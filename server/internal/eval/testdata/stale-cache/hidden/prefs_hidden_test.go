@@ -2,19 +2,19 @@ package prefs
 
 import "testing"
 
-// countingStore counts the reads that reach the backing store.
-type countingStore struct {
+// hiddenCountingStore counts the reads that reach the backing store.
+type hiddenCountingStore struct {
 	*MemStore
 	gets int
 }
 
-func (s *countingStore) Get(key string) (string, bool) {
+func (s *hiddenCountingStore) Get(key string) (string, bool) {
 	s.gets++
 	return s.MemStore.Get(key)
 }
 
 func TestHiddenThemeChangesAreVisible(t *testing.T) {
-	store := &countingStore{MemStore: NewMemStore()}
+	store := &hiddenCountingStore{MemStore: NewMemStore()}
 	svc := NewService(store)
 	steps := []struct {
 		set, reset bool
@@ -49,7 +49,7 @@ func TestHiddenThemeChangesAreVisible(t *testing.T) {
 }
 
 func TestHiddenThemeReadsStayCached(t *testing.T) {
-	store := &countingStore{MemStore: NewMemStore()}
+	store := &hiddenCountingStore{MemStore: NewMemStore()}
 	svc := NewService(store)
 	if err := svc.SetTheme("ada", "dark"); err != nil {
 		t.Fatal(err)

@@ -196,6 +196,47 @@ What it shows:
   changes, a failing check found only by the verifier, or ambiguous issues,
   so that both models and workflows separate again.
 
+### Harder cases, repeated (2026-11-11, `gemini-3.5-flash`)
+
+Nine cases (the four above plus the five harder ones), `EVAL_REPEAT=2`,
+measured once per workflow with `make eval-cloud CLOUD_MODEL=gemini-3.5-flash
+EVAL_REPEAT=2` (add `EVAL_WORKFLOW=factory`) on the free tier. No rate limits
+were hit.
+
+| Workflow | Solved | Solve rate | Tool calls | Tool errors | Tokens in / out | Time |
+|---|---|---|---|---|---|---|
+| Single agent | 17/18 | 94% | 296 | 1 | 5 359 690 / 121 618 | 17 min 59 s |
+| Software Factory v2 | 18/18 | 100% | 683 | 3 | 11 425 054 / 319 205 | 45 min 29 s |
+
+| Case | Single: passed | Single: tokens in | Factory: passed | Factory: tokens in |
+|---|---|---|---|---|
+| `fix-failing-test` | 2/2 | 81 119 | 2/2 | 333 459 |
+| `implement-function` | 2/2 | 182 672 | 2/2 | 415 125 |
+| `rename-across-files` | 2/2 | 156 714 | 2/2 | 878 470 |
+| `bug-from-issue` | 2/2 | 113 677 | 2/2 | 450 011 |
+| `discount-across-packages` | 2/2 | 559 320 | 2/2 | 1 439 316 |
+| `stale-cache` | 1/2 | 586 965 | 2/2 | 894 886 |
+| `misleading-issue` | 2/2 | 385 449 | 2/2 | 737 927 |
+| `printf-logger-vet` | 2/2 | 1 434 913 | 2/2 | 1 577 760 |
+| `truncate-shared-helper` | 2/2 | 1 858 861 | 2/2 | 4 698 100 |
+
+What it shows:
+- The single agent's one failure is the harness's, not the model's: its own
+  regression test declared a `countingStore` type, as the hidden test did, so
+  the package no longer compiled. The hidden helper is now
+  `hiddenCountingStore`. Read the single agent as 18/18 in substance.
+- The harder cases still do not separate `gemini-3.5-flash` by solve rate,
+  but they do by cost: the five new cases take 4.8 M of the single agent's
+  5.4 M input tokens (9 times the four old ones), and `truncate-shared-helper`
+  alone 1.9 M. Every agent found the vet failure, the misleading suggestion
+  and the shared caller without help.
+- The factory costs about 2.1 times the input tokens and 2.5 times the time
+  of the single agent, for no measurable gain at this level.
+- To judge agent changes by solve rate again, the suite needs a model that
+  sits below its ceiling (a smaller hosted model such as a "lite" tier, or a
+  mid-size local one) or cases that are larger still. Tokens and time per
+  solved case are now the more sensitive measure for `gemini-3.5-flash`.
+
 ## Turn context management (NAT-02)
 
 `runtime/native/context.go` budgets every model call of a native turn
