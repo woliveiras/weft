@@ -171,17 +171,20 @@ Sandbox containers are recreated automatically the next time an agent runs.
 | Commands cannot download packages | The agent uses network `none` | Set **Network** to `bridge` for that agent |
 | A sandbox needs to call a private service (internal registry, proxy) | Private ranges are blocked by design | Private destinations remain unsupported, including through the runtime egress proxy; public-host allowlists are documented in `docs/environments.md` |
 
-Run the automated checks at any time:
+With the Compose sandbox daemon running, use the cached `weft/sandbox:latest`
+image on that daemon, the Compose Docker CLI image and `golang:1.26-alpine`
+on the outer daemon, and the populated `weft-gomod` cache:
 
 ```bash
 make test-sandbox
 ```
 
-It verifies authenticated TLS access and rejection of a client without a
-certificate, that the default image exists only in the dedicated
-daemon, that sandboxes without network reach nothing, that bridged sandboxes
-reach the internet but not the daemon or `weftd`, and that your machine's
-Docker runs no Weft sandbox.
+The target uses the running daemon and cached images. It verifies authenticated
+TLS access and refusal without a client certificate, dedicated-daemon image
+placement, network isolation, and the absence of Weft sandboxes on the outer
+daemon. A disposable sandbox created through Weft's factory is inspected for
+`cap-drop ALL`, `no-new-privileges`, network `none` and a single workspace bind
+mount. Its process status also confirms zero capabilities and `NoNewPrivs: 1`.
 
 Run `sh scripts/test-sandbox-mtls.sh` to check only mutual TLS on an already
 running Compose sandbox daemon. This check reads the live endpoint without

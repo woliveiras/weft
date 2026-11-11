@@ -50,7 +50,7 @@ test-web: ## Type-check and run the web console tests (Vitest, jsdom)
 test-compose: ## Reviewed Compose services on the dedicated daemon (cached alpine:3.22 required)
 	./scripts/test-compose-runtime.sh
 
-test-sandbox: ## Sandbox runtime isolation checks against the Compose stack (needs Docker; see docs/sandbox-runtime.md)
+test-sandbox: ## Sandbox hardening and isolation checks (running Compose daemon and cached images required)
 	./scripts/test-sandbox-runtime.sh
 
 test-sandbox-capacity: ## Real sandbox capacity/cgroup checks (running dedicated daemon and local Go required)

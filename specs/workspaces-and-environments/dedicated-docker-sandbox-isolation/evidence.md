@@ -35,3 +35,9 @@ environment or node overrides. It inspected the container while running.
 Inside the sandbox, `/proc/self/status` reported zero effective and bounding
 capabilities and `NoNewPrivs: 1`. The fixture closed the sandbox and verified
 that its container was removed and the dedicated daemon remained healthy.
+
+On 2026-11-11, `make test-sandbox` ran the automated live inspection against
+the running Compose daemon with the cached image and offline Go compilation.
+The disposable sandbox reproduced all four Docker values. Its process had
+zero effective and bounding capabilities and `NoNewPrivs: 1`. The existing TLS, network isolation
+and outer-daemon checks also passed. No inspection container remained.

@@ -42,7 +42,7 @@ guides; `make test` alone does not exercise all sandbox boundaries.
 | `make test-compose` | Reviewed service group isolation, resource caps, suspension/resume and independent teardown |
 | `make test-environment-policy` | Build/setup/runtime policy enforcement and cached-image revocation |
 | `make test-egress` | Runtime/preparation proxies, destination restrictions, diagnostics, history and retention |
-| `make test-sandbox` | Mutual TLS, dedicated-daemon placement and network isolation |
+| `make test-sandbox` | Mutual TLS, dedicated-daemon placement, default hardening on a disposable sandbox and network isolation |
 
 The mise example pins its public image and Node version and commits its pnpm
 lockfile. `.dockerignore` excludes installed dependencies and generated outputs.
