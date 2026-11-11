@@ -10,6 +10,7 @@ const pages = [
   ['canvas', '/#/g/journal-capture/canvas', undefined],
   ['models', '/#/models', 'Models'],
   ['approvals', '/#/approvals', 'Approvals'],
+  ['new-task', '/#/tasks/new', 'New task'],
 ] as const;
 
 for (const theme of ['light', 'dark'] as const) {

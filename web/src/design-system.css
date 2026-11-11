@@ -97,6 +97,19 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 .page fieldset { border-color: var(--border); border-radius: var(--radius); }
 .page legend { font-weight: 600; }
 
+/* Form rhythm: fields stack with consistent gaps, helper copy reads as
+   secondary text, and actions keep their natural width. */
+.form { gap: var(--space-4); }
+.form > fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.form > fieldset:not([hidden]), .form details[open] { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.form :is(fieldset, details) > :is(label, aside, .row, .error-box, fieldset, details, table, .integration-note) { align-self: stretch; }
+.form label { gap: var(--space-1); font-size: 13px; font-weight: 500; color: var(--text); }
+.form label > :is(input, select, textarea) { font-weight: 400; }
+.form label > .small, .form label > .muted { font-weight: 400; color: var(--text-muted); }
+.form :is(fieldset, details) > p { margin: 0; font-size: 13px; line-height: 20px; color: var(--text-muted); max-width: 72ch; }
+.form details > summary { cursor: pointer; font-weight: 600; color: var(--text); padding-block: var(--space-1); }
+.form .row { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+
 /* ---- badges and status ---- */
 .badge { border-radius: 999px; padding: 1px var(--space-2); font-size: 11px; font-weight: 500; line-height: 18px; }
 .error-box { border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); }

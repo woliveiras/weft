@@ -184,8 +184,8 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
       <fieldset disabled={!canEdit||busy}>
         <label>Request<textarea required rows={8} placeholder="Describe the work you want the agents to do and the result you expect." maxLength={16384} value={input.request} onChange={e=>editRequest(e.target.value)}/></label>
         <p>Run task authorizes a separate execution of the selected workflow with its existing permissions. Weft checks requirements first; missing configuration or required approvals keep the task waiting. Saving alone keeps a draft.</p>
-        <Btn tone="primary" disabled={!input.request.trim()||busy||!canStart||modelBlocked} onClick={()=>void submit()}>{saved?.submitted?'Continue task':'Run task'}</Btn>
-        <Btn disabled={!input.request.trim()||busy||!canEdit} onClick={()=>void resolve()}>Resolve request</Btn>
+        <div className="row"><Btn tone="primary" disabled={!input.request.trim()||busy||!canStart||modelBlocked} onClick={()=>void submit()}>{saved?.submitted?'Continue task':'Run task'}</Btn>
+        <Btn disabled={!input.request.trim()||busy||!canEdit} onClick={()=>void resolve()}>Resolve request</Btn></div>
         <p>Uses the configured default model to interpret and save your request. Your workflow selection takes priority, then a named workflow, then Software Factory. Title, project and environment choices are retained; input bindings are rebuilt. No agents start.</p>
         {saved?.resolution&&<aside aria-label="Request interpretation"><p>{saved.resolution.message}</p>{saved.resolution.repository&&<p>Repository: {saved.resolution.repository}</p>}{['needs_model','model_error'].includes(saved.resolution.state)&&<a href="#/models">Configure models</a>}<p>Your original request is preserved. Resolving never grants tool access.</p></aside>}
         <label>Workflow<select required value={input.graphId} onChange={e=>{const g=graphs.find(g=>g.graph.metadata.id===e.target.value)?.graph;change({graphId:e.target.value,graphVersion:g?.metadata.version??0,...workflowTaskDefaults(g,input.title,input.request)});}}>
