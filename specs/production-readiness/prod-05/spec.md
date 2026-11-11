@@ -2,7 +2,7 @@
 id: PROD-05
 title: Production security assessment
 summary: "Complete a security review or authorized penetration test of the production boundaries."
-status: draft
+status: planned
 scope: [production readiness]
 risk: production qualification
 risk_domains: [security, isolation, authorization]
@@ -31,6 +31,17 @@ Assess and record the actual boundary for each runtime. Repository instructions,
 ## Open decisions
 
 - Review versus penetration test, reviewer and permitted environment, finding severity thresholds and risk acceptance authority.
+
+## History
+
+- 2026-11-11. The production checklist called for assessment of the installed security boundaries.
+
+## Capability criteria
+
+- [ENV-005 AC-002](../../workspaces-and-environments/dedicated-docker-sandbox-isolation/spec.md#ac-002--daemon-and-service-boundary).
+- [ENV-009 AC-002](../../workspaces-and-environments/environment-network-policy-and-egress/spec.md#ac-002--separate-egress-phases).
+- [TASK-006 AC-001](../../product-and-tasks/task-consent-and-gateway-authorization/spec.md#ac-001--reviewed-authorization-modes).
+- [RUN-001 AC-002](../../runtime-and-delivery/skills-and-project-steering/spec.md#ac-002--scoped-loading-and-immutable-audit).
 
 ## Reconciliation
 

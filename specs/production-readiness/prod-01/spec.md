@@ -2,7 +2,7 @@
 id: PROD-01
 title: Production sign-in
 summary: "Replace the production human sign-in path with OIDC/SSO and role mapping."
-status: draft
+status: planned
 scope: [production readiness]
 risk: production blocker
 risk_domains: [security, authorization]
@@ -32,6 +32,14 @@ AUTH-OIDC was deferred for local-first delivery. It remains the first production
 ## Open decisions
 
 - OIDC provider and tenant; group claim and mapping; session lifetimes; break-glass procedure reconciling the hardening guide's admin token with automation-only static credentials.
+
+## History
+
+- The local-first plan deferred AUTH-OIDC; the 2026-11-11 production checklist made it the first production blocker.
+
+## Capability criteria
+
+- [OPS-001 AC-001](../../installation-and-operations/compose-installation-and-operations/spec.md#ac-001--separate-bootstrap-and-application-setup).
 
 ## Reconciliation
 

@@ -2,7 +2,7 @@
 id: PROD-02
 title: Versioned production upgrades
 summary: "Qualify upgrades between production releases and close the POC compatibility exception."
-status: draft
+status: planned
 scope: [production readiness]
 risk: production blocker
 risk_domains: [data persistence, migrations]
@@ -32,6 +32,14 @@ The existing embedded SQL migrations and PostgreSQL advisory lock are the baseli
 ## Open decisions
 
 - Supported upgrade starting versions and POC data cutover; compatibility window across releases; rollback procedure for incompatible schema changes.
+
+## History
+
+- The 2026-10-30 POC provider cutover allowed breaking settings without migration. The 2026-11-11 production checklist requires supported release-to-release upgrades.
+
+## Capability criteria
+
+- [OPS-002 AC-002](../../installation-and-operations/standalone-installation-and-recovery/spec.md#ac-002--offline-backup-and-versioned-recovery).
 
 ## Reconciliation
 

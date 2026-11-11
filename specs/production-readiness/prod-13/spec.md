@@ -2,7 +2,7 @@
 id: PROD-13
 title: Coding model acceptance
 summary: "Choose a production coding model and demonstrate an agreed solve rate over repeated evaluations."
-status: draft
+status: planned
 scope: [production readiness]
 risk: production qualification
 risk_domains: [quality, cost]
@@ -21,16 +21,25 @@ Choose a production coding model and demonstrate an agreed solve rate over repea
 
 ## Behavior and invariants
 
-The native runtime is the coding agent. The existing evaluation records 0/4 with llama3.2 and 4/4 exploratory Gemini results on the small suite. The suite reached its ceiling with that exploratory model; production approval and the acceptance threshold remain open.
+Use the [historical benchmark record](../../runtime-and-delivery/coding-evaluation-and-model-benchmarks/evidence.md) to choose a workload and a model with an informative acceptance threshold.
 
 ## Acceptance criteria
 
-- **AC-001 — Measured result.** The selected model runs the agreed suite for the chosen repetitions. Results identify model, workload and run conditions, record outcomes and usage, and show whether the agreed solve rate was met.
-- **AC-002 — Below bar or unavailable.** A run fails or the score falls below the approved minimum. Failures and incomplete trials stay visible. A fixture result or exploratory free-tier result does not qualify a production model.
+- **AC-001 — Measured result.** An approved model meets the chosen production threshold over the agreed workload and repetitions, using the linked RUN-004 verdict and reporting criteria.
+- **AC-002 — Below bar or unavailable.** A below-threshold, incomplete or unavailable evaluation leaves the production model unqualified and records the failed qualification decision.
 
 ## Open decisions
 
 - Model, suite difficulty and cases, number of repetitions, scoring rule, minimum solve rate and cost/time trade-offs.
+
+## History
+
+- 2026-11-11. The production checklist made model selection and a repeated benchmark threshold explicit after the exploratory runs.
+
+## Capability criteria
+
+- [RUN-004 AC-001](../../runtime-and-delivery/coding-evaluation-and-model-benchmarks/spec.md#ac-001--task-verdict).
+- [RUN-004 AC-002](../../runtime-and-delivery/coding-evaluation-and-model-benchmarks/spec.md#ac-002--repeatable-benchmark-report).
 
 ## Reconciliation
 

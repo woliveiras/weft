@@ -2,7 +2,7 @@
 id: PROD-12
 title: Production supply chain
 summary: "Make production artifacts traceable through pins, SBOMs, scans and signatures."
-status: draft
+status: planned
 scope: [production readiness]
 risk: production qualification
 risk_domains: [security, delivery]
@@ -31,6 +31,10 @@ The hardening guide recommends scanning for critical vulnerabilities and deployi
 ## Open decisions
 
 - Signing identities, key custody, scanner and exception policy, admission mechanism and registry/mirroring requirements.
+
+## History
+
+- 2026-11-11. The production checklist added artifact signing, SBOM, scans and pinned inputs.
 
 ## Reconciliation
 

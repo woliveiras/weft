@@ -2,7 +2,7 @@
 id: PROD-14
 title: Production integration qualification
 summary: "Qualify the real integrations selected for production using authorized test accounts."
-status: draft
+status: planned
 scope: [production readiness]
 risk: production qualification
 risk_domains: [security, external access]
@@ -31,6 +31,17 @@ Local-first and fixture coverage come first. Provider selection or fixture succe
 ## Open decisions
 
 - Final integration list and environments, test accounts, scopes and allowed mutations, and vendor or corporate approval.
+
+## History
+
+- 2026-10-30. Live accounts were moved to the external phase. The 2026-11-11 checklist retained real-account acceptance for selected integrations.
+
+## Capability criteria
+
+- [INT-002 AC-003](../../providers-and-integrations/model-provider-adapters-and-conformance/spec.md#ac-003--qualification-scope).
+- [INT-007 AC-003](../../providers-and-integrations/mcp-vendor-profiles-and-qualification/spec.md#ac-003--per-vendor-acceptance-boundary).
+- [RUN-005 AC-003](../../runtime-and-delivery/gateway-mediated-source-control-delivery/spec.md#ac-003--adapter-qualification).
+- [RUN-006 AC-003](../../runtime-and-delivery/issue-references-and-polling-triggers/spec.md#ac-003--gateway-write-back).
 
 ## Reconciliation
 

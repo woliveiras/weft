@@ -35,6 +35,12 @@ and updates preserve existing local settings.
 - Component format, parameter and compatibility rules, update semantics,
   and how installation permissions apply to shared components.
 
+## History
+
+- 2026-10-19 delivery plan. Reusable components remained outside Release 1.
+- 2026-11-11 local-first checkpoint. The maintainer's deferral remained in
+  effect pending Release 1 completion, stability and authorization.
+
 ## Reconciliation
 
 - [Open initiatives and release order](../README.md).

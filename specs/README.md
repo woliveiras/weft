@@ -75,6 +75,11 @@ conditions. Historical task IDs remain source references.
 - [RUN-005 — Gateway-mediated Source Control Delivery](./runtime-and-delivery/gateway-mediated-source-control-delivery/spec.md) — `in-progress`. Push and open pull requests through the reviewed SCM gateway with task-scoped credentials and evidence.
 - [RUN-006 — Issue References and Polling Triggers](./runtime-and-delivery/issue-references-and-polling-triggers/spec.md) — `implemented`. Read reviewed issue references and start eligible labeled work through consent-bound polling.
 
+## Installation and operations
+
+- [OPS-001 — Compose Installation and Operations](./installation-and-operations/compose-installation-and-operations/spec.md) — `in-progress`. Operate the local Compose installation through documented bootstrap, health and maintenance boundaries.
+- [OPS-002 — Standalone Installation and Recovery](./installation-and-operations/standalone-installation-and-recovery/spec.md) — `in-progress`. Package the native profile, preserve offline data and qualify installation lifecycle on each supported platform.
+
 ## Production readiness
 
 The first four items are production blockers in the order listed. The remaining

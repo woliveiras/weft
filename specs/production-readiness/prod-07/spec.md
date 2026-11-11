@@ -2,7 +2,7 @@
 id: PROD-07
 title: Production approval defaults
 summary: "Protect new workflows with human approval on write tools, push and pull requests."
-status: draft
+status: planned
 scope: [production readiness]
 risk: production qualification
 risk_domains: [security, authorization]
@@ -25,12 +25,22 @@ The scope is conservative defaults for new workflows. Existing grants, operator 
 
 ## Acceptance criteria
 
-- **AC-001 — New workflow.** A new workflow tries a write-capable tool, push or pull request with the applicable grant. The gateway requires a human decision before the side effect. Grant enforcement still applies.
-- **AC-002 — Missing or denied consent.** A required decision is rejected or absent. The protected operation has no side effect. The threat model explains enforcement and trust boundaries.
+- **AC-001 — New workflow.** A new production workflow defaults to human approval for granted write tools, push and PR. Verify the default with the linked gateway and SCM criteria.
+- **AC-002 — Missing or denied consent.** Production acceptance includes a threat model and demonstrates the new default for rejection and absence of consent.
 
 ## Open decisions
 
 - Definition of write-capable tools, applicable workflow creation paths, timeout/denial behavior and treatment of existing workflows.
+
+## History
+
+- 2026-11-11. The production checklist called for conservative defaults for new workflows.
+
+## Capability criteria
+
+- [TASK-006 AC-001](../../product-and-tasks/task-consent-and-gateway-authorization/spec.md#ac-001--reviewed-authorization-modes).
+- [RUN-005 AC-001](../../runtime-and-delivery/gateway-mediated-source-control-delivery/spec.md#ac-001--bounded-push).
+- [RUN-005 AC-002](../../runtime-and-delivery/gateway-mediated-source-control-delivery/spec.md#ac-002--idempotent-pull-request-and-hand-off).
 
 ## Reconciliation
 

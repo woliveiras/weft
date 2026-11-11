@@ -2,7 +2,7 @@
 id: PROD-15
 title: Organizational approval
 summary: "Obtain required organizational approval before company use involving external inference."
-status: draft
+status: planned
 scope: [production readiness]
 risk: production qualification
 risk_domains: [data protection, governance]
@@ -31,6 +31,10 @@ Local-first work assumed no company infrastructure, credentials or approvals. Co
 ## Open decisions
 
 - Applicable organizations and policies, approval owners, documented data classes and scope, and review cadence.
+
+## History
+
+- 2026-11-11. The production checklist made organizational approval a condition of company use.
 
 ## Reconciliation
 

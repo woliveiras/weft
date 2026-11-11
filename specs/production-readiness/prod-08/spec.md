@@ -2,7 +2,7 @@
 id: PROD-08
 title: Production topology and workspace storage
 summary: "Choose and qualify the production topology and dedicated workspace filesystem."
-status: draft
+status: planned
 scope: [production readiness]
 risk: production qualification
 risk_domains: [isolation, data persistence]
@@ -27,11 +27,19 @@ A Docker named volume on a shared Linux filesystem does not give fanotify a dedi
 
 - **AC-001 — Topology qualification.** The selected topology runs a representative workload. The approved deployment uses managed or replicated PostgreSQL and NATS as selected and satisfies its documented availability and isolation boundaries.
 - **AC-002 — Workspace migration.** Existing workspaces move to the dedicated fanotify-capable Linux filesystem. Weftd and the dedicated daemon see the distinct filesystem, with ownership and Git metadata preserved. Journal and daemon layers and PostgreSQL remain on other filesystems.
-- **AC-003 — Journal coverage.** Unrelated filesystem writes occur alongside transient workspace operations. The drill verifies transient operations and PID evidence where supported, and compares unresolved paths and overflows before and after migration.
+- **AC-003 — Journal coverage.** A migration drill evaluates the linked ENV-003 kernel coverage on the selected topology and compares unresolved paths and overflows before and after migration.
 
 ## Open decisions
 
 - Single node versus Kubernetes HA; PostgreSQL and NATS ownership and replication; workspace filesystem/host, maintenance window and migration plan.
+
+## History
+
+- 2026-11-11. The production topology decision retained a dedicated workspace filesystem as follow-up to the local journal rollout.
+
+## Capability criteria
+
+- [ENV-003 AC-003](../../workspaces-and-environments/workspace-change-journal-and-attribution/spec.md#ac-003--kernel-observations-and-gaps).
 
 ## Reconciliation
 

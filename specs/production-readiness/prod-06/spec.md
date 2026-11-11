@@ -2,7 +2,7 @@
 id: PROD-06
 title: Managed secrets and key rotation
 summary: "Use managed Vault or KMS in place of the local installation key file and qualify rotation."
-status: draft
+status: planned
 scope: [production readiness]
 risk: production qualification
 risk_domains: [security, secrets, data persistence]
@@ -31,6 +31,15 @@ The current local key file is the starting point. The model gateway remains the 
 ## Open decisions
 
 - Vault versus KMS, key and identity ownership, rotation cadence, availability and recovery design for existing encrypted data.
+
+## History
+
+- 2026-11-11. The production checklist proposed managed key material and tested rotation.
+
+## Capability criteria
+
+- [INT-001 AC-002](../../providers-and-integrations/built-in-inference-plugin-management/spec.md#ac-002--managed-configuration-and-credential-isolation).
+- [ENV-001 AC-002](../../workspaces-and-environments/repository-snapshot-imports/spec.md#ac-002--credential-boundary).
 
 ## Reconciliation
 
