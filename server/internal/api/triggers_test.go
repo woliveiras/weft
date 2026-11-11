@@ -185,3 +185,65 @@ func TestTriggerStartsARealTaskUnderConsent(t *testing.T) {
 		t.Fatalf("completion write-back: %v / %v", comments, updates)
 	}
 }
+
+func TestTriggerWorkspaceAuthorizationFieldAndLegacyPause(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	workflow := strings.Replace(taskGraph, `"tools":[]`, `"isolation":{"mode":"kubernetes"},"tools":[{"name":"check.run"}]`, 1)
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", workflow, nil); c != 201 {
+		t.Fatal(c)
+	}
+	calls := 0
+	a.Tools.MustRegister(fixtureTool{
+		name: "mcp.gh.search_issues", calls: &calls,
+		content: `{"items":[{"number":1,"title":"Ready","state":"open","labels":[{"name":"weft"}],"assignees":[]}]}`,
+	})
+	const collection = "/api/v1/triggers"
+	workspace := strings.Replace(triggerBody, `"ask"`, `"workspace"`, 1)
+	const reason = "process shell cannot be confined to a worktree; use Ask for approval, Full access or Docker isolation"
+	assertInvalid := func(method, path, body string) {
+		t.Helper()
+		var problem apiError
+		if c := call(t, srv, method, path, adminTok, "application/json", body, &problem); c != 422 ||
+			len(problem.Details.Errors) != 1 || problem.Details.Errors[0].Path != "authorizationMode" ||
+			!strings.Contains(problem.Details.Errors[0].Message, reason) {
+			t.Fatalf("%s %s: %d %+v", method, path, c, problem)
+		}
+	}
+	assertInvalid("POST", collection, workspace)
+	var all []trigger.Trigger
+	if c := call(t, srv, "GET", collection, viewerTok, "", "", &all); c != 200 || len(all) != 0 {
+		t.Fatalf("rejected create persisted a trigger: %d %+v", c, all)
+	}
+	var tr trigger.Trigger
+	if c := call(t, srv, "POST", collection, adminTok, "application/json", triggerBody, &tr); c != 201 {
+		t.Fatal(c)
+	}
+	path := collection + "/" + tr.ID
+	assertInvalid("PUT", path, workspace)
+	got, err := a.Triggers.Triggers.Get(t.Context(), tr.ID)
+	if err != nil || got.Authorization != "ask" || got.State != trigger.Active {
+		t.Fatalf("rejected edit changed trigger: %+v %v", got, err)
+	}
+
+	// Store the consent shape accepted before capability validation.
+	if _, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "test", func(t *trigger.Trigger) error {
+		t.Authorization, t.Consent.Authorization = "workspace", "workspace"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	a.Triggers.Tick(t.Context())
+	a.Triggers.Tick(t.Context())
+	if c := call(t, srv, "GET", path, viewerTok, "", "", &tr); c != 200 ||
+		tr.State != trigger.Paused || !strings.Contains(tr.PausedReason, reason) || tr.CurrentTask != "" || tr.LastError != "" {
+		t.Fatalf("legacy trigger: %d %+v", c, tr)
+	}
+	if calls != 0 {
+		t.Fatalf("tracker searched %d times for invalid consent", calls)
+	}
+	page, err := (taskconfig.Manager{Store: a.Store}).List(t.Context(), "", 10)
+	if err != nil || len(page.Items) != 0 {
+		t.Fatalf("invalid consent created a draft: %+v %v", page, err)
+	}
+	assertInvalid("POST", path+"/resume", "")
+}

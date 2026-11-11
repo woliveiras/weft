@@ -38,7 +38,7 @@ func (x triggerTasks) Start(ctx context.Context, t *trigger.Trigger, i trigger.I
 	if err != nil {
 		return "", err
 	}
-	auth := taskauth.Manager{Store: x.a.Store}
+	auth := taskauth.Manager{Store: x.a.Store, Tools: x.a.Tools}
 	review, err := auth.Review(ctx, d.ID)
 	if err != nil {
 		return d.ID, err

@@ -11,7 +11,9 @@ import (
 // administrator who creates or resumes them records. Reads are open to
 // viewers; every change needs an administrator.
 
-func (s *Server) triggers() trigger.Manager { return trigger.Manager{Store: s.Store, Bus: s.Bus} }
+func (s *Server) triggers() trigger.Manager {
+	return trigger.Manager{Store: s.Store, Bus: s.Bus, Tools: s.Tools}
+}
 
 func decodeTrigger(r *http.Request) (trigger.Input, error) {
 	var in trigger.Input

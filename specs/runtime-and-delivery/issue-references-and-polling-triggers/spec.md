@@ -29,6 +29,11 @@ Issue content reaches the task as data through the exact configured entry-agent 
 ### AC-002 — Versioned polling and eligibility
 
 Polling leases admit one eligible item per trigger, deduplicated by source, issue and workflow. Stale consent blocks execution; missed slots are coalesced. Preview and skipped reasons stay visible.
+Create, edit and resume validate the authorization mode against the workflow's
+effective isolation and grants using TASK-006. Incompatible modes produce an
+`authorizationMode` field error. If stored consent is incompatible, the
+runner pauses the trigger with the same reason before polling the tracker,
+claiming an issue or creating a task draft.
 
 ### AC-003 — Gateway write-back
 

@@ -12,8 +12,10 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/events"
+	"github.com/woliveiras/weft/server/internal/graph"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskauth"
+	"github.com/woliveiras/weft/server/internal/tools"
 )
 
 // Prefix keys one setting per trigger.
@@ -176,6 +178,7 @@ type Manager struct {
 	Store storage.Store
 	Bus   *events.Bus // optional
 	Now   func() time.Time
+	Tools *tools.Registry
 }
 
 func (m Manager) now() time.Time {
@@ -248,6 +251,20 @@ func (m Manager) Update(ctx context.Context, id, actor string, fn func(t *Trigge
 	return nil, fmt.Errorf("%w: trigger %q is being changed concurrently", storage.ErrConflict, id)
 }
 
+// authorizationProblem is shared by consent writes and the runner's preflight.
+func (m Manager) authorizationProblem(mode taskauth.Mode, g *domain.Graph) string {
+	if !taskauth.Valid(mode) {
+		return "ask, workspace or full"
+	}
+	if mode == taskauth.Workspace {
+		graph.Normalize(g)
+		if err := taskauth.ValidateMode(mode, g.Spec.Nodes, m.Tools); err != nil {
+			return err.Error()
+		}
+	}
+	return ""
+}
+
 // consent records what the actor agrees to now.
 func (m Manager) consent(ctx context.Context, in Input, actor string) (Consent, error) {
 	g, err := m.Store.GetGraph(ctx, in.Workflow, 0)
@@ -259,6 +276,11 @@ func (m Manager) consent(ctx context.Context, in Input, actor string) (Consent, 
 			Path    string `json:"path"`
 			Message string `json:"message"`
 		}{{"nodeId", "the entry agent is not in the workflow"}}}
+	}
+	if problem := m.authorizationProblem(in.Authorization, g); problem != "" {
+		fe := &FieldError{}
+		fe.add("authorizationMode", "%s", problem)
+		return Consent{}, fe
 	}
 	return Consent{Actor: actor, WorkflowVersion: g.Metadata.Version, ProjectID: in.ProjectID, ExecutionMode: in.ExecutionMode,
 		Authorization: in.Authorization, PolicyVersion: taskauth.PolicyVersion, RecordedAt: m.now()}, nil
@@ -300,6 +322,9 @@ func (m Manager) Edit(ctx context.Context, id string, in Input, actor string) (*
 		return nil, err
 	}
 	t, err := m.Update(ctx, id, actor, func(t *Trigger) error {
+		if _, err := m.consent(ctx, in, actor); err != nil {
+			return err
+		}
 		covered := t.Workflow != in.Workflow || t.NodeID != in.NodeID || t.ResultNodeID != in.ResultNodeID || t.ProjectID != in.ProjectID ||
 			t.ExecutionMode != in.ExecutionMode || t.Authorization != in.Authorization || t.Source != in.Source || t.SCMConnection != in.SCMConnection
 		apply(t, in)
@@ -378,7 +403,7 @@ func (m Manager) ConsentProblem(ctx context.Context, t *Trigger) (string, error)
 	case t.Consent.ProjectID != t.ProjectID || t.Consent.ExecutionMode != t.ExecutionMode || t.Consent.Authorization != t.Authorization:
 		return "The trigger changed what was consented to. Review it and resume to record new consent.", nil
 	}
-	return "", nil
+	return m.authorizationProblem(t.Authorization, g), nil
 }
 
 func (m Manager) audit(ctx context.Context, t *Trigger, action, actor string) {

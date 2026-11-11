@@ -158,7 +158,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	a.Gateway = tools.NewGateway(a.Tools, a.Approvals, a.Bus)
 	a.Gateway.TaskAuthorization = (taskauth.Manager{Store: a.Store}).Check
 	a.Gateway.ResolveTool = a.MCP.Resolve
-	a.Triggers = &trigger.Runner{Triggers: trigger.Manager{Store: a.Store, Bus: a.Bus}, Store: a.Store, Instance: cfg.Instance,
+	a.Triggers = &trigger.Runner{Triggers: trigger.Manager{Store: a.Store, Bus: a.Bus, Tools: a.Tools}, Store: a.Store, Instance: cfg.Instance,
 		Gateway: a.Gateway, BaseURL: cfg.Server.PublicURL, Log: log.With("component", "trigger")}
 
 	ws, err := workspace.NewManager(cfg.Workspaces.Root, cfg.Workspaces.HostRoot, cfg.Workspaces.AllowAbsolute)
