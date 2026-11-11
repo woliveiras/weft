@@ -16,6 +16,10 @@ describe('installation destination routes', () => {
       expect(parseRoute(`#/${prefix}/connect`)).toMatchObject({ connectQuery: '' });
     }
   });
+  it('routes the Activity view with its filters', () => {
+    expect(parseRoute('#/activity')).toEqual({ view: 'activity', activity: { window: '24h', status: '', workflow: '', agent: '', focus: '' } });
+    expect(routeHash(parseRoute('#/activity?window=6h&status=failed&focus=history'))).toBe('#/activity?window=6h&status=failed&focus=history');
+  });
   it('preserves graph correlation links', () => {
     const route = parseRoute('#/g/example/messages?c=sample');
     expect(routeHash(route)).toBe('#/g/example/messages?c=sample');

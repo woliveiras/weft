@@ -13,6 +13,8 @@ it('groups destinations with projects available', async () => {
   await userEvent.click(screen.getByRole('button',{name:'Projects'}));
   expect(navigate).toHaveBeenCalledWith('projects');
   const work = screen.getByRole('region', {name:'Work'});
+  await userEvent.click(within(work).getByRole('button', {name:'Activity'}));
+  expect(navigate).toHaveBeenCalledWith('activity');
   await userEvent.click(within(work).getByRole('button', {name:'Approvals 2'}));
   expect(navigate).toHaveBeenCalledWith('approvals');
   expect(within(work).queryByRole('button', {name:'Models'})).toBeNull();

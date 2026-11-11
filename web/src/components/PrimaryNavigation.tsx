@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Icon, type IconName } from './common';
 
-export type NavigationDestination = 'tasks' | 'projects' | 'graphs' | 'approvals' | 'connections' | 'models' | 'skills' | 'administration';
+export type NavigationDestination = 'activity' | 'tasks' | 'projects' | 'graphs' | 'approvals' | 'connections' | 'models' | 'skills' | 'administration';
 
 const configuration: { destination: NavigationDestination; label: string; icon: IconName }[] = [
   { destination: 'graphs', label: 'Workflows', icon: 'workflows' },
@@ -23,6 +23,7 @@ export function PrimaryNavigation({ active, pending, onNavigate }: {
   return <nav className="primary-navigation" aria-label="Main navigation">
     <section className="navigation-group" aria-labelledby="work-navigation-label">
       <h2 id="work-navigation-label" className="navigation-label">Work</h2>
+      <button type="button" className={`nav-item approvals-btn ${active === 'activity' ? 'on' : ''}`} aria-current={active === 'activity' ? 'page' : undefined} onClick={() => onNavigate('activity')}><Icon name="activity" size={18} /><span>Activity</span></button>
       <button type="button" className={`nav-item approvals-btn ${active === 'tasks' ? 'on' : ''}`} aria-current={active === 'tasks' ? 'page' : undefined} onClick={() => onNavigate('tasks')}><Icon name="tasks" size={18} /><span>Tasks</span></button>
       <button type="button" className={`nav-item approvals-btn ${active === 'projects' ? 'on' : ''}`} aria-current={active === 'projects' ? 'page' : undefined} onClick={() => onNavigate('projects')}><Icon name="projects" size={18} /><span>Projects</span></button>
       <button type="button" className={`nav-item approvals-btn ${active === 'approvals' ? 'on' : ''}`} aria-current={active === 'approvals' ? 'page' : undefined} onClick={() => onNavigate('approvals')}>

@@ -5,6 +5,7 @@ introduce roles or change API permissions.
 
 | Group | Destination | Scope |
 | --- | --- | --- |
+| Work | Activity (`#/activity`) | What is running, what needs a person and recent executions across all workflows; see below |
 | Work | Tasks (`#/tasks`) | Persisted request drafts and requirements preview; execution admission is pending. Existing Runs remains agent execution history. |
 | Work | Projects | Disabled until project registration is implemented. |
 | Work | Approvals | Existing approval and application-review flows, including pending count |
@@ -39,6 +40,39 @@ tab and the selector says so. Colours follow [the brand guidelines](brand/brand-
 Roles and API authorization remain unchanged. Viewers inspect; operators can perform
 existing permitted tests; administrative edits remain admin-only. An OAuth grant
 never assigns tools to agents. Credentials remain managed by the existing server APIs.
+
+## Activity
+
+`#/activity` answers "what is happening and what needs me?" across every workflow
+and task run, from one bounded request (`GET /api/v1/activity`, see
+[api.md](api.md#activity-view)). It never decides anything itself; each row links
+to the view where the work is inspected or decided.
+
+- **Counters** for the selected window (last 1 h, 6 h, 24 h or 7 d): agents
+  running, items waiting for a person, failed executions and finished
+  executions. Clicking a counter focuses the page (Running now, Needs you, or
+  history filtered to failed or succeeded); clicking it again or **Show
+  everything** clears the focus. `—` means the count could not be read, `n+`
+  that it is a lower bound.
+- **Needs you**: pending tool approvals, agent questions, hand-off (gated
+  message), turn, delegation and environment approvals and human reviews, oldest
+  first, linking to Approvals, to the run and to the task.
+- **Running now**, grouped per workflow or task run: each agent replica's state
+  (running, waiting for capacity, awaiting approval or review, idle…), its
+  current plan step, elapsed time, tokens and cost so far, linking to the agent
+  panel and run details.
+- **Recent history**: executions started in the window with status, agent,
+  workflow, duration, tool calls, tokens, cost and error, filterable by status,
+  workflow and agent; each row opens its run details.
+
+Window, filters and focus live in the URL
+(`#/activity?window=6h&status=failed&workflow=…&agent=…&focus=history`), so
+reloads and shared links keep them. The page loads once and then refetches,
+throttled to one request per 1.5 s, when the event stream reports
+`execution.*`, `replica.*`, `approval.*`, `graph.*` or `agent.plan` events.
+A failed refresh keeps the last data and says when it is from; a section the
+server could not read, or that the role cannot see (human reviews for viewers),
+is stated on the page instead of being shown as empty.
 
 ## Connection pages
 

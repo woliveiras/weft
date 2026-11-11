@@ -1,5 +1,6 @@
 import type {TaskInput, TaskDraft, TaskPage, TaskReview, TaskProgress, Project} from './tasks';
 import type { ExecutionTree, CancelScope, Cancellation } from './executionTree';
+import type { ActivityQuery, ActivityView } from './activity';
 import type { DelegationPolicy, DelegationPolicyView, DelegationProfile, DelegationProfileView } from './delegation';
 import type { MCPHistoryPage, MCPConnection, MCPConnectionInput, MCPTemplate } from './types';
 import type { Skill, SkillInput, InstructionSnapshot } from './instructions';
@@ -302,6 +303,7 @@ export const api = {
   events: (id: string, f: { after?: number; node?: string; types?: string; limit?: number } = {}) =>
     request<WeftEvent[]>(`${V1}/graphs/${enc(id)}/events`, { query: f }),
 
+  activity: (q: ActivityQuery = {}) => request<ActivityView>(`${V1}/activity`, { query: { ...q } }),
   approvals: (f: { graph?: string; status?: string } = {}) => request<Approval[]>(`${V1}/approvals`, { query: f }),
   decide: (approvalId: string, decision: 'approve' | 'reject', body: { comment?: string; answer?: string }) =>
     request<Approval>(`${V1}/approvals/${enc(approvalId)}/${decision}`, { method: 'POST', body }),

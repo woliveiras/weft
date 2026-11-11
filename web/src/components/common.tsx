@@ -1,4 +1,4 @@
-import { BookOpen, Check, ChevronDown, ChevronRight, Cpu, ExternalLink, FolderGit2, ListOrdered, ListTodo, Lock, Maximize, Pause, Play, Plug, Radio, RadioTower, RefreshCw, Settings, ShieldCheck, Split, Square, Workflow, X, Zap, type LucideIcon } from 'lucide-react';
+import { Activity as ActivityGlyph, BookOpen, Check, ChevronDown, ChevronRight, Cpu, ExternalLink, FolderGit2, ListOrdered, ListTodo, Lock, Maximize, Pause, Play, Plug, Radio, RadioTower, RefreshCw, Settings, ShieldCheck, Split, Square, Workflow, X, Zap, type LucideIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import type { ReplicaState } from '../api/types';
 
@@ -100,7 +100,7 @@ const icons = {
   play: Play, stop: Square, pause: Pause, bolt: Zap, fit: Maximize, lock: Lock,
   queue: ListOrdered, topic: Radio, fanout: Split, broadcast: RadioTower,
   check: Check, x: X, refresh: RefreshCw, external: ExternalLink,
-  tasks: ListTodo, projects: FolderGit2, approvals: ShieldCheck, workflows: Workflow,
+  activity: ActivityGlyph, tasks: ListTodo, projects: FolderGit2, approvals: ShieldCheck, workflows: Workflow,
   connections: Plug, models: Cpu, skills: BookOpen, administration: Settings,
   'chevron-down': ChevronDown, 'chevron-right': ChevronRight,
 } satisfies Record<string, LucideIcon>;

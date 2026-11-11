@@ -685,6 +685,31 @@ export async function mockFetch(url: string, init: RequestInit): Promise<Respons
     const after = Number(q.get('after') ?? 0);
     return json(db.events.filter((e) => e.graphId === mm![1] && e.seq > after).slice(-Number(q.get('limit') ?? 200)));
   }
+  if (p === '/activity') {
+    // A small approximation of the bounded server view for the mock console.
+    const pending = db.approvals.filter((a) => a.status === 'pending').sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const running = [...db.replicas.entries()].map(([graphId, reps]) => ({
+      graphId, graphName: db.graphs.get(graphId)?.graph.metadata.name, workflow: graphId, state: db.graphs.get(graphId)?.record.state ?? 'running',
+      replicas: reps.filter((r) => !['stopped', 'completed', 'failed'].includes(r.state)).map((r) => {
+        const x = db.executions.find((e) => e.id === r.executionId && !e.completedAt);
+        return { nodeId: r.nodeId, replica: r.replica, state: r.state, phase: r.state, detail: r.detail, executionId: x?.id, startedAt: x?.startedAt,
+          elapsedMs: x ? Date.now() - new Date(x.startedAt).getTime() : undefined, usage: x?.usage ?? { inputTokens: 0, outputTokens: 0 }, toolCalls: x?.toolCalls ?? 0, costMicros: x ? 0 : null };
+      }),
+    })).filter((g) => g.replicas.length);
+    const history = db.executions.slice(0, 100).map((e) => ({ ...e, workflow: e.graphId, graphName: db.graphs.get(e.graphId)?.graph.metadata.name,
+      durationMs: (e.completedAt ? new Date(e.completedAt).getTime() : Date.now()) - new Date(e.startedAt).getTime(), costMicros: 0 }));
+    const count = (st: string[]) => history.filter((e) => st.includes(e.status)).length;
+    return json({
+      window: q.get('window') ?? '24h', since: new Date(Date.now() - 86400000).toISOString(), generatedAt: new Date().toISOString(), currency: 'USD',
+      counters: { running: running.reduce((n, g) => n + g.replicas.filter((r) => r.state === 'running' || r.state === 'awaiting_approval').length, 0),
+        waiting: pending.length, failed: count(['failed', 'interrupted']), finished: count(['succeeded']), cancelled: count(['cancelled']) },
+      needsYou: pending.map((a) => ({ ...a, graphName: db.graphs.get(a.graphId)?.graph.metadata.name })), running, history,
+      options: { workflows: [...db.graphs.keys()].map((id) => ({ id })), agents: [...new Set(history.map((e) => e.nodeId))] },
+      limits: { history: 100, needsYou: 100, executions: 1000, activeGraphs: 50, replicas: 200, costEvents: 5000 },
+      truncated: { needsYou: false, running: false, executions: false, history: false, cost: false },
+      errors: [],
+    });
+  }
   if (p === '/approvals') {
     let list = db.approvals;
     if (q.get('status')) list = list.filter((a) => a.status === q.get('status'));

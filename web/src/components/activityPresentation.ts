@@ -9,7 +9,7 @@ export function belongsToExecution(message: MessageRecord, execution: Execution)
   );
 }
 
-export function executionProgress(execution: Execution): string {
+export function executionProgress(execution: Pick<Execution, 'status'>): string {
   switch (execution.status) {
     case 'pending': return 'Waiting to start';
     case 'running': return 'In progress';

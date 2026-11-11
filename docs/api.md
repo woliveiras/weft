@@ -295,6 +295,80 @@ Starting a graph or node whose docker-isolated agents (without an image of
 their own) need an environment that is not ready returns `422` with an issue
 at `spec.environment`.
 
+## Activity view
+
+`GET /api/v1/activity` (viewer) returns one bounded summary for the console's
+Activity page: what is running across all workflows and task runs, what is
+waiting for a person, and the executions started in a recent window. It only
+reads existing records (executions, approvals, human reviews, replica status and
+the `agent.plan` and `cost.recorded` events) and never scans the full history.
+
+| Query | Default | Notes |
+|---|---|---|
+| `window` | `24h` | Go duration or whole days (`90m`, `6h`, `7d`); 5m to 7d. |
+| `limit` | 100 | History rows, 1 to 200. |
+| `status` | all | History only: `active` (pending, running, awaiting approval), `succeeded`, `failed` (failed or interrupted), `cancelled`. |
+| `workflow` | all | History only: a graph id; a task run matches its own id and its workflow (`weft.workflow` label). |
+| `agent` | all | History only: a node id. |
+
+Invalid values return `400 invalid`. Filters never change the counters, which
+describe the whole window.
+
+```json
+{
+  "window": "24h", "since": "…", "generatedAt": "…", "currency": "USD",
+  "counters": {"running": 2, "waiting": 1, "failed": 0, "finished": 5, "cancelled": 0},
+  "needsYou": [{"kind": "tool", "id": "apr_…", "title": "…", "graphId": "…", "graphName": "…", "task": "…",
+                "nodeId": "coder", "replica": 0, "executionId": "exe_…", "createdAt": "…", "expiresAt": "…"}],
+  "running": [{"graphId": "…", "graphName": "…", "task": "…", "workflow": "…", "state": "running",
+               "replicas": [{"nodeId": "coder", "replica": 0, "state": "running", "phase": "running", "detail": "…",
+                             "executionId": "exe_…", "startedAt": "…", "elapsedMs": 120000, "planStep": "Edit the handler",
+                             "usage": {"inputTokens": 1200, "outputTokens": 300}, "toolCalls": 4, "costMicros": 12500}]}],
+  "history": [{"id": "exe_…", "graphId": "…", "workflow": "…", "nodeId": "tester", "replica": 0, "status": "failed",
+               "startedAt": "…", "completedAt": "…", "durationMs": 5000, "toolCalls": 3, "error": "…",
+               "usage": {…}, "costMicros": 0}],
+  "options": {"workflows": [{"id": "…", "name": "…"}], "agents": ["coder", "tester"]},
+  "limits": {"history": 100, "needsYou": 100, "executions": 1000, "activeGraphs": 50, "replicas": 200, "costEvents": 5000},
+  "truncated": {"needsYou": false, "running": false, "executions": false, "history": false, "cost": false},
+  "errors": [{"section": "reviews", "code": "forbidden", "message": "…"}]
+}
+```
+
+* **Counters.** `running`: replicas in a turn (`running`, including waiting for
+  sandbox capacity, or `awaiting_approval`). `waiting`: pending approvals plus the
+  pending human reviews this caller may decide. `failed` (failed or interrupted),
+  `finished` (succeeded) and `cancelled`: executions *started* in the window.
+* **Needs you.** Every pending approval (`kind` is the approval kind) and pending
+  human review (`kind: review`), oldest first, up to 100. Decide them through the
+  existing `/approvals` and `/reviews` endpoints.
+* **Running now.** Live replicas of graphs that are running, paused or stopping,
+  grouped per graph (a task run is its own group, labelled with `task` and its
+  `workflow`). `phase` refines `state`: `waiting_for_capacity`,
+  `awaiting_approval`, `awaiting_review`, `waiting_for_message`, or the state.
+  Execution fields are present only while the replica's execution is in
+  progress; `planStep` is the `in_progress` item of that execution's latest
+  `agent.plan` event.
+* **Cost** sums the `cost.recorded` events *in the window* per execution, in
+  micro-units of the catalogue currency (records priced in another currency are
+  left out). `costMicros` is `null` when cost could not be read.
+* **Bounds.** At most 1000 executions (newest first), 1000 pending approvals, 50
+  active graphs, 200 replicas, the newest 200 `agent.plan` events per active
+  graph and 5000 cost records are read. Active graphs are found from the graph
+  control records (one small row per graph, as `GET /graphs` reads), and human
+  reviews come from the review list, which has no page size. A read that hits its bound sets the
+  matching `truncated` flag; counts are then lower bounds.
+* **Roles and failures.** The endpoint reuses the existing gates: executions,
+  approvals and replica status are visible to every role; human reviews need
+  `operator` and, when a review names reviewers, the caller among them. A viewer
+  gets `errors[{section: "reviews", code: "forbidden"}]` instead of silently
+  missing reviews; `unavailable` means reviews are not configured. A section that
+  cannot be read is reported with `code: "failed"` and a generic message (the
+  cause is logged server-side); its list and counters are `null`, never empty.
+  `section` is one of `needsYou`, `reviews`, `running`, `history`, `cost`.
+* **Observability.** Each section runs in its own span (`activity.<section>`);
+  metrics `weft_activity_sections_total{section,outcome}` and
+  `weft_activity_build_duration_seconds`.
+
 ## Event stream (SSE)
 
 ```

@@ -1,4 +1,6 @@
 import {ProjectsPage} from './components/ProjectsPage';
+import { ActivityPage } from './components/ActivityPage';
+import { activityHash, parseActivityState, type ActivityRouteState } from './components/activityView';
 import { TasksPage } from './components/TasksPage';
 import { PrimaryNavigation } from './components/PrimaryNavigation';
 import { runSection, type RunSection } from './components/runPresentation';
@@ -22,12 +24,14 @@ import { ThemeSwitcher } from './components/ThemeSwitcher';
 /**
  * Routes live in the hash so a reload (or a shared link) returns to the same
  * place without server-side routing:
+ *   #/activity[?window=&status=&workflow=&agent=&focus=]
  *   #/graphs  #/approvals  #/connections  #/models  #/administration/<section>
  * Legacy #/integrations links remain MCP aliases, including OAuth returns.
  *   #/g/<id>/<tab>[?c=<correlation id>]
  */
 type Route =
   | { view: 'graphs' }
+  | { view: 'activity'; activity: ActivityRouteState }
   | { view: 'projects' }
   | { view: 'tasks'; taskId?: string; create?: boolean }
   | { view: 'approvals' }
@@ -40,6 +44,7 @@ type Route =
 export function parseRoute(hash: string): Route {
   const [path, qs] = hash.replace(/^#/, '').split('?');
   const parts = path.split('/').filter(Boolean);
+  if (parts[0] === 'activity') return { view: 'activity', activity: parseActivityState(qs) };
   if (parts[0] === 'projects') return {view:'projects'};
   if (parts[0] === 'tasks') return {view:'tasks', ...(parts[1] === 'new' ? {create:true} : parts[1] ? {taskId:decodeURIComponent(parts[1])} : {})};
   if (parts[0] === 'approvals') return { view: 'approvals' };
@@ -61,6 +66,7 @@ export function parseRoute(hash: string): Route {
 }
 
 export function routeHash(r: Route): string {
+  if (r.view === 'activity') return activityHash(r.activity);
   if (r.view === 'projects') return '#/projects';
   if (r.view === 'tasks') return r.create ? '#/tasks/new' : r.taskId ? `#/tasks/${encodeURIComponent(r.taskId)}` : '#/tasks';
   if (r.view === 'approvals') return '#/approvals';
@@ -188,9 +194,10 @@ function Shell() {
       </header>
       <div className="workspace-shell">
         <PrimaryNavigation active={route.view === 'graph' ? 'graphs' : route.view} pending={pending}
-          onNavigate={view => go(view === 'administration' ? {view, section: 'health'} : {view})} />
+          onNavigate={view => go(view === 'administration' ? {view, section: 'health'} : view === 'activity' ? {view, activity: parseActivityState('')} : {view})} />
         <main>
           <ErrorBox error={info.error && !graphs.error ? `info: ${info.error}` : undefined} />
+          {route.view === 'activity' && <ActivityPage state={route.activity} onChange={activity => go({ view: 'activity', activity })} />}
           {route.view === 'projects' && <ProjectsPage nativeProfile={info.data?.nativeProfile===true} canEdit={info.data?.identity?.role==='admin'}/>}
           {route.view === 'tasks' && <TasksPage key={route.taskId ?? (route.create ? 'new' : 'list')} id={route.taskId} create={route.create} info={info.data} graphs={list}/>}
           {route.view === 'graphs' && (
