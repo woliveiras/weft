@@ -42,3 +42,11 @@ it('identifies stale saved consent before another start',async()=>{
  vi.mocked(api.taskAuthorization).mockResolvedValue({scope:'new-scope',record:{taskId:'tsk_1',mode:'full',scope:'old-scope',actor:'admin',policyVersion:1,revision:1}});
  render(<TaskAuthorization taskId="tsk_1" canEdit onChanged={()=>{}}/>);await screen.findByText(/Saved authorization is stale/);
 });
+
+it('explains that process and Kubernetes use native shell under Workspace access', async () => {
+ render(<TaskAuthorization taskId="tsk_1" canEdit onChanged={()=>{}}/>);
+ await screen.findByText('Isolation: process');
+ fireEvent.change(screen.getByLabelText('Authorization mode'), {target:{value:'workspace'}});
+ expect(screen.getByText(/Process and Kubernetes isolation both use native shell/)).toBeTruthy();
+ expect(screen.getByText(/Workspace access refuses native shell/)).toBeTruthy();
+});

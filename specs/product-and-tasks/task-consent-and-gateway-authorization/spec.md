@@ -33,7 +33,9 @@ Workspace. Before consent is saved, the server resolves the workflow's grants
 against the tool catalog and checks the declared capabilities. This includes
 wildcard matches and tools such as `check.run` that declare `shell.exec`.
 This check preserves the gateway's grant requirements for invoking each tool.
-The rejection explains how to select Ask, Full access or Docker isolation.
+The authorization panel identifies process and Kubernetes as native shell and
+explains the Workspace restriction. The rejection explains how to select Ask,
+Full access or Docker isolation.
 The gateway returns the same explanation when a previously recorded Workspace
 consent encounters native shell at invocation.
 Ask requires approval for granted shell calls under native isolation.
