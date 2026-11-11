@@ -55,6 +55,17 @@ conditions. Historical task IDs remain source references.
 - [ENV-008 — Environment Build, Reuse and Cleanup](./workspaces-and-environments/environment-build-reuse-and-cleanup/spec.md) — `implemented`. Build and reuse compatible environments while retaining isolated workspaces and protecting referenced generations.
 - [ENV-009 — Environment Network Policy and Egress](./workspaces-and-environments/environment-network-policy-and-egress/spec.md) — `implemented`. Enforce installation policy across environment preparation and execution and expose bounded proxy denial history.
 
+## Providers and integrations
+
+- [INT-001 — Built-in Inference Plugin Management](./providers-and-integrations/built-in-inference-plugin-management/spec.md) — `implemented`. Manage built-in plugin availability and provider instances through the installation console and API.
+- [INT-002 — Model Provider Adapters and Conformance](./providers-and-integrations/model-provider-adapters-and-conformance/spec.md) — `in-progress`. Apply a shared provider contract and distinguish adapter delivery from live qualification.
+- [INT-003 — Out-of-process Provider Plugins](./providers-and-integrations/out-of-process-provider-plugins/spec.md) — `deferred`. Preserve the Provider Protocol v1 design while external plugin execution remains deferred.
+- [INT-004 — Monetary Usage and Budget Controls](./providers-and-integrations/monetary-usage-and-budget-controls/spec.md) — `implemented`. Record model spend and enforce applicable budgets with revisioned pricing and conservative reservations.
+- [INT-005 — MCP Connections and Tool Invocation](./providers-and-integrations/mcp-connections-and-tool-invocation/spec.md) — `implemented`. Register MCP endpoints and enforce exact, scoped tool authorization through the gateway.
+- [INT-006 — MCP Templates and Browser OAuth](./providers-and-integrations/mcp-templates-and-browser-oauth/spec.md) — `implemented`. Open versioned connection templates and complete reviewed browser authorization within the supported client setup.
+- [INT-007 — MCP Vendor Profiles and Qualification](./providers-and-integrations/mcp-vendor-profiles-and-qualification/spec.md) — `in-progress`. Preserve provider-specific connection and resource boundaries and qualify each selected profile separately.
+- [INT-008 — Managed MCP Hosting](./providers-and-integrations/managed-mcp-hosting/spec.md) — `planned`. Preserve the reviewed design for isolated, installation-managed MCP server generations.
+
 ## Production readiness
 
 The first four items are production blockers in the order listed. The remaining
