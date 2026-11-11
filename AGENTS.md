@@ -29,6 +29,26 @@ documentation if instructions conflict.
   repository; use a coding-agent harness that can require approval and isolate
   execution where available.
 
+## Specifications
+
+Specification-Driven Development is used only when a change needs it. Follow
+the `sdd-specification` skill in `.agents/skills/` for the format; do not copy
+or edit the skill.
+
+Write or update a specification when a change:
+
+- adds or changes **user-visible behavior, an API, a data format or another important contract**;
+- **touches security, authorization, isolation, secrets, data persistence or migrations**;
+- **spans several components or needs a design decision with real trade-offs**;
+- is **hard to reverse**, or **its acceptance cannot be stated in one sentence**.
+
+Do not write a specification for bug fixes that restore already specified
+behavior, refactors without behavior change, dependency bumps, test-only
+changes, documentation or formatting. Use an issue or the commit message.
+
+When unsure, ask the user instead of creating a specification. Never change an existing
+specification's intent to make an implementation pass.
+
 ## Required Testing
 
 - For every change that modifies or adds behavior, write or update **both**

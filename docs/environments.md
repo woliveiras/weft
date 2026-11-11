@@ -70,7 +70,7 @@ Shared build/execution concurrency and memory budgets are available in
 [sandbox capacity](sandbox-runtime.md#global-execution-sandbox-capacity).
 Prepared-image and cache-snapshot reuse is available as described below. See the
 [contracts](product-contracts.md#planned-discovery-and-acceptance) and
-[implementation checklist](../wip/TASKS.md#3-provide-containerized-project-environments).
+[environment plan](../wip/PLAN.md#4-provide-containerized-project-environments).
 
 ### Agent proposal and developer approval
 
