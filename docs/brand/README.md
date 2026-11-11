@@ -1,5 +1,8 @@
 # Weft brand
 
+Full guidelines for the console redesign (colour system, typography, voice,
+components): [brand-guidelines.md](brand-guidelines.md).
+
 Weft is the thread that crosses the warp, over and under, and turns loose
 threads into cloth. The mark is a W (the agents and their structure) with
 one thread passing over its outer legs and under its middle V: separate
