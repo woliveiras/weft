@@ -92,6 +92,7 @@ func (s *Server) saveTask(w http.ResponseWriter, r *http.Request) error {
 	writeJSON(w, status, d)
 	return nil
 }
+
 // TaskRunner is the task run manager the API uses (issue triggers start
 // tasks with it too).
 func (s *Server) TaskRunner() taskrun.Manager { return s.taskRunner() }
