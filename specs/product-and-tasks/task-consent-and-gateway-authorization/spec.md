@@ -41,6 +41,9 @@ An active task may reduce automatic authorization. Pending and future actions re
 ### AC-003 — Decision visibility
 
 The task and global inbox expose the same pending approval and terminal decision. Role gates apply to approval, rejection and task cancellation.
+Authenticated Viewers, Operators and Admins can read consent and task decisions.
+Ordinary approval and rejection require Operator or Admin. Environment proposal
+decisions, consent writes and task cancellation require Admin.
 
 ## Explicit exclusions
 
@@ -53,9 +56,6 @@ The task and global inbox expose the same pending approval and terminal decision
 ## Open decisions
 
 - Production defaults for newly created workflows and live credential qualification remain with PROD-07 and PROD-04.
-- Go API role coverage checks viewer reads, operator mutation denial and admin
-  mutation. Viewer mutation denial and complete role coverage across approval
-  and cancellation routes remain pending.
 
 ## History
 

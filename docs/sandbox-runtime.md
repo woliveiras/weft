@@ -177,10 +177,15 @@ Run the automated checks at any time:
 make test-sandbox
 ```
 
-It verifies TLS access, that the default image exists only in the dedicated
+It verifies authenticated TLS access and rejection of a client without a
+certificate, that the default image exists only in the dedicated
 daemon, that sandboxes without network reach nothing, that bridged sandboxes
 reach the internet but not the daemon or `weftd`, and that your machine's
 Docker runs no Weft sandbox.
+
+Run `sh scripts/test-sandbox-mtls.sh` to check only mutual TLS on an already
+running Compose sandbox daemon. This check reads the live endpoint without
+starting services or building images.
 
 ## Running outside Compose
 

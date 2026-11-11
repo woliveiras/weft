@@ -63,11 +63,13 @@ done
 
 install_rules() {
 	# Inserted at the top, so the last insert ends up first.
+	# The caller tests the function's status, so errexit does not propagate
+	# failures inside it. Return explicitly on the first rejected rule.
 	for iface in docker0 'br+'; do
 		for range in $PRIVATE_RANGES; do
-				"$IPT" -I DOCKER-USER -i "$iface" ! -o "$iface" -d "$range" -j DROP
+			"$IPT" -I DOCKER-USER -i "$iface" ! -o "$iface" -d "$range" -j DROP || return 1
 		done
-		"$IPT" -I INPUT -i "$iface" -m conntrack ! --ctstate ESTABLISHED,RELATED -j DROP
+		"$IPT" -I INPUT -i "$iface" -m conntrack ! --ctstate ESTABLISHED,RELATED -j DROP || return 1
 	done
 }
 

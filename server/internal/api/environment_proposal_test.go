@@ -83,8 +83,13 @@ func TestEnvironmentProposalApprovalBuildAndResume(t *testing.T) {
 				}
 			}
 			path := "/api/v1/approvals/" + proposal.ID + "/approve"
-			if code := call(t, srv, "POST", path, operatorTok, "application/json", `{}`, nil); code != 403 {
-				t.Fatalf("operator approval %d", code)
+			for _, role := range taskAPIRoles {
+				if role.adminWrite == 200 {
+					continue // The admin case exercises the full proposal flow below.
+				}
+				if code := call(t, srv, "POST", path, role.token, "application/json", `{}`, nil); code != role.adminWrite {
+					t.Fatalf("%s environment approval: got %d, want %d", role.name, code, role.adminWrite)
+				}
 			}
 			if err := os.WriteFile(manifest, []byte("[tools]\nnode='22'"), 0644); err != nil {
 				t.Fatal(err)
@@ -169,6 +174,16 @@ func TestEnvironmentProposalRejectionAndCancellationDoNotBuild(t *testing.T) {
 				path := "/api/v1/approvals/" + proposal.ID + "/reject"
 				if action == "cancel" {
 					path = "/api/v1/graphs/proposal/environment/proposal/cancel"
+				}
+				if action == "reject" {
+					for _, role := range taskAPIRoles {
+						if role.adminWrite == 200 {
+							continue // The admin case exercises the full proposal flow below.
+						}
+						if code := call(t, srv, "POST", path, role.token, "application/json", `{}`, nil); code != role.adminWrite {
+							t.Fatalf("%s environment rejection: got %d, want %d", role.name, code, role.adminWrite)
+						}
+					}
 				}
 				if code := call(t, srv, "POST", path, adminTok, "application/json", `{}`, nil); code != 200 {
 					t.Fatal(code)

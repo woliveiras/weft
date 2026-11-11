@@ -54,8 +54,6 @@ Agent containers receive no Docker socket.
 ## Open decisions
 
 - Clean-install coverage for the selected production topology remains with OPS-001 and PROD-04.
-- Direct tests for refusal of a client without a certificate and entrypoint
-  exit on firewall setup failure are pending.
 
 ## History
 

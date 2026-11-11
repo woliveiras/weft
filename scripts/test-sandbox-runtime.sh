@@ -2,7 +2,8 @@
 # Integration test for the dedicated sandbox runtime (docs/sandbox-runtime.md).
 # Runs against the Compose stack and checks, with real containers:
 #
-#   1. sandbox-daemon is healthy and weftd's TLS client can talk to it;
+#   1. sandbox-daemon is healthy, accepts weftd's TLS client, and refuses
+#      clients without a certificate;
 #   2. the default sandbox image exists there and NOT on the host daemon;
 #   3. a sandbox without network (Weft's default) reaches nothing;
 #   4. a sandbox on a bridge network cannot reach the sandbox daemon or any
@@ -32,6 +33,9 @@ if $COMPOSE run --rm --no-deps -T sandbox-image docker version --format '{{.Serv
 	pass "sandbox-daemon answers over mutual TLS"
 else
 	fail "sandbox-daemon does not answer over TLS"
+fi
+if ! sh "$(dirname "$0")/test-sandbox-mtls.sh"; then
+	fail "sandbox-daemon missing-certificate check"
 fi
 
 # 2. Image location.
