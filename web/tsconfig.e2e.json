@@ -5,6 +5,7 @@
     "e2e-journal",
     "playwright.journal.config.ts",
     "playwright.config.ts",
+    "playwright.activity.config.ts",
     "playwright.oauth-cimd.config.ts",
     "playwright.instructions.config.ts",
     "e2e-real",
