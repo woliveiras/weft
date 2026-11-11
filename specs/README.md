@@ -187,8 +187,8 @@ items can progress in parallel, subject to the dependencies below.
 ## Agent guidance
 
 - [REPO-GUIDANCE — Load agent guidance from repository workspaces](./repository-agent-guidance/spec.md) —
-  `planned`. Draft awaiting maintainer review of source policy, precedence,
-  loading and audit decisions.
+  `in-progress`. Maintainer-approved source policy, precedence, progressive
+  loading and Activity provenance.
 
 ## Release 2
 

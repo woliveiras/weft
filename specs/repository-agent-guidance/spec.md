@@ -2,19 +2,19 @@
 id: REPO-GUIDANCE
 title: Load agent guidance from repository workspaces
 summary: Discover repository instructions and skills alongside console guidance and show their provenance in Activity.
-status: draft
+status: in-progress
 scope: [cloned workspaces, replica worktrees, console instruction settings, execution Activity]
 risk: high
 risk_domains: [prompt injection, authorization, filesystem isolation, compatibility, audit]
 reversibility: Disable repository discovery through saved console policy
 change_surfaces: [graph and agent settings, instruction loader, runtime context, execution audit, Activity]
 contracts: [graph instructions, Runtime Protocol v1, execution instruction snapshots, workspace file permissions]
-review_policy: Maintainer approval of this specification and matrix before test review and implementation
+review_policy: Maintainer-approved behavior and matrix recorded before tests and implementation
 navigation: [specs/README.md, specs/repository-agent-guidance/matrix.md]
 documentation: Update instruction, graph, API, runtime and Activity contracts when the behavior ships
 authority:
-  granted: [specification and matrix drafting]
-  withheld: [implementation, new tool grants, new permissions, push, pull request, deployment, release]
+  granted: [specification, local commit, implementation, local verification]
+  withheld: [new tool grants, new permissions, push, pull request, deployment, release]
 dependencies: [RUN-001, TASK-007, TASK-008, TASK-006, TASK-004]
 ---
 
@@ -156,92 +156,110 @@ The paths below describe upstream behavior. Weft's supported subset is D-01.
 | Agent Skills | `SKILL.md` frontmatter supplies the name and description; bodies and resources such as `references/` and `assets/` are progressive. [Format](https://agentskills.io/specification). |
 | `npx skills` | Installs to canonical `.agents/skills`, can create per-agent symlinks where applicable, and records project installation metadata in `skills-lock.json`. [Installer](https://github.com/vercel-labs/skills/blob/main/src/installer.ts) and [project lock](https://github.com/vercel-labs/skills/blob/main/src/local-lock.ts). |
 
-## Open decisions
+## Approved decisions and oracle provenance
 
-The recommendations below are proposed contracts. The matrix labels scenarios
-that depend on them.
+On 2026-11-11 the maintainer approved option A for D-01.1 through D-07.4
+in the decision review. The following contracts are spec-derived. The
+acceptance criteria above and matrix use these decisions as their oracles.
 
-- **D-01 — Source coverage and scope.** Start at the checkout root with
-  `AGENTS.md` and immediate skill packages in `.agents/skills`,
-  `.claude/skills` and `.github/skills`. Support `CLAUDE.md` (root first,
-  then `.claude/CLAUDE.md` as a fallback) and
-  `.github/copilot-instructions.md` as root guidance fallbacks in that
-  order when `AGENTS.md` is absent or administratively blocked. Treat a
-  malformed chosen file as an explicit omission. Alternatives are a smaller
-  `AGENTS.md`-only initial instruction set or an expanded set with
-  `AGENTS.override.md`, scoped instructions, imports and nested discovery.
-  Expanded support needs an agreed path scope when a turn touches several
-  directories, and rules for file imports. Generic agent settings, plugins,
-  hooks, MCP configuration and executable features are outside this feature.
-- **D-02 — Rollout and controls.** Recommend a separate opt-in graph setting
-  for new sources, disabled on both existing and new graphs until an admin
-  enables it. Agents inherit or explicitly disable/narrow graph policy; a
-  graph block is a ceiling. Offer blocks per named source family, enforced on
-  both the discovered and resolved path. Preserve `projectSteering` and its
-  original slot independently. Alternatives are default-on for newly created
-  cloned graphs, or an explicitly migrated `projectSteering` setting with
-  separate source choices. Decide whether administrators also need per-file
-  or per-skill blocks, or agent-only opt-in within an allowed graph policy.
-- **D-03 — Guidance precedence.** Recommend inserting new repository
-  guidance below installation defaults. Proposed order, low to high:
-  repository catalogue/activated skills, selected repository instruction
-  file, installation defaults, graph/agent-selected skills, legacy
-  `.weft/steering`, agent prompt, operator messages. Alternatively, place
-  new repository guidance after graph/agent skills and before legacy
-  steering, so local project guidance can override the console skill text
-  while prompt and task authority still win. Keep existing layers' relative
-  order in either case. Decide how equal-rank active skills are ordered;
-  proposed tie-breaker is canonical relative path in bytewise order.
-- **D-04 — Same-name skills.** Recommend that an eligible selected console
-  skill wins over a same-name repository skill. Record the shadowed source
-  even before its body is read. Compare the managed ID and valid repository
-  frontmatter name. Collapse aliases by canonical package identity first.
-  For distinct repository packages, prefer `.agents`, then `.claude`, then
-  `.github`, with an explicit shadow reason. Alternatives are qualified
-  names for both sources with unambiguous selection, or rejecting ambiguous
-  repository names and asking the administrator to choose.
-- **D-05 — Links, version and changed files.** Recommend permitting only
-  relative package-directory aliases from approved skill roots to a supported
-  canonical package under the same checkout. Revalidate at every load and
-  reject symlinks in individual bodies/references and other discovery paths.
-  Alternate scope is any safely contained relative link in an approved source,
-  with the same policy checks. Recommend using project lock v2
-  `skills.<name>.computedHash` as declared installed version when available,
-  separate from observed SHA-256. Never install or refresh from the lock.
-  Decide whether missing, malformed or stale lock entries are advisory or
-  omit locked packages on verification failure. Decide whether to bind
-  lazy reads to an immutable checkout view or recheck identity and metadata
-  against the live checkout at each request and record the bytes actually
-  delivered. Under the latter option, a detected identity or metadata
-  mismatch requires rediscovery in a later execution. Both options defer
-  reading skill bodies until requested. No policy may accept an escape or
-  reuse an alias to bypass a blocked source.
-- **D-06 — Progressive migration and limits.** Recommend progressive
-  catalogue/body behavior for both managed and repository skills in enabled
-  executions, with existing managed body delivery for legacy graphs until a
-  separate migration. An alternative is changing managed delivery for all
-  graphs in the same release. Define metadata, entry, reference and cumulative
-  budgets, and which sources are admitted when optional guidance exceeds
-  the limit. Preserve mandatory prompt/message priority and account for
-  existing 16 KiB file, 128-entry and 8192-byte guidance bounds. Decide
-  whether to fail before dispatch or explicitly omit unsupported progressive
-  guidance for runtimes without the required behavior. Never silently fall
-  back to eager repository body delivery.
-- **D-07 — Audit retention and representation.** Recommend keeping the
-  existing historical snapshot for discovery/composition and recording
-  additional immutable per-execution read outcomes. Show them together in
-  Activity with stable references to the historical run. Decide storage
-  retention and redaction rules for displayable descriptions and paths,
-  delivery-state granularity, and whether to store body copies for new
-  entries. Preserve the current access boundary and keep bodies and
+### D-01 — Source coverage (AC-001, AC-005)
+
+- Discover one root instruction. Use the first present, unblocked candidate
+  in this order: `AGENTS.md`, `CLAUDE.md`, `.claude/CLAUDE.md`,
+  `.github/copilot-instructions.md`. An invalid chosen file is an omission
+  and does not advance the fallback chain.
+- Discover immediate package directories with `SKILL.md` under
+  `.agents/skills`, `.claude/skills` and `.github/skills`. Discovery does
+  not recurse or follow imports. Nested rules, `AGENTS.override.md`, agent
+  configuration and executable features are outside discovery.
+
+### D-02 — Rollout and source controls (AC-002, AC-008)
+
+- The new saved graph policy is opt-in for all graphs. An agent inherits,
+  disables or narrows it. A graph block is a ceiling. Administrative blocks
+  apply per source family to both the discovered and canonical paths before
+  content is loaded. Preview and execution expose inheritance and omissions.
+- The existing `projectSteering` setting, discovery rules and precedence
+  remain independent.
+
+### D-03 — Precedence (AC-003, AC-004, AC-008)
+
+- Low to high: repository skills, selected root instruction, installation
+  defaults, graph/agent-selected console skills, legacy `.weft/steering`,
+  agent prompt, operator messages. A catalogue entry takes its skill's rank.
+  Activating a body or reference preserves that rank. Ties without an
+  existing declared order use the canonical relative path in bytewise order.
+
+### D-04 — Identity and collisions (AC-003, AC-005)
+
+- Collapse aliases by canonical package identity first. An eligible selected
+  console skill ID shadows a matching valid repository skill name before its
+  body is read. Distinct repository packages with the same name prefer
+  `.agents`, then `.claude`, then `.github`. Within a family use the
+  canonical relative path tie-breaker. Report the suppressed candidates.
+
+### D-05 — Links, lock and changes (AC-004, AC-005, AC-006)
+
+- The sole discovery symlinks allowed are relative directory aliases from
+  an approved skill root to a supported canonical package in the same
+  checkout. Every hop must be contained and policy-eligible. Reject symlinks
+  in bodies, references, other discovery paths and legacy steering.
+- A valid v2 `skills.<name>.computedHash` is an advisory declared version,
+  distinct from observed SHA-256 values. Record the observed lock status.
+  Missing, malformed, unsupported or detected stale locks do not block the
+  package or trigger installation, network reads or writes.
+- Revalidate policy, identity and metadata against the live checkout on
+  every request. A detected mismatch is an omission that requires a later
+  execution to rediscover the skill. Record the digest of actual delivered
+  bytes. Body changes that preserve identity and metadata can be observed at
+  activation.
+
+### D-06 — Progressive loading and limits (AC-004, AC-008)
+
+- Enabled executions progressively load both console and repository skills.
+  Legacy executions retain current console body delivery. Initial catalogue
+  items expose a name, description and selection identity. An
+  execution-bound selection opens only the chosen body. A later request can
+  open one chosen textual reference in that repository package, subject to
+  its policy and workspace permissions. No implicit activation, recursion or
+  import occurs.
+- Cap each body, root instruction or reference at 16 KiB, package metadata
+  at 2 KiB, enumeration at 128 candidates per source family, the catalogue
+  at 128 items per execution and reference reads at 16 distinct references
+  per execution. Legacy steering and registry limits still apply.
+- Keep the 8,192-byte conservative guidance budget for opted-in executions.
+  Reserve mandatory prompt and operator messages first, including the
+  current failure behavior for oversized mandatory text. Charge framing,
+  metadata, body and reference bytes against the same cumulative budget.
+  Admit optional initial entries whole from higher to lower precedence with
+  deterministic ties and charge subsequent activation against the balance.
+  Omit a family as a whole when enumeration exceeds its cap. The model
+  gateway continues to bound the complete request.
+- An incompatible runtime fails explicitly before dispatch. Retrying an
+  already applied read does not duplicate context or its budget charge.
+
+### D-07 — Activity and retention (AC-007, AC-008)
+
+- Preserve the existing snapshot and retain immutable per-execution read
+  outcomes for the lifetime of the historical execution. Show them together
+  in Activity to the existing installation-wide Viewer role. Keep old
+  snapshots readable. For new entries retain provenance and digests without
+  body or reference copies.
+- Display validated workspace-relative paths and bounded descriptions as
+  inert text. Exclude absolute paths and raw error detail. Keep bodies and
   credentials out of telemetry.
+- Distinguish discovery, read, confirmed dispatch and indeterminate
+  delivery, separately for catalogue entries, bodies and individual
+  references. Record omissions, failures and interruptions. Persist read
+  evidence before handing off guidance. When delivery cannot be confirmed,
+  never infer it from a successful read alone.
 
 ## Reconciliation
 
 - [Behavior and oracle matrix](./matrix.md).
-- Review the governing user request, this draft and the matrix before writing
-  tests. After approval, record fail-first unit and integration evidence and
-  review the tests before the implementation. Exercise the admin and Activity
+- Review the governing user request, this approved spec and the matrix before
+  writing tests. Record fail-first unit and integration evidence and review
+  the tests before implementation. Exercise the admin and Activity
   paths in the browser against the real API, store and engine.
 - Update [instructions](../../docs/instructions.md), [API](../../docs/api.md),
   runtime and console documentation with the accepted contract on delivery.
