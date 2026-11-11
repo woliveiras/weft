@@ -25,21 +25,21 @@ func init() {
 	llm.RegisterPlugin(llm.Manifest{
 		ID: "openai", Label: "OpenAI", Description: "OpenAI models through the Chat Completions API.",
 		Local: false, DefaultBaseURL: "https://api.openai.com/v1", Key: llm.KeyRequired,
-		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONNative, Usage: true, ModelListing: true},
+		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONNative, Usage: true, ModelListing: true}, Settings: []string{llm.SettingContextWindow},
 	}, func(c llm.ProviderConfig) (llm.Provider, error) {
 		return New(c, Options{DefaultBaseURL: "https://api.openai.com/v1", RequireKey: true})
 	})
 	llm.RegisterPlugin(llm.Manifest{
 		ID: "vllm", Label: "vLLM (OpenAI-compatible)", Description: "Models served by vLLM through its OpenAI-compatible API.",
 		Local: true, DefaultBaseURL: "http://localhost:8000/v1", Key: llm.KeyOptional,
-		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONNative, Usage: true, ModelListing: true},
+		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONNative, Usage: true, ModelListing: true}, Settings: []string{llm.SettingContextWindow},
 	}, func(c llm.ProviderConfig) (llm.Provider, error) {
 		return New(c, Options{DefaultBaseURL: "http://localhost:8000/v1"})
 	})
 	llm.RegisterPlugin(llm.Manifest{
 		ID: "lmstudio", Label: "LM Studio (OpenAI-compatible)", Description: "Models served by LM Studio through its OpenAI-compatible API.",
 		Local: true, DefaultBaseURL: "http://localhost:1234/v1", Key: llm.KeyOptional,
-		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONNative, Usage: true, ModelListing: true},
+		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONNative, Usage: true, ModelListing: true}, Settings: []string{llm.SettingContextWindow},
 	}, func(c llm.ProviderConfig) (llm.Provider, error) {
 		return New(c, Options{DefaultBaseURL: "http://localhost:1234/v1"})
 	})
@@ -88,6 +88,12 @@ func New(cfg llm.ProviderConfig, opts Options) (*Provider, error) {
 }
 
 func (p *Provider) Name() string { return p.cfg.Name }
+
+// ContextWindow implements llm.ContextSizer: the configured window, or 0
+// when none is set. The Chat Completions API has no field for it, so the
+// window is only used to budget and check prompts on this side; an unknown
+// window leaves native turns on their default.
+func (p *Provider) ContextWindow() int { return max(p.cfg.ContextWindow, 0) }
 
 // HTTP exposes the underlying client (tests tune backoff through it).
 func (p *Provider) HTTP() *llm.HTTPClient { return p.http }
@@ -221,6 +227,9 @@ func (p *Provider) buildRequest(req *llm.ChatRequest) *wireRequest {
 }
 
 func (p *Provider) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	if err := llm.CheckContext(p.cfg.Name, p.ContextWindow(), req); err != nil {
+		return nil, err
+	}
 	var out wireResponse
 	if err := p.http.Do(ctx, http.MethodPost, "/chat/completions", p.buildRequest(req), &out); err != nil {
 		return nil, err

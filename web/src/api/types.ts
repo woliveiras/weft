@@ -464,7 +464,7 @@ export interface ProviderInfo {
   timeoutSec?: number;
   maxRetries?: number;
   concurrency?: number;
-  /** Context size in tokens requested from the backend (Ollama num_ctx); 0/absent = the type's default. */
+  /** Context size in tokens: sent to Ollama as num_ctx; for other types used to budget and check prompts. 0/absent = the type's default. */
   contextWindow?: number;
   /** "small": compact tool schemas, call shapes and one tool call per reply for small local models. */
   modelGuidance?: '' | 'small';

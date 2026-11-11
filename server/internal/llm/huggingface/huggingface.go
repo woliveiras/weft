@@ -31,11 +31,11 @@ func init() {
 	llm.RegisterPlugin(llm.Manifest{
 		ID: "huggingface", Label: "Hugging Face TGI", Description: "One model served by Text Generation Inference (OpenAI-compatible API).",
 		Local: true, DefaultBaseURL: defaultBaseURL, Key: llm.KeyOptional,
-		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONInstruction, Usage: true, ModelListing: true},
+		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONInstruction, Usage: true, ModelListing: true}, Settings: []string{llm.SettingContextWindow},
 	}, factory)
 	llm.RegisterPlugin(llm.Manifest{
 		ID: "tgi", Label: "Text Generation Inference", Description: "One model served by Text Generation Inference (OpenAI-compatible API).",
 		Local: true, DefaultBaseURL: defaultBaseURL, Key: llm.KeyOptional,
-		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONInstruction, Usage: true, ModelListing: true},
+		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONInstruction, Usage: true, ModelListing: true}, Settings: []string{llm.SettingContextWindow},
 	}, factory)
 }

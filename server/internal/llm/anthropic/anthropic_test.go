@@ -3,9 +3,11 @@ package anthropic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/woliveiras/weft/server/internal/llm"
@@ -90,5 +92,39 @@ func TestStopMapping(t *testing.T) {
 func TestKeyRequiredForHostedAPI(t *testing.T) {
 	if _, err := New(llm.ProviderConfig{Name: "a"}); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestContextWindow(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		_, _ = w.Write([]byte(`{"model":"claude-x","stop_reason":"end_turn","content":[{"type":"text","text":"ok"}]}`))
+	}))
+	defer srv.Close()
+	ask := func(p *Provider, content string) error {
+		_, err := p.Chat(context.Background(), &llm.ChatRequest{Model: "m", Messages: []llm.ChatMessage{{Role: llm.RoleUser, Content: content}}})
+		return err
+	}
+	def, err := New(llm.ProviderConfig{Name: "a", BaseURL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := llm.ContextWindowOf(def); got != 0 {
+		t.Fatalf("default window = %d, want 0", got)
+	}
+	small, err := New(llm.ProviderConfig{Name: "a", BaseURL: srv.URL, ContextWindow: 2048})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := llm.ContextWindowOf(small); got != 2048 {
+		t.Fatalf("configured window = %d, want 2048", got)
+	}
+	if err := ask(small, "hi"); err != nil || calls.Load() != 1 {
+		t.Fatalf("fitting prompt: %v (requests %d)", err, calls.Load())
+	}
+	err = ask(small, strings.Repeat("x", 4*2048))
+	if !errors.Is(err, llm.ErrContextExceeded) || !strings.Contains(err.Error(), "context window of 2048") || calls.Load() != 1 {
+		t.Fatalf("oversized prompt: %v (requests %d)", err, calls.Load())
 	}
 }

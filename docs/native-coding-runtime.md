@@ -182,7 +182,8 @@ What it shows:
 `runtime/native/context.go` budgets every model call of a native turn
 against the provider's context window. The engine reports the window through
 the optional `runtime.ContextEnv` extension of `TurnEnv` (`llm.ContextWindowOf`:
-Ollama's `num_ctx`, 32 768 by default); a provider that does not report one is
+Ollama's `num_ctx`, 32 768 by default; the configured `contextWindow` for the
+OpenAI-type and Anthropic plugins); a provider that does not report one is
 budgeted as 32 768 tokens. The working limit is the window minus an answer
 reserve (an eighth, at most 8 192 tokens), capped at 64k tokens so large
 hosted windows still keep turns small.

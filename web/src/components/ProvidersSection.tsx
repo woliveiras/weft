@@ -515,7 +515,7 @@ function ProviderForm({
             <Field
               label="Context window (tokens)"
               error={errors.contextWindow}
-              hint={draft.type === 'ollama' ? 'Sent as num_ctx. Default 32768; larger windows need more memory on the model server.' : 'Prompts that do not fit fail instead of being truncated.'}
+              hint={draft.type === 'ollama' ? 'Sent as num_ctx. Default 32768; larger windows need more memory on the model server.' : 'Set it to the model context size. Native agents budget their conversation against it, and prompts that do not fit fail before sending. Empty: native agents assume 32768.'}
             >
               <input
                 value={draft.contextWindow}

@@ -3,8 +3,10 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -210,5 +212,48 @@ func TestToolCallExtraContentRoundTrips(t *testing.T) {
 	}
 	if _, has := sent[1].(map[string]any)["extra_content"]; has {
 		t.Fatalf("invalid extra content must not be echoed: %v", sent[1])
+	}
+}
+
+func TestContextWindow(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+	}))
+	defer srv.Close()
+	ask := func(p *Provider, content string) error {
+		_, err := p.Chat(context.Background(), &llm.ChatRequest{Model: "m", Messages: []llm.ChatMessage{{Role: llm.RoleUser, Content: content}}})
+		return err
+	}
+
+	// No window configured: unknown, so native turns keep their default and
+	// nothing is refused on this side.
+	def, err := New(llm.ProviderConfig{Name: "o", BaseURL: srv.URL}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := llm.ContextWindowOf(def); got != 0 {
+		t.Fatalf("default window = %d, want 0", got)
+	}
+	if err := ask(def, strings.Repeat("x", 4*200_000)); err != nil || calls.Load() != 1 {
+		t.Fatalf("unconfigured window: %v (requests %d)", err, calls.Load())
+	}
+
+	// Configured window: reported, and a prompt that cannot fit is refused
+	// before it is sent.
+	small, err := New(llm.ProviderConfig{Name: "gem", BaseURL: srv.URL, ContextWindow: 2048}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := llm.ContextWindowOf(small); got != 2048 {
+		t.Fatalf("configured window = %d, want 2048", got)
+	}
+	if err := ask(small, "hi"); err != nil || calls.Load() != 2 {
+		t.Fatalf("fitting prompt: %v (requests %d)", err, calls.Load())
+	}
+	err = ask(small, strings.Repeat("x", 4*2048))
+	if !errors.Is(err, llm.ErrContextExceeded) || !strings.Contains(err.Error(), "gem's context window of 2048") || calls.Load() != 2 {
+		t.Fatalf("oversized prompt: %v (requests %d)", err, calls.Load())
 	}
 }

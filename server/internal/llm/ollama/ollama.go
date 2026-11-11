@@ -156,8 +156,8 @@ func (p *Provider) buildRequest(req *llm.ChatRequest) *request {
 func (p *Provider) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 	window := p.ContextWindow()
 	// Fail before sending what Ollama would truncate without saying so.
-	if est := llm.EstimateTokens(req); est >= window {
-		return nil, fmt.Errorf("%w: about %d tokens for %s's context window of %d; raise the provider's context window or shorten the task", llm.ErrContextExceeded, est, p.cfg.Name, window)
+	if err := llm.CheckContext(p.cfg.Name, window, req); err != nil {
+		return nil, err
 	}
 	var out response
 	if err := p.http.Do(ctx, http.MethodPost, "/api/chat", p.buildRequest(req), &out); err != nil {

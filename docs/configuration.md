@@ -81,13 +81,19 @@ Provider fields: `name`, `type` (the plugin id), `baseUrl`, API key (stored
 encrypted), `defaultModel`, `timeoutSec` (default 300), `maxRetries` (default
 3; 429/408/5xx/network errors with backoff and `Retry-After`), `concurrency`
 (per-provider in-flight cap, 0 = unlimited) and `contextWindow` (tokens per
-request, prompt plus answer; Ollama receives it as `num_ctx` and defaults to
-32768 instead of Ollama's own 4096). Prompts that do not fit fail the turn with
-"prompt exceeds the model context window" instead of being truncated, which
-would silently drop the task from the conversation. `modelGuidance` is `""`
-(standard) or `"small"`: native agents on that provider get compact tool
-schemas, call shapes in the system prompt and one tool call per reply. It is
-off by default (see the measurements in
+request, prompt plus answer). Ollama receives it as `num_ctx` and defaults to
+32768 instead of Ollama's own 4096. The other built-in types (OpenAI and its
+compatibles — vLLM, LM Studio, OpenRouter, Hugging Face TGI, Gemini's
+OpenAI-compatible endpoint — and Anthropic) cannot send it, so set it to the
+model's real context size: native agents budget their conversation against
+it, and when it is unset they assume 32768 tokens. Prompts that do not fit
+fail the turn with "prompt exceeds the model context window" before they are
+sent (Ollama would otherwise truncate them, silently dropping the task from
+the conversation). The check uses a rough estimate of about 4 bytes per token,
+so the provider may still reject a prompt slightly under the window.
+`modelGuidance` is `""` (standard) or `"small"`: native agents on that
+provider get compact tool schemas, call shapes in the system prompt and one
+tool call per reply. It is off by default (see the measurements in
 [native-coding-runtime.md](native-coding-runtime.md)).
 
 Nodes select models with `model: {provider, name, temperature, maxTokens}`;

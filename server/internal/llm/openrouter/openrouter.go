@@ -16,7 +16,7 @@ func init() {
 	llm.RegisterPlugin(llm.Manifest{
 		ID: "openrouter", Label: "OpenRouter", Description: "Hosted models from many vendors through OpenRouter.",
 		DefaultBaseURL: defaultBaseURL, Key: llm.KeyRequired,
-		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONNative, Usage: true, ModelListing: true},
+		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONNative, Usage: true, ModelListing: true}, Settings: []string{llm.SettingContextWindow},
 	}, func(c llm.ProviderConfig) (llm.Provider, error) {
 		return openai.New(c, openai.Options{
 			DefaultBaseURL: defaultBaseURL,

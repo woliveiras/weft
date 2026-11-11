@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -121,8 +122,9 @@ type ProviderConfig struct {
 	Concurrency int `json:"concurrency,omitempty" yaml:"concurrency,omitempty"`
 	// ContextWindow is the context size in tokens the backend should use for
 	// a request (prompt plus answer). Providers that let the client choose it
-	// (Ollama's num_ctx) send it; 0 means the provider's default. Prompts that
-	// do not fit fail with ErrContextExceeded instead of being truncated.
+	// (Ollama's num_ctx) send it; the others report it to native turns, which
+	// budget their conversation against it. 0 means the provider's default.
+	// Prompts that do not fit fail with ErrContextExceeded before sending.
 	ContextWindow int `json:"contextWindow,omitempty" yaml:"contextWindow,omitempty"`
 	// ModelGuidance tunes how native agents talk to this provider's models:
 	// "" (standard) or GuidanceSmall.
@@ -155,9 +157,24 @@ func EstimateTokens(req *ChatRequest) int {
 }
 
 // ContextSizer is implemented by providers that know the context window
-// they send requests with (Ollama's num_ctx).
+// they send requests with (Ollama's num_ctx) or that were configured with
+// one. ContextWindow returns 0 when the window is unknown.
 type ContextSizer interface {
 	ContextWindow() int
+}
+
+// CheckContext fails with ErrContextExceeded when req clearly cannot fit a
+// window of the given size, before it is sent. window 0 (unknown) never
+// fails. The estimate is rough, so only prompts that reach the whole window
+// fail here; the backend still rejects the rest itself.
+func CheckContext(provider string, window int, req *ChatRequest) error {
+	if window <= 0 {
+		return nil
+	}
+	if est := EstimateTokens(req); est >= window {
+		return fmt.Errorf("%w: about %d tokens for %s's context window of %d; raise the provider's context window or shorten the task", ErrContextExceeded, est, provider, window)
+	}
+	return nil
 }
 
 // ContextWindowOf returns p's context window in tokens, or 0 when the

@@ -32,7 +32,7 @@ func init() {
 	llm.RegisterPlugin(llm.Manifest{
 		ID: "anthropic", Label: "Anthropic", Description: "Claude models through the Anthropic Messages API.",
 		DefaultBaseURL: "https://api.anthropic.com", Key: llm.KeyRequired,
-		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONInstruction, Usage: true, ModelListing: true},
+		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONInstruction, Usage: true, ModelListing: true}, Settings: []string{llm.SettingContextWindow},
 	}, func(c llm.ProviderConfig) (llm.Provider, error) { return New(c) })
 }
 
@@ -165,7 +165,15 @@ func (p *Provider) buildRequest(req *llm.ChatRequest) *request {
 	return r
 }
 
+// ContextWindow implements llm.ContextSizer: the configured window, or 0
+// when none is set. The Messages API has no field for it, so the window is
+// only used to budget and check prompts on this side.
+func (p *Provider) ContextWindow() int { return max(p.cfg.ContextWindow, 0) }
+
 func (p *Provider) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	if err := llm.CheckContext(p.cfg.Name, p.ContextWindow(), req); err != nil {
+		return nil, err
+	}
 	var out response
 	if err := p.http.Do(ctx, http.MethodPost, "/v1/messages", p.buildRequest(req), &out); err != nil {
 		return nil, err

@@ -1,6 +1,7 @@
 package llm_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -29,6 +30,24 @@ func TestBuiltinPluginsHaveManifests(t *testing.T) {
 	}
 	if mock, _ := llm.PluginManifest("mock"); !mock.DevOnly {
 		t.Fatalf("mock must be a development plugin: %+v", mock)
+	}
+}
+
+// The built-in model plugins honour a configured context window: each
+// declares the setting and reports the window to native turns.
+func TestBuiltinPluginsReportAConfiguredContextWindow(t *testing.T) {
+	for _, id := range []string{"anthropic", "huggingface", "lmstudio", "ollama", "openai", "openrouter", "tgi", "vllm"} {
+		m, ok := llm.PluginManifest(id)
+		if !ok || !slices.Contains(m.Settings, llm.SettingContextWindow) {
+			t.Fatalf("%s settings = %v (ok=%v)", id, m.Settings, ok)
+		}
+		p, err := llm.New(llm.ProviderConfig{Name: id, Type: id, BaseURL: "http://127.0.0.1:1", APIKeyValue: "k", ContextWindow: 4096})
+		if err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+		if got := llm.ContextWindowOf(p); got != 4096 {
+			t.Fatalf("%s window = %d, want 4096", id, got)
+		}
 	}
 }
 
