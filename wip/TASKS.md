@@ -976,6 +976,43 @@ Run the consolidated acceptance round after the remaining Release 1 implementati
 
 **Done when:** Release 1 acceptance criteria in `PLAN.md` are covered by automated tests and a documented manual test.
 
+## Production readiness (added 2026-11-11)
+
+What must be true before Weft has real users, beyond finishing the planned
+work. Blockers come first; the rest can run in parallel. Details:
+[production hardening](../docs/production-hardening.md) and
+[deployment](../docs/deployment.md).
+
+**Blockers**
+
+- [ ] PROD-01 — Real sign-in: OIDC/SSO login with roles from the identity provider's groups (completes AUTH-OIDC); static tokens only for automation.
+- [ ] PROD-02 — End of POC mode: versioned database migrations, a tested upgrade path between releases, and no more breaking changes without migration.
+- [ ] PROD-03 — Production model providers under a data-protection agreement (paid Vertex AI, Bedrock or paid API; never a free tier that trains on inputs), with real prices in the catalogue and budgets per project and user.
+- [ ] PROD-04 — Final acceptance (section 11 of Release 1): end-to-end journey, no secret reaching the browser, logs, prompts or runtimes, sandbox isolation validated; browser suites green.
+
+**Security**
+
+- [ ] PROD-05 — Security review or pentest focused on sandbox isolation, network egress, approvals, and prompt injection from repositories, issues and tool output.
+- [ ] PROD-06 — Secrets in a managed vault or KMS instead of the local key file; key rotation documented and tested.
+- [ ] PROD-07 — Conservative defaults: human approval on write tools, push and pull requests for new workflows; documented threat model.
+
+**Operations**
+
+- [ ] PROD-08 — Chosen topology (single node or Kubernetes HA) with managed or replicated PostgreSQL and NATS.
+- [ ] PROD-09 — Backups with a restore drill actually performed and timed.
+- [ ] PROD-10 — Alerts and SLOs on the existing metrics, runbooks, and an on-call owner.
+
+**Quality and delivery**
+
+- [ ] PROD-11 — CI on GitHub (`woliveiras/weft`): Go, Python and web tests, lint, build and browser suites on every change; known failing tests (`internal/repositoryimport`, `e2e/mcp.spec.ts:18`) fixed so the suite is green.
+- [ ] PROD-12 — Supply chain: signed images, SBOM, dependency and image scanning, pinned versions.
+- [ ] PROD-13 — Coding agent acceptance bar: the production model and a minimum solve rate on the evaluation suite (with repetitions) chosen and met.
+
+**Integrations and organisation**
+
+- [ ] PROD-14 — Real-account validation of the integrations in use (GitHub, Jira; Bitbucket Data Center and Bedrock if adopted).
+- [ ] PROD-15 — Organisational approval when used inside a company: sending source code to an external model provider, data processing terms, and the acceptable-use policy.
+
 ## Release 2 — Reusable Components
 
 Start only after Release 1 is complete and stable.
