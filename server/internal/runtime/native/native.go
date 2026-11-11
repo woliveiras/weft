@@ -112,7 +112,7 @@ func (r *Runtime) Turn(ctx context.Context, in *runtime.TurnInput, env runtime.T
 		if err := cm.fit(ctx, conv); err != nil {
 			return nil, err
 		}
-		resp, err := env.Chat(ctx, &llm.ChatRequest{System: in.System, Messages: conv.messages(), Tools: toolset})
+		resp, err := chatLive(ctx, env, &llm.ChatRequest{System: in.System, Messages: conv.messages(), Tools: toolset})
 		if err != nil {
 			return nil, fmt.Errorf("model call: %w", err)
 		}
@@ -458,4 +458,13 @@ func TextToolCalls(text string, offered []llm.ToolSchema, round int) (calls []ll
 		calls = append(calls, llm.ToolCall{ID: fmt.Sprintf("text_%d_%d", round, i), Name: name, Arguments: args})
 	}
 	return calls, true
+}
+
+// chatLive calls the model so observers see its text as it is generated
+// when the environment supports it (NAT-09), and as a whole otherwise.
+func chatLive(ctx context.Context, env runtime.TurnEnv, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	if live, ok := env.(runtime.LiveChatEnv); ok {
+		return live.ChatLive(ctx, req)
+	}
+	return env.Chat(ctx, req)
 }

@@ -1,6 +1,6 @@
 # Native coding runtime
 
-Status: **in progress** (NAT-01 to NAT-10 in the task list; NAT-01 to NAT-08 done, NAT-09 later). This page describes how
+Status: **in progress** (NAT-01 to NAT-10 in the task list; NAT-01 to NAT-10 done). This page describes how
 Weft's own native runtime becomes a strong coding agent, especially with
 local models, without handing the agent loop to a third-party tool.
 
@@ -77,9 +77,10 @@ tool shapes for the local models we run first.
    schemas are compact and each node offers only its tools; guidance for
    small models (one tool call per round, argument examples) is enabled per
    provider. Changes are accepted only when the evaluation improves.
-9. **Streaming (NAT-09, later).** Token streaming from providers that support
-   it (Ollama, OpenAI-compatible) to show progress live and shorten first
-   output; accounting and budgets unchanged.
+9. **Streaming (NAT-09).** Token streaming from providers that support
+   it (Ollama, OpenAI-compatible, Gemini) to show progress live and shorten
+   first output; accounting and budgets unchanged. See
+   [Live output (NAT-09)](#live-output-nat-09).
 10. **Software Factory v2 (NAT-10).** Plan (read-only, `code.map`) →
     Implement (edit tools, `check.run`) → Review (read-only diff review) →
     Verify (`check.run`) → hand-off (SCM), measured on the evaluation suite
@@ -607,6 +608,73 @@ reaching the hand-off. `TestSoftwareFactoryV2SolvesTheScriptedCases` runs the
 same workflow with a scripted model that plays each role in CI. It solves 4/4
 cases, and both test checks of each case are recorded as `check.completed`
 evidence.
+
+## Live output (NAT-09)
+
+Native turns show the model's text while it is generated, so a slow local
+model no longer looks idle until its whole answer is in.
+
+**Providers.** Streaming is an optional provider capability:
+`llm.StreamingProvider` adds `ChatStream(ctx, req, onText)` to `Provider`,
+and the manifest says `streaming: true`.
+
+| Plugin | Wire |
+|---|---|
+| `ollama` | `/api/chat` with `stream: true`: newline-delimited JSON chunks, the last one (`done: true`) with the stop reason and the counts. |
+| `openai`, `vllm`, `lmstudio`, `openrouter` | Chat Completions with `stream: true` and `stream_options.include_usage`: server-sent deltas of the text and of the tool calls (by index), then a usage chunk and `[DONE]`. |
+| `gemini` | `streamGenerateContent?alt=sse` (Gemini API and Vertex AI): server-sent responses with the next parts; usage counts are running totals. |
+
+`anthropic`, `huggingface`/`tgi` and `mock` answer whole, as before (TGI's
+streamed usage report is not known to work, so the TGI wrappers set
+`openai.Options.NoStreaming`).
+
+**The same answer.** `ChatStream` returns the `ChatResponse` that `Chat`
+returns for the same content: the whole text, the tool calls assembled from
+their deltas (arguments joined, Gemini thought signatures and OpenAI-compatible
+`extra_content` kept), the stop reason and the usage, including hidden
+thinking tokens where the provider reports them (Gemini's
+`thoughtsTokenCount`; the compatible endpoint's `total_tokens`). Thinking is
+never passed to `onText`. Each provider builds its final response with the
+same function for both paths, and the unit tests compare a streamed answer
+with the whole one.
+
+**Failures.** A stream that fails is an error, never a partial answer:
+- an error the backend sends inside the stream is an `*llm.APIError` (status 0,
+  or Google's code) and is not retried, because part of the answer was already
+  shown;
+- a stream that ends before the backend said it was done is
+  `llm.ErrStreamIncomplete`, and an undecodable chunk is `llm.ErrBadStream`;
+- failures before the answer starts (429, 5xx, transport errors) are retried
+  as for whole answers;
+- a server that ignores the stream request and answers with one JSON
+  document (`application/json`; some OpenAI-compatible servers, or Gemini's
+  chunk array without SSE) is accepted as a whole answer, its text shown once;
+- a context cancel closes the connection and returns the context's error at
+  once.
+
+**Accounting unchanged.** The engine streams through
+`llm.Registry.ChatStream`, which shares `Chat`'s path: concurrency limit,
+metrics, span (`weft.llm.stream` marks streamed calls) and the observed call
+that settles cost. The turn's token budget, the money and token reservations
+and the execution's usage are applied in `turnEnv` around the call exactly as
+before. A failed stream is charged like any failure after dispatch (the
+request estimate).
+
+**Live events.** The native runtime calls the model through
+`runtime.LiveChatEnv.ChatLive` when the environment offers it (the engine
+does; external runtimes and compaction calls keep `Chat`). While the answer
+streams, the engine publishes `agent.output` events
+`{text, stream, partial: true}`: the texts of one stream, joined in order, are
+the start of the answer. They are throttled to one per
+`engine.Options.LiveOutputInterval` (1 s by default; the first piece at once)
+and stop after 8000 bytes, so a long answer adds a bounded number of events
+to the log. When the call succeeds, the runtime's usual output of the answer
+carries the same `stream` id and completes the line. The node panel's live
+output log folds the pieces of a stream into one line ending in `…` and
+replaces it with the final output; a stream that failed keeps the text shown.
+
+Not done: streaming to external agents through the LLM gateway endpoint, and
+streaming for Anthropic.
 
 ## Boundaries that do not change
 

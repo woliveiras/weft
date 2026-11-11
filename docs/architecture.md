@@ -309,7 +309,7 @@ Tool names travel to vendors as `filesystem__read` (`WireToolName`), because ven
 | Decision | Alternatives | Why | Consequences |
 |---|---|---|---|
 | A **minimal common denominator** (chat with tools and a JSON-mode flag). | Expose every vendor feature. | Adding a provider is one file. Graphs stay portable. | Vendor features such as prompt caching and vision are not modelled yet. JSON mode on Anthropic and TGI is only a prompt instruction, so callers must still parse defensively. |
-| **No streaming.** | Server-sent token streams to the UI. | Simplicity. Agents act on complete responses. | Narration appears per model round, not per token. Streaming is roadmap. |
+| **Streaming only for live narration** (NAT-09). | Stream every caller; stream to external agents. | Agents still act on complete responses; streaming only shows a native turn's text while it is generated. | Ollama, OpenAI-compatible and Gemini stream; live pieces are throttled `agent.output` events; accounting is the same as for whole answers. External agents and Anthropic get whole answers. |
 | A **`mock` provider by default**. | Require a model to start. | `docker compose up` must work offline. | Example agents fall back to deterministic heuristics when the mock returns `{"mock":true,...}`. |
 
 ### 5.6 Tool gateway and permission model (`internal/tools`)
@@ -490,7 +490,7 @@ Telemetry is optional: without `OTEL_EXPORTER_OTLP_ENDPOINT`, only stdout and `/
 | MCP tool provider (`mcp.<server>.*` grants) | Extension point. Grants parse, but no provider is registered. |
 | Sandbox daemon | Privileged Docker-in-Docker (rootless planned); one daemon per installation; no egress allowlist yet (`bridge` = whole internet); runtimes launched from `runtime.image` are not supported there. See [sandbox-runtime.md](sandbox-runtime.md#limitations). |
 | Kubernetes: engine-managed per-replica runtime/tool pods | Extension point. Use `weft k8s render` plus an explicit `endpoint`. Tools for `kubernetes` isolation currently run in the process sandbox of the `weftd` pod. |
-| Streaming LLM responses and per-token UI narration | Not implemented. |
+| Streaming LLM responses | Native turns only, for live narration (throttled, not per token); not offered to external agents through the LLM gateway endpoint; Anthropic does not stream. See [native-coding-runtime.md](native-coding-runtime.md#live-output-nat-09). |
 | Event-log pruning | Not implemented: the event log, message history and executions are kept until pruned externally (see [database-schema.md](database-schema.md#retention)). |
 | Callback routing across instances | The execution token registry is in memory. `server.internalUrl` must address the specific instance, not a load balancer. |
 | Duplicate window | Before a turn the engine consults the authoritative processed set (`IsProcessed`) and acks redelivered duplicates. A duplicate can still run if the process dies after publishing outputs but before `MarkProcessed` commits. |

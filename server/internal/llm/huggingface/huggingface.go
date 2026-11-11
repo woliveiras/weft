@@ -24,7 +24,7 @@ func factory(c llm.ProviderConfig) (llm.Provider, error) {
 	if c.DefaultModel == "" {
 		c.DefaultModel = "tgi" // TGI serves one model and ignores the name
 	}
-	return openai.New(c, openai.Options{DefaultBaseURL: defaultBaseURL, NoJSONMode: true})
+	return openai.New(c, openai.Options{DefaultBaseURL: defaultBaseURL, NoJSONMode: true, NoStreaming: true})
 }
 
 func init() {

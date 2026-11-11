@@ -28,6 +28,9 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
+	if e.Status == 0 { // a failure reported inside a stream, after a 2xx
+		return fmt.Sprintf("llm %s: %s", e.Provider, e.Body)
+	}
 	return fmt.Sprintf("llm %s: HTTP %d: %s", e.Provider, e.Status, e.Body)
 }
 
@@ -151,17 +154,8 @@ func (c *HTTPClient) Do(ctx context.Context, method, path string, body, out any)
 	var lastErr error
 	for attempt := 0; attempt <= c.Retries; attempt++ {
 		if attempt > 0 {
-			delay := c.backoff(attempt)
-			var ae *APIError
-			if errors.As(lastErr, &ae) && ae.RetryAfter > 0 {
-				delay = ae.RetryAfter
-			}
-			t := time.NewTimer(delay)
-			select {
-			case <-ctx.Done():
-				t.Stop()
-				return ctx.Err()
-			case <-t.C:
+			if err := c.wait(ctx, attempt, lastErr); err != nil {
+				return err
 			}
 		}
 		lastErr = c.once(ctx, method, path, payload, out)
@@ -170,6 +164,24 @@ func (c *HTTPClient) Do(ctx context.Context, method, path string, body, out any)
 		}
 	}
 	return lastErr
+}
+
+// wait sleeps before retry attempt: the backoff step, or the delay the
+// last error asked for. It returns the context's error when cancelled.
+func (c *HTTPClient) wait(ctx context.Context, attempt int, lastErr error) error {
+	delay := c.backoff(attempt)
+	var ae *APIError
+	if errors.As(lastErr, &ae) && ae.RetryAfter > 0 {
+		delay = ae.RetryAfter
+	}
+	t := time.NewTimer(delay)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
 
 func (c *HTTPClient) backoff(attempt int) time.Duration {
@@ -185,66 +197,14 @@ func (c *HTTPClient) backoff(attempt int) time.Duration {
 }
 
 func (c *HTTPClient) once(ctx context.Context, method, path string, payload []byte, out any) error {
-	var rd io.Reader
-	if payload != nil {
-		rd = bytes.NewReader(payload)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, rd)
+	resp, err := c.send(ctx, method, path, payload, "application/json")
 	if err != nil {
 		return err
-	}
-	if payload != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	req.Header.Set("Accept", "application/json")
-	for k, v := range c.Headers {
-		if v != "" {
-			req.Header.Set(k, v)
-		}
-	}
-	if c.Authorize != nil {
-		if err := c.Authorize(ctx, req.Header); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			return fmt.Errorf("llm %s: %w: %v", c.Provider, ErrCredentials, err)
-		}
-	}
-	resp, err := c.Client.Do(req)
-	if err != nil {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		var ne net.Error
-		if errors.As(err, &ne) && ne.Timeout() {
-			return fmt.Errorf("%w: %s gave no answer within %s (the provider's timeout); the model may still be loading or the machine running it may be short of memory: use a smaller model, free memory, or raise the provider's timeout",
-				ErrModelTimeout, c.Provider, c.Client.Timeout)
-		}
-		return fmt.Errorf("llm %s: %w", c.Provider, err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
-		return fmt.Errorf("llm %s: read response: %w", c.Provider, err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		// Redact before truncation, which could otherwise expose a key prefix.
-		b := redactCredentialHeaders(string(data), req.Header)
-		if len(b) > maxErrBody {
-			b = b[:maxErrBody] + "…"
-		}
-		ae := &APIError{
-			Provider:  c.Provider,
-			Status:    resp.StatusCode,
-			Body:      strings.TrimSpace(b),
-			Retryable: resp.StatusCode == 429 || resp.StatusCode == 408 || resp.StatusCode >= 500,
-		}
-		if ra := resp.Header.Get("Retry-After"); ra != "" {
-			if s, err := strconv.Atoi(ra); err == nil && s >= 0 && s <= 120 {
-				ae.RetryAfter = time.Duration(s) * time.Second
-			}
-		}
-		return ae
+		return c.readError(ctx, err)
 	}
 	if out == nil {
 		return nil
@@ -253,6 +213,92 @@ func (c *HTTPClient) once(ctx context.Context, method, path string, payload []by
 		return fmt.Errorf("llm %s: decode response: %w", c.Provider, err)
 	}
 	return nil
+}
+
+// send performs one request and returns the response when its status is
+// 2xx. Any other status is read, redacted and returned as an *APIError;
+// the caller owns (and must close) the body of a returned response.
+func (c *HTTPClient) send(ctx context.Context, method, path string, payload []byte, accept string) (*http.Response, error) {
+	var rd io.Reader
+	if payload != nil {
+		rd = bytes.NewReader(payload)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+path, rd)
+	if err != nil {
+		return nil, err
+	}
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Accept", accept)
+	for k, v := range c.Headers {
+		if v != "" {
+			req.Header.Set(k, v)
+		}
+	}
+	if c.Authorize != nil {
+		if err := c.Authorize(ctx, req.Header); err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, fmt.Errorf("llm %s: %w: %v", c.Provider, ErrCredentials, err)
+		}
+	}
+	resp, err := c.Client.Do(req)
+	if err != nil {
+		return nil, c.transportError(ctx, err)
+	}
+	if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
+		return resp, nil
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+	if err != nil {
+		return nil, c.readError(ctx, err)
+	}
+	// Redact before truncation, which could otherwise expose a key prefix.
+	b := redactCredentialHeaders(string(data), req.Header)
+	if len(b) > maxErrBody {
+		b = b[:maxErrBody] + "…"
+	}
+	ae := &APIError{
+		Provider:  c.Provider,
+		Status:    resp.StatusCode,
+		Body:      strings.TrimSpace(b),
+		Retryable: resp.StatusCode == 429 || resp.StatusCode == 408 || resp.StatusCode >= 500,
+	}
+	if ra := resp.Header.Get("Retry-After"); ra != "" {
+		if s, err := strconv.Atoi(ra); err == nil && s >= 0 && s <= 120 {
+			ae.RetryAfter = time.Duration(s) * time.Second
+		}
+	}
+	return nil, ae
+}
+
+// transportError maps a failed request: cancellation stays the context's
+// error, a client timeout becomes ErrModelTimeout.
+func (c *HTTPClient) transportError(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return fmt.Errorf("%w: %s gave no answer within %s (the provider's timeout); the model may still be loading or the machine running it may be short of memory: use a smaller model, free memory, or raise the provider's timeout",
+			ErrModelTimeout, c.Provider, c.Client.Timeout)
+	}
+	return fmt.Errorf("llm %s: %w", c.Provider, err)
+}
+
+// readError maps a failure while reading a response body the same way.
+func (c *HTTPClient) readError(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return c.transportError(ctx, err)
+	}
+	return fmt.Errorf("llm %s: read response: %w", c.Provider, err)
 }
 
 // LastUserText returns the content of the last user message (or "").

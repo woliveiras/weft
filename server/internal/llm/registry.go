@@ -300,6 +300,23 @@ func (r *Registry) Names() []string {
 // concurrency limiting, Prometheus metrics and a gen_ai OpenTelemetry span.
 // An empty req.Model is filled with the provider's default model.
 func (r *Registry) Chat(ctx context.Context, providerName string, req *ChatRequest) (*ChatResponse, error) {
+	return r.chat(ctx, providerName, req, nil)
+}
+
+// ChatStream is Chat with the answer's text passed to onText as it arrives,
+// when the provider streams (StreamingProvider); other providers answer as
+// Chat does and onText is not called. Limits, metrics, the span and the
+// observed call (accounting) are exactly Chat's, and the returned response
+// is the same one Chat would return. A stream that fails midway returns its
+// error and no response.
+func (r *Registry) ChatStream(ctx context.Context, providerName string, req *ChatRequest, onText func(string)) (*ChatResponse, error) {
+	if onText == nil {
+		onText = func(string) {}
+	}
+	return r.chat(ctx, providerName, req, onText)
+}
+
+func (r *Registry) chat(ctx context.Context, providerName string, req *ChatRequest, onText func(string)) (*ChatResponse, error) {
 	e, providerName, ok := r.lookup(providerName)
 	if !ok {
 		return nil, fmt.Errorf("llm: unknown provider %q", providerName)
@@ -337,8 +354,17 @@ func (r *Registry) Chat(ctx context.Context, providerName string, req *ChatReque
 		}
 	}
 
+	sp, streaming := e.p.(StreamingProvider)
+	streaming = streaming && onText != nil
+	span.SetAttributes(attribute.Bool("weft.llm.stream", streaming))
 	start := time.Now()
-	resp, err := e.p.Chat(ctx, req)
+	var resp *ChatResponse
+	var err error
+	if streaming {
+		resp, err = sp.ChatStream(ctx, req, onText)
+	} else {
+		resp, err = e.p.Chat(ctx, req)
+	}
 	observability.LLMDuration.WithLabelValues(providerName, model).Observe(time.Since(start).Seconds())
 	if usage, estimated, charged := accounted(req, resp, err); charged && UnavailableReason(e.p) == nil {
 		r.observe(ctx, Call{Source: "gateway", Provider: providerName, Type: e.cfg.Type, Model: req.Model,

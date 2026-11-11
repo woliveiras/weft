@@ -14,7 +14,7 @@ import {
 import { useAsync, useThrottled } from '../hooks/useData';
 import { matches, useEventStream } from '../hooks/useEventStream';
 import { Badge, Btn, Empty, ErrorBox, Icon, StateDot, fmtTime, since, stateLabel } from './common';
-import { describeEvent, eventTone } from './describe';
+import { describeEvent, eventTone, foldLiveOutput } from './describe';
 import type { ElementIssue } from './canvas/edit';
 import { effectiveLoopMode } from './canvas/model';
 import { ElementIssues, FieldIssues } from './GraphIssues';
@@ -258,7 +258,7 @@ function OutputLog({ graphId, nodeId, replica }: { graphId: string; nodeId: stri
       </div>
       <div className="log" ref={box} aria-live="polite">
         {lines.length === 0 && <div className="muted">No output yet.</div>}
-        {lines.map((ev) => (
+        {foldLiveOutput(lines).map((ev) => (
           <div key={ev.id} className={`log-line ${eventTone(ev)}`}>
             <span className="log-time">{fmtTime(ev.time)}</span>
             {replica < 0 && <span className="log-rep">n{ev.replica ?? 0}</span>}

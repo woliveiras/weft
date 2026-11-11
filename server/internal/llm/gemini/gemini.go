@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -50,7 +51,7 @@ func init() {
 		ID: "gemini", Label: "Google Gemini",
 		Description:    "Gemini models through the Gemini API (API key) or Vertex AI (the server's Application Default Credentials; set a project).",
 		DefaultBaseURL: defaultBaseURL, Key: llm.KeyOptional,
-		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONNative, Usage: true, ModelListing: true},
+		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONNative, Usage: true, ModelListing: true, Streaming: true},
 		Settings:     []string{llm.SettingContextWindow, llm.SettingProject, llm.SettingRegion},
 	}, func(c llm.ProviderConfig) (llm.Provider, error) { return New(c) })
 }
@@ -155,12 +156,14 @@ func (p *Provider) authorize(ctx context.Context, h http.Header) error {
 // modelID strips the "models/" prefix the Gemini API lists models with.
 func modelID(m string) string { return strings.TrimPrefix(m, "models/") }
 
-func (p *Provider) chatPath(model string) string {
+// chatPath is the path of method (generateContent or
+// streamGenerateContent) for model.
+func (p *Provider) chatPath(model, method string) string {
 	m := url.PathEscape(modelID(model))
 	if p.vertex == nil {
-		return "/models/" + m + ":generateContent"
+		return "/models/" + m + ":" + method
 	}
-	return fmt.Sprintf("/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent", p.vertex.project, p.vertex.region, m)
+	return fmt.Sprintf("/v1/projects/%s/locations/%s/publishers/google/models/%s:%s", p.vertex.project, p.vertex.region, m, method)
 }
 
 type part struct {
@@ -213,23 +216,31 @@ type request struct {
 }
 
 type response struct {
-	Candidates []struct {
-		Content       content `json:"content"`
-		FinishReason  string  `json:"finishReason"`
-		FinishMessage string  `json:"finishMessage"`
-	} `json:"candidates"`
-	PromptFeedback *struct {
-		BlockReason        string `json:"blockReason"`
-		BlockReasonMessage string `json:"blockReasonMessage"`
-	} `json:"promptFeedback"`
-	UsageMetadata struct {
-		PromptTokenCount        int `json:"promptTokenCount"`
-		CandidatesTokenCount    int `json:"candidatesTokenCount"`
-		ThoughtsTokenCount      int `json:"thoughtsTokenCount"`
-		CachedContentTokenCount int `json:"cachedContentTokenCount"`
-		ToolUsePromptTokenCount int `json:"toolUsePromptTokenCount"`
-	} `json:"usageMetadata"`
-	ModelVersion string `json:"modelVersion"`
+	Candidates     []candidate     `json:"candidates"`
+	PromptFeedback *promptFeedback `json:"promptFeedback"`
+	UsageMetadata  usageMetadata   `json:"usageMetadata"`
+	ModelVersion   string          `json:"modelVersion"`
+	// Error is set on a stream chunk that reports a failure.
+	Error json.RawMessage `json:"error,omitempty"`
+}
+
+type candidate struct {
+	Content       content `json:"content"`
+	FinishReason  string  `json:"finishReason"`
+	FinishMessage string  `json:"finishMessage"`
+}
+
+type promptFeedback struct {
+	BlockReason        string `json:"blockReason"`
+	BlockReasonMessage string `json:"blockReasonMessage"`
+}
+
+type usageMetadata struct {
+	PromptTokenCount        int `json:"promptTokenCount"`
+	CandidatesTokenCount    int `json:"candidatesTokenCount"`
+	ThoughtsTokenCount      int `json:"thoughtsTokenCount"`
+	CachedContentTokenCount int `json:"cachedContentTokenCount"`
+	ToolUsePromptTokenCount int `json:"toolUsePromptTokenCount"`
 }
 
 // providerData is the opaque state kept on a tool call.
@@ -332,20 +343,122 @@ func (p *Provider) buildRequest(req *llm.ChatRequest) *request {
 }
 
 func (p *Provider) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	if err := llm.CheckContext(p.cfg.Name, p.ContextWindow(), req); err != nil {
+	model, err := p.prepare(req)
+	if err != nil {
 		return nil, err
+	}
+	var out response
+	if err := p.http.Do(ctx, http.MethodPost, p.chatPath(model, "generateContent"), p.buildRequest(req), &out); err != nil {
+		return nil, p.mapError(err, model)
+	}
+	return p.finish(model, &out)
+}
+
+// prepare checks req before sending and returns the model it uses.
+func (p *Provider) prepare(req *llm.ChatRequest) (string, error) {
+	if err := llm.CheckContext(p.cfg.Name, p.ContextWindow(), req); err != nil {
+		return "", err
 	}
 	model := req.Model
 	if model == "" {
 		model = p.cfg.DefaultModel
 	}
 	if model == "" {
-		return nil, fmt.Errorf("llm %s: no model: set the provider's default model or choose one for the agent", p.cfg.Name)
+		return "", fmt.Errorf("llm %s: no model: set the provider's default model or choose one for the agent", p.cfg.Name)
+	}
+	return model, nil
+}
+
+// ChatStream implements llm.StreamingProvider with streamGenerateContent
+// (alt=sse): each event is a response holding the next parts of the
+// candidate; the last one has the finish reason, and the usage counts are
+// running totals. Function calls (with their thought signatures) arrive
+// whole in a part. The parts are joined into one response and finished as
+// a whole answer is, so the result is the one Chat returns.
+func (p *Provider) ChatStream(ctx context.Context, req *llm.ChatRequest, onText func(string)) (*llm.ChatResponse, error) {
+	model, err := p.prepare(req)
+	if err != nil {
+		return nil, err
 	}
 	var out response
-	if err := p.http.Do(ctx, http.MethodPost, p.chatPath(model), p.buildRequest(req), &out); err != nil {
+	complete := false
+	handle := func(ch response) error {
+		if len(ch.Error) > 0 && string(ch.Error) != "null" {
+			return p.streamFailure(ch.Error)
+		}
+		if pf := ch.PromptFeedback; pf != nil && pf.BlockReason != "" {
+			out.PromptFeedback, complete = pf, true
+		}
+		if ch.ModelVersion != "" {
+			out.ModelVersion = ch.ModelVersion
+		}
+		if ch.UsageMetadata != (usageMetadata{}) {
+			out.UsageMetadata = ch.UsageMetadata
+		}
+		if len(ch.Candidates) == 0 {
+			return nil
+		}
+		if len(out.Candidates) == 0 {
+			out.Candidates = make([]candidate, 1)
+		}
+		c, acc := ch.Candidates[0], &out.Candidates[0]
+		for _, pt := range c.Content.Parts {
+			if pt.Text != "" && !pt.Thought && pt.FunctionCall == nil && onText != nil {
+				onText(pt.Text)
+			}
+			acc.Content.Parts = append(acc.Content.Parts, pt)
+		}
+		if c.FinishReason != "" {
+			acc.FinishReason, acc.FinishMessage, complete = c.FinishReason, c.FinishMessage, true
+		}
+		return nil
+	}
+	err = p.http.DoStream(ctx, http.MethodPost, p.chatPath(model, "streamGenerateContent")+"?alt=sse", p.buildRequest(req), "text/event-stream", func(body io.Reader, whole bool) error {
+		if whole { // without SSE the chunks come as one JSON array
+			var chunks []response
+			if err := llm.DecodeWhole(p.cfg.Name, body, &chunks); err != nil {
+				return err
+			}
+			for _, ch := range chunks {
+				if err := handle(ch); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		return llm.ReadSSE(body, func(data []byte) error {
+			var ch response
+			if err := json.Unmarshal(data, &ch); err != nil {
+				return llm.BadStream(p.cfg.Name, err)
+			}
+			return handle(ch)
+		})
+	})
+	if err != nil {
 		return nil, p.mapError(err, model)
 	}
+	if !complete {
+		return nil, llm.Incomplete(p.cfg.Name)
+	}
+	return p.finish(model, &out)
+}
+
+// streamFailure is an error Google sent inside a stream, as the
+// *llm.APIError the same error would have been before the stream started,
+// so mapError explains it the same way. It is never retried.
+func (p *Provider) streamFailure(raw json.RawMessage) error {
+	body := `{"error":` + string(raw) + `}`
+	var g googleError
+	_ = json.Unmarshal([]byte(body), &g)
+	if len(body) > 2048 {
+		body = body[:2048] + "…"
+	}
+	return &llm.APIError{Provider: p.cfg.Name, Status: g.Error.Code, Body: body}
+}
+
+// finish turns a whole answer, or one joined from a stream, into the
+// platform response.
+func (p *Provider) finish(model string, out *response) (*llm.ChatResponse, error) {
 	if pf := out.PromptFeedback; pf != nil && pf.BlockReason != "" {
 		return nil, p.blocked("the prompt", pf.BlockReason, pf.BlockReasonMessage)
 	}

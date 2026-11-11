@@ -22,7 +22,7 @@ func TestBuiltinPluginsHaveManifests(t *testing.T) {
 	}
 	ollama, ok := llm.PluginManifest("OLLAMA")
 	if !ok || !ollama.Local || ollama.Key != llm.KeyNone || ollama.DefaultBaseURL != "http://localhost:11434" ||
-		!ollama.Capabilities.Tools || ollama.Capabilities.Streaming || len(ollama.Settings) != 1 || ollama.Settings[0] != llm.SettingContextWindow {
+		!ollama.Capabilities.Tools || !ollama.Capabilities.Streaming || len(ollama.Settings) != 1 || ollama.Settings[0] != llm.SettingContextWindow {
 		t.Fatalf("ollama manifest = %+v ok=%v", ollama, ok)
 	}
 	if openai, _ := llm.PluginManifest("openai"); openai.Local || openai.Key != llm.KeyRequired {
@@ -30,6 +30,17 @@ func TestBuiltinPluginsHaveManifests(t *testing.T) {
 	}
 	if mock, _ := llm.PluginManifest("mock"); !mock.DevOnly {
 		t.Fatalf("mock must be a development plugin: %+v", mock)
+	}
+}
+
+// NAT-09: the plugins that stream say so in their manifest; the others
+// answer whole, as before.
+func TestBuiltinPluginsDeclareStreaming(t *testing.T) {
+	streams := map[string]bool{"gemini": true, "lmstudio": true, "ollama": true, "openai": true, "openrouter": true, "vllm": true}
+	for _, m := range llm.Plugins() {
+		if m.Capabilities.Streaming != streams[m.ID] {
+			t.Errorf("%s: streaming = %v, want %v", m.ID, m.Capabilities.Streaming, streams[m.ID])
+		}
 	}
 }
 

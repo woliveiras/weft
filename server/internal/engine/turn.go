@@ -558,6 +558,9 @@ type turnEnv struct {
 	children int
 	// checkpointDue: the round's first workspace change records a checkpoint.
 	checkpointDue bool
+	// streamed is the last live model call whose text was shown, until the
+	// next Output (guarded by mu).
+	streamed *streamedText
 }
 
 func newTurnEnv(r *replica, gr *graphRun, n *domain.Node, x *domain.Execution) *turnEnv {
@@ -647,7 +650,18 @@ func (t *turnEnv) InvokeTool(ctx context.Context, name string, args json.RawMess
 	return result, err
 }
 
-func (t *turnEnv) Chat(ctx context.Context, req *llm.ChatRequest) (response *llm.ChatResponse, retErr error) {
+// Chat implements runtime.TurnEnv.
+func (t *turnEnv) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	return t.chat(ctx, req, false)
+}
+
+// ChatLive implements runtime.LiveChatEnv: Chat, with the answer's text
+// published as live agent.output events while the provider streams it.
+func (t *turnEnv) ChatLive(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	return t.chat(ctx, req, true)
+}
+
+func (t *turnEnv) chat(ctx context.Context, req *llm.ChatRequest, live bool) (response *llm.ChatResponse, retErr error) {
 	ctx, done, controlErr := t.controlled(ctx)
 	defer done()
 	if controlErr != nil {
@@ -711,7 +725,14 @@ func (t *turnEnv) Chat(ctx context.Context, req *llm.ChatRequest) (response *llm
 			return nil, errors.Join(err, money.Release(ctx))
 		}
 	}
-	resp, err := e.opt.Models.Chat(ctx, prov.Name(), req)
+	var resp *llm.ChatResponse
+	if sm, ok := e.opt.Models.(StreamingModels); ok && live {
+		out := t.newLiveOutput(ctx)
+		resp, err = sm.ChatStream(ctx, prov.Name(), req, out.add)
+		out.done(resp, err)
+	} else {
+		resp, err = e.opt.Models.Chat(ctx, prov.Name(), req)
+	}
 	if reservation != nil {
 		reservation.report(resp)
 	}
@@ -804,7 +825,15 @@ func (t *turnEnv) Output(ctx context.Context, text string) {
 	if text == "" {
 		return
 	}
-	t.gr.e.bus.Publish(ctx, domain.NewEvent(domain.EvAgentOutput, t.gr.g.Metadata.ID, map[string]any{"text": truncate(text, 8000)}).
+	data := map[string]any{"text": truncate(text, maxOutputText)}
+	t.mu.Lock()
+	// The streamed answer's text completes its live line.
+	if t.streamed != nil && t.streamed.text == text {
+		data["stream"] = t.streamed.id
+	}
+	t.streamed = nil
+	t.mu.Unlock()
+	t.gr.e.bus.Publish(ctx, domain.NewEvent(domain.EvAgentOutput, t.gr.g.Metadata.ID, data).
 		WithNode(t.n.ID, t.r.index).WithExecution(t.x.ID))
 }
 

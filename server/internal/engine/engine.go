@@ -52,6 +52,13 @@ type Models interface {
 	Chat(ctx context.Context, provider string, req *llm.ChatRequest) (*llm.ChatResponse, error)
 }
 
+// StreamingModels is implemented by gateways that can stream an answer's
+// text (llm.Registry). ChatStream must account for the call exactly as
+// Chat does; the engine streams only native turns' calls through it.
+type StreamingModels interface {
+	ChatStream(ctx context.Context, provider string, req *llm.ChatRequest, onText func(string)) (*llm.ChatResponse, error)
+}
+
 // ToolGateway is the engine's view of the tool gateway.
 type ToolGateway interface {
 	Invoke(ctx context.Context, p *tools.Principal, name string, args json.RawMessage) (*tools.Result, error)
@@ -108,6 +115,10 @@ type Options struct {
 	ReconcileInterval  time.Duration
 	RetryBackoff       time.Duration
 	MaxConcurrentTurns int
+	// LiveOutputInterval is the least time between two live output events
+	// of one streamed model call (default 1s): it bounds how many events a
+	// long answer adds to the event log.
+	LiveOutputInterval time.Duration
 }
 
 // EnvironmentChecker reports whether a graph's environment can serve agents.
@@ -145,6 +156,9 @@ func New(opt Options) (*Engine, error) {
 	}
 	if opt.ReconcileInterval == 0 {
 		opt.ReconcileInterval = opt.LeaseTTL / 4
+	}
+	if opt.LiveOutputInterval <= 0 {
+		opt.LiveOutputInterval = time.Second
 	}
 	if opt.RetryBackoff == 0 {
 		opt.RetryBackoff = 2 * time.Second

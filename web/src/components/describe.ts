@@ -15,7 +15,8 @@ export function describeEvent(ev: WeftEvent): string {
   const x = d(ev);
   switch (ev.type) {
     case 'agent.output':
-      return String(x.text ?? short(ev.data));
+      // A live piece of a streamed answer (NAT-09) is still being written.
+      return x.partial === true ? `${String(x.text ?? '')}…` : String(x.text ?? short(ev.data));
     case 'agent.broadcast':
       return `broadcast: ${String(x.text ?? short(ev.data))}`;
     case 'agent.plan': {
@@ -69,4 +70,40 @@ export function eventTone(ev: WeftEvent): string {
   if (ev.type === 'agent.output') return 'out';
   if (ev.type.startsWith('tool')) return 'tool';
   return '';
+}
+
+/**
+ * Folds the live pieces of streamed model answers (agent.output with
+ * `partial` and a `stream` id, NAT-09) into one line per answer, at the
+ * position of its first piece. Once the final output of that stream is in
+ * the list, it replaces the live line. Other events are kept as they are.
+ */
+export function foldLiveOutput(events: WeftEvent[]): WeftEvent[] {
+  const finals = new Set<string>();
+  const texts = new Map<string, string>();
+  for (const ev of events) {
+    const stream = liveStream(ev);
+    if (!stream) continue;
+    if (d(ev).partial === true) texts.set(stream, (texts.get(stream) ?? '') + String(d(ev).text ?? ''));
+    else finals.add(stream);
+  }
+  const out: WeftEvent[] = [];
+  const placed = new Set<string>();
+  for (const ev of events) {
+    const stream = liveStream(ev);
+    if (!stream || d(ev).partial !== true) {
+      out.push(ev);
+      continue;
+    }
+    if (finals.has(stream) || placed.has(stream)) continue;
+    placed.add(stream);
+    out.push({ ...ev, data: { ...d(ev), text: texts.get(stream) ?? '' } });
+  }
+  return out;
+}
+
+function liveStream(ev: WeftEvent): string {
+  if (ev.type !== 'agent.output') return '';
+  const s = d(ev).stream;
+  return typeof s === 'string' ? s : '';
 }

@@ -938,7 +938,7 @@ local models first. Each step is accepted only when the evaluation suite
 - [x] NAT-06 — `plan.update` platform tool: per-execution checklist shown live on the task.
 - [x] NAT-07 — Worktree checkpoints on hidden Git refs before edits; restore the last good checkpoint from the task (and, with a grant, by the agent).
 - [x] NAT-08 — Role prompt templates (planner, implementer, reviewer, verifier) as built-in skills; compact tool schemas; per-provider guidance for small models; accepted only on evaluation improvement.
-- [ ] NAT-09 (Later) — Provider streaming (Ollama, OpenAI-compatible) for live output; accounting unchanged.
+- [x] NAT-09 — Provider streaming (Ollama, OpenAI-compatible, Gemini) for live output; accounting unchanged.
 - [x] NAT-10 — Software Factory v2: Plan → Implement → Review → Verify → SCM hand-off on the new tools, measured on the evaluation suite with a local model.
 
 **Done when:** the Software Factory v2 solves the evaluation suite with a local

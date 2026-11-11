@@ -249,3 +249,33 @@ func TestSmallModelGuidanceCompactsSchemasAndRunsOneCallPerReply(t *testing.T) {
 		t.Fatalf("standard: %v", env.tools)
 	}
 }
+
+// liveEnv supports runtime.LiveChatEnv and records which door each model
+// call used.
+type liveEnv struct {
+	scriptedEnv
+	live int
+}
+
+func (e *liveEnv) ChatLive(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	e.live++
+	return e.Chat(ctx, req)
+}
+
+// NAT-09: the turn's model calls go through ChatLive when the environment
+// offers it, and the final text still goes to Output; environments without
+// it keep Chat.
+func TestModelCallsAreLiveWhenTheEnvironmentStreams(t *testing.T) {
+	env := &liveEnv{scriptedEnv: scriptedEnv{replies: []*llm.ChatResponse{toolCall("git.branch", `{}`), text("Branch created.")}}}
+	res, err := New().Turn(context.Background(), &runtime.TurnInput{Prompt: "go", Tools: granted}, env)
+	if err != nil || res.Summary != "Branch created." || env.live != 2 || len(env.asked) != 2 {
+		t.Fatalf("res %+v err %v live %d asked %d", res, err, env.live, len(env.asked))
+	}
+	if n := len(env.outputs); n == 0 || env.outputs[n-1] != "Branch created." {
+		t.Fatalf("outputs %q", env.outputs)
+	}
+	plain := &scriptedEnv{replies: []*llm.ChatResponse{text("Hi.")}}
+	if _, err := turn(t, plain, nil); err != nil || len(plain.asked) != 1 {
+		t.Fatalf("plain env: err %v asked %d", err, len(plain.asked))
+	}
+}

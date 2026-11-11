@@ -198,6 +198,16 @@ type ContextEvent struct {
 	Error        string `json:"error,omitempty"`
 }
 
+// LiveChatEnv is an optional extension of TurnEnv for runtimes that narrate
+// the model's text themselves (the native runtime, NAT-09). ChatLive is
+// Chat - same budgets, accounting and response - and, when the provider
+// streams, also shows the answer's text to observers while it is generated.
+// The runtime still passes the final text to Output, which completes the
+// live line. Runtimes must work without it.
+type LiveChatEnv interface {
+	ChatLive(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error)
+}
+
 // PlanEnv is an optional extension of TurnEnv: the engine records an
 // agent's working plan (plan.update) so people can follow it live.
 type PlanEnv interface {

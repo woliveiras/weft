@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/woliveiras/weft/server/internal/llm"
@@ -36,7 +37,7 @@ func init() {
 	llm.RegisterPlugin(llm.Manifest{
 		ID: "ollama", Label: "Ollama", Description: "Models served by Ollama on this machine or network (native /api/chat).",
 		Local: true, DefaultBaseURL: "http://localhost:11434", Key: llm.KeyNone,
-		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONNative, Usage: true, ModelListing: true}, Settings: []string{llm.SettingContextWindow},
+		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONNative, Usage: true, ModelListing: true, Streaming: true}, Settings: []string{llm.SettingContextWindow},
 	}, func(c llm.ProviderConfig) (llm.Provider, error) { return New(c) })
 }
 
@@ -99,6 +100,7 @@ type request struct {
 type response struct {
 	Model           string  `json:"model"`
 	Message         message `json:"message"`
+	Done            bool    `json:"done"`
 	DoneReason      string  `json:"done_reason"`
 	PromptEvalCount int     `json:"prompt_eval_count"`
 	EvalCount       int     `json:"eval_count"`
@@ -163,6 +165,72 @@ func (p *Provider) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatRes
 	if err := p.http.Do(ctx, http.MethodPost, "/api/chat", p.buildRequest(req), &out); err != nil {
 		return nil, err
 	}
+	return p.finish(req, window, &out)
+}
+
+// ChatStream implements llm.StreamingProvider with /api/chat and
+// stream: true: newline-delimited JSON chunks, each with a piece of the
+// message, the last one (done: true) with the stop reason and the counts.
+// Tool calls arrive whole in a chunk and are collected in order.
+func (p *Provider) ChatStream(ctx context.Context, req *llm.ChatRequest, onText func(string)) (*llm.ChatResponse, error) {
+	window := p.ContextWindow()
+	if err := llm.CheckContext(p.cfg.Name, window, req); err != nil {
+		return nil, err
+	}
+	wire := p.buildRequest(req)
+	wire.Stream = true
+	var out response
+	var text []byte
+	err := p.http.DoStream(ctx, http.MethodPost, "/api/chat", wire, "application/x-ndjson", func(body io.Reader, whole bool) error {
+		if whole { // a proxy that answered without streaming
+			if err := llm.DecodeWhole(p.cfg.Name, body, &out); err != nil {
+				return err
+			}
+			out.Done, text = true, []byte(out.Message.Content)
+			if onText != nil && out.Message.Content != "" {
+				onText(out.Message.Content)
+			}
+			return nil
+		}
+		return llm.ReadLines(body, func(line []byte) error {
+			var ch response
+			if err := json.Unmarshal(line, &ch); err != nil {
+				return llm.BadStream(p.cfg.Name, err)
+			}
+			if ch.Error != "" {
+				return p.http.StreamError(0, ch.Error)
+			}
+			if ch.Message.Content != "" {
+				text = append(text, ch.Message.Content...)
+				if onText != nil {
+					onText(ch.Message.Content)
+				}
+			}
+			out.Message.ToolCalls = append(out.Message.ToolCalls, ch.Message.ToolCalls...)
+			if ch.Model != "" {
+				out.Model = ch.Model
+			}
+			if ch.Done {
+				out.Done, out.DoneReason = true, ch.DoneReason
+				out.PromptEvalCount, out.EvalCount = ch.PromptEvalCount, ch.EvalCount
+				return io.EOF
+			}
+			return nil
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !out.Done {
+		return nil, llm.Incomplete(p.cfg.Name)
+	}
+	out.Message.Content = string(text)
+	return p.finish(req, window, &out)
+}
+
+// finish turns Ollama's answer, whole or assembled from a stream, into the
+// platform response.
+func (p *Provider) finish(req *llm.ChatRequest, window int, out *response) (*llm.ChatResponse, error) {
 	if out.Error != "" {
 		return nil, fmt.Errorf("llm %s: %s", p.cfg.Name, out.Error)
 	}

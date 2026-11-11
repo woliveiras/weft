@@ -316,7 +316,9 @@ func Run(t *testing.T, w Wire, build New) {
 // RunLive checks a real backend. Real models are not deterministic, so it
 // holds them only to what agents need: an answer, a structured tool call
 // when one is clearly asked for, valid JSON in JSON mode, reported usage,
-// the model listed, and prompt cancellation.
+// the model listed, and prompt cancellation. Providers that stream are also
+// held to a streamed text (the live pieces are the answer) and a streamed
+// tool call.
 // liveAnswerTokens leaves room for models that reason before answering
 // (their hidden thinking counts against max_tokens).
 const liveAnswerTokens = 1024
@@ -387,6 +389,29 @@ func RunLive(t *testing.T, p llm.Provider, model string) {
 			t.Fatalf("not a JSON object: %q", resp.Message.Content)
 		}
 	})
+	if sp, ok := p.(llm.StreamingProvider); ok {
+		t.Run("streaming", func(t *testing.T) {
+			var live strings.Builder
+			resp, err := sp.ChatStream(ctx, &llm.ChatRequest{Model: model, MaxTokens: liveAnswerTokens,
+				Messages: []llm.ChatMessage{{Role: llm.RoleUser, Content: "Count from 1 to 5, separated by spaces."}}}, func(s string) { live.WriteString(s) })
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.TrimSpace(resp.Message.Content) == "" || live.String() != resp.Message.Content || resp.Usage.InputTokens == 0 || resp.Usage.OutputTokens == 0 {
+				t.Fatalf("live text %q, response %+v", live.String(), resp)
+			}
+			tools := []llm.ToolSchema{{Name: "fixture.echo", Description: "Echo a word back.",
+				Parameters: json.RawMessage(`{"type":"object","properties":{"word":{"type":"string"}},"required":["word"]}`)}}
+			call, err := sp.ChatStream(ctx, &llm.ChatRequest{Model: model, System: "You can only act through tools. Always call the provided tool.",
+				Messages: []llm.ChatMessage{{Role: llm.RoleUser, Content: "Use the echo tool to echo the word OK."}}, Tools: tools}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(call.Message.ToolCalls) == 0 || call.Message.ToolCalls[0].Name != "fixture.echo" || !strings.Contains(string(call.Message.ToolCalls[0].Arguments), "OK") {
+				t.Fatalf("streamed tool call not assembled: %+v", call.Message)
+			}
+		})
+	}
 	t.Run("cancellation", func(t *testing.T) {
 		c, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 		defer cancel()

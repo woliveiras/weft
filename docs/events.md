@@ -52,7 +52,7 @@ Persisting an event never fails the operation it describes: write errors are log
 | `approval.requested` | HITL service | `Approval` |
 | `approval.decided` | HITL service (human decision or timeout) | `Approval` (actor = decider or `system`) |
 | `operator.message` | API, `POST …/nodes/{n}/chat` | `OperatorMessage` |
-| `agent.output` | runtime narration (native model text, tool call summaries, `POST /output`) | `{text}` (≤ 8000 chars) |
+| `agent.output` | runtime narration (native model text, tool call summaries, `POST /output`); live pieces of a native turn's streamed answer (NAT-09) | `{text}` (≤ 8000 chars); a live piece is `{text, stream, partial: true}` (pieces of one `stream` joined in order are the start of the answer, ≤ 8000 bytes in all, at most one per second), and the final output of that answer is `{text, stream}` |
 | `agent.context` | a native turn elided older tool results or compacted its conversation (NAT-02) | `{operation: elide\|compact, outcome: ok\|failed, messages, tokensBefore, tokensAfter, window, error?}` |
 | `agent.plan` | a native agent replaced its working plan with `plan.update` (NAT-06); the Activity view shows the `in_progress` step of an execution's latest plan | `{items: [{step, status: pending\|in_progress\|done}]}` |
 | `agent.broadcast` | ring clusters, end of each turn | `{text, iteration}` |
