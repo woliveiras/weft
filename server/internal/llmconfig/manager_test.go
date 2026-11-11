@@ -320,6 +320,31 @@ func TestDeleteAndDefault(t *testing.T) {
 	}
 }
 
+func TestDefaultModelMatchesPrefixedListings(t *testing.T) {
+	e := newEnv(t)
+	e.fake.Models = []string{"models/gemini-3.5-flash", "models/gemini-flash-latest"}
+	in := e.openaiInput("g")
+	in.DefaultModel = "gemini-3.5-flash"
+	if _, err := e.m.Create(ctx, in, "a", 0); err != nil {
+		t.Fatal(err)
+	}
+	res, err := e.m.Test(ctx, "g", "op")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Models.DefaultModelListed == nil || !*res.Models.DefaultModelListed {
+		t.Fatalf("a model listed as models/<id> must count as listed: %+v", res.Models)
+	}
+	other := e.openaiInput("h")
+	other.DefaultModel = "gemini-9-ultra"
+	if _, err := e.m.Create(ctx, other, "a", 0); err != nil {
+		t.Fatal(err)
+	}
+	if res, _ = e.m.Test(ctx, "h", "op"); res.Models.DefaultModelListed == nil || *res.Models.DefaultModelListed {
+		t.Fatalf("an unlisted model must still be reported: %+v", res.Models)
+	}
+}
+
 func TestConnectionTestUsesInference(t *testing.T) {
 	e := newEnv(t)
 	if _, err := e.m.Create(ctx, e.openaiInput("p"), "a", 0); err != nil {

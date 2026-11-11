@@ -185,7 +185,7 @@ func (m *Manager) run(ctx context.Context, reg *llm.Registry, name, defModel str
 		if defModel != "" {
 			listed := false
 			for _, mi := range models {
-				if mi.ID == defModel {
+				if sameModel(mi.ID, defModel) {
 					listed = true
 				}
 			}
@@ -276,4 +276,11 @@ func truncate(s string, n int) string {
 		cut--
 	}
 	return s[:cut] + "…"
+}
+
+// sameModel compares model IDs, ignoring the "models/" prefix some
+// providers put on listed IDs (Gemini lists "models/gemini-2.5-flash" but
+// accepts "gemini-2.5-flash" in requests).
+func sameModel(listed, configured string) bool {
+	return strings.TrimPrefix(listed, "models/") == strings.TrimPrefix(configured, "models/")
 }
