@@ -93,7 +93,7 @@ it('filters the page from counters and history controls through the route', asyn
   const onChange = vi.fn();
   const { rerender } = render(view(parseActivityState(''), onChange));
   await userEvent.click(await screen.findByRole('button', { name: /1\s*Failed/ }));
-  expect(onChange).toHaveBeenLastCalledWith({ window: '24h', status: 'failed', workflow: '', agent: '', focus: 'history' });
+  expect(onChange).toHaveBeenLastCalledWith({ window: '24h', status: 'failed', workflow: '', agent: '', focus: 'history', tab: '' });
   await userEvent.click(screen.getByRole('button', { name: /2\s*Waiting for a person/ }));
   expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ focus: 'needs', status: '' }));
   await userEvent.selectOptions(screen.getByLabelText('Agent'), 'tester');

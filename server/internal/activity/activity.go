@@ -312,7 +312,15 @@ func (b Builder) Build(ctx context.Context, q Query, v Viewer) (*View, error) {
 
 // section runs one builder in its own span and records its outcome.
 func (x *build) section(ctx context.Context, name string, fn func(context.Context) (bool, *SectionError)) {
-	ctx, span := observability.Start(ctx, "activity."+name, attribute.String("activity.window", x.view.Window))
+	if failure := runSection(ctx, "activity."+name, name, x.view.Window, fn); failure != nil {
+		x.view.Errors = append(x.view.Errors, *failure)
+	}
+}
+
+// runSection runs fn in a span named span and counts its outcome under the
+// bounded metric label metric. It returns fn's failure, if any.
+func runSection(ctx context.Context, span, metric, window string, fn func(context.Context) (bool, *SectionError)) *SectionError {
+	ctx, sp := observability.Start(ctx, span, attribute.String("activity.window", window))
 	truncated, failure := fn(ctx)
 	outcome := "ok"
 	switch {
@@ -323,28 +331,34 @@ func (x *build) section(ctx context.Context, name string, fn func(context.Contex
 	case truncated:
 		outcome = "truncated"
 	}
-	span.SetAttributes(attribute.String("activity.outcome", outcome), attribute.Bool("activity.truncated", truncated))
+	sp.SetAttributes(attribute.String("activity.outcome", outcome), attribute.Bool("activity.truncated", truncated))
 	var err error
 	if failure != nil {
 		err = failure.Err
-		x.view.Errors = append(x.view.Errors, *failure)
 	}
-	observability.EndSpan(span, err)
-	observability.ActivitySections.WithLabelValues(name, outcome).Inc()
+	observability.EndSpan(sp, err)
+	observability.ActivitySections.WithLabelValues(metric, outcome).Inc()
+	return failure
 }
 
 func failed(section, message string, err error) *SectionError {
 	return &SectionError{Section: section, Code: "failed", Message: message, Err: err}
 }
 
-// graph resolves a graph's display name and its task/workflow labels. A
-// deleted graph still has its id; any other read error is returned.
+// graph resolves a graph's display name and its task/workflow labels.
 func (x *build) graph(ctx context.Context, id string) (graphInfo, error) {
-	if gi, ok := x.graphs[id]; ok {
+	return resolveGraph(ctx, x.b.Store, x.graphs, id)
+}
+
+// resolveGraph reads a graph's display name and its task/workflow labels
+// through cache. A deleted graph still has its id; any other read error is
+// returned.
+func resolveGraph(ctx context.Context, store storage.Store, cache map[string]graphInfo, id string) (graphInfo, error) {
+	if gi, ok := cache[id]; ok {
 		return gi, nil
 	}
 	gi := graphInfo{workflow: id}
-	g, err := x.b.Store.GetGraph(ctx, id, 0)
+	g, err := store.GetGraph(ctx, id, 0)
 	switch {
 	case errors.Is(err, storage.ErrNotFound):
 	case err != nil:
@@ -358,31 +372,41 @@ func (x *build) graph(ctx context.Context, id string) (graphInfo, error) {
 			}
 		}
 	}
-	x.graphs[id] = gi
+	cache[id] = gi
 	return gi, nil
 }
 
-// cost sums cost.recorded micro-units per execution over the window, reading
-// newest first and stopping at the window start or after maxCostEvents.
+// cost sums cost.recorded micro-units per execution over the window.
 func (x *build) cost(ctx context.Context) (bool, *SectionError) {
-	cat, _, err := (cost.Prices{Store: x.b.Store}).Get(ctx)
+	sums, currency, truncated, err := readCosts(ctx, x.b.Store, x.since)
 	if err != nil {
 		return false, failed("cost", "Cost is unavailable; tokens are still shown.", err)
 	}
-	x.view.Currency = cat.Currency
-	sums := map[string]int64{}
+	x.view.Currency, x.costs, x.view.Truncated.Cost = currency, sums, truncated
+	return truncated, nil
+}
+
+// readCosts sums cost.recorded micro-units per execution since a time,
+// reading newest first and stopping at since or after maxCostEvents (then
+// truncated is true). Records priced in another currency than the catalog's
+// are skipped.
+func readCosts(ctx context.Context, store storage.Store, since time.Time) (sums map[string]int64, currency string, truncated bool, err error) {
+	cat, _, err := (cost.Prices{Store: store}).Get(ctx)
+	if err != nil {
+		return nil, "", false, err
+	}
+	sums = map[string]int64{}
 	var before int64
 	read := 0
 	for read < maxCostEvents {
-		evs, err := x.b.Store.ListEvents(ctx, storage.EventFilter{Types: []domain.EventType{domain.EvCostRecorded}, BeforeSeq: before, Limit: costPage})
+		evs, err := store.ListEvents(ctx, storage.EventFilter{Types: []domain.EventType{domain.EvCostRecorded}, BeforeSeq: before, Limit: costPage})
 		if err != nil {
-			return false, failed("cost", "Cost is unavailable; tokens are still shown.", err)
+			return nil, "", false, err
 		}
 		read += len(evs)
 		for _, ev := range evs {
-			if ev.Time.Before(x.since) {
-				x.costs = sums
-				return false, nil
+			if ev.Time.Before(since) {
+				return sums, cat.Currency, false, nil
 			}
 			before = ev.Seq
 			var r cost.Record
@@ -392,13 +416,10 @@ func (x *build) cost(ctx context.Context) (bool, *SectionError) {
 			sums[r.Execution] += r.CostMicros
 		}
 		if len(evs) < costPage {
-			x.costs = sums
-			return false, nil
+			return sums, cat.Currency, false, nil
 		}
 	}
-	x.costs = sums
-	x.view.Truncated.Cost = true
-	return true, nil
+	return sums, cat.Currency, true, nil
 }
 
 func (x *build) costOf(execution string) *int64 {

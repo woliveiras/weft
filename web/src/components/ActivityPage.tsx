@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, errorMessage } from '../api/client';
 import type { ActivityView } from '../api/activity';
 import { useThrottled } from '../hooks/useData';
 import { useEventStream } from '../hooks/useEventStream';
+import { ActivityHealth } from './ActivityHealth';
 import { executionProgress } from './activityPresentation';
 import { Badge, Btn, ErrorBox, PageHeading, fmtDateTime, fmtDuration, fmtTime, since } from './common';
 import { money } from './cost';
 import { runLink } from './runPresentation';
 import {
-  activityQuery, activityWindows, counterText, elapsedMs, groupTitle, needLabel, nodeLink, phaseLabel, phaseTone,
+  activityQuery, activityWindows, counterText, elapsedMs, groupTitle, healthWindow, needLabel, nodeLink, phaseLabel, phaseTone,
   sectionErrors, statusFilters, taskLink, tokens, type ActivityFocus, type ActivityRouteState,
 } from './activityView';
 
@@ -67,7 +68,25 @@ function SectionNotes({ view, sections }: { view?: ActivityView; sections: strin
     : <p key={e.section} className="muted small" role="note">{e.message}</p>)}</>;
 }
 
+function ActivityTabs({ state, onChange }: { state: ActivityRouteState; onChange: (next: ActivityRouteState) => void }) {
+  const tabs: { tab: ActivityRouteState['tab']; label: string }[] = [{ tab: '', label: 'Overview' }, { tab: 'health', label: 'Health' }];
+  return <div className="tabs activity-tabs" role="tablist" aria-label="Activity views">
+    {tabs.map(t => <button key={t.label} type="button" role="tab" aria-selected={state.tab === t.tab} className={state.tab === t.tab ? 'on' : ''}
+      onClick={() => state.tab !== t.tab && onChange(t.tab === 'health'
+        ? { ...state, tab: 'health', window: healthWindow(state.window), focus: '', status: '' }
+        : { ...state, tab: '' })}>{t.label}</button>)}
+  </div>;
+}
+
+/** The Activity page: the live overview (OBS-01) or health rankings (OBS-02). */
 export function ActivityPage({ state, onChange }: { state: ActivityRouteState; onChange: (next: ActivityRouteState) => void }) {
+  const tabs = <ActivityTabs state={state} onChange={onChange} />;
+  return state.tab === 'health'
+    ? <ActivityHealth state={state} onChange={onChange} tabs={tabs} />
+    : <ActivityOverview state={state} onChange={onChange} tabs={tabs} />;
+}
+
+function ActivityOverview({ state, onChange, tabs }: { state: ActivityRouteState; onChange: (next: ActivityRouteState) => void; tabs: ReactNode }) {
   const { view, error, loading, fetchedAt, reload } = useActivity(state);
   const ticking = !!view?.needsYou?.length || !!view?.running?.some(g => g.replicas.some(r => r.startedAt));
   const now = useNow(ticking);
@@ -93,6 +112,7 @@ export function ActivityPage({ state, onChange }: { state: ActivityRouteState; o
         <Btn onClick={() => void reload()} disabled={loading}>Refresh</Btn>
       </div>
     </PageHeading>
+    {tabs}
     <p role="status" className="muted small">
       {loading && !view ? 'Loading activity…' : view ? `Updated ${fmtTime(view.generatedAt)} · updates live from the event stream.` : ''}
     </p>

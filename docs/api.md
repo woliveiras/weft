@@ -369,6 +369,79 @@ describe the whole window.
   metrics `weft_activity_sections_total{section,outcome}` and
   `weft_activity_build_duration_seconds`.
 
+### Activity health
+
+`GET /api/v1/activity/health` (viewer) returns, per agent and per workflow, how
+executions started in the window went: runs, failure rate, the most common
+errors, median and p90 duration, tokens and cost, plus three rankings. It reads
+the same records and bounds as the Activity view (the newest 1000 executions and
+5000 cost records) and never the full history.
+
+| Query | Default | Notes |
+|---|---|---|
+| `window` | `24h` | `24h` or `7d` only. |
+| `ranking` | 10 | Rows per ranking, 1 to 50. |
+
+Invalid values return `400 invalid`.
+
+```json
+{
+  "window": "24h", "since": "…", "generatedAt": "…", "currency": "USD",
+  "agents": [{"key": "wf/tester", "workflow": "wf", "workflowName": "Software factory", "nodeId": "tester",
+              "runs": 4, "finished": 4, "succeeded": 1, "failed": 3, "cancelled": 0, "failureRate": 0.75,
+              "p50Ms": 20000, "p90Ms": 40000, "usage": {"inputTokens": 400, "outputTokens": 40}, "costMicros": 100,
+              "topErrors": [{"message": "read <path>: no such file", "count": 2, "lastAt": "…",
+                             "lastRun": {"id": "exe_…", "graphId": "task-run-1", "status": "failed", "startedAt": "…"}}],
+              "otherErrors": 0,
+              "lastRun": {"id": "exe_…", "graphId": "wf", "status": "succeeded", "startedAt": "…"},
+              "lastFailure": {"id": "exe_…", "graphId": "wf", "status": "interrupted", "startedAt": "…"}}],
+  "workflows": [{"key": "wf", "workflow": "wf", "workflowName": "Software factory", "runs": 15, …}],
+  "rankings": {"failsMost": {"agents": ["wf/tester"], "workflows": ["wf"]},
+               "slowest": {"agents": ["wf/coder", "wf/tester"], "workflows": ["wf"]},
+               "mostExpensive": {"agents": ["wf/coder"], "workflows": ["wf"]}},
+  "limits": {"executions": 1000, "costEvents": 5000, "rows": 200, "ranking": 10, "errors": 5},
+  "truncated": {"executions": false, "cost": false, "agents": false, "workflows": false},
+  "errors": []
+}
+```
+
+* **Rows.** An agent is a node of a workflow (`key` is `workflow/nodeId`, an
+  opaque id); a task run counts under its workflow (`weft.workflow` label), as in
+  the Activity history filter. Rows are busiest first. `finished` counts terminal
+  runs; `failed` is failed or interrupted; `failureRate` is `failed / finished`
+  (cancelled runs count as finished, not failed) and `null` with no finished run.
+  `p50Ms`/`p90Ms` are nearest-rank percentiles of finished runs' durations,
+  `null` without one. `costMicros` sums the window's `cost.recorded` events of
+  the row's executions, as in the Activity view, and is `null` when cost could
+  not be read.
+* **Errors.** Errors of failed and interrupted runs are grouped after
+  normalization: only the first line is kept; credentials (auth schemes,
+  `key=value` secrets, JWTs and well-known token shapes) become `<redacted>`;
+  long quoted text becomes `<text>`; URLs, e-mails, UUIDs, paths, hex and
+  generated ids and numbers become `<url>`, `<email>`, `<id>`, `<path>` and
+  `<n>`; the result is capped at 200 characters. A run with no error text groups
+  as `(no error message)`. The top 5 groups per row are listed, most frequent
+  first, each with its newest run; `otherErrors` counts the remaining failures
+  (at most 100 distinct groups are tracked per row).
+* **Rankings** list row keys, worst first, ties by key: `failsMost` (rows with a
+  failure, by failure rate then failed count), `slowest` (by p90 then median) and
+  `mostExpensive` (rows with cost, by cost; `null` when cost could not be read).
+  The `agents` and `workflows` lists hold every ranked row plus the busiest
+  others, up to 200 each (`truncated.agents`/`truncated.workflows`).
+* **Links.** `lastRun`, `lastFailure` and each error's `lastRun` name an
+  execution and its graph for the existing run detail view; the console links
+  each row to the Activity history filtered by `workflow` and `agent`.
+* **Bounds, roles and failures.** `truncated.executions` means more executions
+  started in the window than were read; statistics then describe the newest 1000.
+  Executions and cost are visible to every role, so no section is role-gated. A
+  section that cannot be read is reported in `errors` with `code: "failed"` and a
+  generic message (`section` is `executions` or `cost`); when executions fail,
+  `agents`, `workflows` and `rankings` are `null`, never empty.
+* **Observability.** Spans `activity.health.executions` and `activity.health.cost`;
+  `weft_activity_sections_total{section="health_executions"|"health_cost",outcome}`
+  and `weft_activity_health_build_duration_seconds`. Error text is never a metric
+  label.
+
 ## Event stream (SSE)
 
 ```

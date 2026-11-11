@@ -1,4 +1,4 @@
-import type { ActivityGroup, ActivityQuery, ActivityReplica, ActivityStatusFilter, ActivityView } from '../api/activity';
+import type { ActivityGroup, ActivityQuery, ActivityReplica, ActivityStatusFilter, ActivitySectionError, HealthRow } from '../api/activity';
 
 /** Windows offered by the page; the API accepts 5m to 7d. */
 export const activityWindows = ['1h', '6h', '24h', '7d'] as const;
@@ -10,6 +10,12 @@ export const statusFilters: { value: ActivityStatusFilter; label: string }[] = [
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
+/** Windows the health tab offers; the health API accepts only these. */
+export const healthWindows = ['24h', '7d'] as const;
+
+/** The page's tab: "" is the overview. */
+export type ActivityTab = '' | 'health';
+
 /** Which part of the page a counter focuses; "" shows everything. */
 export type ActivityFocus = '' | 'running' | 'needs' | 'history';
 
@@ -19,6 +25,7 @@ export interface ActivityRouteState {
   workflow: string;
   agent: string;
   focus: ActivityFocus;
+  tab: ActivityTab;
 }
 
 const focuses: ActivityFocus[] = ['', 'running', 'needs', 'history'];
@@ -34,6 +41,7 @@ export function parseActivityState(query: string | undefined): ActivityRouteStat
     workflow: q.get('workflow') ?? '',
     agent: q.get('agent') ?? '',
     focus: focuses.includes(focus as ActivityFocus) ? focus as ActivityFocus : '',
+    tab: q.get('tab') === 'health' ? 'health' : '',
   };
 }
 
@@ -44,6 +52,7 @@ export function activityHash(s: Partial<ActivityRouteState>): string {
   if (s.workflow) q.set('workflow', s.workflow);
   if (s.agent) q.set('agent', s.agent);
   if (s.focus) q.set('focus', s.focus);
+  if (s.tab) q.set('tab', s.tab);
   const qs = q.toString();
   return qs ? `#/activity?${qs}` : '#/activity';
 }
@@ -113,10 +122,32 @@ export function counterText(value: number | null | undefined, truncated = false)
   return truncated ? `${value}+` : String(value);
 }
 
-export function sectionErrors(view: ActivityView | undefined, ...sections: string[]) {
+export function sectionErrors(view: { errors: ActivitySectionError[] } | undefined, ...sections: string[]) {
   return (view?.errors ?? []).filter(e => sections.includes(e.section));
 }
 
 export function tokens(u: { inputTokens: number; outputTokens: number } | undefined): string {
   return `${(u?.inputTokens ?? 0).toLocaleString('en')} in / ${(u?.outputTokens ?? 0).toLocaleString('en')} out`;
+}
+
+/** The health window for a route window: 24h unless the route asks for 7d. */
+export function healthWindow(window: string): string {
+  return (healthWindows as readonly string[]).includes(window) ? window : '24h';
+}
+
+/** The overview's history, filtered to one agent or workflow of a health row. */
+export function healthHistoryLink(window: string, row: Pick<HealthRow, 'workflow' | 'nodeId'>, failedOnly = false): string {
+  return activityHash({ window: healthWindow(window), workflow: row.workflow, agent: row.nodeId ?? '', status: failedOnly ? 'failed' : '', focus: 'history' });
+}
+
+export function healthRowTitle(row: Pick<HealthRow, 'workflow' | 'workflowName' | 'nodeId'>): string {
+  const workflow = row.workflowName || row.workflow;
+  return row.nodeId ? `${row.nodeId} · ${workflow}` : workflow;
+}
+
+/** A failure rate as a percentage; "—" when no run finished. */
+export function percent(rate: number | null | undefined): string {
+  if (rate === null || rate === undefined) return '—';
+  const p = rate * 100;
+  return `${p > 0 && p < 1 ? '<1' : Math.round(p)}%`;
 }

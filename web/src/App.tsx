@@ -24,7 +24,7 @@ import { ThemeSwitcher } from './components/ThemeSwitcher';
 /**
  * Routes live in the hash so a reload (or a shared link) returns to the same
  * place without server-side routing:
- *   #/activity[?window=&status=&workflow=&agent=&focus=]
+ *   #/activity[?window=&status=&workflow=&agent=&focus=&tab=health]
  *   #/graphs  #/approvals  #/connections  #/models  #/administration/<section>
  * Legacy #/integrations links remain MCP aliases, including OAuth returns.
  *   #/g/<id>/<tab>[?c=<correlation id>]

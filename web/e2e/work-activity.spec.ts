@@ -62,3 +62,32 @@ test('a viewer is told which sections are hidden, and a failed load recovers on 
   await page.setViewportSize({ width: 580, height: 850 });
   await expect(page.getByRole('button', { name: /Agents running/ })).toBeVisible();
 });
+
+test('ranks a finished agent in Health and links to its filtered history and run details', async ({ page }) => {
+  const id = 'activity-health-browser';
+  const once = { metadata: { id, name: `Activity ${id}` }, spec: { nodes: [{ id: 'worker', runtime: { kind: 'echo' }, prompt: 'Health fixture', loop: { mode: 'once' } }] } };
+  expect((await page.request.post('/api/v1/graphs', { headers, data: once })).status()).toBe(201);
+  expect((await page.request.post(`/api/v1/graphs/${id}/start`, { headers })).ok()).toBe(true);
+  await expect.poll(async () => (await (await page.request.get(`/api/v1/graphs/${id}/executions`, { headers })).json())
+    .filter((e: { status: string }) => e.status === 'succeeded').length).toBe(1);
+
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-viewer-token'));
+  await page.goto('/#/activity');
+  await page.getByRole('tab', { name: 'Health' }).click();
+  await expect(page).toHaveURL(/tab=health/);
+  const title = `worker · Activity ${id}`;
+  await expect(page.getByRole('article', { name: 'Slowest' }).getByRole('link', { name: title })).toBeVisible();
+  const row = page.getByRole('region', { name: 'Agent health' }).getByRole('row').filter({ hasText: `Activity ${id}` });
+  await expect(row).toContainText('0%');
+  await page.getByLabel('Window').selectOption('7d');
+  await expect(page).toHaveURL(/window=7d/);
+  await expect(row).toBeVisible();
+
+  await row.getByRole('link', { name: 'History' }).click();
+  await expect(page).toHaveURL(new RegExp(`#/activity\\?window=7d&workflow=${id}&agent=worker&focus=history`));
+  await expect(page.getByRole('region', { name: 'Recent history' }).getByRole('row').filter({ hasText: 'worker' })).toContainText('Completed');
+  await page.goBack();
+  await row.getByRole('link', { name: 'Last run' }).click();
+  await expect(page).toHaveURL(new RegExp(`#/g/${id}/runs\\?execution=`));
+  await expect(page.getByRole('region', { name: 'Run detail' })).toContainText('Completed');
+});

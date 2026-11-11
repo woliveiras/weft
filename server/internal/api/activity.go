@@ -35,3 +35,26 @@ func (s *Server) activityView(w http.ResponseWriter, r *http.Request) error {
 	writeJSON(w, http.StatusOK, view)
 	return nil
 }
+
+// activityHealth serves GET /api/v1/activity/health: per agent and per
+// workflow failure rate, common errors, duration and cost over 24 h or 7 d.
+func (s *Server) activityHealth(w http.ResponseWriter, r *http.Request) error {
+	q, err := activity.ParseHealthQuery(r.URL.Query())
+	if errors.Is(err, activity.ErrInvalid) {
+		return badRequest("%v", err)
+	}
+	if err != nil {
+		return err
+	}
+	view, err := activity.Builder{Store: s.Store}.Health(r.Context(), q)
+	if err != nil {
+		return err
+	}
+	for _, e := range view.Errors {
+		if e.Err != nil {
+			s.Log.Warn("activity health section unavailable", "section", e.Section, "err", e.Err)
+		}
+	}
+	writeJSON(w, http.StatusOK, view)
+	return nil
+}

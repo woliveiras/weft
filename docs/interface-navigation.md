@@ -5,7 +5,7 @@ introduce roles or change API permissions.
 
 | Group | Destination | Scope |
 | --- | --- | --- |
-| Work | Activity (`#/activity`) | What is running, what needs a person and recent executions across all workflows; see below |
+| Work | Activity (`#/activity`) | What is running, what needs a person and recent executions across all workflows, and per agent/workflow health; see below |
 | Work | Tasks (`#/tasks`) | Persisted request drafts and requirements preview; execution admission is pending. Existing Runs remains agent execution history. |
 | Work | Projects | Disabled until project registration is implemented. |
 | Work | Approvals | Existing approval and application-review flows, including pending count |
@@ -73,6 +73,28 @@ throttled to one request per 1.5 s, when the event stream reports
 A failed refresh keeps the last data and says when it is from; a section the
 server could not read, or that the role cannot see (human reviews for viewers),
 is stated on the page instead of being shown as empty.
+
+### Health
+
+The **Health** tab (`#/activity?tab=health`, from `GET /api/v1/activity/health`,
+see [api.md](api.md#activity-health)) shows, for the last 24 h or 7 d, which
+agents and workflows fail, slow down or cost the most. **Group by** switches
+between agents and workflows.
+
+- **Rankings**: Fails most (failure rate), Slowest (p90 duration) and Most
+  expensive (cost), each linking to the overview history filtered to that agent
+  or workflow (failed runs only for Fails most).
+- **Table**, busiest first: runs, failure rate, median and p90 duration, tokens,
+  cost and the most common errors, normalized so ids and paths do not split one
+  error into many and credentials, paths and payload text are not shown. Each
+  error links to its latest run; each row links to its filtered **History**, its
+  **Last run** and its **Last failure**.
+
+Switching to Health keeps a 24 h or 7 d window and clears the overview's focus
+and status filter. The tab refetches, throttled to one request per 5 s, on
+`execution.*` and `cost.recorded` events. A failed section (executions or cost)
+is stated instead of shown as empty; `—` marks a value that could not be read or
+has no finished run.
 
 ## Connection pages
 

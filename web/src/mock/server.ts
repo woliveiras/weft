@@ -685,6 +685,41 @@ export async function mockFetch(url: string, init: RequestInit): Promise<Respons
     const after = Number(q.get('after') ?? 0);
     return json(db.events.filter((e) => e.graphId === mm![1] && e.seq > after).slice(-Number(q.get('limit') ?? 200)));
   }
+  if (p === '/activity/health') {
+    // A small approximation of the server's health view for the mock console.
+    const windowMs = q.get('window') === '7d' ? 7 * 86400000 : 86400000;
+    const recent = db.executions.filter((e) => Date.now() - new Date(e.startedAt).getTime() <= windowMs);
+    const group = (key: (e: (typeof recent)[number]) => string, agent: boolean) => {
+      const rows = new Map<string, typeof recent>();
+      for (const e of recent) rows.set(key(e), [...(rows.get(key(e)) ?? []), e]);
+      return [...rows.entries()].map(([k, xs]) => {
+        const done = xs.filter((e) => e.completedAt);
+        const failed = done.filter((e) => e.status === 'failed' || e.status === 'interrupted');
+        const ms = done.map((e) => new Date(e.completedAt!).getTime() - new Date(e.startedAt).getTime()).sort((a, b) => a - b);
+        const at = (p: number) => (ms.length ? ms[Math.max(0, Math.ceil(p * ms.length) - 1)] : null);
+        const ref = (e?: (typeof recent)[number]) => (e ? { id: e.id, graphId: e.graphId, status: e.status, startedAt: e.startedAt } : undefined);
+        return { key: k, workflow: xs[0].graphId, workflowName: db.graphs.get(xs[0].graphId)?.graph.metadata.name, nodeId: agent ? xs[0].nodeId : undefined,
+          runs: xs.length, finished: done.length, succeeded: done.filter((e) => e.status === 'succeeded').length, failed: failed.length,
+          cancelled: done.filter((e) => e.status === 'cancelled').length, failureRate: done.length ? failed.length / done.length : null,
+          p50Ms: at(0.5), p90Ms: at(0.9), usage: xs.reduce((u, e) => ({ inputTokens: u.inputTokens + (e.usage?.inputTokens ?? 0), outputTokens: u.outputTokens + (e.usage?.outputTokens ?? 0) }), { inputTokens: 0, outputTokens: 0 }),
+          costMicros: 0, topErrors: failed.length ? [{ message: failed[0].error || '(no error message)', count: failed.length, lastAt: failed[0].startedAt, lastRun: ref(failed[0])! }] : [],
+          otherErrors: 0, lastRun: ref(xs[0]), lastFailure: ref(failed[0]) };
+      });
+    };
+    const agents = group((e) => `${e.graphId}/${e.nodeId}`, true);
+    const workflows = group((e) => e.graphId, false);
+    const rank = (rows: typeof agents, ok: (r: (typeof agents)[number]) => boolean, by: (r: (typeof agents)[number]) => number) =>
+      rows.filter(ok).sort((a, b) => by(b) - by(a)).slice(0, 10).map((r) => r.key);
+    const ranking = (ok: (r: (typeof agents)[number]) => boolean, by: (r: (typeof agents)[number]) => number) => ({ agents: rank(agents, ok, by), workflows: rank(workflows, ok, by) });
+    return json({
+      window: q.get('window') ?? '24h', since: new Date(Date.now() - windowMs).toISOString(), generatedAt: new Date().toISOString(), currency: 'USD',
+      agents, workflows,
+      rankings: { failsMost: ranking((r) => r.failed > 0, (r) => r.failureRate ?? 0), slowest: ranking((r) => r.p90Ms !== null, (r) => r.p90Ms ?? 0), mostExpensive: { agents: [], workflows: [] } },
+      limits: { executions: 1000, costEvents: 5000, rows: 200, ranking: 10, errors: 5 },
+      truncated: { executions: false, cost: false, agents: false, workflows: false },
+      errors: [],
+    });
+  }
   if (p === '/activity') {
     // A small approximation of the bounded server view for the mock console.
     const pending = db.approvals.filter((a) => a.status === 'pending').sort((a, b) => a.createdAt.localeCompare(b.createdAt));

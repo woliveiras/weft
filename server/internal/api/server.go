@@ -195,6 +195,7 @@ func (s *Server) routes() {
 		{"GET /api/v1/graphs/{id}/events", R, s.listEvents},
 		{"GET /api/v1/events/stream", R, s.stream},
 		{"GET /api/v1/activity", R, s.activityView},
+		{"GET /api/v1/activity/health", R, s.activityHealth},
 		{"GET /api/v1/approvals", R, s.listApprovals},
 		{"POST /api/v1/approvals/{aid}/{decision}", O, s.decide},
 		{"GET /api/v1/blocked-history-retention", R, s.historyRetention},

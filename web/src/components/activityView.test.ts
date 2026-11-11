@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { activityHash, activityQuery, counterText, elapsedMs, groupTitle, needLabel, nodeLink, parseActivityState, phaseLabel, phaseTone, sectionErrors } from './activityView';
+import { activityHash, activityQuery, counterText, elapsedMs, groupTitle, healthHistoryLink, healthRowTitle, healthWindow, needLabel, nodeLink, parseActivityState, percent, phaseLabel, phaseTone, sectionErrors } from './activityView';
 import type { ActivityView } from '../api/activity';
 
 describe('activity route state', () => {
   it('round-trips filters and drops unknown values', () => {
     const state = parseActivityState('window=7d&status=failed&workflow=wf&agent=coder&focus=history');
-    expect(state).toEqual({ window: '7d', status: 'failed', workflow: 'wf', agent: 'coder', focus: 'history' });
+    expect(state).toEqual({ window: '7d', status: 'failed', workflow: 'wf', agent: 'coder', focus: 'history', tab: '' });
     expect(activityHash(state)).toBe('#/activity?window=7d&status=failed&workflow=wf&agent=coder&focus=history');
-    expect(parseActivityState('window=30d&status=bogus&focus=everything')).toEqual({ window: '24h', status: '', workflow: '', agent: '', focus: '' });
+    expect(parseActivityState('window=30d&status=bogus&focus=everything&tab=other')).toEqual({ window: '24h', status: '', workflow: '', agent: '', focus: '', tab: '' });
+    expect(activityHash(parseActivityState('tab=health&window=7d'))).toBe('#/activity?window=7d&tab=health');
     expect(activityHash(parseActivityState(undefined))).toBe('#/activity');
   });
   it('sends only set filters to the API', () => {
@@ -46,5 +47,26 @@ describe('activity presentation', () => {
     const view = { errors: [{ section: 'history', code: 'failed', message: 'x' }, { section: 'reviews', code: 'forbidden', message: 'y' }] } as ActivityView;
     expect(sectionErrors(view, 'reviews', 'needsYou').map(e => e.code)).toEqual(['forbidden']);
     expect(sectionErrors(undefined, 'history')).toEqual([]);
+  });
+});
+
+describe('activity health presentation', () => {
+  it('keeps the health window to 24h or 7d', () => {
+    expect(healthWindow('7d')).toBe('7d');
+    expect(healthWindow('1h')).toBe('24h');
+    expect(healthWindow('')).toBe('24h');
+  });
+  it('links a row to the overview history filtered to it', () => {
+    expect(healthHistoryLink('7d', { workflow: 'wf', nodeId: 'coder' })).toBe('#/activity?window=7d&workflow=wf&agent=coder&focus=history');
+    expect(healthHistoryLink('6h', { workflow: 'w f' }, true)).toBe('#/activity?status=failed&workflow=w+f&focus=history');
+  });
+  it('titles rows and formats failure rates', () => {
+    expect(healthRowTitle({ workflow: 'wf', workflowName: 'Software factory', nodeId: 'coder' })).toBe('coder · Software factory');
+    expect(healthRowTitle({ workflow: 'wf' })).toBe('wf');
+    expect(percent(null)).toBe('—');
+    expect(percent(0)).toBe('0%');
+    expect(percent(0.004)).toBe('<1%');
+    expect(percent(0.756)).toBe('76%');
+    expect(percent(1)).toBe('100%');
   });
 });

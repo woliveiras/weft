@@ -1,8 +1,13 @@
 package api_test
 
 import (
+	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/woliveiras/weft/server/internal/domain"
 )
 
 const activityGraph = `
@@ -133,4 +138,112 @@ func TestActivityAPIWithEngine(t *testing.T) {
 		call(t, srv, "GET", "/api/v1/activity", viewerTok, "", "", &v)
 		return len(v.Running) == 0 && v.Running != nil && *v.Counters.Running == 0
 	})
+}
+
+type healthResponse struct {
+	Window   string `json:"window"`
+	Currency string `json:"currency"`
+	Agents   []struct {
+		Key, Workflow, WorkflowName, NodeID string
+		Runs, Finished, Failed, OtherErrors int
+		FailureRate                         *float64
+		P50Ms, P90Ms, CostMicros            *int64
+		TopErrors                           []struct {
+			Message string
+			Count   int
+			LastRun struct{ ID, GraphID string }
+		}
+		LastRun, LastFailure *struct{ ID, GraphID, Status string }
+	} `json:"agents"`
+	Workflows []struct {
+		Key  string
+		Runs int
+	} `json:"workflows"`
+	Rankings *struct {
+		FailsMost, Slowest struct{ Agents, Workflows []string }
+		MostExpensive      *struct{ Agents, Workflows []string }
+	} `json:"rankings"`
+	Errors []struct{ Section, Code string } `json:"errors"`
+}
+
+// Health reads what the real engine and store record: a real echo turn plus
+// failures persisted in the real store, whose errors differ only by run ids,
+// paths and a credential. It groups them into one normalized error, ranks
+// the failing agent, links to run details that resolve, and never returns
+// the raw text.
+func TestActivityHealthAPIWithStore(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	if c := call(t, srv, "GET", "/api/v1/activity/health", "", "", "", nil); c != 401 {
+		t.Fatalf("anonymous: %d", c)
+	}
+	for _, q := range []string{"window=1h", "window=30d", "window=6h", "ranking=0", "ranking=99"} {
+		var e struct{ Code string }
+		if c := call(t, srv, "GET", "/api/v1/activity/health?"+q, viewerTok, "", "", &e); c != 400 || e.Code != "invalid" {
+			t.Fatalf("%s: %d %+v", q, c, e)
+		}
+	}
+	var empty healthResponse
+	if c := call(t, srv, "GET", "/api/v1/activity/health", viewerTok, "", "", &empty); c != 200 || empty.Window != "24h" || empty.Agents == nil || len(empty.Agents) != 0 || empty.Rankings == nil {
+		t.Fatalf("empty installation: %d %+v", c, empty)
+	}
+
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/yaml", activityGraph, nil); c != 201 {
+		t.Fatalf("create: %d", c)
+	}
+	if c := call(t, srv, "POST", "/api/v1/graphs/activity-demo/start", adminTok, "", "", nil); c != 200 {
+		t.Fatalf("start: %d", c)
+	}
+	if c := call(t, srv, "POST", "/api/v1/graphs/activity-demo/channels/in/messages", operatorTok, "application/json", `{"type":"build","payload":{"v":1}}`, nil); c != 201 {
+		t.Fatalf("inject: %d", c)
+	}
+	var h healthResponse
+	waitFor(t, 15*time.Second, "the maker turn in health", func() bool {
+		h = healthResponse{}
+		call(t, srv, "GET", "/api/v1/activity/health", viewerTok, "", "", &h)
+		return len(h.Agents) == 1 && h.Agents[0].Finished == 1
+	})
+	if m := h.Agents[0]; m.Key != "activity-demo/maker" || m.WorkflowName != "activity-demo" || *m.FailureRate != 0 || m.P90Ms == nil || m.CostMicros == nil || m.LastRun == nil {
+		t.Fatalf("maker: %+v", m)
+	}
+
+	now := time.Now().UTC()
+	for i, msg := range []string{
+		"read /var/lib/weft/ws/run-8f3a91c2/out.json: no such file (key=sk-livesecretvalue123)",
+		"read /var/lib/weft/ws/run-0c77d1e4/out.json: no such file (key=sk-othersecretvalue9)\n{\"prompt\":\"private payload\"}",
+	} {
+		done := now.Add(-time.Duration(i+1) * time.Minute)
+		if err := a.Store.PutExecution(t.Context(), &domain.Execution{ID: fmt.Sprintf("health-fail-%d", i), GraphID: "activity-demo", NodeID: "shipper",
+			Status: domain.ExecFailed, StartedAt: done.Add(-3 * time.Second), CompletedAt: &done, Error: msg}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw := map[string]any{}
+	call(t, srv, "GET", "/api/v1/activity/health?window=7d&ranking=5", viewerTok, "", "", &raw)
+	body, _ := json.Marshal(raw)
+	for _, bad := range []string{"sk-livesecretvalue123", "sk-othersecretvalue9", "/var/lib/weft", "private payload", "8f3a91c2"} {
+		if strings.Contains(string(body), bad) {
+			t.Fatalf("health leaks %q: %s", bad, body)
+		}
+	}
+	h = healthResponse{}
+	if c := call(t, srv, "GET", "/api/v1/activity/health?window=7d&ranking=5", viewerTok, "", "", &h); c != 200 || h.Window != "7d" || len(h.Errors) != 0 {
+		t.Fatalf("7d: %d %+v", c, h)
+	}
+	var shipper = h.Agents[0]
+	if shipper.Key != "activity-demo/shipper" {
+		shipper = h.Agents[1]
+	}
+	if shipper.Runs != 2 || shipper.Failed != 2 || *shipper.FailureRate != 1 || len(shipper.TopErrors) != 1 || shipper.TopErrors[0].Count != 2 ||
+		shipper.TopErrors[0].Message != "read <path>: no such file (key=<redacted>)" || shipper.LastFailure.ID != "health-fail-0" {
+		t.Fatalf("shipper: %+v", shipper)
+	}
+	if fmt.Sprint(h.Rankings.FailsMost.Agents) != "[activity-demo/shipper]" || len(h.Workflows) != 1 || h.Workflows[0].Runs != 3 || h.Rankings.MostExpensive == nil {
+		t.Fatalf("rankings: %+v workflows %+v", h.Rankings, h.Workflows)
+	}
+	// The linked run details exist.
+	for _, id := range []string{shipper.TopErrors[0].LastRun.ID, shipper.LastFailure.ID, h.Agents[0].LastRun.ID} {
+		if c := call(t, srv, "GET", "/api/v1/executions/"+id, viewerTok, "", "", nil); c != 200 {
+			t.Fatalf("run %s: %d", id, c)
+		}
+	}
 }

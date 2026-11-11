@@ -90,3 +90,70 @@ export interface ActivityView {
   truncated: { needsYou: boolean; running: boolean; executions: boolean; history: boolean; cost: boolean };
   errors: ActivitySectionError[];
 }
+
+/** GET /api/v1/activity/health — see docs/api.md (Activity health). */
+export interface HealthQuery {
+  /** 24h or 7d. */
+  window?: string;
+  /** Rows per ranking, 1–50. */
+  ranking?: number;
+}
+
+export interface HealthRunRef {
+  id: string;
+  graphId: string;
+  status: ExecutionStatus;
+  startedAt: string;
+}
+
+export interface HealthErrorGroup {
+  /** Normalized: first line only, ids/paths/URLs/numbers as placeholders, credentials redacted. */
+  message: string;
+  count: number;
+  lastAt: string;
+  lastRun: HealthRunRef;
+}
+
+export interface HealthRow {
+  /** Unique within its list; what rankings refer to. */
+  key: string;
+  workflow: string;
+  workflowName?: string;
+  /** Agents only. */
+  nodeId?: string;
+  runs: number;
+  finished: number;
+  succeeded: number;
+  failed: number;
+  cancelled: number;
+  /** failed / finished; null with no finished run. */
+  failureRate: number | null;
+  p50Ms: number | null;
+  p90Ms: number | null;
+  usage: Usage;
+  /** Null when cost could not be read. */
+  costMicros: number | null;
+  topErrors: HealthErrorGroup[];
+  otherErrors: number;
+  lastRun?: HealthRunRef;
+  lastFailure?: HealthRunRef;
+}
+
+export interface HealthRanking {
+  agents: string[];
+  workflows: string[];
+}
+
+export interface HealthView {
+  window: string;
+  since: string;
+  generatedAt: string;
+  currency?: string;
+  /** Null when executions could not be read (see errors). */
+  agents: HealthRow[] | null;
+  workflows: HealthRow[] | null;
+  rankings: { failsMost: HealthRanking; slowest: HealthRanking; mostExpensive: HealthRanking | null } | null;
+  limits: { executions: number; costEvents: number; rows: number; ranking: number; errors: number };
+  truncated: { executions: boolean; cost: boolean; agents: boolean; workflows: boolean };
+  errors: ActivitySectionError[];
+}

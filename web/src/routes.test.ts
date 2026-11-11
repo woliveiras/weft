@@ -17,8 +17,9 @@ describe('installation destination routes', () => {
     }
   });
   it('routes the Activity view with its filters', () => {
-    expect(parseRoute('#/activity')).toEqual({ view: 'activity', activity: { window: '24h', status: '', workflow: '', agent: '', focus: '' } });
+    expect(parseRoute('#/activity')).toEqual({ view: 'activity', activity: { window: '24h', status: '', workflow: '', agent: '', focus: '', tab: '' } });
     expect(routeHash(parseRoute('#/activity?window=6h&status=failed&focus=history'))).toBe('#/activity?window=6h&status=failed&focus=history');
+    expect(routeHash(parseRoute('#/activity?window=7d&tab=health'))).toBe('#/activity?window=7d&tab=health');
   });
   it('preserves graph correlation links', () => {
     const route = parseRoute('#/g/example/messages?c=sample');
