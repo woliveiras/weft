@@ -45,6 +45,19 @@ describe('provider form helpers', () => {
     expect(draftFrom(undefined, types).modelGuidance).toBe('');
   });
 
+  it('sends the Vertex AI project and region only for types that use them', () => {
+    const d = { ...draftFrom({ name: 'g', type: 'gemini', project: 'my-project', region: 'europe-west4' }, types) };
+    expect(d).toMatchObject({ project: 'my-project', region: 'europe-west4' });
+    expect(inputFromDraft(d, 'edit', ['contextWindow', 'project', 'region'])).toMatchObject({ project: 'my-project', region: 'europe-west4' });
+    const other = inputFromDraft({ ...d, type: 'openai' }, 'edit', ['contextWindow']);
+    expect(other.project).toBeUndefined();
+    expect(other.region).toBeUndefined();
+    expect(inputFromDraft({ ...d, project: ' ', region: '' }, 'edit', ['project', 'region']).project).toBeUndefined();
+    expect(draftFrom(undefined, types)).toMatchObject({ project: '', region: '' });
+    const errs = localErrors(inputFromDraft({ ...d, project: 'My Project', region: 'eu_west' }, 'edit', ['project', 'region']), 'edit');
+    expect(Object.keys(errs).sort()).toEqual(['project', 'region']);
+  });
+
   it('catches obvious mistakes before a request', () => {
     const errs = localErrors(inputFromDraft({ ...draftFrom(undefined, types), timeoutSec: 'soon', baseUrl: 'ftp://x' }, 'create'), 'create');
     expect(Object.keys(errs).sort()).toEqual(['baseUrl', 'name', 'timeoutSec']);

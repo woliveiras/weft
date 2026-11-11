@@ -154,3 +154,63 @@ var Ollama = Wire{
 		return map[string]any{"models": models}
 	},
 }
+
+// Gemini is Google's generateContent protocol (Gemini API and Vertex AI).
+// Tool results are functionResponse parts of a user turn; the credential is
+// the x-goog-api-key header (Vertex AI uses a bearer token instead).
+var Gemini = Wire{
+	Name: "gemini", ChatPath: ":generateContent", ModelsPath: "/models", IDs: true, CacheRead: true,
+	Decode: func(r *http.Request, b map[string]any) Observed {
+		o := Observed{Credential: r.Header.Get("x-goog-api-key"), Model: r.URL.Path}
+		if i := strings.LastIndex(o.Model, "/models/"); i >= 0 {
+			o.Model = strings.TrimSuffix(o.Model[i+len("/models/"):], ":generateContent")
+		}
+		for _, pt := range list(obj(b["systemInstruction"])["parts"]) {
+			o.System += str(obj(pt)["text"])
+		}
+		for _, c := range list(b["contents"]) {
+			c := obj(c)
+			role := str(c["role"])
+			if role == "model" {
+				role = "assistant"
+			}
+			for _, pt := range list(c["parts"]) {
+				if fr := obj(obj(pt)["functionResponse"]); fr != nil {
+					role = "tool"
+					o.ToolCallID = str(fr["id"])
+					o.ToolResult = str(obj(fr["response"])["result"])
+				}
+			}
+			o.Roles = append(o.Roles, role)
+		}
+		for _, t := range list(b["tools"]) {
+			for _, f := range list(obj(t)["functionDeclarations"]) {
+				o.ToolNames = append(o.ToolNames, str(obj(f)["name"]))
+			}
+		}
+		o.JSON = str(obj(b["generationConfig"])["responseMimeType"]) == "application/json"
+		return o
+	},
+	EncodeChat: func(a Answer) any {
+		parts := []any{}
+		if a.Text != "" {
+			parts = append(parts, map[string]any{"text": a.Text})
+		}
+		if a.ToolCall != nil {
+			parts = append(parts, map[string]any{"functionCall": map[string]any{"id": a.ToolCall.ID, "name": llm.WireToolName(a.ToolCall.Name), "args": args(a.ToolCall)},
+				"thoughtSignature": "c2lnbmF0dXJl"})
+		}
+		return map[string]any{"modelVersion": "conf-small",
+			"candidates": []any{map[string]any{"content": map[string]any{"role": "model", "parts": parts}, "finishReason": "STOP"}},
+			// promptTokenCount includes the cached part on this protocol.
+			"usageMetadata": map[string]any{"promptTokenCount": a.Usage.InputTokens, "candidatesTokenCount": a.Usage.OutputTokens,
+				"cachedContentTokenCount": a.Usage.CacheReadTokens}}
+	},
+	EncodeModels: func(ids []string) any {
+		var models []any
+		for _, id := range ids {
+			models = append(models, map[string]any{"name": "models/" + id, "supportedGenerationMethods": []string{"generateContent"}})
+		}
+		return map[string]any{"models": models}
+	},
+}

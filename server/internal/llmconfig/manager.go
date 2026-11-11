@@ -25,6 +25,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +39,10 @@ import (
 
 // SettingKey is the installation setting holding managed providers.
 const SettingKey = "llm/providers"
+
+// cloudIdentifier is the shape of cloud project and region identifiers;
+// plugins check their own exact format when they are built.
+var cloudIdentifier = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // Source says where a provider is defined.
 type Source string
@@ -59,6 +64,8 @@ type managedProvider struct {
 	Concurrency         int        `json:"concurrency,omitempty"`
 	ContextWindow       int        `json:"contextWindow,omitempty"`
 	ModelGuidance       string     `json:"modelGuidance,omitempty"`
+	Project             string     `json:"project,omitempty"`
+	Region              string     `json:"region,omitempty"`
 	APIKey              string     `json:"apiKey,omitempty"`
 	CredentialUpdatedAt *time.Time `json:"credentialUpdatedAt,omitempty"`
 	CreatedAt           time.Time  `json:"createdAt"`
@@ -122,8 +129,12 @@ type ProviderInput struct {
 	ContextWindow int `json:"contextWindow,omitempty"`
 	// ModelGuidance: "" (standard) or "small" (compact tool schemas,
 	// argument examples and one tool call per round for small models).
-	ModelGuidance string            `json:"modelGuidance,omitempty"`
-	APIKey        *CredentialUpdate `json:"apiKey,omitempty"`
+	ModelGuidance string `json:"modelGuidance,omitempty"`
+	// Project and Region: the cloud project and region of plugins that
+	// declare them (Gemini on Vertex AI). Identifiers, not credentials.
+	Project string            `json:"project,omitempty"`
+	Region  string            `json:"region,omitempty"`
+	APIKey  *CredentialUpdate `json:"apiKey,omitempty"`
 }
 
 // CredentialState describes a credential without revealing it.
@@ -151,6 +162,8 @@ type ProviderView struct {
 	Concurrency   int             `json:"concurrency,omitempty"`
 	ContextWindow int             `json:"contextWindow,omitempty"`
 	ModelGuidance string          `json:"modelGuidance,omitempty"`
+	Project       string          `json:"project,omitempty"`
+	Region        string          `json:"region,omitempty"`
 	Source        Source          `json:"source"`
 	Editable      bool            `json:"editable"`
 	Credential    CredentialState `json:"credential"`
@@ -171,6 +184,9 @@ type TypeInfo struct {
 	// KeyRequired: the type cannot work without an API key (with its
 	// default base URL).
 	KeyRequired bool `json:"keyRequired"`
+	// Settings are the optional instance settings the type honours
+	// (llm.Setting*), so the form shows only the relevant fields.
+	Settings []string `json:"settings,omitempty"`
 }
 
 // Meta describes the provider settings as a whole.
@@ -357,7 +373,7 @@ func (m *Manager) build(p managedProvider) (llm.ProviderConfig, llm.Provider) {
 	cfg := llm.ProviderConfig{
 		Name: p.Name, Type: p.Type, BaseURL: p.BaseURL, DefaultModel: p.DefaultModel,
 		TimeoutSec: p.TimeoutSec, MaxRetries: p.MaxRetries, Concurrency: p.Concurrency, ContextWindow: p.ContextWindow,
-		ModelGuidance: p.ModelGuidance,
+		ModelGuidance: p.ModelGuidance, Project: p.Project, Region: p.Region,
 	}
 	if p.APIKey != "" {
 		key, err := m.opt.Box.Open(p.APIKey, credentialAAD(p.Name))
@@ -467,6 +483,7 @@ func (m *Manager) List() []ProviderView {
 		if mp, ok := managed[info.Name]; ok {
 			v.Source, v.Editable = SourceManaged, true
 			v.TimeoutSec, v.MaxRetries, v.Concurrency, v.ContextWindow, v.ModelGuidance = mp.TimeoutSec, mp.MaxRetries, mp.Concurrency, mp.ContextWindow, mp.ModelGuidance
+			v.Project, v.Region = mp.Project, mp.Region
 			created, updated := mp.CreatedAt, mp.UpdatedAt
 			v.CreatedAt, v.UpdatedAt, v.UpdatedBy = &created, &updated, mp.UpdatedBy
 			v.Credential = CredentialState{Source: "none"}
@@ -480,6 +497,7 @@ func (m *Manager) List() []ProviderView {
 			c := static[info.Name]
 			v.Source = SourceConfig
 			v.TimeoutSec, v.MaxRetries, v.Concurrency, v.ContextWindow, v.ModelGuidance = c.TimeoutSec, c.MaxRetries, c.Concurrency, c.ContextWindow, c.ModelGuidance
+			v.Project, v.Region = c.Project, c.Region
 			v.Credential = staticCredential(c)
 		}
 		out = append(out, v)
@@ -529,7 +547,7 @@ func (m *Manager) Meta() Meta {
 func Types() []TypeInfo {
 	var out []TypeInfo
 	for _, m := range llm.Plugins() {
-		out = append(out, TypeInfo{Type: m.ID, Label: m.Label, DefaultBaseURL: m.DefaultBaseURL, KeyRequired: m.Key == llm.KeyRequired})
+		out = append(out, TypeInfo{Type: m.ID, Label: m.Label, DefaultBaseURL: m.DefaultBaseURL, KeyRequired: m.Key == llm.KeyRequired, Settings: m.Settings})
 	}
 	return out
 }
@@ -620,6 +638,16 @@ func (m *Manager) validate(in *ProviderInput, d *document, existing *managedProv
 	if in.ModelGuidance != "" && in.ModelGuidance != llm.GuidanceSmall {
 		add("modelGuidance", `must be "" (standard) or "small"`)
 	}
+	manifest, _ := llm.PluginManifest(in.Type)
+	for _, f := range []struct{ path, value, setting string }{{"project", in.Project, llm.SettingProject}, {"region", in.Region, llm.SettingRegion}} {
+		switch {
+		case f.value == "":
+		case !slices.Contains(manifest.Settings, f.setting):
+			add(f.path, "is not used by provider type %q", in.Type)
+		case len(f.value) > 63 || !cloudIdentifier.MatchString(f.value):
+			add(f.path, "must be lowercase letters, digits and hyphens (at most 63)")
+		}
+	}
 	if c := in.APIKey; c != nil {
 		switch {
 		case c.Clear && c.Value != "":
@@ -659,7 +687,7 @@ func (m *Manager) resolveKey(in *ProviderInput, existing *managedProvider) (stri
 // checkBuild constructs the provider so configuration errors (a hosted type
 // without a key, ...) are reported now, not on the first agent turn.
 func checkBuild(in *ProviderInput, key string) *ValidationError {
-	cfg := llm.ProviderConfig{Name: in.Name, Type: in.Type, BaseURL: in.BaseURL, DefaultModel: in.DefaultModel, APIKeyValue: key}
+	cfg := llm.ProviderConfig{Name: in.Name, Type: in.Type, BaseURL: in.BaseURL, DefaultModel: in.DefaultModel, Project: in.Project, Region: in.Region, APIKeyValue: key}
 	if _, err := llm.New(cfg); err != nil {
 		msg := secrets.Redact(err.Error(), key)
 		msg = strings.Replace(msg, "(set apiKeyEnv or apiKeyFile)", "(enter it in the API key field)", 1)
@@ -675,6 +703,7 @@ func checkBuild(in *ProviderInput, key string) *ValidationError {
 func (m *Manager) applyInput(p *managedProvider, in *ProviderInput, key string, actor string, now time.Time) error {
 	p.Type, p.BaseURL, p.DefaultModel = in.Type, in.BaseURL, in.DefaultModel
 	p.TimeoutSec, p.MaxRetries, p.Concurrency, p.ContextWindow, p.ModelGuidance = in.TimeoutSec, in.MaxRetries, in.Concurrency, in.ContextWindow, in.ModelGuidance
+	p.Project, p.Region = in.Project, in.Region
 	p.UpdatedAt, p.UpdatedBy = now, actor
 	if in.APIKey == nil {
 		return nil

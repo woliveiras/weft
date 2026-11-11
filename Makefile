@@ -110,6 +110,12 @@ test-llm-cloud: ## Live provider conformance against CLOUD_URL/CLOUD_MODEL (key:
 		WEFT_TEST_OPENAI_URL="$(CLOUD_URL)" WEFT_TEST_OPENAI_MODEL="$(CLOUD_MODEL)" WEFT_TEST_OPENAI_KEY="$$WEFT_CLOUD_API_KEY" \
 		$(GO) test ./internal/llm/conformance -run TestOpenAICompatibleLive -count=1 -v
 
+.PHONY: test-llm-gemini
+test-llm-gemini: ## Live conformance of the native Gemini plugin against the Gemini API with CLOUD_MODEL (key: WEFT_CLOUD_API_KEY in .env)
+	@set -a; . ./.env; set +a; test -n "$$WEFT_CLOUD_API_KEY" || { echo "set WEFT_CLOUD_API_KEY in .env"; exit 2; }; \
+		WEFT_TEST_GEMINI_MODEL="$(CLOUD_MODEL)" WEFT_TEST_GEMINI_KEY="$$WEFT_CLOUD_API_KEY" \
+		$(GO) test ./internal/llm/conformance -run TestGeminiLive -count=1 -v
+
 .PHONY: eval-cloud
 eval-cloud: ## Measure the native coding runtime with hosted models (CLOUD_MODEL=a,b EVAL_WORKFLOW=factory; key: WEFT_CLOUD_API_KEY in .env)
 	@set -a; . ./.env; set +a; test -n "$$WEFT_CLOUD_API_KEY" || { echo "set WEFT_CLOUD_API_KEY in .env"; exit 2; }; \

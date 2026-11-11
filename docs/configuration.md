@@ -68,7 +68,8 @@ provider, duplicate provider names, invalid roles, no API credentials).
 ### Inference plugins
 
 Model providers are inference plugins. Each built-in plugin (`ollama`,
-`openai`, `vllm`, `lmstudio`, `anthropic`, `openrouter`, `huggingface`/`tgi`)
+`openai`, `vllm`, `lmstudio`, `anthropic`, `gemini`, `openrouter`,
+`huggingface`/`tgi`)
 publishes a manifest at `GET /api/v1/provider-plugins`: label, local or hosted,
 default base URL, whether an API key is required, capabilities (tool calls,
 JSON mode, usage, model listing, streaming) and optional settings. Every plugin
@@ -84,7 +85,7 @@ encrypted), `defaultModel`, `timeoutSec` (default 300), `maxRetries` (default
 request, prompt plus answer). Ollama receives it as `num_ctx` and defaults to
 32768 instead of Ollama's own 4096. The other built-in types (OpenAI and its
 compatibles — vLLM, LM Studio, OpenRouter, Hugging Face TGI, Gemini's
-OpenAI-compatible endpoint — and Anthropic) cannot send it, so set it to the
+OpenAI-compatible endpoint — Anthropic and Gemini) cannot send it, so set it to the
 model's real context size: native agents budget their conversation against
 it, and when it is unset they assume 32768 tokens. Prompts that do not fit
 fail the turn with "prompt exceeds the model context window" before they are
@@ -95,6 +96,36 @@ so the provider may still reject a prompt slightly under the window.
 provider get compact tool schemas, call shapes in the system prompt and one
 tool call per reply. It is off by default (see the measurements in
 [native-coding-runtime.md](native-coding-runtime.md)).
+
+#### Google Gemini
+
+The `gemini` plugin speaks Google's native `generateContent` protocol to one
+of two services, chosen by the `project` field:
+
+* **Gemini API** (no project): enter an API key from Google AI Studio. It is
+  sent only in the `x-goog-api-key` header to
+  `https://generativelanguage.googleapis.com/v1beta` (or `baseUrl`).
+* **Vertex AI** (`project` set, optional `region`, default `global`): no API
+  key. The server authenticates with its own Application Default Credentials:
+  the file named by `GOOGLE_APPLICATION_CREDENTIALS` (a service-account key),
+  else gcloud's file from `gcloud auth application-default login`, else the
+  metadata server of the Google Cloud machine it runs on. The identity needs
+  the Vertex AI User role (`roles/aiplatform.user`) in the project. Short-lived
+  tokens are fetched and cached by the server; neither they nor the key reach
+  runtimes, prompts, events or the browser. Workload identity federation and
+  impersonated credentials are not supported yet. `baseUrl` replaces the
+  regional endpoint (for example a Private Service Connect address).
+
+Tool calls carry Gemini's thought signatures, which are sent back on the next
+turn as the API requires; JSON mode uses `responseMimeType`; usage counts
+thinking tokens as output and reports cached prompt tokens. Model listing
+shows the Gemini API models that support `generateContent`, or the Gemini
+publisher models on Vertex AI (best effort: any model the region serves can be
+used). Quota and rate limits (HTTP 429, free-tier keys allow few requests per
+minute), permission problems, unknown models and safety blocks fail the turn
+with an explanation of the fix. Gemini also offers an OpenAI-compatible
+endpoint, usable with the `openai` plugin and `baseUrl`
+`https://generativelanguage.googleapis.com/v1beta/openai/`.
 
 Nodes select models with `model: {provider, name, temperature, maxTokens}`;
 an empty provider means the default provider, an empty name the provider's

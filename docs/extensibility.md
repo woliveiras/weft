@@ -73,7 +73,8 @@ concurrency limit for free. OpenAI-compatible backends need no code at all:
 
 Every built-in plugin passes `llm/conformance`, which drives the provider only
 through `llm.Provider` against a scripted fake backend speaking its wire
-protocol (`conformance.OpenAI`, `conformance.Anthropic`, `conformance.Ollama`).
+protocol (`conformance.OpenAI`, `conformance.Anthropic`, `conformance.Gemini`,
+`conformance.Ollama`).
 It checks text answers and usage, a structured tool call and the tool result
 sent back, JSON mode (parameter or instruction), model listing, a 401 that is
 neither retried nor leaks the credential, a retried 503, cancellation, the
@@ -89,6 +90,12 @@ cancellation). It runs against a real Ollama only when asked:
 WEFT_TEST_OLLAMA_URL=http://host.docker.internal:11434 WEFT_TEST_OLLAMA_MODEL=llama3.2:latest \
   ./scripts/go.sh test ./internal/llm/conformance -run TestOllamaLive -v
 ```
+
+Hosted endpoints use the key in `WEFT_CLOUD_API_KEY` from the local `.env`
+(never echoed): `make test-llm-cloud` checks the `openai` plugin against an
+OpenAI-compatible endpoint (`CLOUD_URL`, `CLOUD_MODEL`), and
+`make test-llm-gemini` checks the native `gemini` plugin against the Gemini
+API with `CLOUD_MODEL`. Both make a handful of real, billed calls.
 
 ### Out-of-process provider plugins
 

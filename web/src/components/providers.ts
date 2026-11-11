@@ -12,6 +12,8 @@ export interface ProviderDraft {
   concurrency: string;
   contextWindow: string;
   modelGuidance: '' | 'small';
+  project: string;
+  region: string;
   apiKey: string;
   clearKey: boolean;
 }
@@ -28,6 +30,8 @@ export function draftFrom(provider: ProviderInfo | undefined, types: ProviderTyp
     concurrency: num(provider?.concurrency),
     contextWindow: num(provider?.contextWindow),
     modelGuidance: provider?.modelGuidance ?? '',
+    project: provider?.project ?? '',
+    region: provider?.region ?? '',
     apiKey: '',
     clearKey: false,
   };
@@ -43,8 +47,10 @@ function optionalInt(v: string): number | undefined {
 /**
  * Builds the API body. The credential is only sent when the operator typed
  * one (replace) or asked to remove it; otherwise the stored one is kept.
+ * Project and region are sent only for types whose settings include them,
+ * so switching the type does not carry them over.
  */
-export function inputFromDraft(d: ProviderDraft, mode: 'create' | 'edit'): ProviderInput {
+export function inputFromDraft(d: ProviderDraft, mode: 'create' | 'edit', settings: string[] = []): ProviderInput {
   const input: ProviderInput = {
     type: d.type,
     baseUrl: d.baseUrl.trim() || undefined,
@@ -54,6 +60,8 @@ export function inputFromDraft(d: ProviderDraft, mode: 'create' | 'edit'): Provi
     concurrency: optionalInt(d.concurrency),
     contextWindow: optionalInt(d.contextWindow),
     modelGuidance: d.modelGuidance || undefined,
+    project: (settings.includes('project') && d.project.trim()) || undefined,
+    region: (settings.includes('region') && d.region.trim()) || undefined,
   };
   input.name = d.name.trim();
   if (mode === 'create' && !input.name) delete input.name;
@@ -71,6 +79,10 @@ export function localErrors(input: ProviderInput, mode: 'create' | 'edit'): Reco
     if (Number.isNaN(input[k])) out[k] = 'Enter a whole number.';
   }
   if (input.baseUrl && !/^https?:\/\/[^/\s]+/i.test(input.baseUrl)) out.baseUrl = 'Use an http:// or https:// URL.';
+  for (const k of ['project', 'region'] as const) {
+    const v = input[k];
+    if (v && !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(v)) out[k] = 'Use lowercase letters, digits and hyphens.';
+  }
   return out;
 }
 

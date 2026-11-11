@@ -100,6 +100,38 @@ describe('ProvidersSection', () => {
     expect(document.body.textContent).not.toContain('sk-secret-1');
   });
 
+  it('offers Vertex AI project and region only for plugins that declare them', async () => {
+    const list = [mockProvider];
+    const gemini = { type: 'gemini', label: 'Google Gemini', keyRequired: false, settings: ['contextWindow', 'project', 'region'] };
+    const api = fakeApi({
+      'GET /api/v1/providers': () => list,
+      'GET /api/v1/provider-settings': () => settings({ types: [...settings().types, gemini] }),
+      'GET /api/v1/provider-plugins': () => [...plugins(), plugin({ id: 'gemini', label: 'Google Gemini', key: 'optional' })],
+      'POST /api/v1/providers': (c) => {
+        const body = c.body as ProviderInfo;
+        list.push({ ...body, source: 'managed', editable: true, status: 'ready', credential: { configured: false, source: 'none' } });
+        return new Response(JSON.stringify(list[list.length - 1]), { status: 201, headers: { 'content-type': 'application/json' } });
+      },
+    });
+    const user = userEvent.setup();
+    render(<ProvidersSection canEdit canTest />);
+    await user.click(await screen.findByRole('button', { name: 'Add provider' }));
+    const dialog = screen.getByRole('dialog', { name: 'Add model provider' });
+    expect(within(dialog).queryByLabelText(/^Vertex AI project/)).toBeNull();
+    await user.selectOptions(within(dialog).getByLabelText(/^Type/), 'gemini');
+    await user.type(within(dialog).getByLabelText(/^Name/), 'vertex');
+    await user.type(within(dialog).getByLabelText(/^Default model/), 'gemini-x');
+    await user.type(within(dialog).getByLabelText(/^Vertex AI project/), 'my-project');
+    await user.type(within(dialog).getByLabelText(/^Vertex AI region/), 'europe-west4');
+    await user.click(within(dialog).getByRole('button', { name: 'Add provider' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const [post] = api.find('POST', '/api/v1/providers');
+    expect(post.body).toMatchObject({ name: 'vertex', type: 'gemini', project: 'my-project', region: 'europe-west4' });
+    expect((post.body as { apiKey?: unknown }).apiKey).toBeUndefined();
+    expect(await within(await screen.findByRole('article', { name: 'Provider vertex' })).findByText('my-project · europe-west4')).toBeTruthy();
+  });
+
   it('shows server validation next to the field and keeps the dialog open', async () => {
     fakeApi({
       'GET /api/v1/providers': () => [mockProvider],

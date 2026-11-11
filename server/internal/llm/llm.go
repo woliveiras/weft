@@ -129,6 +129,11 @@ type ProviderConfig struct {
 	// ModelGuidance tunes how native agents talk to this provider's models:
 	// "" (standard) or GuidanceSmall.
 	ModelGuidance string `json:"modelGuidance,omitempty" yaml:"modelGuidance,omitempty"`
+	// Project and Region select a cloud project and its region for plugins
+	// that declare SettingProject and SettingRegion (Gemini on Vertex AI).
+	// They are identifiers, never credentials.
+	Project string `json:"project,omitempty" yaml:"project,omitempty"`
+	Region  string `json:"region,omitempty" yaml:"region,omitempty"`
 }
 
 // GuidanceSmall asks native agents to use compact tool schemas, argument

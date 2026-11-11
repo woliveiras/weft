@@ -40,7 +40,12 @@ type Capabilities struct {
 
 // Optional instance settings a plugin honours, beyond name, base URL,
 // default model, timeout, retries and concurrency that every plugin has.
-const SettingContextWindow = "contextWindow"
+const (
+	SettingContextWindow = "contextWindow"
+	// SettingProject and SettingRegion: a cloud project and region (Vertex AI).
+	SettingProject = "project"
+	SettingRegion  = "region"
+)
 
 // Manifest describes a plugin. ID is the provider type stored on instances.
 type Manifest struct {

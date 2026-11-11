@@ -15,6 +15,7 @@ func TestRedactCredentialHeaders(t *testing.T) {
 		{"Authorization", "Bearer artificial-key", "rejected Bearer artificial-key / artificial-key", "rejected [redacted] / [redacted]"},
 		{"X-Api-Key", "test-key", "rejected test-key", "rejected [redacted]"},
 		{"Api-Key", "abc", "rejected abc", "rejected [redacted]"},
+		{"X-Goog-Api-Key", "goog-key", "API key goog-key not valid", "API key [redacted] not valid"},
 		{"Authorization", "", "empty credential", "empty credential"},
 		{"Content-Type", "application/json", "application/json failure", "application/json failure"},
 	} {
@@ -52,5 +53,38 @@ func TestHTTPProviderErrorRedactionPreservesRetryContract(t *testing.T) {
 				t.Fatal("credential not redacted before truncation")
 			}
 		})
+	}
+}
+
+func TestHTTPClientAuthorize(t *testing.T) {
+	const token = "short-lived-token"
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Header.Get("Authorization") != "Bearer "+token {
+			t.Errorf("Authorization = %q", r.Header.Get("Authorization"))
+		}
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("denied for " + token))
+	}))
+	defer srv.Close()
+	c := NewHTTPClient(ProviderConfig{Name: "fixture", MaxRetries: -1}, srv.URL, nil)
+	c.Authorize = func(_ context.Context, h http.Header) error {
+		h.Set("Authorization", "Bearer "+token)
+		return nil
+	}
+	err := c.Do(context.Background(), "POST", "/chat", map[string]string{}, nil)
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusForbidden || strings.Contains(err.Error(), token) {
+		t.Fatalf("err = %v", err)
+	}
+
+	// A credential that cannot be obtained fails without a request and is not retried.
+	calls = 0
+	c.Retries = 3
+	c.Authorize = func(context.Context, http.Header) error { return errors.New("no ADC found") }
+	err = c.Do(context.Background(), "POST", "/chat", map[string]string{}, nil)
+	if !errors.Is(err, ErrCredentials) || IsRetryable(err) || calls != 0 || !strings.Contains(err.Error(), "no ADC found") {
+		t.Fatalf("err = %v after %d calls", err, calls)
 	}
 }

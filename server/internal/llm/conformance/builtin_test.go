@@ -15,6 +15,7 @@ var wires = map[string]conformance.Wire{
 	"openai": conformance.OpenAI, "vllm": conformance.OpenAI, "lmstudio": conformance.OpenAI,
 	"openrouter": conformance.OpenAI, "huggingface": conformance.OpenAI, "tgi": conformance.OpenAI,
 	"anthropic": conformance.Anthropic,
+	"gemini":    conformance.Gemini,
 	"ollama":    conformance.Ollama,
 }
 
@@ -68,6 +69,26 @@ func TestOpenAICompatibleLive(t *testing.T) {
 	}
 	p, err := llm.New(llm.ProviderConfig{Name: "live-openai", Type: "openai", BaseURL: url, DefaultModel: model, TimeoutSec: 120, MaxRetries: 3,
 		APIKeyValue: os.Getenv("WEFT_TEST_OPENAI_KEY")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conformance.RunLive(t, p, model)
+}
+
+// TestGeminiLive runs the live subset against the Gemini API with the
+// native plugin when WEFT_TEST_GEMINI_KEY is set (model:
+// WEFT_TEST_GEMINI_MODEL, default gemini-3.5-flash). It is skipped
+// otherwise; the key never appears in output.
+func TestGeminiLive(t *testing.T) {
+	key := os.Getenv("WEFT_TEST_GEMINI_KEY")
+	if key == "" {
+		t.Skip("set WEFT_TEST_GEMINI_KEY (and optionally WEFT_TEST_GEMINI_MODEL) to run against the Gemini API")
+	}
+	model := os.Getenv("WEFT_TEST_GEMINI_MODEL")
+	if model == "" {
+		model = "gemini-3.5-flash"
+	}
+	p, err := llm.New(llm.ProviderConfig{Name: "live-gemini", Type: "gemini", DefaultModel: model, TimeoutSec: 120, MaxRetries: 3, APIKeyValue: key})
 	if err != nil {
 		t.Fatal(err)
 	}

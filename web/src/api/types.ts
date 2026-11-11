@@ -468,6 +468,9 @@ export interface ProviderInfo {
   contextWindow?: number;
   /** "small": compact tool schemas, call shapes and one tool call per reply for small local models. */
   modelGuidance?: '' | 'small';
+  /** Cloud project and region (Gemini on Vertex AI); identifiers, never credentials. */
+  project?: string;
+  region?: string;
   /** config: defined in the server configuration (read-only here); managed: created in the console. */
   source?: 'config' | 'managed';
   editable?: boolean;
@@ -484,6 +487,8 @@ export interface ProviderTypeInfo {
   label: string;
   defaultBaseUrl?: string;
   keyRequired: boolean;
+  /** Optional instance settings the type honours: contextWindow, project, region. */
+  settings?: string[];
 }
 
 export interface TriggerSource {
@@ -679,6 +684,8 @@ export interface ProviderInput {
   concurrency?: number;
   contextWindow?: number;
   modelGuidance?: '' | 'small';
+  project?: string;
+  region?: string;
   apiKey?: CredentialUpdate;
 }
 

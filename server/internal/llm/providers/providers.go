@@ -3,8 +3,8 @@
 //
 //	import _ "github.com/woliveiras/weft/server/internal/llm/providers"
 //
-// Registered types: openai, vllm, lmstudio, anthropic, ollama, openrouter,
-// huggingface, tgi, mock.
+// Registered types: openai, vllm, lmstudio, anthropic, gemini, ollama,
+// openrouter, huggingface, tgi, mock.
 //
 // Adding a backend: implement llm.Provider in a new package, call
 // llm.RegisterPlugin with its manifest in its init(), and add a blank import here.
@@ -12,6 +12,7 @@ package providers
 
 import (
 	_ "github.com/woliveiras/weft/server/internal/llm/anthropic"
+	_ "github.com/woliveiras/weft/server/internal/llm/gemini"
 	_ "github.com/woliveiras/weft/server/internal/llm/huggingface"
 	_ "github.com/woliveiras/weft/server/internal/llm/mock"
 	_ "github.com/woliveiras/weft/server/internal/llm/ollama"

@@ -10,7 +10,7 @@ import (
 )
 
 func TestBuiltinPluginsHaveManifests(t *testing.T) {
-	want := []string{"anthropic", "huggingface", "lmstudio", "mock", "ollama", "openai", "openrouter", "tgi", "vllm"}
+	want := []string{"anthropic", "gemini", "huggingface", "lmstudio", "mock", "ollama", "openai", "openrouter", "tgi", "vllm"}
 	got := llm.Plugins()
 	if len(got) != len(want) {
 		t.Fatalf("plugins = %d, want %d: %+v", len(got), len(want), got)
@@ -36,7 +36,7 @@ func TestBuiltinPluginsHaveManifests(t *testing.T) {
 // The built-in model plugins honour a configured context window: each
 // declares the setting and reports the window to native turns.
 func TestBuiltinPluginsReportAConfiguredContextWindow(t *testing.T) {
-	for _, id := range []string{"anthropic", "huggingface", "lmstudio", "ollama", "openai", "openrouter", "tgi", "vllm"} {
+	for _, id := range []string{"anthropic", "gemini", "huggingface", "lmstudio", "ollama", "openai", "openrouter", "tgi", "vllm"} {
 		m, ok := llm.PluginManifest(id)
 		if !ok || !slices.Contains(m.Settings, llm.SettingContextWindow) {
 			t.Fatalf("%s settings = %v (ok=%v)", id, m.Settings, ok)

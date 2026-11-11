@@ -840,7 +840,7 @@ const mockCaps = { tools: true, json: 'native' as const, usage: true, modelListi
 function providerPlugins(): ProviderPlugin[] {
   return providerSettings().types.map((t) => ({
     id: t.type, label: t.label, builtin: true, local: t.type === 'ollama' || t.type === 'mock', defaultBaseUrl: t.defaultBaseUrl,
-    key: t.keyRequired ? 'required' : 'none', capabilities: mockCaps, devOnly: t.type === 'mock' || undefined,
+    key: t.keyRequired ? 'required' : t.type === 'gemini' ? 'optional' : 'none', capabilities: mockCaps, settings: t.settings, devOnly: t.type === 'mock' || undefined,
     enabled: t.type === 'mock' || mockProviders.enabled.has(t.type),
     enabledBy: t.type === 'mock' ? 'config' : mockProviders.enabled.has(t.type) ? 'console' : undefined,
     instances: providerList().filter((x) => x.type === t.type).map((x) => x.name),
@@ -862,6 +862,10 @@ function providerSettings() {
     secrets: { enabled: true, keySource: 'generated', keyId: 'mock0001' },
     types: [
       { type: 'anthropic', label: 'Anthropic', defaultBaseUrl: 'https://api.anthropic.com', keyRequired: true },
+      {
+        type: 'gemini', label: 'Google Gemini', defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta', keyRequired: false,
+        settings: ['contextWindow', 'project', 'region'],
+      },
       { type: 'mock', label: 'Mock (offline, deterministic)', keyRequired: false },
       { type: 'ollama', label: 'Ollama', defaultBaseUrl: 'http://localhost:11434', keyRequired: false },
       { type: 'openai', label: 'OpenAI', defaultBaseUrl: 'https://api.openai.com/v1', keyRequired: true },

@@ -141,7 +141,8 @@ func (m *Manager) TestDraft(ctx context.Context, in ProviderInput, actor string)
 	}
 	cfg := llm.ProviderConfig{
 		Name: in.Name, Type: in.Type, BaseURL: in.BaseURL, DefaultModel: in.DefaultModel,
-		TimeoutSec: in.TimeoutSec, MaxRetries: in.MaxRetries, Concurrency: in.Concurrency, ContextWindow: in.ContextWindow, ModelGuidance: in.ModelGuidance, APIKeyValue: key,
+		TimeoutSec: in.TimeoutSec, MaxRetries: in.MaxRetries, Concurrency: in.Concurrency, ContextWindow: in.ContextWindow, ModelGuidance: in.ModelGuidance,
+		Project: in.Project, Region: in.Region, APIKeyValue: key,
 	}
 	reg, err := llm.NewRegistry([]llm.ProviderConfig{cfg}, cfg.Name)
 	if err != nil {

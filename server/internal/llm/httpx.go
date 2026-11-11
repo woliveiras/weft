@@ -38,8 +38,13 @@ func (e *APIError) Error() string {
 // again, and each retry would hold the turn for another full timeout.
 var ErrModelTimeout = errors.New("model call timed out")
 
+// ErrCredentials: a provider could not obtain the credential for a request
+// (for example a short-lived OAuth token from Application Default
+// Credentials). Not retried: a missing or revoked credential stays missing.
+var ErrCredentials = errors.New("provider credentials unavailable")
+
 func IsRetryable(err error) bool {
-	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrModelTimeout) {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrModelTimeout) || errors.Is(err, ErrCredentials) {
 		return false
 	}
 	var ae *APIError
@@ -106,6 +111,10 @@ type HTTPClient struct {
 	Retries  int
 	// BaseDelay is the first backoff step (default 500ms); tests shrink it.
 	BaseDelay time.Duration
+	// Authorize, when set, adds per-request credentials to h (short-lived
+	// OAuth tokens). They are set on the request itself, so error bodies
+	// that echo them are redacted like static keys.
+	Authorize func(ctx context.Context, h http.Header) error
 }
 
 // NewHTTPClient builds a client from provider config plus static headers.
@@ -191,6 +200,14 @@ func (c *HTTPClient) once(ctx context.Context, method, path string, payload []by
 	for k, v := range c.Headers {
 		if v != "" {
 			req.Header.Set(k, v)
+		}
+	}
+	if c.Authorize != nil {
+		if err := c.Authorize(ctx, req.Header); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("llm %s: %w: %v", c.Provider, ErrCredentials, err)
 		}
 	}
 	resp, err := c.Client.Do(req)
@@ -291,7 +308,7 @@ func SchemaOrEmpty(s json.RawMessage) json.RawMessage {
 // redactCredentialHeaders sanitizes provider error bodies at the HTTP boundary,
 // before they can reach runtime callbacks, events, or callers of Models.
 func redactCredentialHeaders(body string, headers http.Header) string {
-	for _, name := range []string{"Authorization", "X-Api-Key", "Api-Key"} {
+	for _, name := range []string{"Authorization", "X-Api-Key", "Api-Key", "X-Goog-Api-Key"} {
 		for _, value := range headers.Values(name) {
 			if value == "" {
 				continue

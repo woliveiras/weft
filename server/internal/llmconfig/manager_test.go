@@ -7,8 +7,11 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -616,5 +619,98 @@ func TestModelGuidanceIsValidatedAndReachesTheRegistry(t *testing.T) {
 	}
 	if g := e.reg.ModelGuidance("p"); g != llm.GuidanceSmall {
 		t.Fatalf("registry guidance %q", g)
+	}
+}
+
+// A Vertex AI provider keeps its project and region through the console:
+// validated, stored, reloaded, and used by the registered provider, which
+// authenticates with the server's Application Default Credentials (here
+// the metadata server of a Google Cloud machine) and never with a stored key.
+func TestVertexProjectAndRegionAreValidatedKeptAndUsed(t *testing.T) {
+	metadata := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Metadata-Flavor") != "Google" {
+			http.Error(w, "missing flavor", http.StatusBadRequest)
+			return
+		}
+		_, _ = io.WriteString(w, `{"access_token":"vertex-token","expires_in":3600}`)
+	}))
+	t.Cleanup(metadata.Close)
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+	t.Setenv("CLOUDSDK_CONFIG", t.TempDir())
+	t.Setenv("GCE_METADATA_HOST", strings.TrimPrefix(metadata.URL, "http://"))
+	var lastPath atomic.Value
+	vertex := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lastPath.Store(r.URL.Path)
+		if r.Header.Get("Authorization") != "Bearer vertex-token" {
+			http.Error(w, `{"error":{"code":401,"status":"UNAUTHENTICATED"}}`, http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			_, _ = io.WriteString(w, `{"publisherModels":[{"name":"publishers/google/models/gemini-test"}]}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"OK"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":1}}`)
+	}))
+	t.Cleanup(vertex.Close)
+
+	e := newEnv(t)
+	e.enable(t, "gemini")
+	in := llmconfig.ProviderInput{Name: "vertex", Type: "gemini", BaseURL: vertex.URL, DefaultModel: "gemini-test", MaxRetries: -1, Project: "weft-test", Region: "europe-west4"}
+
+	for name, c := range map[string]struct {
+		mutate func(*llmconfig.ProviderInput)
+		path   string
+	}{
+		"project on a type without it": {func(i *llmconfig.ProviderInput) {
+			i.Type, i.APIKey = "openai", &llmconfig.CredentialUpdate{Value: secretKey}
+		}, "project"},
+		"malformed region":  {func(i *llmconfig.ProviderInput) { i.Region = "Europe West" }, "region"},
+		"vertex with a key": {func(i *llmconfig.ProviderInput) { i.APIKey = &llmconfig.CredentialUpdate{Value: "AIza-key"} }, "type"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			bad := in
+			c.mutate(&bad)
+			if _, err := e.m.Create(ctx, bad, "a", 0); issues(t, err)[c.path] == "" {
+				t.Fatalf("want an issue at %q, got %v", c.path, err)
+			}
+		})
+	}
+
+	res, err := e.m.TestDraft(ctx, in, "a")
+	if err != nil || !res.OK || !res.Models.OK {
+		t.Fatalf("draft test: %+v %v", res, err)
+	}
+	if _, err := e.m.Create(ctx, in, "a", 0); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := e.m.Get("vertex"); v.Project != "weft-test" || v.Region != "europe-west4" || v.Credential.Configured {
+		t.Fatalf("view: %+v", v)
+	}
+	var settings []string
+	for _, ti := range llmconfig.Types() {
+		if ti.Type == "gemini" {
+			settings = ti.Settings
+		}
+	}
+	if strings.Join(settings, ",") != "contextWindow,project,region" {
+		t.Fatalf("gemini form settings = %v", settings)
+	}
+
+	// A fresh manager reads the stored provider back and serves it.
+	m2 := e.manager(t, e.box)
+	if v, _ := m2.Get("vertex"); v.Project != "weft-test" || v.Region != "europe-west4" {
+		t.Fatalf("reloaded view: %+v", v)
+	}
+	p, ok := e.reg.Get("vertex")
+	if !ok {
+		t.Fatal("provider not registered")
+	}
+	resp, err := p.Chat(ctx, &llm.ChatRequest{Messages: []llm.ChatMessage{{Role: llm.RoleUser, Content: "Say OK"}}})
+	if err != nil || resp.Message.Content != "OK" || resp.Usage.InputTokens != 3 {
+		t.Fatalf("chat: %+v %v", resp, err)
+	}
+	if last, _ := lastPath.Load().(string); last != "/v1/projects/weft-test/locations/europe-west4/publishers/google/models/gemini-test:generateContent" {
+		t.Fatalf("path = %s", last)
 	}
 }

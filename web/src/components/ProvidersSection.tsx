@@ -314,6 +314,14 @@ function ProviderCard({
             <dd>{p.contextWindow ? `${p.contextWindow.toLocaleString()} tokens` : p.type === 'ollama' ? '32,768 tokens (default)' : ''}</dd>
           </>
         )}
+        {p.project && (
+          <>
+            <dt>Vertex AI</dt>
+            <dd>
+              {p.project} · {p.region || 'global'}
+            </dd>
+          </>
+        )}
         {p.baseUrl && (
           <>
             <dt>Endpoint</dt>
@@ -390,7 +398,7 @@ function ProviderForm({
   };
 
   const prepare = () => {
-    const input = inputFromDraft(draft, mode);
+    const input = inputFromDraft(draft, mode, type?.settings);
     const local = localErrors(input, mode);
     setErrors(local);
     setFormError(undefined);
@@ -471,6 +479,20 @@ function ProviderForm({
         <Field label="Default model" error={errors.defaultModel} hint="Used by agents that do not choose a model.">
           <input value={draft.defaultModel} onChange={(e) => set({ defaultModel: e.target.value })} />
         </Field>
+        {type?.settings?.includes('project') && (
+          <Field
+            label="Vertex AI project"
+            error={errors.project}
+            hint="Set it to use Vertex AI with the Weft server's Application Default Credentials instead of an API key. Leave empty for the Gemini API."
+          >
+            <input value={draft.project} onChange={(e) => set({ project: e.target.value })} spellCheck={false} placeholder="my-project" />
+          </Field>
+        )}
+        {type?.settings?.includes('region') && (
+          <Field label="Vertex AI region" error={errors.region} hint="Leave empty for global, which serves the newest models.">
+            <input value={draft.region} onChange={(e) => set({ region: e.target.value })} spellCheck={false} placeholder="global" />
+          </Field>
+        )}
         <Field
           label="API key"
           error={errors.apiKey}
