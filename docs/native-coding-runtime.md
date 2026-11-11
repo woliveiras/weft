@@ -100,13 +100,31 @@ agent's claim.
 | `implement-function` | Implement a stubbed function (Unicode-correct) and add a test |
 | `rename-across-files` | Rename a function and every caller across files |
 | `bug-from-issue` | Fix a bug described only in issue text and add a regression test |
+| `discount-across-packages` | Add a field and carry it through three packages (model, invoice text, JSON API) with exact rounding and validation rules |
+| `stale-cache` | Fix a bug whose visible tests pass: only a read, change, read, reset sequence (the hidden integration test) shows the cache serving stale themes |
+| `misleading-issue` | Fix the real cause (`Compare`, numeric parts, missing parts count as 0) of an issue whose reporter blames `Latest` and suggests a wrong fix |
+| `printf-logger-vet` | Refactor a logger to printf style; the check is `gofmt`, `go vet` (the logger is copied with its mutex) and `go test`, and `Log` must be gone |
+| `truncate-shared-helper` | Stop titles being cut mid-character; the obvious fix (make the shared `Truncate` count runes) breaks the storage caller's byte limit |
+
+The last five are harder by design: a strong model should solve them only
+sometimes, so models and workflows separate again. Hidden test files and
+functions have names an agent would not pick (`*_hidden_test.go`,
+`TestHidden…`), and they test only behaviour the request or the code's own
+documentation states.
 
 Per run it records success, tool calls, tool errors (failed or denied gateway
 calls), input/output tokens and time. `TestScriptedSolutionsPassAndLazyAnswersFail`
 keeps the harness honest in CI: a scripted model solving every case passes and
-a model that does nothing fails every case. Real models are measured with
+a model that does nothing fails every case. `TestPlausibleWrongFixesFail` runs
+a tempting but incomplete fix of each harder case (and of the rename) and
+requires the checks to reject it, so a case cannot be passed by its most
+obvious half. Real models are measured with
 `make eval-local EVAL_MODELS=llama3.2:latest,qwen3.6:27b-q4_K_M`, which writes
 the tables to `server/eval-report.md`.
+
+`EVAL_REPEAT=n` (`WEFT_EVAL_REPEAT`, default 1) runs every case n times. The
+first table reports the solve rate over all runs per model and workflow; the
+per-case table shows passes over attempts, with totals over the attempts.
 
 Hosted models behind an OpenAI-compatible endpoint (Gemini by default) are
 measured with `make eval-cloud CLOUD_MODEL=gemini-3.5-flash` (add

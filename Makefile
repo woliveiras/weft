@@ -100,8 +100,8 @@ test-e2e-real: ## Browser journey with shell.exec on the running dedicated sandb
 	cd web && pnpm run test:e2e:real
 
 .PHONY: eval-local
-eval-local: ## Measure the native coding runtime with local Ollama models (EVAL_MODELS=llama3.2:latest,... EVAL_GUIDANCE=small EVAL_WORKFLOW=factory)
-	WEFT_EVAL_OLLAMA_URL=$${WEFT_EVAL_OLLAMA_URL:-http://host.docker.internal:11434} WEFT_EVAL_MODELS=$${EVAL_MODELS:-llama3.2:latest} WEFT_EVAL_GUIDANCE=$(EVAL_GUIDANCE) WEFT_EVAL_WORKFLOW=$(EVAL_WORKFLOW) \
+eval-local: ## Measure the native coding runtime with local Ollama models (EVAL_MODELS=llama3.2:latest,... EVAL_GUIDANCE=small EVAL_WORKFLOW=factory EVAL_REPEAT=3)
+	WEFT_EVAL_OLLAMA_URL=$${WEFT_EVAL_OLLAMA_URL:-http://host.docker.internal:11434} WEFT_EVAL_MODELS=$${EVAL_MODELS:-llama3.2:latest} WEFT_EVAL_GUIDANCE=$(EVAL_GUIDANCE) WEFT_EVAL_WORKFLOW=$(EVAL_WORKFLOW) WEFT_EVAL_REPEAT=$(EVAL_REPEAT) \
 		WEFT_EVAL_REPORT=/repo/server/eval-report.md $(GO) test ./internal/eval -run TestLocalModels -count=1 -timeout 4h -v
 
 .PHONY: test-llm-cloud
@@ -117,10 +117,10 @@ test-llm-gemini: ## Live conformance of the native Gemini plugin against the Gem
 		$(GO) test ./internal/llm/conformance -run TestGeminiLive -count=1 -v
 
 .PHONY: eval-cloud
-eval-cloud: ## Measure the native coding runtime with hosted models (CLOUD_MODEL=a,b EVAL_WORKFLOW=factory; key: WEFT_CLOUD_API_KEY in .env)
+eval-cloud: ## Measure the native coding runtime with hosted models (CLOUD_MODEL=a,b EVAL_WORKFLOW=factory EVAL_REPEAT=3; key: WEFT_CLOUD_API_KEY in .env)
 	@set -a; . ./.env; set +a; test -n "$$WEFT_CLOUD_API_KEY" || { echo "set WEFT_CLOUD_API_KEY in .env"; exit 2; }; \
 		WEFT_EVAL_OPENAI_URL="$(CLOUD_URL)" WEFT_EVAL_OPENAI_KEY="$$WEFT_CLOUD_API_KEY" WEFT_EVAL_MODELS="$(CLOUD_MODEL)" \
-		WEFT_EVAL_GUIDANCE="$(EVAL_GUIDANCE)" WEFT_EVAL_WORKFLOW="$(EVAL_WORKFLOW)" WEFT_EVAL_REPORT=/repo/server/eval-report.md \
+		WEFT_EVAL_GUIDANCE="$(EVAL_GUIDANCE)" WEFT_EVAL_WORKFLOW="$(EVAL_WORKFLOW)" WEFT_EVAL_REPEAT="$(EVAL_REPEAT)" WEFT_EVAL_REPORT=/repo/server/eval-report.md \
 		$(GO) test ./internal/eval -run TestCloudModels -count=1 -timeout 4h -v
 
 .PHONY: test-e2e-providers

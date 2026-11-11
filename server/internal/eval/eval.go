@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -47,9 +48,26 @@ var Cases = []Case{
 		Check:   []string{"go", "test", "./..."}},
 	{ID: "rename-across-files", Title: "Rename across files",
 		Request: "Rename the function GetUserName to UserName everywhere in this module, including its doc comment and every caller. Make sure `go test ./...` passes.",
-		Check:   []string{"sh", "-c", "go test ./... && ! grep -rn GetUserName --include=*.go ."}},
+		Check:   []string{"sh", "-c", "go test ./... && ! grep -rln GetUserName . | grep -q '\\.go$'"}},
 	{ID: "bug-from-issue", Title: "Bug described in an issue",
 		Request: "Issue #42 from a user: \"Parse(\\\"10m\\\") returns 10 seconds instead of 10 minutes, so our timeouts are far too short.\" Fix the bug, add a regression test, and make sure `go test ./...` passes.",
+		Check:   []string{"go", "test", "./..."}},
+	// The cases below are harder: a strong model should solve them only
+	// sometimes, so models and workflows separate again.
+	{ID: "discount-across-packages", Title: "Feature spanning several packages",
+		Request: "Add per-order discounts to this shop module. `order.Order` gets a `DiscountPercent int` field: a whole percentage from 0 to 100, and `Validate` must reject any other value. `Total` subtracts the discount from the subtotal; the discount amount is rounded down to whole cents. The invoice (`invoice.Render`) shows a `Discount: <n>%` line between the `Subtotal:` and `Total:` lines, only when the discount is not zero. The JSON API (`api.Encode` and `api.Decode`) carries it as `discount_percent`. Add tests and make sure `go test ./...` passes.",
+		Check:   []string{"go", "test", "./..."}},
+	{ID: "stale-cache", Title: "Bug found only by an integration test",
+		Request: "Bug report from support: \"Users who change their theme, or reset it to the default, keep seeing their old theme until the server restarts. It does not happen the first time a user picks a theme.\" Find the cause and fix it. The cache exists so that repeated reads do not reach the store; keep it doing that. Add a regression test and make sure `go test ./...` passes.",
+		Check:   []string{"go", "test", "./..."}},
+	{ID: "misleading-issue", Title: "Issue with a misleading suggestion",
+		Request: "Issue #118 from a user: \"`Latest` offers v1.9.0 as our newest release although v1.10.0 is out. I think `Latest` should compare the tags by length first and then alphabetically.\" A maintainer added: \"Our tags look like `v1.2.3`; older ones look like `1.4`, without the `v` or the patch number. A missing number counts as 0, so `1.4` and `v1.4.0` are the same version.\" Fix the root cause, add a regression test, and make sure `go test ./...` passes.",
+		Check:   []string{"go", "test", "./..."}},
+	{ID: "printf-logger-vet", Title: "Refactor that go vet and gofmt judge",
+		Request: "Refactor the logger in package logx to printf style: replace `Log(args ...any)` with `Logf(format string, args ...any)`, which writes the prefix, a space, the formatted message and a newline. Convert every caller so the log output stays exactly the same, and remove `Log`. The code must stay gofmt-formatted and `go vet ./...` must pass, as well as `go test ./...`.",
+		Check:   []string{"sh", "-c", "test -z \"$(gofmt -l .)\" && go vet ./... && go test ./... && ! grep -nF -e ') Log(' -e '.Log(' $(find . -name '*.go' ! -name '*_test.go')"}},
+	{ID: "truncate-shared-helper", Title: "Obvious fix breaks another caller",
+		Request: "Bug report: \"Note titles in Japanese or with emoji end with a broken character (\uFFFD) in the notes list.\" The notes list shows at most `preview.MaxTitle` characters of a title. Fix the bug. `text.Truncate` has other callers: keep them working. Add a regression test and make sure `go test ./...` passes.",
 		Check:   []string{"go", "test", "./..."}},
 }
 
@@ -257,26 +275,65 @@ func check(ctx context.Context, dir string, argv []string) (bool, string) {
 	return err == nil, text
 }
 
-// Summary aggregates results per model.
+// Repeat parses the number of runs per case (WEFT_EVAL_REPEAT): empty means
+// 1, anything else must be a positive whole number.
+func Repeat(v string) (int, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 1, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return 0, fmt.Errorf("eval: repeat %q is not a positive whole number", v)
+	}
+	return n, nil
+}
+
+// Summary aggregates the runs of one model in one workflow.
 type Summary struct {
-	Provider, Model           string
-	Cases, Solved             int
+	Provider, Model, Workflow string
+	// Runs counts every attempt (cases times repetitions); Solved counts
+	// the attempts that passed.
+	Runs, Solved              int
 	ToolCalls, ToolErrors     int
 	InputTokens, OutputTokens int
 	Duration                  time.Duration
 }
 
-// Summarize groups results by provider and model.
+// SolveRate is Solved over Runs, from 0 to 1.
+func (s Summary) SolveRate() float64 {
+	if s.Runs == 0 {
+		return 0
+	}
+	return float64(s.Solved) / float64(s.Runs)
+}
+
+// CaseSummary aggregates the repetitions of one case for one model in one
+// workflow.
+type CaseSummary struct {
+	Provider, Model, Workflow, Case string
+	Attempts, Passes                int
+	ToolCalls, ToolErrors           int
+	ContextOps                      int
+	InputTokens, OutputTokens       int
+	Duration                        time.Duration
+	// Statuses are the attempts' final statuses, in run order.
+	Statuses []string
+}
+
+// Summarize groups results by provider, model and workflow.
 func Summarize(rs []Result) []Summary {
 	by := map[string]*Summary{}
+	var order []string
 	for _, r := range rs {
-		k := r.Provider + "/" + r.Model
+		k := r.Provider + "\x00" + r.Model + "\x00" + r.Workflow
 		s := by[k]
 		if s == nil {
-			s = &Summary{Provider: r.Provider, Model: r.Model}
+			s = &Summary{Provider: r.Provider, Model: r.Model, Workflow: r.Workflow}
 			by[k] = s
+			order = append(order, k)
 		}
-		s.Cases++
+		s.Runs++
 		if r.Success {
 			s.Solved++
 		}
@@ -286,28 +343,58 @@ func Summarize(rs []Result) []Summary {
 		s.OutputTokens += r.OutputTokens
 		s.Duration += r.Duration
 	}
+	sort.Strings(order)
 	out := make([]Summary, 0, len(by))
-	for _, s := range by {
-		out = append(out, *s)
+	for _, k := range order {
+		out = append(out, *by[k])
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Provider+out[i].Model < out[j].Provider+out[j].Model })
 	return out
 }
 
-// Markdown renders results as tables for the design page.
+// SummarizeCases groups results by provider, model, workflow and case, in
+// the order the cases first ran.
+func SummarizeCases(rs []Result) []CaseSummary {
+	by := map[string]*CaseSummary{}
+	var order []string
+	for _, r := range rs {
+		k := r.Provider + "\x00" + r.Model + "\x00" + r.Workflow + "\x00" + r.Case
+		c := by[k]
+		if c == nil {
+			c = &CaseSummary{Provider: r.Provider, Model: r.Model, Workflow: r.Workflow, Case: r.Case}
+			by[k] = c
+			order = append(order, k)
+		}
+		c.Attempts++
+		if r.Success {
+			c.Passes++
+		}
+		c.ToolCalls += r.ToolCalls
+		c.ToolErrors += r.ToolErrors
+		c.ContextOps += r.ContextOps
+		c.InputTokens += r.InputTokens
+		c.OutputTokens += r.OutputTokens
+		c.Duration += r.Duration
+		c.Statuses = append(c.Statuses, r.Status)
+	}
+	out := make([]CaseSummary, 0, len(order))
+	for _, k := range order {
+		out = append(out, *by[k])
+	}
+	return out
+}
+
+// Markdown renders results as tables for the design page: the solve rate
+// over every run per model and workflow, then passes over attempts per
+// case. Counts, tokens and times are totals over the attempts.
 func Markdown(rs []Result) string {
 	var b strings.Builder
-	b.WriteString("| Provider | Model | Solved | Tool calls | Tool errors | Tokens in / out | Time |\n|---|---|---|---|---|---|---|\n")
+	b.WriteString("| Provider | Model | Workflow | Solved | Solve rate | Tool calls | Tool errors | Tokens in / out | Time |\n|---|---|---|---|---|---|---|---|---|\n")
 	for _, s := range Summarize(rs) {
-		fmt.Fprintf(&b, "| %s | %s | %d/%d | %d | %d | %d / %d | %s |\n", s.Provider, s.Model, s.Solved, s.Cases, s.ToolCalls, s.ToolErrors, s.InputTokens, s.OutputTokens, s.Duration.Round(time.Second))
+		fmt.Fprintf(&b, "| %s | %s | %s | %d/%d | %.0f%% | %d | %d | %d / %d | %s |\n", s.Provider, s.Model, s.Workflow, s.Solved, s.Runs, 100*s.SolveRate(), s.ToolCalls, s.ToolErrors, s.InputTokens, s.OutputTokens, s.Duration.Round(time.Second))
 	}
-	b.WriteString("\n| Provider | Model | Case | Result | Tool calls | Tool errors | Context ops | Tokens in / out | Time | Status |\n|---|---|---|---|---|---|---|---|---|---|\n")
-	for _, r := range rs {
-		verdict := "fail"
-		if r.Success {
-			verdict = "pass"
-		}
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %d | %d | %d | %d / %d | %s | %s |\n", r.Provider, r.Model, r.Case, verdict, r.ToolCalls, r.ToolErrors, r.ContextOps, r.InputTokens, r.OutputTokens, r.Duration.Round(time.Second), r.Status)
+	b.WriteString("\n| Provider | Model | Workflow | Case | Passed | Tool calls | Tool errors | Context ops | Tokens in / out | Time | Status |\n|---|---|---|---|---|---|---|---|---|---|---|\n")
+	for _, c := range SummarizeCases(rs) {
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %d/%d | %d | %d | %d | %d / %d | %s | %s |\n", c.Provider, c.Model, c.Workflow, c.Case, c.Passes, c.Attempts, c.ToolCalls, c.ToolErrors, c.ContextOps, c.InputTokens, c.OutputTokens, c.Duration.Round(time.Second), strings.Join(c.Statuses, ", "))
 	}
 	return b.String()
 }

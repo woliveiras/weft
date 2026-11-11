@@ -1,0 +1,3 @@
+module example.com/release
+
+go 1.22
