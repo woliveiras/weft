@@ -190,7 +190,7 @@ Type scale (*proposed*, 14 px base, 1.25 ratio for headings):
 | Token | Size / line-height | Weight | Use |
 |---|---|---|---|
 | `display` | 28 / 36 | 600 | Empty states, onboarding hero |
-| `h1` | 22 / 30 | 600 | Page title |
+| `h1` | 24 / 32 | 600 | Page title |
 | `h2` | 18 / 26 | 600 | Section title |
 | `h3` | 15 / 22 | 600 | Card / panel title |
 | `body` | 14 / 20 | 400 | Default |

@@ -7,7 +7,7 @@ import { Activity, useCallback, useEffect, useState } from 'react';
 import { api, errorMessage, getToken, MOCK, onUnauthorized, setToken } from './api/client';
 import type { GraphSummary } from './api/types';
 import { ApprovalsView } from './components/ApprovalsView';
-import { Badge, Btn, ErrorBox, Modal } from './components/common';
+import { Badge, Btn, ErrorBox, Icon, Modal } from './components/common';
 import { GraphSelector } from './components/GraphSelector';
 import { GraphList } from './components/GraphList';
 import { GraphWorkspace, type GraphTab } from './components/GraphWorkspace';
@@ -182,7 +182,7 @@ function Shell() {
         </span>
         {info.data?.grafanaUrl && (
           <a href={info.data.grafanaUrl} target="_blank" rel="noreferrer" className="small">
-            Grafana ↗
+            Grafana <Icon name="external" size={12} />
           </a>
         )}
       </header>
