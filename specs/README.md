@@ -7,6 +7,42 @@ The main Phase A–C paths are delivered. Finish remaining Release 1 work before
 the consolidated clean-install exercise and developer walkthrough. Real-account
 validation needs separate authorization.
 
+## Specification layout and identifiers
+
+New specifications live at `specs/<area>/<slug>/spec.md`, with a sibling
+`matrix.md` and an `evidence.md` when durable evidence is available. Use a
+lowercase kebab-case slug that describes the capability. The 33 historical
+capability specifications use the following area prefixes and three-digit
+sequences. IDs and slugs remain stable after assignment.
+
+| Area directory | ID range | Capabilities |
+| --- | --- | --- |
+| `product-and-tasks` | `TASK-001`–`TASK-008` | Release contracts, console navigation, graph editing, Activity, prompt tasks, consent, admission, and registered projects |
+| `workspaces-and-environments` | `ENV-001`–`ENV-009` | Repository imports, workspace review, journal, human review, Docker isolation, capacity, definitions, build/reuse, and network policy |
+| `providers-and-integrations` | `INT-001`–`INT-008` | Built-in inference plugins, adapters, external plugins, budgets, MCP invocation, MCP OAuth, vendor profiles, and hosting |
+| `runtime-and-delivery` | `RUN-001`–`RUN-006` | Steering, delegation, native coding, evaluation, SCM, and issue triggers |
+| `installation-and-operations` | `OPS-001`–`OPS-002` | Compose and standalone installations |
+
+Keep existing specification IDs and paths. Use `implemented`, `in-progress`,
+`planned`, `deferred` or `superseded` to describe capability status in the
+index. Pending maintainer review is a separate condition.
+
+Each acceptance criterion has one owning specification. A qualified reference
+such as `ENV-003 AC-004` links to that owner's criterion. Production specs
+reference capability criteria and own only the extra production acceptance
+conditions. Historical task IDs remain source references.
+
+## Product and tasks
+
+- [TASK-001 — Release 1 Product Contracts](./product-and-tasks/release-one-product-contracts/spec.md) — `implemented`. Define shared release boundaries, observable errors, and audit identity.
+- [TASK-002 — Console Navigation and Configuration](./product-and-tasks/console-navigation-and-configuration/spec.md) — `implemented`. Organize daily work and configuration, preserving route compatibility and contextual guidance.
+- [TASK-003 — Graph Editing and Versioned Saves](./product-and-tasks/graph-editing-and-versioned-saves/spec.md) — `implemented`. Edit complete graph definitions in the canvas and recover safely from validation and save conflicts.
+- [TASK-004 — Execution Activity and Run Diagnostics](./product-and-tasks/execution-activity-and-run-diagnostics/spec.md) — `implemented`. Expose execution state, pending decisions and bounded health diagnostics through Activity and Runs.
+- [TASK-005 — Prompt-first Tasks and Drafts](./product-and-tasks/prompt-first-tasks-and-drafts/spec.md) — `implemented`. Save and interpret a task request, review suggestions and retain the draft through corrections.
+- [TASK-006 — Task Consent and Gateway Authorization](./product-and-tasks/task-consent-and-gateway-authorization/spec.md) — `implemented`. Bind task authorization to reviewed scope and preserve gateway grants and mandatory approvals.
+- [TASK-007 — Task Execution Admission and Recovery](./product-and-tasks/task-execution-admission-and-recovery/spec.md) — `implemented`. Start a reviewed workflow copy once, preserve its scoped execution state and recover without inventing success.
+- [TASK-008 — Registered Projects and Task Worktrees](./product-and-tasks/registered-projects-and-task-worktrees/spec.md) — `implemented`. Register repositories and create isolated task worktrees with reviewed cleanup.
+
 ## Production readiness
 
 The first four items are production blockers in the order listed. The remaining

@@ -1,0 +1,9 @@
+# TASK-004 behavior and oracle matrix
+
+Verification paths identify existing checks unless marked pending. Historical runs are scoped in the evidence record.
+
+| Criterion | Scenario | Invariant | Observable oracle | Oracle provenance | Verification | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| [AC-001](./spec.md#ac-001--execution-identity-and-outcome) | Multiple runs or mixed tool outcomes | Execution identity and outcome | Run details use persisted execution and message identities. A tool failure, a terminal run outcome and a graph-wide review remain separately visible. | spec-derived (Interface Navigation and Evolution Plan R1 §5) | [server/internal/api/activity_test.go](../../../server/internal/api/activity_test.go), [web/e2e/activity.spec.ts](../../../web/e2e/activity.spec.ts), [web/e2e/runs.spec.ts](../../../web/e2e/runs.spec.ts) | [Historical record](./evidence.md) |
+| [AC-002](./spec.md#ac-002--current-activity-and-pending-work) | Pending decision or recent terminal run | Current activity and pending work | Activity reports running, waiting, failed and finished work in its window and links actionable approvals and reviews to their original records. | spec-derived (Implementation Tasks OBS-01) | [server/internal/activity/activity_test.go](../../../server/internal/activity/activity_test.go), [web/e2e/work-activity.spec.ts](../../../web/e2e/work-activity.spec.ts) | [Historical record](./evidence.md) |
+| [AC-003](./spec.md#ac-003--health-windows) | Select a time window | Health windows | Health aggregates bounded agent and workflow duration, failures and cost for the supported 24-hour and seven-day windows. | spec-derived (Implementation Tasks OBS-02) | [server/internal/activity/health_test.go](../../../server/internal/activity/health_test.go), [web/src/components/ActivityHealth.test.tsx](../../../web/src/components/ActivityHealth.test.tsx) | [Historical record](./evidence.md) |
