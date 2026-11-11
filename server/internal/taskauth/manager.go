@@ -44,7 +44,10 @@ type Review struct {
 	Scope        string        `json:"scope"`
 	Agents       []domain.Node `json:"-"`
 }
-type Manager struct{ Store storage.Store }
+type Manager struct {
+	Store storage.Store
+	Tools *tools.Registry
+}
 
 func (m Manager) Review(ctx context.Context, id string) (*Review, error) {
 	d, err := (taskconfig.Manager{Store: m.Store}).Get(ctx, id)
@@ -125,17 +128,8 @@ func (m Manager) Save(ctx context.Context, id string, mode Mode, scope string, r
 	if running && (review.Record == nil || !Reduction(review.Record.Mode, mode) || review.Record.Scope != scope) {
 		return nil, storage.ErrConflict
 	}
-	if mode == Workspace {
-		for _, n := range review.Agents {
-			if n.Disabled {
-				continue
-			}
-			for _, g := range n.Tools {
-				if (g.Name == "*" || g.Name == "shell.*" || g.Name == "shell.exec") && !workspaceShellAllowed(string(n.Isolation.Mode)) {
-					return nil, fmt.Errorf("%w: process shell cannot be confined to a worktree; use Ask for approval, Full access or Docker isolation", ErrInvalid)
-				}
-			}
-		}
+	if err := ValidateMode(mode, review.Agents, m.Tools); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	rec := &Record{TaskID: id, Mode: mode, Scope: scope, Actor: actor, PolicyVersion: PolicyVersion}
 	if running {

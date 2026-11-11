@@ -181,3 +181,48 @@ func TestTaskApprovalAPIRoles(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkspaceConsentRejectsCheckRunUnderNativeIsolation(t *testing.T) {
+	for _, isolation := range []string{"process", "kubernetes"} {
+		t.Run(isolation, func(t *testing.T) {
+			srv := setup(t)
+			workflow := strings.Replace(taskGraph, `"tools":[]`, fmt.Sprintf(`"isolation":{"mode":%q},"tools":[{"name":"check.run"}]`, isolation), 1)
+			if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", workflow, nil); c != 201 {
+				t.Fatalf("save workflow: %d", c)
+			}
+			var draft taskconfig.Draft
+			if c := call(t, srv, "POST", "/api/v1/tasks", operatorTok, "application/json", taskBody, &draft); c != 201 {
+				t.Fatalf("save draft: %d", c)
+			}
+			path := "/api/v1/tasks/" + draft.ID + "/authorization"
+			var review taskauth.Review
+			if c := call(t, srv, "GET", path, adminTok, "", "", &review); c != 200 {
+				t.Fatalf("review consent: %d", c)
+			}
+			body := fmt.Sprintf(`{"mode":"workspace","scope":%q,"confirm":true}`, review.Scope)
+			req, err := http.NewRequestWithContext(t.Context(), "PUT", srv.URL+path, strings.NewReader(body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Authorization", "Bearer "+adminTok)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("If-Match", "0")
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer res.Body.Close()
+			var problem apiError
+			if err := json.NewDecoder(res.Body).Decode(&problem); err != nil {
+				t.Fatal(err)
+			}
+			if res.StatusCode != 400 || !strings.Contains(problem.Error, "process shell cannot be confined to a worktree; use Ask for approval, Full access or Docker isolation") {
+				t.Fatalf("save consent: %d %+v", res.StatusCode, problem)
+			}
+			review = taskauth.Review{}
+			if c := call(t, srv, "GET", path, adminTok, "", "", &review); c != 200 || review.Record != nil {
+				t.Fatalf("rejected consent was persisted: %d %+v", c, review.Record)
+			}
+		})
+	}
+}

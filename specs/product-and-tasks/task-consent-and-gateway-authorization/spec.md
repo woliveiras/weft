@@ -29,7 +29,12 @@ Ask for approval, Workspace access and Full access apply within the effective
 grants and mandatory approvals. New tasks default to Ask unless another mode
 was explicitly confirmed. Workspace allows shell only in a Docker sandbox.
 Process execution, including Kubernetes mode in the weftd pod, is refused in
-Workspace. Ask requires approval for granted shell calls there.
+Workspace. Before consent is saved, the server resolves the workflow's grants
+against the tool catalog and checks the declared capabilities. This includes
+wildcard matches and tools such as `check.run` that declare `shell.exec`.
+This check preserves the gateway's grant requirements for invoking each tool.
+The rejection explains how to select Ask, Full access or Docker isolation.
+Ask requires approval for granted shell calls under native isolation.
 Revision-fenced consent binds the actor, task, workflow version, policy,
 reviewed capabilities, and selected environment, repository and base commit
 when applicable.

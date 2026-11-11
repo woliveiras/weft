@@ -11,7 +11,10 @@ then task-mode approval. Tool path, command, host and rate constraints still app
 - **Workspace access** preauthorizes jailed filesystem tools, Git reads and shell
   calls in Docker sandboxes. Other tools require a decision. It refuses process
   shell execution, including `isolation.mode: kubernetes`, which currently runs
-  tools inside the weftd pod. Ask still requires a human decision for granted
+  tools inside the weftd pod. Consent review resolves exact and wildcard grants
+  against the tool catalog, including declarations of `check.run`, which uses the
+  shell capability. The gateway still requires a shell capability grant to run
+  a check. Ask requires a human decision for granted
   shell calls in that pod.
 - **Full access** preauthorizes granted operations within the reviewed scope.
   Mandatory grant approvals, human questions, delegation and environment gates

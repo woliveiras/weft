@@ -14,6 +14,9 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 )
 
+// ErrWorkspaceShellIsolation is the actionable refusal for native shell under Workspace consent.
+var ErrWorkspaceShellIsolation = errors.New("process shell cannot be confined to a worktree; use Ask for approval, Full access or Docker isolation")
+
 var (
 	ErrDenied      = errors.New("tool: permission denied")
 	ErrUnknownTool = errors.New("tool: unknown tool")

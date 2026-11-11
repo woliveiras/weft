@@ -4,6 +4,9 @@ package taskauth
 import (
 	"errors"
 	"strings"
+
+	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/tools"
 )
 
 type Mode string
@@ -22,6 +25,28 @@ func Valid(m Mode) bool { return m == Ask || m == Workspace || m == Full }
 
 // Kubernetes currently uses process execution in the weftd pod.
 func workspaceShellAllowed(isolation string) bool { return isolation == "docker" }
+
+var builtinTools = tools.Builtin(tools.BuiltinConfig{})
+
+// ValidateMode checks consent against the workflow's normalized agents.
+func ValidateMode(mode Mode, agents []domain.Node, registry *tools.Registry) error {
+	if !Valid(mode) {
+		return ErrInvalid
+	}
+	if mode != Workspace {
+		return nil
+	}
+	if registry == nil {
+		registry = builtinTools
+	}
+	for _, n := range agents {
+		if !n.Disabled && !workspaceShellAllowed(string(n.Isolation.Mode)) &&
+			registry.DeclaresCapability(n.Tools, "shell.exec") {
+			return tools.ErrWorkspaceShellIsolation
+		}
+	}
+	return nil
+}
 
 // Approval is evaluated only after exact grants and installation restrictions.
 // Mandatory grant approvals are never converted into automatic decisions.

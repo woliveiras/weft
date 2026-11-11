@@ -57,6 +57,10 @@ type argsDescriber interface {
 // capability or wildcard), in declaration order. A capabilityOnly tool is
 // matched by its capability alone.
 func MatchingGrants(p *Principal, t Tool) []domain.ToolGrant {
+	return matchingGrants(p, t, false)
+}
+
+func matchingGrants(p *Principal, t Tool, includeCapabilityOnlyNames bool) []domain.ToolGrant {
 	if p == nil || t == nil {
 		return nil
 	}
@@ -80,7 +84,7 @@ func MatchingGrants(p *Principal, t Tool) []domain.ToolGrant {
 			}
 			continue
 		}
-		if _, capOnly := t.(capabilityOnly); capOnly {
+		if _, capOnly := t.(capabilityOnly); capOnly && !includeCapabilityOnlyNames {
 			// Granted only through its capability: a grant naming the tool
 			// itself ("check.run", "check.*") must not open a shell.
 			if domain.GlobMatch(g.Name, t.Capability()) {

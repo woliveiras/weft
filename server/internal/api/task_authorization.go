@@ -3,15 +3,16 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"github.com/woliveiras/weft/server/internal/taskauth"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/woliveiras/weft/server/internal/taskauth"
 )
 
 func (s *Server) taskAuthorization(w http.ResponseWriter, r *http.Request) error {
-	m := taskauth.Manager{Store: s.Store}
+	m := taskauth.Manager{Store: s.Store, Tools: s.Tools}
 	id := r.PathValue("tid")
 	if r.Method == http.MethodGet {
 		v, err := m.Review(r.Context(), id)

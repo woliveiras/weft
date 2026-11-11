@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/llm"
 )
 
@@ -75,6 +76,19 @@ func (r *Registry) Describe() []ToolInfo {
 		out[i] = ToolInfo{Name: t.Name(), Capability: t.Capability(), Description: t.Description(), Schema: t.Schema()}
 	}
 	return out
+}
+
+// DeclaresCapability reports whether grants declare a registered tool with the
+// capability. Consent review also recognizes names of capability-only tools;
+// MatchingGrants still requires a capability match to invoke those tools.
+func (r *Registry) DeclaresCapability(grants []domain.ToolGrant, capability string) bool {
+	p := &Principal{Grants: grants}
+	for _, t := range r.List() {
+		if t.Capability() == capability && len(matchingGrants(p, t, true)) != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // Schemas returns the schemas of the tools p is granted, for the model.
