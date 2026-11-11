@@ -38,13 +38,10 @@ A failed or cancelled attempt remains inspectable. A revision-fenced retry uses 
 
 - Live private repositories, OS keychains and corporate restrictions require separate qualification. A registered local repository is governed by TASK-008.
 
-## Open decisions
-
-- The 2026-11-11 local-first record reports failures in [repositoryimport](../../../server/internal/repositoryimport) and [TestRepositoryImportAPIPermissionsAndPersistence](../../../server/internal/api/repository_imports_test.go). The October passes are earlier runs; reconfirm under PROD-11.
-
 ## History
 
 - 2026-10-19. PROMPT-03 introduced public snapshots. PROMPT-04 added reviewed private access and explicit native credential options.
+- 2026-11-11. PROD-11 reproduced the Go package and API failures in an Alpine image without `git-http-backend`. Both passed on main with the `git-daemon` package provided by `f6dab53`. [Verification](./evidence.md#prod-11-local-verification).
 
 ## Reconciliation
 

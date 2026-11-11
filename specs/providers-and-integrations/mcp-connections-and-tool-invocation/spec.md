@@ -38,14 +38,10 @@ Connection quotas are shared across callers. Bounded history records approval, r
 
 - Vendor live assurance is INT-007 and PROD-14. Managed server launching is INT-008.
 
-## Open decisions
-
-- The local-first record reports a failure at [the MCP authentication-failure scenario](../../../web/e2e/mcp.spec.ts#L18). Reconfirm under PROD-11 and retain the intended safe failure behavior.
-
 ## History
 
 - 2026-10-17 to 2026-10-19. The delivery increments added exact gateway grants, bounded lifecycle and history, explicit stateless transport, argument rules and reviewed native stdio.
-- 2026-11-11. Local-first verification notes retain the main-branch browser failure.
+- 2026-11-11. PROD-11 reproduced the [MCP authentication browser failure](../../../web/e2e/mcp.spec.ts#L18). The scenario expected generic discovery copy where the contract requires HTTP 401 guidance. With maintainer approval, the scenario now checks that guidance, the unavailable connection and the empty catalogue. [Verification](../../production-readiness/prod-11/evidence.md#mcp-browser-baseline-and-review).
 
 ## Reconciliation
 
