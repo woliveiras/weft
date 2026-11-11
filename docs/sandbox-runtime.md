@@ -530,10 +530,12 @@ Public DNS/TLS deployments require installation-specific validation using the
 recipes above.
 
 
-Workspace process/transient history uses a private `workspace-journal` volume,
-read-only in weftd and absent from agent sandboxes. The collector continues
-while weftd is offline, and journal imports resume from durable cursors.
-See [kernel journal](tool-permissions.md#kernel-journal-in-the-dedicated-linux-daemon)
-for process identity, coverage gaps, size limits, recovery and activation on an
-existing installation. The collector must remain active to record offline events;
-this is not reconstruction of unobserved history.
+Workspace process and transient-file history uses a private `workspace-journal`
+volume, read-only in weftd and absent from agent sandboxes. The collector
+continues while weftd is offline. It records unresolved-path gaps in 10-second
+windows with counts and timestamps, and records every queue overflow immediately.
+It rotates at the 64 MiB segment limit and keeps all linked archives. On restart
+weftd drains the saved segment before advancing to its successor. A missing or
+damaged archive stops import, and a collector failure stops the dedicated daemon.
+See the [kernel journal contract](tool-permissions.md#kernel-journal-in-the-dedicated-linux-daemon)
+and the [workspace journal runbook](operations.md#workspace-journal).

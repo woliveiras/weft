@@ -158,6 +158,12 @@ Branch `local-first-ollama`, um commit por tarefa (autor woliveiras).
 - Fase 5: jornada nativa opcional com Ollama real passou (plugin, provider,
   tarefa com ferramenta, custo local). Instalação limpa via Compose e aceite
   final dependem de baixar imagens (aprovação).
+- Workspace journal follow-up on `main`. Unresolved paths are recorded in
+  10-second windows and queue overflows are recorded individually. Segments
+  rotate at 64 MiB and retain the cursor chain. SQLite replay, Linux fanotify
+  and Chromium journal checks passed. The capacity alert and recovery runbook
+  are in place. The local stack upgrade awaits approval. A dedicated workspace
+  filesystem is tracked with PROD-08.
 
 Como rodar os checks neste ambiente (sem Go/Node no host):
 - Go: `./scripts/go.sh test ./...` (Docker). Falhas pré-existentes:

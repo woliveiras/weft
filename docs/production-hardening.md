@@ -93,6 +93,23 @@ setting or file that implements it.
       history on a schedule (database job) according to your audit policy;
       Loki/Tempo retention is configured in `deploy/observability/`.
 - [ ] Backups for workspaces (or rely on git remotes); see [deployment](deployment.md#backup-and-restore).
+- [ ] **Give workspaces a dedicated Linux filesystem (PROD-08).** On the
+      selected sandbox host or VM, mount a dedicated block volume with a
+      filesystem supporting fanotify file handles, such as ext4. Mount that
+      filesystem at the existing workspace path in both weftd and the
+      dedicated daemon, and keep the daemon's image layers, the journal and
+      PostgreSQL on other filesystems. A named Docker volume backed by a
+      directory on the same filesystem still shares the fanotify filesystem
+      mark. A mount-only fanotify mark cannot report the file-handle events
+      needed for creation and moves. [Linux fanotify marks](https://man7.org/linux/man-pages/man2/fanotify_mark.2.html)
+      · [Docker volumes](https://docs.docker.com/engine/storage/volumes/)
+
+      Plan the mount and data migration with the production topology. Preserve
+      workspace ownership and Git metadata and verify that the daemon sees a
+      distinct filesystem. In the chosen environment, test transient operations
+      and PID attribution from nested sandboxes while generating writes on the
+      other filesystems. Compare the unresolved-path and overflow rates before
+      and after the migration.
 
 ## Reliability
 
@@ -129,8 +146,8 @@ setting or file that implements it.
       (`traceSampleRatio` 0.1–0.2) at high volume — parent-based sampling keeps
       whole agent chains together.
 - [ ] Load `deploy/observability/alerts.yaml` (dead letters, growing backlog,
-      turn failure rate, waiting approvals, LLM errors) into Prometheus /
-      Alertmanager and route them.
+      turn failure rate, waiting approvals, LLM errors and journal segment
+      capacity) into Prometheus / Alertmanager and route them.
 - [ ] Define SLOs, e.g. *95 % of messages start processing within 2 min*
       (`weft_message_queue_latency_seconds`), *turn success ≥ 99 %*
       (`weft_executions_total`), *API availability ≥ 99.9 %*.

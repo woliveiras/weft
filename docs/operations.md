@@ -82,7 +82,7 @@ a complete Weft backup.
 | `weftd-data` | Generated installation encryption key; local state when configured | Protect separately from the database backup. An external key must be retained in the secret store instead. |
 | `nats-data` | JetStream messages and consumer acknowledgement state | Use a broker-supported backup or a consistent stopped-volume snapshot. Do not infer exactly-once delivery from a restore. |
 | `workspaces` | Repositories, uncommitted edits and isolated worktrees | Preserve ownership, permissions and hidden Git metadata. A Git remote does not preserve uncommitted work. |
-| `workspace-journal` | Process evidence and replay history | Retain with the workspace snapshot; missing/lost kernel events cannot be reconstructed. |
+| `workspace-journal` | Process evidence and replay history | Back up the active file and every linked archive with the workspace snapshot and the store containing the import cursor. Lost kernel events cannot be reconstructed. |
 | `sandbox-daemon-data` | Suspended containers, images and shared caches | Preserve if container-local files must survive. Treat Docker state as version-sensitive, not portable workspace backup. |
 | `sandbox-certs-ca`, `sandbox-certs-server`, `sandbox-certs-client` | Mutual TLS identity for the dedicated daemon | Keep as a matching protected set; do not restore only one side. |
 | Configuration and external secrets | Database/runtime authentication, provider keys, OAuth clients, public callback URL | Retain out of band with access controls and the required historical keys. |
@@ -135,6 +135,73 @@ status. Validate a read-only console journey before resuming work. If rollback i
 needed, restore the prior image only when its schema is compatible; otherwise use
 a matching backup in an isolated recovery environment. Do not overwrite the new
 state without an explicit recovery decision.
+
+## Workspace journal
+
+The collector rotates before a record would take the active segment past
+64 MiB. It preserves the old inode as
+`events.jsonl.segment-<sha256-of-segment-id>`, then atomically publishes
+the successor at `events.jsonl`. Its first record contains
+`previousSegment.id` and `previousSegment.bytes`. Archives and the active
+segment must stay in the same directory on a filesystem supporting hard links
+and directory sync. An interrupted rotation can leave a staged
+`.events.jsonl.next-*` file and an archive name linked to the still-active
+inode. On retry the collector reuses that link.
+
+Keep all linked segments for the lifetime of the active chain. Provision disk
+space for archive growth and monitor available bytes and inodes on the volume.
+To retire a chain, quiesce work and stop the collector, let weftd import through
+the last complete record, and confirm the cursor has reached that byte offset.
+Stop weftd and take a matching backup of the chain and the cursor. A planned
+cutover to a new filename in both services starts a new chain with a startup
+coverage gap. Retain the retired chain with the backup for the installation's
+audit retention period.
+
+### Near the segment limit
+
+`WeftWorkspaceJournalNearLimit` fires when the active segment stays at or
+above 90% of its limit for one minute. The `weft_workspace_journal_*` series
+are available on the existing weftd `/metrics` endpoint.
+
+| Series suffix | Meaning |
+|---|---|
+| `active_bytes`, `segment_limit_bytes` | Last active size sampled by the importer and the per-segment limit. |
+| `archived_bytes` | Total linked archive bytes at the last successful chain validation. |
+| `rotations_total` | Segment links committed by this importer process. A backlog can delay this counter after the collector logs a rotation. |
+| `gap_windows_total`, `gaps_coalesced_total` | Imported unresolved-path windows and additional kernel gaps represented by those windows, summed as `count - 1`. |
+| `records_imported_total` | Committed observation records. Each record is counted once, independent of the number of workspace scopes. |
+| `imports_total{outcome="error"}`, `import_duration_seconds` | Failed import passes and the pass latency histogram. |
+
+1. Check `docker compose ps weftd sandbox-daemon`. Inspect the journal-related
+   lines in the two services' logs for `workspace journal rotated`,
+   `workspace journal import failed` or collector shutdown. Check free disk
+   space and inodes for the journal volume.
+2. After a normal rotation, confirm that the active size dropped, the archived
+   byte count increased, and the importer crossed the link. If archive usage
+   keeps increasing, compare the rates of rotations, gap windows and imported
+   records to the workload and budget disk space accordingly.
+3. On a missing link, wrong identity, length mismatch or incomplete archived
+   record, preserve the journal directory and store. Restore the matching
+   segment at its expected name from a verified backup and confirm its ID and
+   exact length against the successor. The importer resumes from the saved
+   cursor. Keep partial active records for diagnosis if the collector cannot
+   reopen the file. A recovery decision must account for any unavailable
+   evidence before starting a new chain.
+
+### Upgrade an exhausted legacy journal
+
+Record the legacy file size, first-record ID and saved cursor under
+`workspace-journal/cursor/<sha256-of-configured-path>`. Upgrade the collector and
+importer together. Preserve `WEFT_WORKSPACE_JOURNAL` and the original journal
+file at the configured path until the upgraded collector starts. Its first
+append rotates an exhausted, complete journal. The existing cursor still
+addresses the archived segment. If its offset already equals the archive
+length, the importer advances directly through the link.
+
+Confirm the archive has the original ID and length, then verify that the cursor
+points to the new segment and both services stay healthy. An older importer
+cannot follow segment links. Rollback after rotation requires a matching
+pre-upgrade journal and store recovery set.
 
 ## Encryption-key rotation
 

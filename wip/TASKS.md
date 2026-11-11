@@ -1000,7 +1000,14 @@ work. Blockers come first; the rest can run in parallel. Details:
 
 - [ ] PROD-08 — Chosen topology (single node or Kubernetes HA) with managed or replicated PostgreSQL and NATS.
 - [ ] PROD-09 — Backups with a restore drill actually performed and timed.
+  - Workspace journal backups now cover the complete segment chain and its cursor.
+    The SQLite integration tests resumed import after restoring a missing
+    archive. A timed installation restore drill is still open.
 - [ ] PROD-10 — Alerts and SLOs on the existing metrics, runbooks, and an on-call owner.
+  - The workspace journal exposes size, rotation, gap and import metrics.
+    `promtool test rules` verified that the capacity alert fires and clears.
+    The [journal runbook](../docs/operations.md#workspace-journal) covers rotation
+    and recovery. Production SLOs, alert routing and on-call ownership are open.
 
 **Quality and delivery**
 
