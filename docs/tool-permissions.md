@@ -316,9 +316,11 @@ The collector fsyncs each record independently of weftd. With
 up to 1,000 records per pass, maps paths only to authorized workspace scopes and
 persists events before advancing a durable cursor. Stable event IDs make replay
 safe after a crash between event persistence and cursor advancement. The cursor
-also checks journal identity and refuses truncation/replacement. Original record
-times survive replay. This recovers events collected while **weftd was offline**;
-it cannot recover events never captured while the collector itself was offline.
+identifies a segment and a byte offset. The importer finishes that segment
+before advancing to a linked successor. Missing or invalid links, unexpected
+identities and truncation stop import. Original record times survive replay.
+This recovers events collected while **weftd was offline**. Capture must be
+running to record events.
 
 Startup and each kernel queue overflow are recorded immediately as coverage
 gaps. Repeated unresolved paths, such as when parent directories are deleted,
@@ -333,15 +335,14 @@ collector does not inspect other PID namespaces or claim support for native
 macOS/Windows, rootless or arbitrary external hosts. Snapshot monitoring remains
 available for those configurations, with its existing limits.
 
-A journal is capped at 64 MiB and records at 60 KiB. Disk/write failures and the
-size limit stop capture; daemon supervision stops dockerd rather than silently
-continuing without its collector. No history is automatically deleted. An
-incomplete trailing record prevents collector restart and must be preserved for
-recovery. Preserve/archive an exhausted or damaged journal and choose a **new
-filename** under `/var/lib/weft/journal` through `WEFT_WORKSPACE_JOURNAL`
-for both services; do not truncate or replace a file behind an existing cursor.
-Previously imported history remains in the event store. Automatic retention and
-repair are not implemented.
+A journal segment is capped at 64 MiB and each record at 60 KiB. When the
+next record would exceed the segment limit, the collector archives the current
+segment and publishes a successor at the configured path. The first record
+links the predecessor by identity and byte length. The collector retains every
+archive in the active chain indefinitely. Disk, write and rotation failures
+stop capture, and daemon supervision stops dockerd. The importer waits for a
+partial final record in the active segment. An incomplete tail prevents
+collector restart and must be preserved for recovery.
 
 Existing installations require rebuilding/restarting the sandbox-daemon image
 and adding the journal volume to weftd. Changing source files alone does not

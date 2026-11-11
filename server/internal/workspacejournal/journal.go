@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,81 +19,18 @@ import (
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
-const MaxJournalBytes int64 = 64 << 20
-
 type Record struct {
-	ID           string     `json:"id"`
-	Time         time.Time  `json:"time"`
-	Path         string     `json:"path,omitempty"`
-	Operation    string     `json:"operation,omitempty"`
-	PID          int32      `json:"pid,omitempty"`
-	ProcessStart string     `json:"processStart,omitempty"`
-	Namespace    string     `json:"namespace,omitempty"`
-	BootID       string     `json:"bootId,omitempty"`
-	Gap          string     `json:"gap,omitempty"`
-	GapWindow    *gapWindow `json:"gapWindow,omitempty"`
-}
-
-type Writer struct {
-	f    *os.File
-	size int64
-	err  error
-}
-
-func OpenWriter(path string) (*Writer, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0640)
-	if err != nil {
-		return nil, err
-	}
-	info, err := f.Stat()
-	if err != nil {
-		f.Close()
-		return nil, err
-	}
-	if info.Size() > 0 {
-		last := make([]byte, 1)
-		if _, err := f.ReadAt(last, info.Size()-1); err != nil || last[0] != '\n' {
-			f.Close()
-			return nil, fmt.Errorf("journal ends with an incomplete record; preserve it for recovery")
-		}
-	}
-	return &Writer{f: f, size: info.Size()}, nil
-}
-func (w *Writer) Close() error { return w.f.Close() }
-func (w *Writer) Append(r Record) error {
-	if w.err != nil {
-		return w.err
-	}
-	if r.ID == "" {
-		r.ID = domain.NewID("wj")
-	}
-	if r.Time.IsZero() {
-		r.Time = time.Now().UTC()
-	}
-	data, err := json.Marshal(r)
-	if err != nil {
-		return err
-	}
-	data = append(data, '\n')
-	if len(data) > 60<<10 {
-		return fmt.Errorf("journal record exceeds limit")
-	}
-	if w.size+int64(len(data)) > MaxJournalBytes {
-		return fmt.Errorf("workspace journal reached size limit; capture stopped")
-	}
-	n, err := w.f.Write(data)
-	w.size += int64(n)
-	if err == nil && n != len(data) {
-		err = io.ErrShortWrite
-	}
-	if err == nil {
-		err = w.f.Sync()
-	}
-	if err != nil {
-		// A failed append may have left a partial record on disk.
-		w.err = fmt.Errorf("persist workspace journal record: %w", err)
-	}
-	return w.err
+	ID              string      `json:"id"`
+	Time            time.Time   `json:"time"`
+	Path            string      `json:"path,omitempty"`
+	Operation       string      `json:"operation,omitempty"`
+	PID             int32       `json:"pid,omitempty"`
+	ProcessStart    string      `json:"processStart,omitempty"`
+	Namespace       string      `json:"namespace,omitempty"`
+	BootID          string      `json:"bootId,omitempty"`
+	Gap             string      `json:"gap,omitempty"`
+	GapWindow       *gapWindow  `json:"gapWindow,omitempty"`
+	PreviousSegment *segmentRef `json:"previousSegment,omitempty"`
 }
 
 // Scope is installation-derived, not supplied by an agent or journal record.
@@ -107,126 +45,235 @@ type Importer struct {
 	Scopes func(context.Context) ([]Scope, error)
 }
 
+type cursor struct {
+	Offset    int64
+	JournalID string
+}
+
+type importProgress struct {
+	key       string
+	revision  int64
+	remaining int
+}
+
+const importBatchSize = 1000
+
 func (i *Importer) Import(ctx context.Context) error {
-	scopes, err := i.Scopes(ctx)
+	key := fmt.Sprintf("workspace-journal/cursor/%x", sha256.Sum256([]byte(i.Path)))
+	saved, revision, err := i.loadCursor(ctx, key)
 	if err != nil {
 		return err
 	}
 	f, err := os.Open(i.Path)
 	if err != nil {
-		return err
+		return fmt.Errorf("open active workspace journal: %w", err)
 	}
 	defer f.Close()
-	// A cursor is committed only after event persistence. Stable IDs make replay
-	// idempotent when the process stops between these two writes.
-	key := fmt.Sprintf("workspace-journal/cursor/%x", sha256.Sum256([]byte(i.Path)))
-	first, firstErr := bufio.NewReaderSize(f, 64<<10).ReadSlice('\n')
-	if firstErr == io.EOF {
-		if _, err := i.Store.GetSetting(ctx, key); err == nil {
-			return fmt.Errorf("journal lost its initial record; refusing cursor reuse")
-		} else if !errors.Is(err, storage.ErrNotFound) {
-			return err
-		}
-		return nil
-	}
-	if firstErr != nil {
-		return firstErr
-	}
-	var identity Record
-	if err := json.Unmarshal(first, &identity); err != nil || identity.ID == "" {
-		return fmt.Errorf("invalid journal identity")
-	}
-	type cursor struct {
-		Offset    int64
-		JournalID string
-	}
-	saved := cursor{JournalID: identity.ID}
-	var offset int64
-	var revision int64
-	setting, err := i.Store.GetSetting(ctx, key)
-	if err == nil {
-		if err = json.Unmarshal(setting.Value, &saved); err != nil {
-			return err
-		}
-		if saved.JournalID != identity.ID {
-			return fmt.Errorf("journal identity changed; refusing cursor reuse")
-		}
-		offset = saved.Offset
-		revision = setting.Revision
-	} else if !errors.Is(err, storage.ErrNotFound) {
-		return err
-	}
-	info, err := f.Stat()
+	size, err := segmentSize(f)
 	if err != nil {
 		return err
 	}
-	if offset > info.Size() {
-		return fmt.Errorf("workspace journal was truncated; refusing cursor reset")
+	active, err := readSegment(f, size)
+	if err == io.EOF {
+		if saved.JournalID != "" {
+			return fmt.Errorf("journal lost its initial record; refusing cursor reuse")
+		}
+		return requireNoArchives(i.Path)
 	}
-	if _, err = f.Seek(offset, io.SeekStart); err != nil {
+	if err != nil {
 		return err
 	}
-	reader := bufio.NewReaderSize(f, 64<<10)
-	for n := 0; n < 1000; n++ {
-		if ctx.Err() != nil {
-			return ctx.Err()
+	chain, err := readChain(ctx, i.Path, active)
+	if err != nil {
+		return err
+	}
+	if saved.JournalID == "" {
+		saved.JournalID = chain[0].ID
+	}
+	start := slices.IndexFunc(chain, func(s segment) bool { return s.ID == saved.JournalID })
+	if start < 0 {
+		return fmt.Errorf("journal identity changed; refusing cursor reuse: segment %q is absent from the active chain", saved.JournalID)
+	}
+	scopes, err := i.Scopes(ctx)
+	if err != nil {
+		return fmt.Errorf("discover workspace journal scopes: %w", err)
+	}
+	progress := importProgress{key: key, revision: revision, remaining: importBatchSize}
+	for _, s := range chain[start:] {
+		offset := int64(0)
+		if s.ID == saved.JournalID {
+			offset = saved.Offset
+		}
+		if s.ID == active.ID {
+			return i.importSegment(ctx, f, s, offset, false, scopes, &progress)
+		}
+		if err := i.importArchive(ctx, s, offset, scopes, &progress); err != nil {
+			return err
+		}
+		if progress.remaining == 0 {
+			break
+		}
+	}
+	return nil
+}
+
+func (i *Importer) loadCursor(ctx context.Context, key string) (cursor, int64, error) {
+	setting, err := i.Store.GetSetting(ctx, key)
+	if errors.Is(err, storage.ErrNotFound) {
+		return cursor{}, 0, nil
+	}
+	if err != nil {
+		return cursor{}, 0, fmt.Errorf("load workspace journal cursor: %w", err)
+	}
+	var saved cursor
+	if err := json.Unmarshal(setting.Value, &saved); err != nil {
+		return cursor{}, 0, fmt.Errorf("decode workspace journal cursor: %w", err)
+	}
+	if saved.Offset <= 0 || saved.JournalID == "" {
+		return cursor{}, 0, fmt.Errorf("invalid workspace journal cursor")
+	}
+	return saved, setting.Revision, nil
+}
+
+func (i *Importer) importArchive(ctx context.Context, s segment, offset int64, scopes []Scope, progress *importProgress) error {
+	f, current, err := openArchive(i.Path, s.segmentRef)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if !sameLink(current.previous, s.previous) {
+		return fmt.Errorf("workspace journal archive %q changed during import", s.ID)
+	}
+	return i.importSegment(ctx, f, s, offset, true, scopes, progress)
+}
+
+func sameLink(a, b *segmentRef) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func (i *Importer) importSegment(ctx context.Context, f *os.File, s segment, offset int64, archived bool, scopes []Scope, progress *importProgress) error {
+	if offset > s.Bytes {
+		return fmt.Errorf("workspace journal was truncated; refusing cursor reset")
+	}
+	if offset > 0 {
+		var last [1]byte
+		if _, err := f.ReadAt(last[:], offset-1); err != nil {
+			return fmt.Errorf("read workspace journal cursor boundary: %w", err)
+		}
+		if last[0] != '\n' {
+			return fmt.Errorf("workspace journal cursor is not at a record boundary")
+		}
+	}
+	if offset == s.Bytes {
+		return nil
+	}
+	reader := bufio.NewReaderSize(io.NewSectionReader(f, offset, s.Bytes-offset), recordBufferBytes)
+	for offset < s.Bytes && progress.remaining > 0 {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 		line, err := reader.ReadSlice('\n')
 		if err == io.EOF {
-			break
-		} // a partial last line is retried, never consumed
+			if archived || offset+int64(len(line)) < s.Bytes {
+				return fmt.Errorf("workspace journal segment %q ended before a complete record", s.ID)
+			}
+			return nil // an incomplete active record is retried
+		}
 		if err != nil {
 			return fmt.Errorf("workspace journal record: %w", err)
 		}
-		var r Record
-		if err = json.Unmarshal(line, &r); err != nil {
+		r, err := decodeRecord(line)
+		if err != nil {
 			return fmt.Errorf("workspace journal record: %w", err)
 		}
-		if r.ID == "" || r.Time.IsZero() {
-			return fmt.Errorf("workspace journal record missing identity")
+		if offset == 0 {
+			if r.ID != s.ID || !sameLink(r.PreviousSegment, s.previous) {
+				return fmt.Errorf("workspace journal segment %q changed during import", s.ID)
+			}
+		} else if r.PreviousSegment != nil {
+			return fmt.Errorf("workspace journal segment link is not its first record")
 		}
-		if r.Gap == "" && (!validPath(r.Path) || !validOperation(r.Operation)) {
-			return fmt.Errorf("invalid workspace journal operation")
-		}
-		if window := r.GapWindow; window != nil && (r.Gap != unresolvedKernelPath || window.Count == 0 ||
-			window.Start.IsZero() || window.End.IsZero() || window.End.Before(window.Start)) {
-			return fmt.Errorf("invalid workspace journal gap window")
-		}
-		for _, s := range scopes {
-			rel, ok := scopePath(s.RelativeRoot, r.Path)
-			if r.Gap == "" && !ok {
-				continue
-			}
-			data := map[string]any{"source": "kernel-journal", "attribution": "kernel_pid", "journalId": r.ID, "process": map[string]any{"pid": r.PID, "start": r.ProcessStart, "namespace": r.Namespace, "bootId": r.BootID}, "status": "complete", "changes": []map[string]string{{"path": rel, "operation": r.Operation}}}
-			if r.PID <= 0 {
-				data["attribution"] = "unknown"
-			}
-			if r.Gap != "" {
-				data["gap"] = true
-				data["reason"] = r.Gap
-				data["status"] = "partial"
-				data["changes"] = []any{}
-				data["attribution"] = "unknown"
-				if r.GapWindow != nil {
-					data["gapWindow"] = r.GapWindow
-				}
-			}
-			ev := domain.NewEvent("workspace.observed", s.GraphID, data).WithActor("workspace-journal")
-			ev.ID = r.ID + "_" + s.GraphID + "_" + s.NodeID + fmt.Sprint(s.Replica)
-			ev.Time = r.Time
-			if s.NodeID != "" {
-				ev.WithNode(s.NodeID, s.Replica)
-			}
-			if err := i.Store.AppendEvent(ctx, ev); err != nil && !errors.Is(err, storage.ErrConflict) {
+		if r.PreviousSegment == nil {
+			if err := i.persistObservation(ctx, r, scopes); err != nil {
 				return err
 			}
 		}
+		// Commit the cursor after persisting all scopes. Stable event IDs make
+		// replays idempotent if the setting write fails.
 		offset += int64(len(line))
-		saved.Offset = offset
-		data, _ := json.Marshal(saved)
-		revision, err = i.Store.PutSetting(ctx, key, data, revision, "workspace-journal")
+		data, _ := json.Marshal(cursor{Offset: offset, JournalID: s.ID})
+		progress.revision, err = i.Store.PutSetting(ctx, progress.key, data, progress.revision, "workspace-journal")
 		if err != nil {
-			return err
+			return fmt.Errorf("advance workspace journal cursor: %w", err)
+		}
+		progress.remaining--
+	}
+	return nil
+}
+
+func decodeRecord(line []byte) (Record, error) {
+	var r Record
+	if err := json.Unmarshal(line, &r); err != nil {
+		return Record{}, err
+	}
+	return r, validateRecord(r)
+}
+
+func validateRecord(r Record) error {
+	if r.ID == "" || r.Time.IsZero() {
+		return fmt.Errorf("workspace journal record missing identity")
+	}
+	if link := r.PreviousSegment; link != nil {
+		if link.ID == "" || link.Bytes <= 0 || r.Gap != "" || r.GapWindow != nil || r.Path != "" || r.Operation != "" {
+			return fmt.Errorf("invalid workspace journal segment link")
+		}
+		return nil
+	}
+	if r.Gap == "" && (!validPath(r.Path) || !validOperation(r.Operation)) {
+		return fmt.Errorf("invalid workspace journal operation")
+	}
+	if window := r.GapWindow; window != nil && (r.Gap != unresolvedKernelPath || window.Count == 0 ||
+		window.Start.IsZero() || window.End.IsZero() || window.End.Before(window.Start)) {
+		return fmt.Errorf("invalid workspace journal gap window")
+	}
+	return nil
+}
+
+func (i *Importer) persistObservation(ctx context.Context, r Record, scopes []Scope) error {
+	for _, s := range scopes {
+		rel, ok := scopePath(s.RelativeRoot, r.Path)
+		if r.Gap == "" && !ok {
+			continue
+		}
+		data := map[string]any{
+			"source": "kernel-journal", "attribution": "kernel_pid", "journalId": r.ID,
+			"process": map[string]any{"pid": r.PID, "start": r.ProcessStart, "namespace": r.Namespace, "bootId": r.BootID},
+			"status":  "complete", "changes": []map[string]string{{"path": rel, "operation": r.Operation}},
+		}
+		if r.PID <= 0 {
+			data["attribution"] = "unknown"
+		}
+		if r.Gap != "" {
+			data["gap"] = true
+			data["reason"] = r.Gap
+			data["status"] = "partial"
+			data["changes"] = []any{}
+			data["attribution"] = "unknown"
+			if r.GapWindow != nil {
+				data["gapWindow"] = r.GapWindow
+			}
+		}
+		ev := domain.NewEvent("workspace.observed", s.GraphID, data).WithActor("workspace-journal")
+		ev.ID = r.ID + "_" + s.GraphID + "_" + s.NodeID + fmt.Sprint(s.Replica)
+		ev.Time = r.Time
+		if s.NodeID != "" {
+			ev.WithNode(s.NodeID, s.Replica)
+		}
+		if err := i.Store.AppendEvent(ctx, ev); err != nil && !errors.Is(err, storage.ErrConflict) {
+			return fmt.Errorf("persist workspace journal observation: %w", err)
 		}
 	}
 	return nil

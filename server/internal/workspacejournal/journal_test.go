@@ -2,10 +2,13 @@ package workspacejournal
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,9 +28,14 @@ func TestJournalValidationAndSizeLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer w.Close()
-	w.size = MaxJournalBytes
-	if w.Append(Record{Path: "file", Operation: "created"}) == nil {
-		t.Fatal("size limit ignored")
+	if err := w.Append(Record{Path: strings.Repeat("x", maxRecordBytes), Operation: "created"}); err == nil {
+		t.Fatal("record size limit ignored")
+	}
+	if err := w.Append(Record{Path: "../secret", Operation: "created"}); err == nil {
+		t.Fatal("invalid record written")
+	}
+	if w.size != 0 {
+		t.Fatal("invalid record changed the journal")
 	}
 	if validOperation("execute") {
 		t.Fatal("invalid operation accepted")
@@ -269,5 +277,50 @@ func TestImporterDoesNotAdvancePastEventFailure(t *testing.T) {
 	}
 	if importer.Import(ctx) == nil {
 		t.Fatal("empty replacement accepted")
+	}
+}
+
+func TestImporterRefusesInvalidCursor(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events")
+	line := recordLine(t, Record{ID: "first", Time: time.Now().UTC(), Path: "file", Operation: "created"})
+	if err := os.WriteFile(path, line, 0640); err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []struct {
+		saved     cursor
+		errorText string
+	}{
+		{cursor{Offset: -1, JournalID: "first"}, "invalid workspace journal cursor"},
+		{cursor{JournalID: "first"}, "invalid workspace journal cursor"},
+		{cursor{Offset: 1, JournalID: "first"}, "not at a record boundary"},
+		{cursor{Offset: int64(len(line)) + 1, JournalID: "first"}, "journal was truncated"},
+		{cursor{Offset: int64(len(line)), JournalID: "different"}, "journal identity changed"},
+	} {
+		t.Run(invalid.errorText, func(t *testing.T) {
+			store, err := fsstore.Open(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			data, err := json.Marshal(invalid.saved)
+			if err != nil {
+				t.Fatal(err)
+			}
+			key := fmt.Sprintf("workspace-journal/cursor/%x", sha256.Sum256([]byte(path)))
+			if _, err := store.PutSetting(ctx, key, data, 0, "test"); err != nil {
+				t.Fatal(err)
+			}
+			importer := journalTestImporter(path, store)
+			if err := importer.Import(ctx); err == nil || !strings.Contains(err.Error(), invalid.errorText) {
+				t.Fatalf("invalid cursor %+v: %v", invalid.saved, err)
+			}
+			saved, revision := readTestCursor(t, store)
+			if saved != invalid.saved || revision != 1 {
+				t.Fatal("invalid cursor changed")
+			}
+			checkEventOrder(t, store)
+		})
 	}
 }
