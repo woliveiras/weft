@@ -131,5 +131,43 @@ baseline and again after the MCP test correction.
   are different.` for light and `32071 pixels (ratio 0.04 of all image pixels)
   are different.` for dark. The baselines require review.
 
-GitHub workflow and branch protection qualification remain open. The local
-browser suite still reports the Activity ranking and Models snapshot failures.
+GitHub workflow and branch protection qualification remain open.
+
+## Activity and Models follow-up on 2026-11-11
+
+The Activity failure was caused by shared test data. `Slowest` shows ten
+entries sorted by p90 duration. The failed run displayed all ten positions
+with slower agents from previous scenarios and showed the Activity fixture's
+0 ms run in the main table. The same scenario passed in isolation. The
+standard `pnpm run test:e2e` command now runs all three `work-activity.spec.ts`
+scenarios in `playwright.activity.config.ts` with a fresh backend. It uses the
+real Activity API and retains the original test assertions.
+
+The Models references from `550569c` predated Activity navigation (`9cd8d0d`),
+the Gemini card (`cea5042`) and streaming capability labels (`29cf70a`). The
+visual diff showed these changes in both themes. The command below regenerated
+only the two Models references in the cached Linux Chromium image with
+Playwright 1.64.1. Each new file matched the corresponding screenshot from the
+previous failing run byte for byte.
+
+```sh
+pnpm exec playwright test --config playwright.visual.config.ts \
+  --grep 'models matches the design baseline' --update-snapshots
+```
+
+After warming the Go build cache, `go test -tags e2e ./cmd/weft-e2e` and
+`pnpm run test:e2e` both exited successfully. The full run compared the visual
+references in regular verification mode.
+
+| Configuration | Result |
+| --- | --- |
+| Main Chromium journeys | 112 passed, 7 gated by the deterministic prompt fixture |
+| Activity | 3 passed, including `Slowest` |
+| OAuth CIMD | 1 passed |
+| Provider management | 1 passed |
+| Visual | 10 passed, including Models in both themes |
+
+`WEFT_E2E_PROMPT_MODEL=1 pnpm exec playwright test e2e/task-prompts.spec.ts e2e/prompt-qualification.spec.ts`
+passed all 8 scenarios, covering the 7 gated cases and one scenario also run
+by the main configuration. Across both commands, all 134 distinct scenarios
+passed.

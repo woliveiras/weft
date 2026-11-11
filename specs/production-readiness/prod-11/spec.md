@@ -34,14 +34,13 @@ The local baseline covers `internal/repositoryimport`, the API permissions and p
   when qualifying the browser and sandbox suites. It passed on the recorded
   diagnostic and full reruns after earlier failures.
 
-- Resolve the Activity ranking and Models screenshot failures observed in the
-  [complete local browser run](./evidence.md#verification-results).
 - Event and branch protection configuration, runner and dependency/cache strategy, and ownership of future check failures.
 
 ## History
 
 - 2026-11-11. The checklist recorded repository-import and MCP authentication browser failures for reconfirmation in required CI.
 - 2026-11-11. Local checks confirmed that both repository-import failures were caused by the Alpine test image missing `git-http-backend`. Commit `f6dab53` supplied it through `git-daemon`. The maintainer approved updating the MCP browser oracle to require the documented HTTP 401 guidance and an empty tool catalogue. [Local evidence](./evidence.md#local-verification-on-2026-11-11).
+- 2026-11-11. The complete local browser suite passed after isolating the Activity scenarios from other journeys and refreshing the two Models references. [Follow-up evidence](./evidence.md#activity-and-models-follow-up-on-2026-11-11).
 
 ## Capability criteria
 
