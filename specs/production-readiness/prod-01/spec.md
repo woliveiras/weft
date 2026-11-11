@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production blocker
 risk_domains: [security, authorization]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-01/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-01/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -35,6 +35,6 @@ AUTH-OIDC was deferred for local-first delivery. It remains the first production
 
 ## Reconciliation
 
-- Governing inputs: `identity and access; release 1 AUTH-OIDC`. [Production hardening](../../../docs/production-hardening.md#identity-and-access) and [deployment](../../../docs/deployment.md). [Initial identity and credentials](../../../docs/operations.md#initial-identity-and-credentials).
+- Supporting references: [Production hardening](../../../docs/production-hardening.md#identity-and-access) and [initial identity and credentials](../../../docs/operations.md#initial-identity-and-credentials).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

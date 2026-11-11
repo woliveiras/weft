@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production qualification
 risk_domains: [security, authorization]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-07/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-07/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -34,6 +34,6 @@ The scope is conservative defaults for new workflows. Existing grants, operator 
 
 ## Reconciliation
 
-- Governing inputs: `hardening grant and approval checklist`. [Production hardening](../../../docs/production-hardening.md#llm-safety) and [deployment](../../../docs/deployment.md).
+- Supporting references: [Agent isolation](../../../docs/production-hardening.md#isolation-of-agent-work) and [LLM safety](../../../docs/production-hardening.md#llm-safety).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

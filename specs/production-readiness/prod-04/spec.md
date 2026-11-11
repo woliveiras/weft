@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production blocker
 risk_domains: [security, isolation, user experience]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-04/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-04/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -36,6 +36,6 @@ Automated fixture flows cover both delegation modes. The clean-install exercise 
 
 ## Reconciliation
 
-- Governing inputs: `original TASKS.md section 11; product plan; local-first phase 5`. [Production hardening](../../../docs/production-hardening.md#isolation-of-agent-work) and [deployment](../../../docs/deployment.md). [Release 1 product plan](../../../wip/PLAN.md#release-1--build-and-operate-graphs-through-the-interface) and [sandbox acceptance](../../../docs/sandbox-acceptance.md).
+- Supporting references: [Deployment](../../../docs/deployment.md), [task workflow contracts](../../../docs/task-workflows.md), and [sandbox acceptance](../../../docs/sandbox-acceptance.md).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

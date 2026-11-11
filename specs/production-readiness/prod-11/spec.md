@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production qualification
 risk_domains: [delivery, reliability]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-11/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-11/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -34,6 +34,6 @@ The backlog records failures in `internal/repositoryimport` (including the API p
 
 ## Reconciliation
 
-- Governing inputs: `original TASKS.md PROD-11; Makefile; local-first test notes`. [Production hardening](../../../docs/production-hardening.md#supply-chain) and [deployment](../../../docs/deployment.md). [Makefile](../../../Makefile) and [local test notes](../../../wip/OLLAMA-PLAN.md#progresso-2026-11-11).
+- Supporting references: [Makefile](../../../Makefile) and [production supply chain](../../../docs/production-hardening.md#supply-chain).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

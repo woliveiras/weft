@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production qualification
 risk_domains: [security, delivery]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-12/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-12/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -34,6 +34,6 @@ The hardening guide recommends scanning for critical vulnerabilities and deployi
 
 ## Reconciliation
 
-- Governing inputs: `hardening supply chain; deployment artifact handling`. [Production hardening](../../../docs/production-hardening.md#supply-chain) and [deployment](../../../docs/deployment.md).
+- Supporting references: [Production supply chain](../../../docs/production-hardening.md#supply-chain) and [air-gapped artifact handling](../../../docs/deployment.md#air-gapped-installation).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

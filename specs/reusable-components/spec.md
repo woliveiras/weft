@@ -5,7 +5,7 @@ summary: Save, version, share and reuse agents and subgraphs in the visual edito
 status: deferred
 scope: [Release 2, graph components]
 review_policy: Maintainer approval after Release 1 is complete and stable
-navigation: [wip/TASKS.md, specs/reusable-components/matrix.md]
+navigation: [specs/README.md, specs/reusable-components/matrix.md]
 dependencies: [Release 1 completion and stability, maintainer authorization]
 ---
 
@@ -37,7 +37,7 @@ and updates preserve existing local settings.
 
 ## Reconciliation
 
-- Governing input: [Release 2 plan](../../wip/PLAN.md#release-2--reusable-components).
+- [Open initiatives and release order](../README.md).
 - [Behavior and oracle matrix](./matrix.md).
 - Review the deferred scope before implementation. Update reuse documentation
   and record fresh unit, integration and browser results during delivery.

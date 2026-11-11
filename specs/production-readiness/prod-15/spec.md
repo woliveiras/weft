@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production qualification
 risk_domains: [data protection, governance]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-15/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-15/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -34,6 +34,6 @@ Local-first work assumed no company infrastructure, credentials or approvals. Co
 
 ## Reconciliation
 
-- Governing inputs: `original TASKS.md PROD-15; hardening LLM safety and secrets`. [Production hardening](../../../docs/production-hardening.md#llm-safety) and [deployment](../../../docs/deployment.md). [Production provider qualification](../prod-03/spec.md).
+- Supporting references: [Production provider qualification](../prod-03/spec.md) and [production LLM safety](../../../docs/production-hardening.md#llm-safety).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

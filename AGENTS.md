@@ -33,7 +33,9 @@ documentation if instructions conflict.
 
 Specification-Driven Development is used only when a change needs it. Follow
 the `sdd-specification` skill in `.agents/skills/` for the format; do not copy
-or edit the skill.
+or edit the skill. Use `specs/` as the sole home for planning and historical
+intent. Start with the [specification index](specs/README.md). There is no
+separate work-in-progress planning directory.
 
 Write or update a specification when a change:
 

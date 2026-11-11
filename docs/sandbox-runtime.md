@@ -84,8 +84,7 @@ the command for them.
   firewalled as described above. On Docker Desktop and Colima the daemon runs
   inside their Linux VM, not directly on macOS or Windows. On a shared Linux
   server, treat `sandbox-daemon` like any privileged service: run Weft on a
-  host or VM dedicated to it. A rootless variant is planned (`wip/TASKS.md`,
-  section 3).
+  host or VM dedicated to it. Rootless support is deferred. See the [backlog](../specs/README.md).
 - **Mutual TLS.** The daemon only accepts clients holding the certificate in
   the `sandbox-certs-client` volume (mounted read-only into `weftd`). The CA
   and server keys stay in volumes only `sandbox-daemon` mounts.

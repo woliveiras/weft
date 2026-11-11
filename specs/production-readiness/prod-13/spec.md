@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production qualification
 risk_domains: [quality, cost]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-13/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-13/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -21,7 +21,7 @@ Choose a production coding model and demonstrate an agreed solve rate over repea
 
 ## Behavior and invariants
 
-The native runtime is the coding agent. The local-first plan records 0/4 with llama3.2 and 4/4 exploratory Gemini results on the small suite. The suite reached its ceiling with that exploratory model; production approval and the acceptance threshold remain open.
+The native runtime is the coding agent. The existing evaluation records 0/4 with llama3.2 and 4/4 exploratory Gemini results on the small suite. The suite reached its ceiling with that exploratory model; production approval and the acceptance threshold remain open.
 
 ## Acceptance criteria
 
@@ -34,6 +34,6 @@ The native runtime is the coding agent. The local-first plan records 0/4 with ll
 
 ## Reconciliation
 
-- Governing inputs: `local-first evaluation and native coding runtime`. [Production hardening](../../../docs/production-hardening.md#capacity-and-resilience-testing) and [deployment](../../../docs/deployment.md). [Native runtime evaluation](../../../docs/native-coding-runtime.md) and [local-first results](../../../wip/OLLAMA-PLAN.md#progresso-2026-11-11).
+- Supporting references: [Native runtime evaluation](../../../docs/native-coding-runtime.md#evaluation-suite-nat-01) and [capacity testing](../../../docs/production-hardening.md#capacity-and-resilience-testing).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

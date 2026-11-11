@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production qualification
 risk_domains: [security, isolation, authorization]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-05/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-05/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -34,6 +34,6 @@ Assess and record the actual boundary for each runtime. Repository instructions,
 
 ## Reconciliation
 
-- Governing inputs: `hardening network, isolation and LLM safety`. [Production hardening](../../../docs/production-hardening.md#llm-safety) and [deployment](../../../docs/deployment.md).
+- Supporting references: [Network controls](../../../docs/production-hardening.md#network), [agent isolation](../../../docs/production-hardening.md#isolation-of-agent-work), and [LLM safety](../../../docs/production-hardening.md#llm-safety).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

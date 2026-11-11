@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production blocker
 risk_domains: [data persistence, migrations]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-02/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-02/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -35,6 +35,6 @@ The existing embedded SQL migrations and PostgreSQL advisory lock are the baseli
 
 ## Reconciliation
 
-- Governing inputs: `deployment upgrades; operations upgrade and rollback`. [Deployment upgrades](../../../docs/deployment.md#upgrades-and-schema-migrations). [Upgrade and rollback](../../../docs/operations.md#upgrade-and-rollback).
+- Supporting references: [Deployment upgrades](../../../docs/deployment.md#upgrades-and-schema-migrations) and [upgrade and rollback](../../../docs/operations.md#upgrade-and-rollback).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

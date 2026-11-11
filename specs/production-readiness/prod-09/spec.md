@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production qualification
 risk_domains: [data persistence]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-09/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-09/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -34,6 +34,6 @@ Local workspace journal recovery and cursor-gated pruning are already covered. T
 
 ## Reconciliation
 
-- Governing inputs: `deployment backup and restore; operations inventory, drill and workspace journal`. [Production hardening](../../../docs/production-hardening.md#data-and-durability) and [deployment](../../../docs/deployment.md). [Backup inventory and restore drill](../../../docs/operations.md#backup-inventory).
+- Supporting references: [Backup and restore](../../../docs/deployment.md#backup-and-restore), [backup inventory](../../../docs/operations.md#backup-inventory), and [workspace journal](../../../docs/operations.md#workspace-journal).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

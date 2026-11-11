@@ -508,7 +508,8 @@ changes installation authentication settings automatically.
 GitLab.com currently advertises DCR; selected instances may disable it. CIMD must
 not be inferred where absent. Atlassian MCP v2 currently advertises both; corporate
 callback/site/IP restrictions can still prevent consent. GitHub remote MCP uses
-manual registration. See [verified metadata sources](../wip/PLAN.md#6-add-mcp-configuration).
+manual registration. See the metadata sources for [Atlassian](#atlassian-cloud-mcp-v2) and
+[GitLab](#gitlab-instance-setup).
 These capabilities are not certification of real account acceptance.
 
 OAuth still uses PKCE S256, session-bound state/cookies, encrypted tokens and

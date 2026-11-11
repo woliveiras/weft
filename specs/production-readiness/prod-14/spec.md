@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production qualification
 risk_domains: [security, external access]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-14/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-14/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -34,6 +34,6 @@ Local-first and fixture coverage come first. Provider selection or fixture succe
 
 ## Reconciliation
 
-- Governing inputs: `original TASKS.md vendor checklist; local-first external phase`. [Production hardening](../../../docs/production-hardening.md#identity-and-access) and [deployment](../../../docs/deployment.md). [Local-first external phase](../../../wip/OLLAMA-PLAN.md#fica-para-a-fase-de-apis-e-contas-externas).
+- Supporting references: [MCP integration guide](../../../docs/mcp.md), [Atlassian and Bitbucket Data Center setup](../../../docs/atlassian-bitbucket-setup.md), and [provider conformance](../../../docs/extensibility.md#provider-conformance-suite).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

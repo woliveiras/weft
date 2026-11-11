@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production blocker
 risk_domains: [data protection, secrets, cost]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-03/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-03/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -35,6 +35,6 @@ The installation catalogue and budget controls already exist. The Ollama plan re
 
 ## Reconciliation
 
-- Governing inputs: `hardening cost controls; local-first evaluation; existing cost controls`. [Production hardening](../../../docs/production-hardening.md#cost-controls) and [deployment](../../../docs/deployment.md). [Cost control](../../../docs/cost-control.md) and [local-first evaluation](../../../wip/OLLAMA-PLAN.md#progresso-2026-11-11).
+- Supporting references: [Production hardening](../../../docs/production-hardening.md#cost-controls), [cost control](../../../docs/cost-control.md), and [coding evaluations](../../../docs/native-coding-runtime.md#evaluation-suite-nat-01).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

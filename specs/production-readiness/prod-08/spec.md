@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production qualification
 risk_domains: [isolation, data persistence]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-08/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-08/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -35,6 +35,6 @@ A Docker named volume on a shared Linux filesystem does not give fanotify a dedi
 
 ## Reconciliation
 
-- Governing inputs: `deployment topologies; hardening dedicated Linux workspace filesystem`. [Production hardening](../../../docs/production-hardening.md#data-and-durability) and [deployment](../../../docs/deployment.md). [Workspace journal](../../../docs/operations.md#workspace-journal).
+- Supporting references: [Production durability](../../../docs/production-hardening.md#data-and-durability), [deployment topologies](../../../docs/deployment.md#topologies), and [workspace journal](../../../docs/operations.md#workspace-journal).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

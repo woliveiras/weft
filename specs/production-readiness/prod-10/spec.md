@@ -7,7 +7,7 @@ scope: [production readiness]
 risk: production qualification
 risk_domains: [reliability, operations]
 review_policy: Maintainer review before implementation or live qualification
-navigation: [wip/TASKS.md, specs/production-readiness/prod-10/matrix.md]
+navigation: [specs/README.md, specs/production-readiness/prod-10/matrix.md]
 documentation: Review affected operating guides during delivery
 authority:
   granted: [specification drafting]
@@ -34,6 +34,6 @@ Workspace journal metrics, capacity and collector alerts, and a recovery runbook
 
 ## Reconciliation
 
-- Governing inputs: `hardening observability; operations workspace journal and triage`. [Production hardening](../../../docs/production-hardening.md#observability) and [deployment](../../../docs/deployment.md). [Journal alerts](../../../docs/operations.md#journal-alerts).
+- Supporting references: [Production observability](../../../docs/production-hardening.md#observability) and [journal alerts](../../../docs/operations.md#journal-alerts).
 - [Behavior and oracle matrix](./matrix.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.
