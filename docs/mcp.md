@@ -511,6 +511,8 @@ callback/site/IP restrictions can still prevent consent. GitHub remote MCP uses
 manual registration. See the metadata sources for [Atlassian](#atlassian-cloud-mcp-v2) and
 [GitLab](#gitlab-instance-setup).
 These capabilities are not certification of real account acceptance.
+See the [browser OAuth specification](../specs/providers-and-integrations/mcp-templates-and-browser-oauth/spec.md)
+and [vendor qualification record](../specs/providers-and-integrations/mcp-vendor-profiles-and-qualification/spec.md).
 
 OAuth still uses PKCE S256, session-bound state/cookies, encrypted tokens and
 explicit per-agent grants. Revocation blocks this connection's access and attempts

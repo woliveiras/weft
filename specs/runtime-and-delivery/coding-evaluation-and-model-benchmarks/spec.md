@@ -30,9 +30,11 @@ A case runs through the engine, runtime and gateway. A solve requires both the i
 
 A run records model, workflow, case and attempt outcomes, tool calls/errors, usage and time. Repeat counts preserve the per-attempt denominator; fixtures and live opt-in report separately.
 
-### AC-003 — Harness collision attribution
+### AC-003 — Comparable measurements
 
-The recorded repeated run keeps the observed 17/18 single-agent score and annotates the helper-name collision separately. A rerun under the corrected harness would produce a separate result.
+Keep observed scores and run conditions distinct across changed cases, workflows
+and harness versions. Annotate a suspected harness failure without adjusting
+the observed score. Record a corrected rerun as a separate result.
 
 ## Explicit exclusions
 

@@ -30,6 +30,10 @@ The backlog records failures in `internal/repositoryimport` (including the API p
 
 ## Open decisions
 
+- Reconfirm the historical intermittent sandbox journal supervision check
+  when qualifying the browser and sandbox suites. It passed on the recorded
+  diagnostic and full reruns after earlier failures.
+
 - Event and branch protection configuration, runner and dependency/cache strategy, and ownership of known failures.
 
 ## History
@@ -45,4 +49,5 @@ The backlog records failures in `internal/repositoryimport` (including the API p
 
 - Supporting references: [Makefile](../../../Makefile) and [production supply chain](../../../docs/production-hardening.md#supply-chain).
 - [Behavior and oracle matrix](./matrix.md).
+- [Historical CI and environment notes](./evidence.md).
 - Record test review before implementation review. Capture fresh evidence when the agreed checks run.

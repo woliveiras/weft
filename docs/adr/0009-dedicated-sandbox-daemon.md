@@ -1,6 +1,6 @@
 # 0009 — A Docker daemon dedicated to agent sandboxes
 
-**Status:** Proposed
+**Status:** Accepted
 
 ## Context
 Agents that run commands (`shell.exec`, git tools) need the project's real
@@ -47,3 +47,10 @@ daemon (non-fatal) and the console shows it.
   Docker Desktop, Colima and Linux; kept as a follow-up.
 - **Kubernetes-style per-replica pods:** right for clusters, not for the
   single-machine Compose goal.
+
+## Operational evidence
+
+The [sandbox acceptance record](../sandbox-acceptance.md) documents real-daemon
+isolation checks. The [2026-11-11 local rollout record](../../specs/workspaces-and-environments/dedicated-docker-sandbox-isolation/evidence.md)
+records daemon recreation with existing volumes and successful sandbox readiness.
+Rootless support remains deferred.

@@ -32,7 +32,11 @@ such as `ENV-003 AC-004` links to that owner's criterion. Production specs
 reference capability criteria and own only the extra production acceptance
 conditions. Historical task IDs remain source references.
 
+The [historical source map](./historical-source-map.md) records the migration of the planning and evidence files. See the [architecture decisions](../docs/adr/README.md) for cross-cutting policy.
+
 ## Product and tasks
+
+### Implemented
 
 - [TASK-001 — Release 1 Product Contracts](./product-and-tasks/release-one-product-contracts/spec.md) — `implemented`. Define shared release boundaries, observable errors, and audit identity.
 - [TASK-002 — Console Navigation and Configuration](./product-and-tasks/console-navigation-and-configuration/spec.md) — `implemented`. Organize daily work and configuration, preserving route compatibility and contextual guidance.
@@ -45,9 +49,10 @@ conditions. Historical task IDs remain source references.
 
 ## Workspaces and environments
 
+### Implemented
+
 - [ENV-001 — Repository Snapshot Imports](./workspaces-and-environments/repository-snapshot-imports/spec.md) — `implemented`. Import reviewed Git snapshots and retain safe retry, authentication and worktree boundaries.
 - [ENV-002 — Read-only Workspace and Git Review](./workspaces-and-environments/read-only-workspace-and-git-review/spec.md) — `implemented`. Inspect authorized files and Git evidence and hand off a selected workspace for human review.
-- [ENV-003 — Workspace Change Journal and Attribution](./workspaces-and-environments/workspace-change-journal-and-attribution/spec.md) — `in-progress`. Record bounded change evidence, preserve honest attribution and recover the Linux workspace journal.
 - [ENV-004 — Durable Human Review and Protected Previews](./workspaces-and-environments/durable-human-review-and-protected-previews/spec.md) — `implemented`. Bind review to a durable candidate and expose protected Docker previews through the gateway.
 - [ENV-005 — Dedicated Docker Sandbox Isolation](./workspaces-and-environments/dedicated-docker-sandbox-isolation/spec.md) — `implemented`. Run Docker-isolated agents on the dedicated daemon and keep sandbox resources and access separate from the host.
 - [ENV-006 — Sandbox Capacity and Idle Resume](./workspaces-and-environments/sandbox-capacity-and-idle-resume/spec.md) — `implemented`. Bound preparation and execution resources and resume idle containers through admission.
@@ -55,27 +60,49 @@ conditions. Historical task IDs remain source references.
 - [ENV-008 — Environment Build, Reuse and Cleanup](./workspaces-and-environments/environment-build-reuse-and-cleanup/spec.md) — `implemented`. Build and reuse compatible environments while retaining isolated workspaces and protecting referenced generations.
 - [ENV-009 — Environment Network Policy and Egress](./workspaces-and-environments/environment-network-policy-and-egress/spec.md) — `implemented`. Enforce installation policy across environment preparation and execution and expose bounded proxy denial history.
 
+### In progress
+
+- [ENV-003 — Workspace Change Journal and Attribution](./workspaces-and-environments/workspace-change-journal-and-attribution/spec.md) — `in-progress`. Record bounded change evidence, preserve honest attribution and recover the Linux workspace journal.
+
 ## Providers and integrations
 
+### Implemented
+
 - [INT-001 — Built-in Inference Plugin Management](./providers-and-integrations/built-in-inference-plugin-management/spec.md) — `implemented`. Manage built-in plugin availability and provider instances through the installation console and API.
-- [INT-002 — Model Provider Adapters and Conformance](./providers-and-integrations/model-provider-adapters-and-conformance/spec.md) — `in-progress`. Apply a shared provider contract and distinguish adapter delivery from live qualification.
-- [INT-003 — Out-of-process Provider Plugins](./providers-and-integrations/out-of-process-provider-plugins/spec.md) — `deferred`. Preserve the Provider Protocol v1 design while external plugin execution remains deferred.
 - [INT-004 — Monetary Usage and Budget Controls](./providers-and-integrations/monetary-usage-and-budget-controls/spec.md) — `implemented`. Record model spend and enforce applicable budgets with revisioned pricing and conservative reservations.
 - [INT-005 — MCP Connections and Tool Invocation](./providers-and-integrations/mcp-connections-and-tool-invocation/spec.md) — `implemented`. Register MCP endpoints and enforce exact, scoped tool authorization through the gateway.
 - [INT-006 — MCP Templates and Browser OAuth](./providers-and-integrations/mcp-templates-and-browser-oauth/spec.md) — `implemented`. Open versioned connection templates and complete reviewed browser authorization within the supported client setup.
+
+### In progress
+
+- [INT-002 — Model Provider Adapters and Conformance](./providers-and-integrations/model-provider-adapters-and-conformance/spec.md) — `in-progress`. Apply a shared provider contract and distinguish adapter delivery from live qualification.
 - [INT-007 — MCP Vendor Profiles and Qualification](./providers-and-integrations/mcp-vendor-profiles-and-qualification/spec.md) — `in-progress`. Preserve provider-specific connection and resource boundaries and qualify each selected profile separately.
+
+### Planned
+
 - [INT-008 — Managed MCP Hosting](./providers-and-integrations/managed-mcp-hosting/spec.md) — `planned`. Preserve the reviewed design for isolated, installation-managed MCP server generations.
+
+### Deferred
+
+- [INT-003 — Out-of-process Provider Plugins](./providers-and-integrations/out-of-process-provider-plugins/spec.md) — `deferred`. Preserve the Provider Protocol v1 design while external plugin execution remains deferred.
 
 ## Runtime and delivery
 
+### Implemented
+
 - [RUN-001 — Skills and Project Steering](./runtime-and-delivery/skills-and-project-steering/spec.md) — `implemented`. Compose explicitly selected managed skills and bounded project steering and preserve the execution snapshot.
-- [RUN-002 — Dynamic Delegation and Execution Trees](./runtime-and-delivery/dynamic-delegation-and-execution-trees/spec.md) — `in-progress`. Run bounded native children under inherited grants and preserve execution-tree control and token accounting.
 - [RUN-003 — Native Coding Runtime](./runtime-and-delivery/native-coding-runtime/spec.md) — `implemented`. Keep coding turns, tool execution and verification within Weft's native runtime and gateways.
 - [RUN-004 — Coding Evaluation and Model Benchmarks](./runtime-and-delivery/coding-evaluation-and-model-benchmarks/spec.md) — `implemented`. Measure coding workflows with independent task checks and retain the conditions and limits of each benchmark.
-- [RUN-005 — Gateway-mediated Source Control Delivery](./runtime-and-delivery/gateway-mediated-source-control-delivery/spec.md) — `in-progress`. Push and open pull requests through the reviewed SCM gateway with task-scoped credentials and evidence.
 - [RUN-006 — Issue References and Polling Triggers](./runtime-and-delivery/issue-references-and-polling-triggers/spec.md) — `implemented`. Read reviewed issue references and start eligible labeled work through consent-bound polling.
 
+### In progress
+
+- [RUN-002 — Dynamic Delegation and Execution Trees](./runtime-and-delivery/dynamic-delegation-and-execution-trees/spec.md) — `in-progress`. Run bounded native children under inherited grants and preserve execution-tree control and token accounting.
+- [RUN-005 — Gateway-mediated Source Control Delivery](./runtime-and-delivery/gateway-mediated-source-control-delivery/spec.md) — `in-progress`. Push and open pull requests through the reviewed SCM gateway with task-scoped credentials and evidence.
+
 ## Installation and operations
+
+### In progress
 
 - [OPS-001 — Compose Installation and Operations](./installation-and-operations/compose-installation-and-operations/spec.md) — `in-progress`. Operate the local Compose installation through documented bootstrap, health and maintenance boundaries.
 - [OPS-002 — Standalone Installation and Recovery](./installation-and-operations/standalone-installation-and-recovery/spec.md) — `in-progress`. Package the native profile, preserve offline data and qualify installation lifecycle on each supported platform.
@@ -85,44 +112,79 @@ conditions. Historical task IDs remain source references.
 The first four items are production blockers in the order listed. The remaining
 items can progress in parallel, subject to the dependencies below.
 
-- [PROD-01 — Production sign-in](./production-readiness/prod-01/spec.md) — Open, blocker 1. Completes AUTH-OIDC, deferred for local-first delivery.
-- [PROD-02 — Versioned production upgrades](./production-readiness/prod-02/spec.md) — Open, blocker 2. Qualify the release-to-release upgrade path.
-- [PROD-03 — Production model providers and budgets](./production-readiness/prod-03/spec.md) — Open, blocker 3. Requires approved paid service and data terms, verified prices, and project/user budget settings.
-- [PROD-04 — Final Release 1 acceptance](./production-readiness/prod-04/spec.md) — Open, blocker 4. After remaining Release 1 work and with authorized test resources.
-- [PROD-05 — Production security assessment](./production-readiness/prod-05/spec.md) — Open. Final assessment covers the selected topology and security boundaries.
-- [PROD-06 — Managed secrets and key rotation](./production-readiness/prod-06/spec.md) — Open. Vault/KMS choice and authorized rotation qualification pending.
-- [PROD-07 — Production approval defaults](./production-readiness/prod-07/spec.md) — Open. Review new-workflow defaults and threat model.
-- [PROD-08 — Production topology and workspace storage](./production-readiness/prod-08/spec.md) — Open. Choose deployment shape before the dedicated workspace filesystem migration.
-- [PROD-09 — Timed backup and restore](./production-readiness/prod-09/spec.md) — Partial. Journal recovery exists. Time a full restore for the selected installation.
-- [PROD-10 — Production SLOs and alert ownership](./production-readiness/prod-10/spec.md) — Partial. Journal alerts exist. Production SLOs, routing and ownership are open.
-- [PROD-11 — Required GitHub CI checks](./production-readiness/prod-11/spec.md) — Open. Reconfirm the repository-import and MCP browser failures and qualify the full CI workflow.
-- [PROD-12 — Production supply chain](./production-readiness/prod-12/spec.md) — Open. Build on CI artifact generation and agree on admission policy.
-- [PROD-13 — Coding model acceptance](./production-readiness/prod-13/spec.md) — Open. Choose the production model with PROD-03 and agree on a repeated evaluation and solve-rate bar.
-- [PROD-14 — Production integration qualification](./production-readiness/prod-14/spec.md) — Open for the external phase. Requires selected integrations and authorized accounts.
-- [PROD-15 — Organizational approval](./production-readiness/prod-15/spec.md) — Open for company use. Requires approval of source-code transfer, data terms and acceptable use.
+### Blockers in delivery order
 
-## Other Release 1 work
+- [PROD-01 — Production sign-in](./production-readiness/prod-01/spec.md) — `planned`, blocker 1. Completes AUTH-OIDC, deferred for local-first delivery.
+- [PROD-02 — Versioned production upgrades](./production-readiness/prod-02/spec.md) — `planned`, blocker 2. Qualify the release-to-release upgrade path.
+- [PROD-03 — Production model providers and budgets](./production-readiness/prod-03/spec.md) — `planned`, blocker 3. Requires approved paid service and data terms, verified prices, and project/user budget settings.
+- [PROD-04 — Final Release 1 acceptance](./production-readiness/prod-04/spec.md) — `planned`, blocker 4. After remaining Release 1 work and with authorized test resources.
+### Planned qualification
 
-Where a standalone specification is pending, the link points to the current
-contract or operating guide.
+- [PROD-05 — Production security assessment](./production-readiness/prod-05/spec.md) — `planned`. Final assessment covers the selected topology and security boundaries.
+- [PROD-06 — Managed secrets and key rotation](./production-readiness/prod-06/spec.md) — `planned`. Vault/KMS choice and authorized rotation qualification pending.
+- [PROD-07 — Production approval defaults](./production-readiness/prod-07/spec.md) — `planned`. Review new-workflow defaults and threat model.
+- [PROD-08 — Production topology and workspace storage](./production-readiness/prod-08/spec.md) — `planned`. Choose deployment shape before the dedicated workspace filesystem migration.
+- [PROD-11 — Required GitHub CI checks](./production-readiness/prod-11/spec.md) — `planned`. Reconfirm the repository-import and MCP browser failures and qualify the full CI workflow.
+- [PROD-12 — Production supply chain](./production-readiness/prod-12/spec.md) — `planned`. Build on CI artifact generation and agree on admission policy.
+- [PROD-13 — Coding model acceptance](./production-readiness/prod-13/spec.md) — `planned`. Choose the production model with PROD-03 and agree on a repeated evaluation and solve-rate bar.
+- [PROD-14 — Production integration qualification](./production-readiness/prod-14/spec.md) — `planned` for the external phase. Requires selected integrations and authorized accounts.
+- [PROD-15 — Organizational approval](./production-readiness/prod-15/spec.md) — `planned` for company use. Requires approval of source-code transfer, data terms and acceptable use.
 
-- [Workspace change provenance](../docs/operations.md#workspace-journal) — Partial. Exact execution attribution, unsupported runtime/PID boundaries and collector gaps remain open.
-- [Delegation scope and cost](../docs/delegation.md) — Partial. Preserve explicit grants and empty child permissions by default. Broader runtime/profile support and enforceable monetary ceilings across delegation remain open.
-- [Clean Compose installation](./production-readiness/prod-04/spec.md) — Open. Validate reachability and browser-only setup using the documentation after approval for required image downloads.
-- [Native installation qualification (LOCAL-07)](./production-readiness/prod-04/spec.md) — Partial. Real local Ollama passed. VS Code/user review, real sandbox, external accounts and other platforms remain.
-- [Vendor MCP and OAuth qualification](./production-readiness/prod-14/spec.md) — Partial. Finish vendor-specific auth, catalogue, scopes and live end-to-end checks, including DCR/CIMD where supported, in the external phase with authorized accounts.
-- [Bedrock adapter (PROV-02)](../docs/extensibility.md#add-a-model-provider) — Open for the external phase. Live Vertex AI qualification is also pending.
-- [Bitbucket Data Center delivery (SCM-05)](../docs/atlassian-bitbucket-setup.md) — Open for the external phase. Requires an evaluation license and approval for any image download.
-- [Issue webhooks](../docs/task-workflows.md) — Deferred. Polling and fixtures precede authenticated webhooks.
-- [External provider plugins (PROV-06)](../docs/extensibility.md#out-of-process-provider-plugins) — Deferred by maintainer on 2026-11-11 due to third-party code risk. Design is delivered. Revisit the dependency on PROV-02 only if implementation is authorized.
-- [Rootless sandbox](../docs/sandbox-runtime.md) — Deferred by maintainer.
-- [Native preview supervision and automatic PR/CI review adapters](../docs/sandbox-runtime.md#human-review-and-application-previews) — Deferred. Manual review and gateway-mediated SCM delivery are available.
+### In progress
+
+- [PROD-09 — Timed backup and restore](./production-readiness/prod-09/spec.md) — `in-progress`. Journal recovery exists. Time a full restore for the selected installation.
+- [PROD-10 — Production SLOs and alert ownership](./production-readiness/prod-10/spec.md) — `in-progress`. Journal alerts exist. Production SLOs, routing and ownership are open.
+
+### Dependencies
+
+- PROD-04 follows the remaining Release 1 work, the preceding blockers and
+  authorization for the installation and external targets under test.
+- PROD-05, PROD-09 and PROD-10 qualify the topology selected under PROD-08.
+  PROD-08 uses ENV-003 kernel evidence when qualifying a dedicated workspace
+  filesystem. PROD-09 and PROD-10 reuse ENV-003 replay, pruning and metrics.
+- PROD-12 depends on CI artifact generation under PROD-11.
+- PROD-13 depends on the model and data terms selected under PROD-03 and on
+  the evaluation criteria in RUN-004. PROD-14 depends on the selected
+  adapters and approved accounts. PROD-15 applies to organizational use.
+- Task admission depends on reviewed consent, project/workspace ownership
+  and the selected environment. Gateway SCM delivery precedes issue-trigger
+  completion write-back. Capability-specific dependencies are in spec metadata.
+
+## Maintainer decisions and pending qualification
+
+- [Final Release 1 acceptance](./production-readiness/prod-04/spec.md) — The
+  maintainer deferred the clean-install exercise and unaided developer
+  walkthrough until remaining Release 1 work is ready. The walkthrough covers
+  navigation, agent configuration, MCP connection and execution tracking.
+- [Native qualification](./installation-and-operations/standalone-installation-and-recovery/spec.md) —
+  Actual VS Code/user review, optional real native sandbox and additional
+  operating systems remain open.
+- [Vendor qualification](./production-readiness/prod-14/spec.md) — Selected
+  MCP DCR/CIMD and vendor scopes, Vertex AI, Bedrock, GitHub/Jira and Bitbucket
+  Data Center require their own qualification and authorized resources.
+- [Workspace journal](./workspaces-and-environments/workspace-change-journal-and-attribution/spec.md) —
+  Arbitrary execution attribution and unsupported runtime/PID boundaries remain open.
+- [Delegation](./runtime-and-delivery/dynamic-delegation-and-execution-trees/spec.md) —
+  Broader runtime/profile coverage, crash qualification and a tree-wide
+  monetary ceiling remain open.
+- [Docker isolation](./workspaces-and-environments/dedicated-docker-sandbox-isolation/spec.md) —
+  Rootless remains deferred by the maintainer.
+- [Human review](./workspaces-and-environments/durable-human-review-and-protected-previews/spec.md) —
+  Native preview supervision and automatic PR/CI review adapters remain deferred.
+- [Issue triggers](./runtime-and-delivery/issue-references-and-polling-triggers/spec.md) —
+  Authenticated webhooks remain deferred.
+- [External provider plugins](./providers-and-integrations/out-of-process-provider-plugins/spec.md) —
+  The maintainer deferred PROV-06 on 2026-11-11 due to third-party code risk.
+- [Console navigation](./product-and-tasks/console-navigation-and-configuration/spec.md#history) —
+  The maintainer withdrew global onboarding on 2026-10-18.
 
 ## Agent guidance
 
-- [Repository agent guidance](./repository-agent-guidance/spec.md) — Draft awaiting maintainer review of the source policy, precedence, loading and audit decisions.
+- [REPO-GUIDANCE — Load agent guidance from repository workspaces](./repository-agent-guidance/spec.md) —
+  `planned`. Draft awaiting maintainer review of source policy, precedence,
+  loading and audit decisions.
 
-## UX and Release 2
+## Release 2
 
-- [Developer usability walkthrough](./production-readiness/prod-04/spec.md) — Deferred by maintainer to final Release 1 acceptance. Repeat navigation, agent configuration, MCP connection and run tracking without facilitator help. Confirm the earlier graph-screen feedback. UX-01–UX-05 are delivered and the global onboarding panel was withdrawn.
-- [Reusable components](./reusable-components/spec.md) — Release 2 is deferred until Release 1 is complete and stable and the maintainer authorizes it.
+- [RELEASE-2 — Reusable graph components](./reusable-components/spec.md) —
+  `deferred` until Release 1 is complete and stable and the maintainer authorizes it.

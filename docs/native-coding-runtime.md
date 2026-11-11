@@ -1,8 +1,10 @@
 # Native coding runtime
 
-Status: **in progress** (NAT-01 to NAT-10 in the task list; NAT-01 to NAT-10 done). This page describes how
-Weft's own native runtime becomes a strong coding agent, especially with
-local models, without handing the agent loop to a third-party tool.
+The [native coding runtime specification](../specs/runtime-and-delivery/native-coding-runtime/spec.md)
+records delivered NAT-02–10 behavior. The
+[evaluation specification](../specs/runtime-and-delivery/coding-evaluation-and-model-benchmarks/spec.md)
+records NAT-01 and the benchmark history. Weft's native runtime owns the
+coding loop and evaluates it with local and hosted models.
 
 ## Why native
 
@@ -120,8 +122,8 @@ a model that does nothing fails every case. `TestPlausibleWrongFixesFail` runs
 a tempting but incomplete fix of each harder case (and of the rename) and
 requires the checks to reject it, so a case cannot be passed by its most
 obvious half. Real models are measured with
-`make eval-local EVAL_MODELS=llama3.2:latest,qwen3.6:27b-q4_K_M`, which writes
-the tables to `server/eval-report.md`.
+`make eval-local EVAL_MODELS=llama3.2:latest,qwen3.6:27b-q4_K_M`, which generates
+an `eval-report.md` in the server directory.
 
 `EVAL_REPEAT=n` (`WEFT_EVAL_REPEAT`, default 1) runs every case n times. The
 first table reports the solve rate over all runs per model and workflow; the

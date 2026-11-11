@@ -10,7 +10,10 @@
 | [0006](0006-sqlite-default-postgres-production.md) | SQLite by default, PostgreSQL in production | Accepted |
 | [0007](0007-nats-jetstream-default.md) | NATS JetStream as the default broker | Accepted |
 | [0008](0008-offline-mock-provider.md) | Deterministic mock provider as the default model | Accepted |
-| [0009](0009-dedicated-sandbox-daemon.md) | A Docker daemon dedicated to agent sandboxes | Proposed |
+| [0009](0009-dedicated-sandbox-daemon.md) | A Docker daemon dedicated to agent sandboxes | Accepted |
+| [0010](0010-local-first-delivery.md) | Local-first delivery and external qualification | Accepted |
+| [0011](0011-execution-boundaries.md) | Explicit native and sandbox execution boundaries | Accepted |
+| [0012](0012-installation-identity.md) | Separate installation identity from integration credentials | Accepted |
 
 Format: context, decision, consequences, alternatives considered. New ADRs
 take the next number with status *Proposed* in the pull request that

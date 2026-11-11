@@ -69,7 +69,8 @@ through the admin API described below.
 Shared build/execution concurrency and memory budgets are available in
 [sandbox capacity](sandbox-runtime.md#global-execution-sandbox-capacity).
 Prepared-image and cache-snapshot reuse is available as described below. See the
-[discovery and acceptance contract](product-contracts.md#discovery-and-acceptance).
+[discovery and acceptance contract](product-contracts.md#discovery-and-acceptance)
+and [environment definition specification](../specs/workspaces-and-environments/environment-discovery-and-reviewed-definitions/spec.md).
 
 ### Agent proposal and developer approval
 
