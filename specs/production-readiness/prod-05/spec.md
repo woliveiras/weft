@@ -21,7 +21,10 @@ Complete a security review or authorized penetration test of the production boun
 
 ## Behavior and invariants
 
-Assess and record the actual boundary for each runtime. Repository instructions, issues and tool results are untrusted. Grants and approvals remain enforced at the gateway.
+Assess and record the actual boundary for each runtime. Repository instructions, issues and tool results are untrusted. Grants and approvals remain enforced at the gateway. Verify the sandbox kind
+produced by the runtime factory and its effect on Workspace consent. The current
+Kubernetes configuration produces a process sandbox in weftd and Workspace
+denies its shell capability.
 
 ## Acceptance criteria
 
