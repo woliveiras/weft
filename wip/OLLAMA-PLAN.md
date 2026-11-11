@@ -168,6 +168,14 @@ Branch `local-first-ollama`, um commit por tarefa (autor woliveiras).
   workspace filesystem is tracked with PROD-08.
   Follow-up checks qualified cursor-gated pruning and alerts based on filesystem
   capacity and collector health. They ran against disposable journals.
+- The local rollout of `c0902f5` and `ddc8737` rebuilt and recreated `weftd`
+  and `sandbox-daemon` from cache with the existing volumes. SHA-256 checks
+  confirmed preservation of the archive and the existing active bytes.
+  Both services stayed healthy with zero restarts for two minutes.
+  `/healthz` and `/readyz` passed, including storage, queue and sandbox
+  readiness. Prometheus reloaded and evaluated all five journal rules.
+  It scraped volume capacity, 38.6 GiB of available space, an advancing
+  collector heartbeat and zero write or rotation failure timestamps.
 
 Como rodar os checks neste ambiente (sem Go/Node no host):
 - Go: `./scripts/go.sh test ./...` (Docker). Falhas pré-existentes:

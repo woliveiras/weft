@@ -1008,6 +1008,9 @@ work. Blockers come first; the rest can run in parallel. Details:
     drill is still open.
   - SQLite tests cover preview and approved pruning behind a durable cursor,
     retrying an interrupted prune, and refusing a store restored behind the anchor.
+  - The local rollout of `c0902f5` and `ddc8737` preserved all journal
+    segments. SHA-256 matched for the 67,108,856-byte archive and the
+    12,471 bytes present in the active segment before the services started.
 - [ ] PROD-10 — Alerts and SLOs on the existing metrics, runbooks, and an on-call owner.
   - The workspace journal exposes size, rotation, gap and import metrics.
     `promtool test rules` verified that the capacity alert fires and clears.
@@ -1016,6 +1019,13 @@ work. Blockers come first; the rest can run in parallel. Details:
     and recovery. Production SLOs, alert routing and on-call ownership are open.
   - Follow-up rules use disk capacity, archive growth and collector health.
     `promtool` verified a healthy rotation with no importer samples.
+  - The local rollout of `c0902f5` and `ddc8737` used cached builds.
+    `weftd` and `sandbox-daemon` stayed healthy with zero restarts over
+    two minutes. `/healthz` returned `ok`, and `/readyz` reported `ok` for
+    storage, queue and sandbox. After reload, Prometheus scraped 38.6 GiB of
+    available space, an advancing collector heartbeat and zero write or
+    rotation failure timestamps. All five journal rules evaluated
+    successfully and were inactive.
 
 **Quality and delivery**
 
