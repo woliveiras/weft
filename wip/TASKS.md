@@ -946,6 +946,15 @@ local models first. Each step is accepted only when the evaluation suite
 model at a success rate set after the NAT-01 baseline, every change and check
 goes through the gateway, and checks appear as task evidence.
 
+#### Activity view (added 2026-11-11)
+
+A console page, reachable from the side menu, that shows at a glance what is
+running across workflows and what needs a person, linking to the existing
+node, run and approval views for details.
+
+- [ ] OBS-01 — Activity view MVP: side-menu "Activity" page with live counters (agents running, waiting for a person, failed and finished in the window); "Needs you" (pending tool approvals, agent questions, human reviews, hand-offs, oldest first); "Running now" grouped by workflow/task with each agent replica's state, current plan step, elapsed time, tokens and cost; and a filterable recent-executions history. Backed by one bounded, role-filtered aggregation endpoint (`GET /api/v1/activity?window=`) and live updates from the existing event stream; unit, integration, component and browser tests.
+- [ ] OBS-02 — Activity health: per agent and workflow failure rate, most common errors, duration and cost rankings over 24 h / 7 d, linked from OBS-01.
+
 #### Deferred
 
 - [ ] AUTH-OIDC (Later) — Browser login with Authorization Code + PKCE, session cookie, refresh and logout; configurable role claim path and group-to-role mapping; issuer/audience validation. Qualify against a local Keycloak container first.
