@@ -16,3 +16,22 @@ These results were recorded at the time of the run. The documentation migration 
   After the correction, both reported the firewall error, stopped the
   daemon and collector stand-ins, exited nonzero, and left no readiness marker.
   The tests exercised the entrypoint with stand-ins for privileged commands.
+
+## Default sandbox hardening inspection
+
+On 2026-11-11, a disposable Go fixture compiled from `ae062b5` invoked the
+Weft sandbox factory against the running dedicated Compose daemon (Docker
+28.5.2, Linux arm64). The fixture used the cached `weft/sandbox:latest` image,
+the default Docker configuration and a temporary replica workspace, without
+environment or node overrides. It inspected the container while running.
+
+| Docker inspection field | Observed value |
+| --- | --- |
+| `HostConfig.CapDrop` | `["ALL"]` |
+| `HostConfig.SecurityOpt` | `["no-new-privileges"]` |
+| `HostConfig.NetworkMode` | `none` |
+| `Mounts` | Exactly one bind mount from the fixture workspace to `/workspace` |
+
+Inside the sandbox, `/proc/self/status` reported zero effective and bounding
+capabilities and `NoNewPrivs: 1`. The fixture closed the sandbox and verified
+that its container was removed and the dedicated daemon remained healthy.
