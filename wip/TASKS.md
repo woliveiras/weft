@@ -1002,10 +1002,14 @@ work. Blockers come first; the rest can run in parallel. Details:
 - [ ] PROD-09 — Backups with a restore drill actually performed and timed.
   - Workspace journal backups now cover the complete segment chain and its cursor.
     The SQLite integration tests resumed import after restoring a missing
-    archive. A timed installation restore drill is still open.
+    archive. The local upgrade preserved the 67,108,856-byte legacy segment
+    with its original inode and SHA-256, and the importer advanced the existing
+    PostgreSQL cursor through the rotation link. A timed installation restore
+    drill is still open.
 - [ ] PROD-10 — Alerts and SLOs on the existing metrics, runbooks, and an on-call owner.
   - The workspace journal exposes size, rotation, gap and import metrics.
     `promtool test rules` verified that the capacity alert fires and clears.
+    Local Prometheus reloaded the rule and scraped the rotation counter.
     The [journal runbook](../docs/operations.md#workspace-journal) covers rotation
     and recovery. Production SLOs, alert routing and on-call ownership are open.
 

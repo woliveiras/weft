@@ -162,8 +162,10 @@ Branch `local-first-ollama`, um commit por tarefa (autor woliveiras).
   10-second windows and queue overflows are recorded individually. Segments
   rotate at 64 MiB and retain the cursor chain. SQLite replay, Linux fanotify
   and Chromium journal checks passed. The capacity alert and recovery runbook
-  are in place. The local stack upgrade awaits approval. A dedicated workspace
-  filesystem is tracked with PROD-08.
+  are in place. The local upgrade preserved the archived journal and advanced
+  the existing cursor. Both services stayed healthy with zero restarts over
+  two minutes of monitoring, and local Prometheus loaded the alert. A dedicated
+  workspace filesystem is tracked with PROD-08.
 
 Como rodar os checks neste ambiente (sem Go/Node no host):
 - Go: `./scripts/go.sh test ./...` (Docker). Falhas pré-existentes:
