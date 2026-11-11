@@ -112,6 +112,84 @@ func TestGatewayConsentAndMandatoryGrants(t *testing.T) {
 		})
 	}
 }
+
+func TestRunningLegacyTaskWithoutConsent(t *testing.T) {
+	ctx := t.Context()
+	m, draft, principal := setup(t)
+	// Seed a running execution copy in the pre-consent shape. Current task
+	// admission creates and binds consent, so it cannot build this fixture.
+	draft.ExecutionGraphID = principal.GraphID
+	execution := &domain.Graph{
+		Metadata: domain.GraphMetadata{ID: principal.GraphID, Labels: map[string]string{"weft.task": draft.ID}},
+		Spec: domain.GraphSpec{Nodes: []domain.Node{
+			{ID: draft.NodeID, Tools: principal.Grants},
+			{ID: "reviewed", Tools: []domain.ToolGrant{{Name: "test.call", RequiresApproval: true}}},
+			{ID: "ungranted"},
+		}},
+	}
+	if _, err := m.Store.SaveGraph(ctx, execution, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (taskconfig.Manager{Store: m.Store}).Transition(ctx, draft, "running", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	review, err := m.Review(ctx, draft.ID)
+	if err != nil || review.Record != nil {
+		t.Fatalf("expected no consent for running legacy task: %+v, %v", review, err)
+	}
+	saved, err := m.Store.GetGraph(ctx, principal.GraphID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tool := &sampleTool{}
+	reg := tools.NewRegistry()
+	reg.Register(tool)
+	ap := &approver{onWait: func() {
+		if tool.calls != 1 {
+			t.Fatalf("tool ran before approval: %d calls", tool.calls)
+		}
+	}}
+	gw := tools.NewGateway(reg, ap, nil)
+	gw.TaskAuthorization = m.Check
+
+	principalFor := func(id string) *tools.Principal {
+		t.Helper()
+		node := saved.Node(id)
+		if node == nil {
+			t.Fatalf("legacy execution copy missing node %q", id)
+		}
+		return &tools.Principal{GraphID: saved.Metadata.ID, GraphVersion: saved.Metadata.Version, NodeID: node.ID, Grants: node.Tools}
+	}
+	if result, err := gw.Invoke(ctx, principalFor(draft.NodeID), tool.Name(), nil); err != nil ||
+		result == nil || result.Content != "ok" || tool.calls != 1 || ap.calls != 0 {
+		t.Fatalf("legacy grant without approval: result=%+v err=%v calls=%d approvals=%d", result, err, tool.calls, ap.calls)
+	}
+	gated := principalFor("reviewed")
+	if _, err := gw.Invoke(tools.WithoutApproval(ctx), gated, tool.Name(), nil); !errors.Is(err, tools.ErrDenied) ||
+		tool.calls != 1 || ap.calls != 0 {
+		t.Fatalf("mandatory approval was not enforced: err=%v calls=%d approvals=%d", err, tool.calls, ap.calls)
+	}
+	if result, err := gw.Invoke(ctx, gated, tool.Name(), nil); err != nil ||
+		result == nil || result.Content != "ok" || tool.calls != 2 || ap.calls != 1 {
+		t.Fatalf("legacy grant with approval: result=%+v err=%v calls=%d approvals=%d", result, err, tool.calls, ap.calls)
+	}
+	if _, err := gw.Invoke(ctx, principalFor("ungranted"), tool.Name(), nil); !errors.Is(err, tools.ErrDenied) ||
+		tool.calls != 2 || ap.calls != 1 {
+		t.Fatalf("ungranted legacy call: err=%v calls=%d approvals=%d", err, tool.calls, ap.calls)
+	}
+
+	for _, mode := range []Mode{Ask, Workspace, Full} {
+		if _, err := m.Save(ctx, draft.ID, mode, review.Scope, 0, "admin", true); !errors.Is(err, storage.ErrConflict) {
+			t.Fatalf("running legacy task adopted %s: %v", mode, err)
+		}
+	}
+	review, err = m.Review(ctx, draft.ID)
+	if err != nil || review.Record != nil {
+		t.Fatalf("legacy task acquired consent: %+v, %v", review, err)
+	}
+}
+
 func TestConsentInvalidationAndPersistence(t *testing.T) {
 	m, d, p := setup(t)
 	r, _ := m.Review(t.Context(), d.ID)

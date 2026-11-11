@@ -12,3 +12,12 @@ These results were recorded at the time of the run. The documentation migration 
   to consent, cancellation, task progress, the approval inbox and decision
   routes. Denied requests left consent, approvals and task state intact.
   The task and inbox showed the same pending and final decision identities.
+
+## Legacy execution compatibility
+
+- 2026-11-11. `TestRunningLegacyTaskWithoutConsent` passed 20 repetitions.
+  A disposable filesystem store held a running execution copy without a
+  consent record. The gateway allowed the ungated grant, waited for approval
+  on the gated grant, and denied a gated call in a non-interactive context
+  and an ungranted call. The fixture provided the human approval response.
+  Saving Ask, Workspace or Full returned a conflict and left consent absent.
