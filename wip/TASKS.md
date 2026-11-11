@@ -879,7 +879,6 @@ or migration with the earlier provider configuration is kept. See
 - [ ] PROV-03 — Built-in Google provider for Gemini (Gemini API key and Vertex AI with Application Default Credentials), with the same contract and tests as PROV-02.
 - [x] PROV-04 — Provider conformance suite: one shared test set (chat, tool calls, tool results, JSON mode, usage, errors, cancellation, timeouts, credential redaction) that every built-in provider passes, documented in `docs/extensibility.md`.
 - [x] PROV-05 — Design Provider Protocol v1 for out-of-process provider plugins, derived from `llm.Provider` and PROV-04: transport (HTTP or stdio), manifest (name, version, checksum, declared outbound hosts), lifecycle and error contract. Document the trust model: a plugin receives prompts and code, runs as a separate process, receives only its own credential, and requires administrator review to install. Design only; no implementation in this task.
-- [ ] PROV-06 — Implement provider plugin installation and execution per PROV-05, after PROV-02 is delivered: explicit administrator install with checksum verification, isolated process, per-plugin encrypted credential, console label marking plugin providers, conformance suite run before enablement.
 
 **Done when:** Bedrock and Gemini work through the UI like existing providers,
 pass the conformance suite, and never expose credentials; the plugin protocol is
@@ -957,6 +956,7 @@ node, run and approval views for details.
 
 #### Deferred
 
+- [ ] PROV-06 (Future idea) — Implement provider plugin installation and execution per PROV-05, after PROV-02 is delivered: explicit administrator install with checksum verification, isolated process, per-plugin encrypted credential, console label marking plugin providers, conformance suite run before enablement. Deferred on 2026-11-11 by the user: running third-party provider code opens security risks they do not want to take on now. The PROV-05 design stays as reference.
 - [ ] AUTH-OIDC (Later) — Browser login with Authorization Code + PKCE, session cookie, refresh and logout; configurable role claim path and group-to-role mapping; issuer/audience validation. Qualify against a local Keycloak container first.
 
 
