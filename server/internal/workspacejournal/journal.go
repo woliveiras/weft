@@ -59,6 +59,8 @@ type importProgress struct {
 
 const importBatchSize = 1000
 
+var errAnchorChanged = errors.New("workspace journal retention anchor changed during import")
+
 func cursorKey(path string) string {
 	return fmt.Sprintf("workspace-journal/cursor/%x", sha256.Sum256([]byte(path)))
 }
@@ -73,6 +75,20 @@ func (i *Importer) Import(ctx context.Context) (err error) {
 			observability.WorkspaceJournalImports.WithLabelValues("error").Inc()
 		}
 	}()
+	err = i.importOnce(ctx)
+	if errors.Is(err, errAnchorChanged) {
+		return i.importOnce(ctx)
+	}
+	return err
+}
+
+func (i *Importer) importOnce(ctx context.Context) error {
+	// Read the anchor before the cursor. A new anchor may require a cursor
+	// that was committed after an earlier read of the store.
+	anchor, err := readAnchor(i.Path)
+	if err != nil {
+		return err
+	}
 	key := cursorKey(i.Path)
 	saved, revision, err := loadCursor(ctx, i.Store, key)
 	if err != nil {
@@ -97,16 +113,21 @@ func (i *Importer) Import(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	anchor, err := readAnchor(i.Path)
-	if err != nil {
-		return err
+	chain, validationErr := i.cache.load(ctx, i.Path, active, anchor)
+	if validationErr == nil {
+		validationErr = anchor.validateCursor(chain, saved, revision)
 	}
-	chain, err := i.cache.load(ctx, i.Path, active, anchor)
+	// A prune may have removed archives from the old chain during validation.
+	// Confirm the snapshot before consuming records or advancing the cursor.
+	current, err := readAnchor(i.Path)
 	if err != nil {
-		return err
+		return errors.Join(validationErr, err)
 	}
-	if err := anchor.validateCursor(chain, saved, revision); err != nil {
-		return err
+	if !sameAnchor(anchor, current) {
+		return errAnchorChanged
+	}
+	if validationErr != nil {
+		return validationErr
 	}
 	if saved.JournalID == "" {
 		saved.JournalID = chain[0].ID

@@ -54,3 +54,19 @@ func TestReadAnchorRejectsCorruptMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestReadAnchorWithValidJSONRejectsInconsistentChain(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events")
+	const data = `{"version":1,"first":{"id":"first","bytes":100},"previous":{"id":"pruned","bytes":90},"cursor":{"JournalID":"first","Offset":101},"revision":9}`
+	if err := os.WriteFile(anchorPath(path), []byte(data), 0640); err != nil {
+		t.Fatal(err)
+	}
+	anchor, err := readAnchor(path)
+	if err != nil {
+		t.Fatalf("fixture must be structurally valid: %v", err)
+	}
+	chain := []segment{{segmentRef: anchor.First, previous: &anchor.Previous}}
+	if err := anchor.validateChain(chain); err == nil || !strings.Contains(err.Error(), "outside the retained chain") {
+		t.Fatalf("accepted checkpoint past the end of its segment: %v", err)
+	}
+}

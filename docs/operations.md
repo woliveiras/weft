@@ -160,9 +160,12 @@ windows or when the importer falls behind. Use `--journal-keep-archives N`
 to set the minimum number of newest archives retained. Preserve exported
 backups according to the installation's audit policy.
 
-1. Quiesce sandbox work and stop `sandbox-daemon` so the maintenance command
-   can acquire the writer lock. Let the importer catch up. Back up the journal
-   directory and the store containing the cursor as a matching recovery set.
+1. If alert routing is enabled, silence only
+   `WeftWorkspaceJournalCollectorUnavailable` for this installation for the
+   approved maintenance window. Quiesce sandbox work and stop `sandbox-daemon`
+   so the maintenance command can acquire the writer lock. Let the importer
+   catch up. Back up the journal directory and the store containing the cursor
+   as a matching recovery set.
    A filesystem-backed store also requires stopping its controller before
    opening it from the maintenance command.
 2. Run `weftd --prune-workspace-journal` with the installation's config and
@@ -175,16 +178,25 @@ backups according to the installation's audit policy.
    store and revalidates the chain under the writer lock. It syncs
    `events.jsonl.anchor.json` before unlinking each eligible segment. The
    anchor identifies the oldest retained segment, its immediate predecessor
-   and the cursor checkpoint. Retrying an interrupted prune finishes a
-   committed unlink before advancing the anchor again.
+   and the cursor checkpoint. It establishes consistency with the durable
+   cursor and segment chain. It supplies no signature or authenticity proof
+   against a writer with access to the volume. Retrying an interrupted prune
+   finishes a committed unlink before advancing the anchor again.
 4. Restart the collector and check daemon health and import progress.
+   Confirm a fresh heartbeat and end the maintenance silence.
    Restore the anchor, retained segments and cursor together. A missing or
    mismatched anchor, missing retained segment or cursor behind the checkpoint
    stops import. The importer caches validated archive links and checks file
-   identities and lengths on subsequent passes.
+   identities and lengths on subsequent passes. When a live importer sees
+   the anchor change during validation, it retries once with a fresh anchor
+   and durable cursor. A repeated change or persistent inconsistency fails
+   the pass and is reported by normal import diagnostics.
 
-For Compose, use a maintenance override file for the one-off command. The
-normal weftd service mounts the journal read-only.
+For Compose, the collector in the privileged `sandbox-daemon` writes to the
+journal volume. Use a maintenance override for the authorized one-off writer.
+The regular weftd service mounts the journal read-only, and agent containers
+have no journal mount. Host or Docker administrators with volume access are
+trusted writers.
 
 ```yaml
 services:
@@ -218,7 +230,7 @@ the scrape or filesystem measurements are unavailable.
 | `WeftWorkspaceJournalArchiveGrowth` | Archive bytes exceed their one-hour low by more than two segments, with less than 24 times that growth available on disk, for ten minutes. |
 | `WeftWorkspaceJournalWriteFailed` | The collector recorded a write or rotation failure in the last five minutes. |
 | `WeftWorkspaceJournalCollectorUnavailable` | The collector heartbeat is missing or more than 45 seconds old for 30 seconds. |
-| `WeftWorkspaceJournalMonitoringUnavailable` | Prometheus cannot scrape the weftd job, filesystem metrics fail or collector metrics are missing on a configured controller for one minute. |
+| `WeftWorkspaceJournalMonitoringUnavailable` | Prometheus cannot scrape the weftd job, the target is absent, or journal filesystem metrics fail for one minute. |
 
 | Series suffix | Meaning |
 |---|---|

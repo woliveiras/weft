@@ -41,10 +41,17 @@ A collector that stays active during controller downtime can replay its private 
 ### AC-005 — Cursor-gated retention
 
 Approved pruning removes only fully imported archives behind a verified anchor. Retries are safe and a store restored behind the anchor is refused.
+If pruning changes the anchor between the importer's initial read and
+validation, the importer retries once with a fresh anchor and durable cursor.
+An unchanged invalid anchor or a second change stops the pass. The anchor
+checks consistency with the cursor and segment chain, without authenticating
+the volume's contents.
 
 ### AC-006 — Capacity and collector monitoring
 
 Installed metrics expose journal capacity, write/rotation failures and collector progress. The corresponding alerts can evaluate without importer samples where their inputs are collector-side.
+Monitoring unavailability covers scrape or filesystem metric failure.
+Missing or stale collector heartbeat uses the collector alert.
 
 ## Explicit exclusions
 

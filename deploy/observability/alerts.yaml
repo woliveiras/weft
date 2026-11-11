@@ -61,7 +61,6 @@ groups:
           up{job="weft"} == 0
           or absent(up{job="weft"})
           or weft_workspace_journal_filesystem_metrics_ok == 0
-          or (weft_workspace_journal_segment_limit_bytes > 0 unless weft_workspace_journal_collector_heartbeat_timestamp_seconds)
         for: 1m
         labels: {severity: warning}
         annotations:

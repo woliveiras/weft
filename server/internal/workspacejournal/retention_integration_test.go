@@ -1,13 +1,110 @@
 package workspacejournal
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/woliveiras/weft/server/internal/storage"
 )
+
+type pausedCursorRead struct {
+	storage.Store
+	key     string
+	read    chan struct{}
+	proceed chan struct{}
+}
+
+func (s *pausedCursorRead) GetSetting(ctx context.Context, key string) (*storage.Setting, error) {
+	setting, err := s.Store.GetSetting(ctx, key)
+	if key == s.key && s.read != nil {
+		close(s.read)
+		s.read = nil
+		select {
+		case <-s.proceed:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return setting, err
+}
+
+func TestImportRetriesAfterConcurrentPrune(t *testing.T) {
+	ctx := t.Context()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events")
+	store := openTestSQLite(t, filepath.Join(dir, "state.db"))
+	importer := journalTestImporter(path, store)
+	w, err := openWriter(path, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	appendLargeObservation(t, w, "first")
+	if err := importer.Import(ctx); err != nil {
+		t.Fatal(err)
+	}
+	appendLargeObservation(t, w, "second")
+	appendLargeObservation(t, w, "third")
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	read, proceed := make(chan struct{}), make(chan struct{})
+	paused := journalTestImporter(path, &pausedCursorRead{
+		Store: store, key: cursorKey(path), read: read, proceed: proceed,
+	})
+	result := make(chan error, 1)
+	finished := make(chan struct{})
+	importCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		defer close(finished)
+		result <- paused.Import(importCtx)
+	}()
+	defer func() {
+		cancel()
+		<-finished
+	}()
+	select {
+	case <-read:
+	case err := <-result:
+		t.Fatalf("import finished before reading its cursor: %v", err)
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	if err := importer.Import(ctx); err != nil {
+		t.Fatal(err)
+	}
+	wantCursor, wantRevision := readTestCursor(t, store)
+	plan, err := Prune(ctx, store, path, 0, true)
+	if err != nil || len(plan.Archives) != 2 {
+		t.Fatalf("concurrent prune: %+v %v", plan, err)
+	}
+	reopened, err := openWriter(path, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if err := reopened.Append(Record{ID: "after-prune", Path: "file", Operation: "created"}); err != nil {
+		t.Fatal(err)
+	}
+	active := inspectActive(t, path)
+	if active.ID != wantCursor.JournalID || active.Bytes <= wantCursor.Offset {
+		t.Fatal("fixture must append a new record to the retained cursor segment")
+	}
+	close(proceed)
+	if err := <-result; err != nil {
+		t.Fatalf("import after concurrent prune: %v", err)
+	}
+	if saved, revision := readTestCursor(t, store); saved.JournalID != active.ID || saved.Offset != active.Bytes || revision != wantRevision+1 {
+		t.Fatalf("retry did not advance exactly one record: %+v at revision %d", saved, revision)
+	}
+	checkEventOrder(t, store, "first", "second", "third", "after-prune")
+}
 
 func TestPruneKeepsNewestArchivesAndResumesAcrossRotations(t *testing.T) {
 	ctx := t.Context()

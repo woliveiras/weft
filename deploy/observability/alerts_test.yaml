@@ -67,6 +67,20 @@ tests:
         values: '0+0x40'
       - series: 'up{instance="stalled:8080",job="weft"}'
         values: '1+0x40'
+      - series: 'up{instance="filesystem:8080",job="weft"}'
+        values: '1+0x40'
+      - series: 'weft_workspace_journal_filesystem_metrics_ok{instance="filesystem:8080",job="weft"}'
+        values: '0+0x40'
+      - series: 'weft_workspace_journal_collector_heartbeat_timestamp_seconds{instance="filesystem:8080",job="weft"}'
+        values: '0+10x40'
+      - series: 'up{instance="missing-heartbeat:8080",job="weft"}'
+        values: '1+0x40'
+      - series: 'weft_workspace_journal_segment_limit_bytes{instance="missing-heartbeat:8080",job="weft"}'
+        values: '67108864+0x40'
+      - series: 'weft_workspace_journal_filesystem_metrics_ok{instance="missing-heartbeat:8080",job="weft"}'
+        values: '1+0x40'
+      - series: 'weft_workspace_journal_collector_heartbeat_timestamp_seconds{instance="missing-heartbeat:8080",job="weft"}'
+        values: '0+0x40'
       - series: 'weft_workspace_journal_collector_heartbeat_timestamp_seconds{instance="stalled:8080",job="weft"}'
         values: '1+0x40'
       - series: 'weft_workspace_journal_collector_failure_timestamp_seconds{instance="stalled:8080",job="weft",operation="write"}'
@@ -84,12 +98,16 @@ tests:
       - eval_time: 1m20s
         alertname: WeftWorkspaceJournalCollectorUnavailable
         exp_alerts:
+          - exp_labels: {instance: "missing-heartbeat:8080", job: weft, severity: critical}
+            exp_annotations: {summary: "Workspace journal collector heartbeat is missing or stale"}
           - exp_labels: {instance: "stalled:8080", job: weft, severity: critical}
             exp_annotations: {summary: "Workspace journal collector heartbeat is missing or stale"}
       - eval_time: 1m20s
         alertname: WeftWorkspaceJournalMonitoringUnavailable
         exp_alerts:
           - exp_labels: {instance: "down:8080", job: weft, severity: warning}
+            exp_annotations: {summary: "Workspace journal monitoring is unavailable"}
+          - exp_labels: {instance: "filesystem:8080", job: weft, severity: warning}
             exp_annotations: {summary: "Workspace journal monitoring is unavailable"}
       - {eval_time: 5m50s, alertname: WeftWorkspaceJournalWriteFailed, exp_alerts: []}
 

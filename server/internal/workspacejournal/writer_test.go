@@ -225,6 +225,41 @@ func TestWriterRemovesOnlyOrphanStagesForItsJournal(t *testing.T) {
 	}
 }
 
+func TestOpenWriterRejectsSameSizeArchiveWithDifferentIdentity(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events")
+	w, err := openWriter(path, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	appendLargeObservation(t, w, "first")
+	appendLargeObservation(t, w, "second")
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	archive := archivePath(path, "first")
+	data, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement := bytes.Replace(data, []byte(`"id":"first"`), []byte(`"id":"other"`), 1)
+	if bytes.Equal(data, replacement) || len(replacement) != len(data) {
+		t.Fatal("replacement must change the ID without changing the size")
+	}
+	if err := os.WriteFile(archive+".replacement", replacement, 0640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(archive+".replacement", archive); err != nil {
+		t.Fatal(err)
+	}
+	if reopened, err := openWriter(path, 1024); err == nil {
+		reopened.Close()
+		t.Fatal("opened a journal with a replaced archive")
+	} else if !strings.Contains(err.Error(), "segment identity changed") {
+		t.Fatal(err)
+	}
+}
+
 func recordLine(t *testing.T, r Record) []byte {
 	t.Helper()
 	line, err := encodeRecord(r)
