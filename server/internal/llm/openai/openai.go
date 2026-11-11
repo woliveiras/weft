@@ -146,6 +146,7 @@ type wireResponse struct {
 	Usage struct {
 		PromptTokens        int `json:"prompt_tokens"`
 		CompletionTokens    int `json:"completion_tokens"`
+		TotalTokens         int `json:"total_tokens"`
 		PromptTokensDetails struct {
 			CachedTokens int `json:"cached_tokens"`
 		} `json:"prompt_tokens_details"`
@@ -248,7 +249,7 @@ func (p *Provider) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatRes
 		StopReason: mapFinish(ch.FinishReason, len(msg.ToolCalls) > 0),
 		Model:      model,
 		// prompt_tokens already includes the cached part.
-		Usage: llm.Usage{InputTokens: out.Usage.PromptTokens, OutputTokens: out.Usage.CompletionTokens,
+		Usage: llm.Usage{InputTokens: out.Usage.PromptTokens, OutputTokens: outputTokens(out.Usage.PromptTokens, out.Usage.CompletionTokens, out.Usage.TotalTokens),
 			CacheReadTokens: out.Usage.PromptTokensDetails.CachedTokens},
 	}, nil
 }
@@ -293,3 +294,15 @@ func (p *Provider) Models(ctx context.Context) ([]llm.ModelInfo, error) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// outputTokens is what the answer cost. OpenAI counts reasoning inside
+// completion_tokens; Gemini's compatible endpoint leaves its thinking tokens
+// out of completion_tokens but bills them and includes them in
+// total_tokens. Tokens in the total beyond prompt and completion are
+// therefore output too.
+func outputTokens(prompt, completion, total int) int {
+	if hidden := total - prompt - completion; hidden > 0 {
+		return completion + hidden
+	}
+	return completion
+}

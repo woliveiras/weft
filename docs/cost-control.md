@@ -160,3 +160,12 @@ cannot be requested by the model.
 2. Task-run budget with pause and raise.
 3. User, project, workflow and installation budgets.
 4. Interrupt level and console spend views.
+
+### Hidden reasoning tokens
+
+OpenAI-compatible endpoints differ in how they report reasoning. OpenAI counts
+it inside `completion_tokens`. Gemini's compatible endpoint leaves its thinking
+tokens out of `completion_tokens`, but bills them and includes them in
+`total_tokens`. The OpenAI plugin therefore records as output whatever part of
+`total_tokens` is neither prompt nor completion, so budgets and prices see the
+real cost.

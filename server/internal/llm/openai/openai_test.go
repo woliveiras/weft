@@ -136,3 +136,35 @@ func TestModels(t *testing.T) {
 		t.Fatalf("%v %v", ms, err)
 	}
 }
+
+// Gemini's OpenAI-compatible endpoint leaves thinking tokens out of
+// completion_tokens but includes (and bills) them in total_tokens.
+func TestHiddenThinkingTokensCountAsOutput(t *testing.T) {
+	for name, tc := range map[string]struct {
+		usage string
+		want  int
+	}{
+		"gemini thinking": {`{"prompt_tokens":10,"completion_tokens":5,"total_tokens":134}`, 124},
+		"openai":          {`{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}`, 5},
+		"no total":        {`{"prompt_tokens":10,"completion_tokens":5}`, 5},
+		"inconsistent":    {`{"prompt_tokens":10,"completion_tokens":5,"total_tokens":3}`, 5},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(`{"model":"m","choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}],"usage":` + tc.usage + `}`))
+			}))
+			defer srv.Close()
+			p, err := New(llm.ProviderConfig{Name: "o", BaseURL: srv.URL + "/v1", DefaultModel: "m"}, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := p.Chat(context.Background(), &llm.ChatRequest{Messages: []llm.ChatMessage{{Role: llm.RoleUser, Content: "hi"}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.Usage.InputTokens != 10 || resp.Usage.OutputTokens != tc.want {
+				t.Fatalf("usage %+v, want output %d", resp.Usage, tc.want)
+			}
+		})
+	}
+}

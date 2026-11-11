@@ -317,6 +317,10 @@ func Run(t *testing.T, w Wire, build New) {
 // holds them only to what agents need: an answer, a structured tool call
 // when one is clearly asked for, valid JSON in JSON mode, reported usage,
 // the model listed, and prompt cancellation.
+// liveAnswerTokens leaves room for models that reason before answering
+// (their hidden thinking counts against max_tokens).
+const liveAnswerTokens = 1024
+
 func RunLive(t *testing.T, p llm.Provider, model string) {
 	t.Helper()
 	ctx := context.Background()
@@ -334,7 +338,7 @@ func RunLive(t *testing.T, p llm.Provider, model string) {
 		t.Fatalf("model %q not listed: %+v", model, ms)
 	})
 	t.Run("text and usage", func(t *testing.T) {
-		resp, err := p.Chat(ctx, &llm.ChatRequest{Model: model, MaxTokens: 64, Messages: []llm.ChatMessage{{Role: llm.RoleUser, Content: "Reply with the single word OK."}}})
+		resp, err := p.Chat(ctx, &llm.ChatRequest{Model: model, MaxTokens: liveAnswerTokens, Messages: []llm.ChatMessage{{Role: llm.RoleUser, Content: "Reply with the single word OK."}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -358,7 +362,7 @@ func RunLive(t *testing.T, p llm.Provider, model string) {
 		}
 	})
 	t.Run("json mode", func(t *testing.T) {
-		resp, err := p.Chat(ctx, &llm.ChatRequest{Model: model, JSON: true, MaxTokens: 128,
+		resp, err := p.Chat(ctx, &llm.ChatRequest{Model: model, JSON: true, MaxTokens: liveAnswerTokens,
 			Messages: []llm.ChatMessage{{Role: llm.RoleUser, Content: `Return a JSON object {"ok": true}.`}}})
 		if err != nil {
 			t.Fatal(err)
