@@ -1,6 +1,11 @@
 package taskauth
 
-import "testing"
+import (
+	"errors"
+	"testing"
+
+	"github.com/woliveiras/weft/server/internal/tools"
+)
 
 func TestApproval(t *testing.T) {
 	for _, tc := range []struct {
@@ -27,6 +32,15 @@ func TestApproval(t *testing.T) {
 				t.Fatalf("%v %v", got, err)
 			}
 		})
+	}
+}
+
+func TestApprovalExplainsWorkspaceNativeShellDenial(t *testing.T) {
+	for _, kind := range []string{"process", "kubernetes", ""} {
+		approval, err := Approval(Workspace, "shell.exec", kind, true)
+		if approval || !errors.Is(err, ErrDenied) || !errors.Is(err, tools.ErrWorkspaceShellIsolation) {
+			t.Errorf("sandbox %q: approval %t, error %v", kind, approval, err)
+		}
 	}
 }
 

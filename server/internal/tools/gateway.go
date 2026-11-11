@@ -153,7 +153,7 @@ func (g *Gateway) Invoke(ctx context.Context, p *Principal, name string, args js
 		required, consent, e = g.TaskAuthorization(ctx, p, t, required)
 		if e != nil {
 			outcome = "denied"
-			err = fmt.Errorf("%w: task consent unavailable or stale", ErrDenied)
+			err = taskConsentDenied(e, "task consent unavailable or stale")
 			g.audit(ctx, p, domain.EvToolDenied, name, nil, outcome, 0, err)
 			return nil, err
 		}
@@ -182,7 +182,7 @@ func (g *Gateway) Invoke(ctx context.Context, p *Principal, name string, args js
 		_, current, e := g.TaskAuthorization(ctx, p, t, grant.RequiresApproval)
 		if e != nil || current != consent {
 			outcome = "denied"
-			err = fmt.Errorf("%w: task consent changed while waiting; retry under current permissions", ErrDenied)
+			err = taskConsentDenied(e, "task consent changed while waiting; retry under current permissions")
 			g.audit(ctx, p, domain.EvToolDenied, name, nil, outcome, 0, err)
 			return nil, err
 		}
@@ -256,6 +256,15 @@ func (g *Gateway) auditCheck(ctx context.Context, p *Principal, res *Result) {
 		ev.WithActor(domain.ReplicaKey(p.GraphID, p.NodeID, p.Replica))
 	}
 	g.Auditor.Audit(ctx, ev)
+}
+
+// taskConsentDenied forwards the actionable isolation refusal and keeps
+// other authorization failures generic at the tool boundary.
+func taskConsentDenied(cause error, fallback string) error {
+	if errors.Is(cause, ErrWorkspaceShellIsolation) {
+		return fmt.Errorf("%w: %w", ErrDenied, ErrWorkspaceShellIsolation)
+	}
+	return fmt.Errorf("%w: %s", ErrDenied, fallback)
 }
 
 // rateKey shares one allowance between a capability-only tool and its

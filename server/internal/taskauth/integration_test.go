@@ -420,3 +420,57 @@ func TestProcessShellRequiresAskOrExplicitFull(t *testing.T) {
 		})
 	}
 }
+
+func TestGatewayExplainsNativeShellDenialForPreviouslyConsentedTask(t *testing.T) {
+	ctx := t.Context()
+	m, draft, p := setup(t)
+	g, err := m.Store.GetGraph(ctx, draft.GraphID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.Spec.Nodes[0].Isolation.Mode = domain.IsolationProcess
+	g.Spec.Nodes[0].Tools = []domain.ToolGrant{{Name: "shell.exec"}}
+	version, err := m.Store.SaveGraph(ctx, g, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := draft.Input
+	in.GraphVersion = version
+	draft, err = (taskconfig.Manager{Store: m.Store}).Save(ctx, draft.ID, in, draft.Revision, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	review, err := m.Review(ctx, draft.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const reason = "process shell cannot be confined to a worktree; use Ask for approval, Full access or Docker isolation"
+	if _, err := m.Save(ctx, draft.ID, Workspace, review.Scope, 0, "admin", true); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), reason) {
+		t.Fatalf("current save should reject Workspace: %v", err)
+	}
+	// Restore the persisted consent directly to exercise the runtime guard.
+	record, err := json.Marshal(Record{TaskID: draft.ID, Mode: Workspace, Scope: review.Scope, Actor: "admin", PolicyVersion: PolicyVersion})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Store.PutSetting(ctx, prefix+draft.ID, record, 0, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	launch(t, m, draft, p)
+	p.Grants = g.Spec.Nodes[0].Tools
+	p.Workdir = t.TempDir()
+	p.Sandbox = &tools.ProcessSandbox{Root: p.Workdir}
+	p.Checks = []domain.Check{{Name: "test", Command: "printf fixture"}}
+	ap := &approver{}
+	gw := tools.NewGateway(tools.Builtin(tools.BuiltinConfig{}), ap, nil)
+	gw.TaskAuthorization = m.Check
+	for _, call := range []struct{ name, args string }{
+		{"shell.exec", `{"command":"printf fixture"}`},
+		{tools.CheckToolName, `{"name":"test"}`},
+	} {
+		result, err := gw.Invoke(ctx, p, call.name, json.RawMessage(call.args))
+		if result != nil || !errors.Is(err, tools.ErrDenied) || !strings.Contains(err.Error(), reason) || ap.calls != 0 {
+			t.Errorf("%s: result %+v, approvals %d, error %v", call.name, result, ap.calls, err)
+		}
+	}
+}

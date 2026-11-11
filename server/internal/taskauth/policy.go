@@ -3,6 +3,7 @@ package taskauth
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/woliveiras/weft/server/internal/domain"
@@ -55,7 +56,7 @@ func Approval(mode Mode, capability, isolation string, mandatory bool) (bool, er
 		return false, ErrInvalid
 	}
 	if mode == Workspace && capability == "shell.exec" && !workspaceShellAllowed(isolation) {
-		return false, ErrDenied // cwd/worktrees are not an OS boundary.
+		return false, fmt.Errorf("%w: %w", ErrDenied, tools.ErrWorkspaceShellIsolation)
 	}
 	if mandatory {
 		return true, nil
