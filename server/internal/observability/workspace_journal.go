@@ -6,18 +6,6 @@ import (
 )
 
 var (
-	WorkspaceJournalActiveBytes = promauto.NewGauge(prometheus.GaugeOpts{
-		Namespace: ns, Name: "workspace_journal_active_bytes",
-		Help: "Size of the active workspace journal segment at the last read.",
-	})
-	WorkspaceJournalArchivedBytes = promauto.NewGauge(prometheus.GaugeOpts{
-		Namespace: ns, Name: "workspace_journal_archived_bytes",
-		Help: "Total bytes in the archived workspace journal segments at the last successful chain validation.",
-	})
-	WorkspaceJournalSegmentLimitBytes = promauto.NewGauge(prometheus.GaugeOpts{
-		Namespace: ns, Name: "workspace_journal_segment_limit_bytes",
-		Help: "Workspace journal segment size limit when journal import is enabled.",
-	})
 	WorkspaceJournalRotations = promauto.NewCounter(prometheus.CounterOpts{
 		Namespace: ns, Name: "workspace_journal_rotations_total",
 		Help: "Workspace journal rotation links committed by the importer.",

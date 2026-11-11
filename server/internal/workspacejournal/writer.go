@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/domain"
@@ -28,6 +29,7 @@ type Writer struct {
 	id       string
 	size     int64
 	maxBytes int64
+	rename   func(string, string) error
 	err      error
 }
 
@@ -40,7 +42,7 @@ func openWriter(path string, maxBytes int64) (_ *Writer, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("lock workspace journal: %w", err)
 	}
-	w := &Writer{path: path, maxBytes: maxBytes, unlock: unlock}
+	w := &Writer{path: path, maxBytes: maxBytes, unlock: unlock, rename: os.Rename}
 	defer func() {
 		if err != nil {
 			err = errors.Join(err, w.Close())
@@ -89,6 +91,9 @@ func openWriter(path string, maxBytes int64) (_ *Writer, err error) {
 	if _, err := readChain(context.Background(), path, s); err != nil {
 		return nil, err
 	}
+	if err := cleanStagedSegments(path); err != nil {
+		return nil, fmt.Errorf("clean workspace journal staging files: %w", err)
+	}
 	w.id = s.ID
 	return w, nil
 }
@@ -128,20 +133,27 @@ func (w *Writer) Append(r Record) error {
 	}
 	if w.size+int64(len(data)) > w.maxBytes {
 		if err := w.rotate(data); err != nil {
-			w.err = fmt.Errorf("rotate workspace journal: %w", err)
+			return w.fail("rotate", fmt.Errorf("rotate workspace journal: %w", err))
 		}
-		return w.err
+		return nil
 	}
 	if err := writeAndSync(w.f, data); err != nil {
 		// A failed append may have left a partial record on disk.
-		w.err = fmt.Errorf("persist workspace journal record: %w", err)
-		return w.err
+		return w.fail("write", fmt.Errorf("persist workspace journal record: %w", err))
 	}
 	if w.size == 0 {
 		w.id = r.ID
 	}
 	w.size += int64(len(data))
 	return nil
+}
+
+func (w *Writer) fail(operation string, err error) error {
+	w.err = err
+	if statusErr := markCollectorTime(failurePath(w.path, operation), time.Now()); statusErr != nil {
+		w.err = errors.Join(err, fmt.Errorf("record workspace journal failure: %w", statusErr))
+	}
+	return w.err
 }
 
 func encodeRecord(r Record) ([]byte, error) {
@@ -171,7 +183,7 @@ func (w *Writer) rotate(data []byte) (err error) {
 	if newSize > w.maxBytes {
 		return fmt.Errorf("record and segment link exceed journal segment limit")
 	}
-	next, err := os.CreateTemp(filepath.Dir(w.path), "."+filepath.Base(w.path)+".next-*")
+	next, err := os.CreateTemp(filepath.Dir(w.path), stagePrefix(w.path)+"*")
 	if err != nil {
 		return err
 	}
@@ -195,8 +207,8 @@ func (w *Writer) rotate(data []byte) (err error) {
 	if err := syncJournalDirectory(w.path); err != nil {
 		return err
 	}
-	if err := os.Rename(next.Name(), w.path); err != nil {
-		return err
+	if err := w.rename(next.Name(), w.path); err != nil {
+		return fmt.Errorf("publish workspace journal segment: %w", err)
 	}
 	published = true
 	old, previous := w.f, *link.PreviousSegment
@@ -205,6 +217,32 @@ func (w *Writer) rotate(data []byte) (err error) {
 		return err
 	}
 	slog.Info("workspace journal rotated", "previous_segment", previous.ID, "segment", link.ID, "archived_bytes", previous.Bytes)
+	return nil
+}
+
+// The writer lock is held and the published chain has been validated.
+func cleanStagedSegments(path string) error {
+	dir := filepath.Dir(path)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	removed := false
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), stagePrefix(path)) {
+			continue
+		}
+		if !entry.Type().IsRegular() {
+			return fmt.Errorf("staged segment %q is not a regular file", entry.Name())
+		}
+		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
+			return err
+		}
+		removed = true
+	}
+	if removed {
+		return syncJournalDirectory(path)
+	}
 	return nil
 }
 

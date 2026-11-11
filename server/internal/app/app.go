@@ -167,7 +167,12 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 
 	a.WorkspaceMonitor = &tools.WorkspaceMonitor{Auditor: a.Bus, Targets: func(ctx context.Context) ([]tools.WorkspaceTarget, error) { return workspaceTargets(ctx, a.Store, ws) }}
+	var journalMetrics http.Handler
 	if path := os.Getenv("WEFT_WORKSPACE_JOURNAL"); path != "" {
+		journalMetrics, err = workspacejournal.MetricsHandler(path)
+		if err != nil {
+			return nil, fmt.Errorf("workspace journal metrics: %w", err)
+		}
 		a.WorkspaceJournal = &workspacejournal.Importer{Store: a.Store, Path: path, Scopes: func(ctx context.Context) ([]workspacejournal.Scope, error) {
 			targets, err := workspaceTargets(ctx, a.Store, ws)
 			if err != nil {
@@ -293,7 +298,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		Reviews:           a.Reviews, PreviewGateway: a.PreviewGateway, MCP: a.MCP, SCM: a.SCM, Gateway: a.Gateway,
 		Config: cfg, Engine: a.Engine, Store: a.Store, Broker: a.Broker, Bus: a.Bus, Approvals: a.Approvals,
 		Models: a.Models, Providers: a.Providers, Tools: a.Tools, Workspaces: ws, Auth: auth, Log: log,
-		Environments: a.Environments, Proposals: a.Proposals,
+		Environments: a.Environments, Proposals: a.Proposals, Metrics: journalMetrics,
 	})
 	a.Triggers.Tasks = triggerTasks{a: a, runner: a.API.TaskRunner}
 	return a, nil

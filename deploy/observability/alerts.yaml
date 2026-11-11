@@ -25,10 +25,44 @@ groups:
         for: 5m
         labels: {severity: warning}
         annotations: {summary: "LLM provider {{ $labels.provider }} is failing"}
-      - alert: WeftWorkspaceJournalNearLimit
-        expr: weft_workspace_journal_active_bytes >= 0.90 * weft_workspace_journal_segment_limit_bytes and weft_workspace_journal_segment_limit_bytes > 0
+      - alert: WeftWorkspaceJournalVolumeLow
+        expr: |
+          weft_workspace_journal_volume_available_bytes < 2 * weft_workspace_journal_segment_limit_bytes
+          or weft_workspace_journal_volume_available_bytes / weft_workspace_journal_volume_size_bytes < 0.10
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: "Workspace journal filesystem has low free space"
+      - alert: WeftWorkspaceJournalArchiveGrowth
+        expr: |
+          (weft_workspace_journal_archived_bytes - min_over_time(weft_workspace_journal_archived_bytes[1h]) > 2 * weft_workspace_journal_segment_limit_bytes)
+          and weft_workspace_journal_volume_available_bytes < 24 * (weft_workspace_journal_archived_bytes - min_over_time(weft_workspace_journal_archived_bytes[1h]))
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Workspace journal archive growth threatens filesystem capacity"
+      - alert: WeftWorkspaceJournalWriteFailed
+        expr: |
+          weft_workspace_journal_collector_failure_timestamp_seconds > 0
+          and time() - weft_workspace_journal_collector_failure_timestamp_seconds < 300
+        labels: {severity: critical}
+        annotations:
+          summary: "Workspace journal {{ $labels.operation }} failed"
+      - alert: WeftWorkspaceJournalCollectorUnavailable
+        expr: |
+          weft_workspace_journal_collector_heartbeat_timestamp_seconds == 0
+          or time() - weft_workspace_journal_collector_heartbeat_timestamp_seconds > 45
+        for: 30s
+        labels: {severity: critical}
+        annotations:
+          summary: "Workspace journal collector heartbeat is missing or stale"
+      - alert: WeftWorkspaceJournalMonitoringUnavailable
+        expr: |
+          up{job="weft"} == 0
+          or absent(up{job="weft"})
+          or weft_workspace_journal_filesystem_metrics_ok == 0
+          or (weft_workspace_journal_segment_limit_bytes > 0 unless weft_workspace_journal_collector_heartbeat_timestamp_seconds)
         for: 1m
         labels: {severity: warning}
         annotations:
-          summary: "Workspace journal segment is at least 90% full"
-          description: "Check rotation and archive capacity. See the workspace journal runbook in docs/operations.md."
+          summary: "Workspace journal monitoring is unavailable"

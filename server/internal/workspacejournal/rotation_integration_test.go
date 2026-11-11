@@ -55,6 +55,67 @@ func TestImporterResumesLegacyCursorAcrossRotations(t *testing.T) {
 	}
 }
 
+func TestWriterReopensAfterRenameFailureAndImporterResumes(t *testing.T) {
+	ctx := t.Context()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events.jsonl")
+	w, err := openWriter(path, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { w.Close() })
+	appendLargeObservation(t, w, "first")
+	original := inspectActive(t, path)
+	store := openTestSQLite(t, filepath.Join(dir, "state.db"))
+	importer := journalTestImporter(path, store)
+	if err := importer.Import(ctx); err != nil {
+		t.Fatal(err)
+	}
+	orphan := filepath.Join(dir, stagePrefix(path)+"123")
+	w.rename = func(staged, active string) error {
+		if active != path {
+			t.Fatalf("unexpected publication path %q", active)
+		}
+		data, err := os.ReadFile(staged)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(orphan, data, 0640); err != nil {
+			t.Fatal(err)
+		}
+		// Exercise a real failed rename after the archive link was created.
+		return os.Rename(staged, dir)
+	}
+	second := Record{ID: "second", Path: strings.Repeat("b", 600), Operation: "created"}
+	if err := w.Append(second); err == nil || !strings.Contains(err.Error(), "publish workspace journal segment") {
+		t.Fatalf("rotation rename failure: %v", err)
+	}
+	if active := inspectActive(t, path); active.segmentRef != original.segmentRef {
+		t.Fatal("failed rename changed the active segment")
+	}
+	if err := importer.Import(ctx); err != nil {
+		t.Fatal(err)
+	}
+	checkEventOrder(t, store, "first")
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	w, err = openWriter(path, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
+		t.Fatalf("interrupted stage was not removed: %v", err)
+	}
+	if err := w.Append(second); err != nil {
+		t.Fatal(err)
+	}
+	if err := importer.Import(ctx); err != nil {
+		t.Fatal(err)
+	}
+	checkEventOrder(t, store, "first", "second")
+}
+
 func TestImportSnapshotSurvivesConcurrentRotation(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

@@ -77,6 +77,7 @@ type Deps struct {
 	Proposals    *environment.Proposals
 	Auth         *Authenticator
 	Log          *slog.Logger
+	Metrics      http.Handler
 }
 
 type Server struct {
@@ -256,14 +257,17 @@ func (s *Server) routes() {
 	for _, rt := range routes {
 		s.mux.Handle(rt.pattern, s.wrap(rt))
 	}
+	metrics := s.Metrics
+	if metrics == nil {
+		metrics = promhttp.Handler()
+	}
 	if s.Config.Server.ProtectMetrics {
-		metrics := promhttp.Handler()
 		s.mux.Handle("GET /metrics", s.wrap(route{"GET /metrics", config.RoleViewer, func(w http.ResponseWriter, r *http.Request) error {
 			metrics.ServeHTTP(w, r)
 			return nil
 		}}))
 	} else {
-		s.mux.Handle("GET /metrics", promhttp.Handler())
+		s.mux.Handle("GET /metrics", metrics)
 	}
 	s.projectRoutes()
 	s.internalRoutes()

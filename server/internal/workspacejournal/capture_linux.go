@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,8 +18,8 @@ import (
 
 // Capture runs in the already privileged dedicated daemon's PID namespace.
 // It does not change sandbox capabilities, mounts or authorization policies.
-func Capture(ctx context.Context, root string, writer *Writer) (err error) {
-	root, err = filepath.EvalSymlinks(root)
+func Capture(ctx context.Context, root string, writer *Writer) error {
+	root, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return err
 	}
@@ -48,7 +49,11 @@ func Capture(ctx context.Context, root string, writer *Writer) (err error) {
 		return fmt.Errorf("collector boot identity is empty")
 	}
 	bootID := strings.TrimSpace(string(boot))
-	if err := writer.Append(Record{Gap: "collector_started", Namespace: namespace, BootID: bootID}); err != nil {
+	return captureLoop(ctx, func(buffer []byte) (int, error) { return unix.Read(fd, buffer) }, mount, root, namespace, bootID, writer)
+}
+
+func captureLoop(ctx context.Context, read func([]byte) (int, error), mount int, root, namespace, boot string, writer *Writer) (err error) {
+	if err := writer.Append(Record{Gap: "collector_started", Namespace: namespace, BootID: boot}); err != nil {
 		return err
 	}
 	var gaps unresolvedGaps
@@ -58,14 +63,22 @@ func Capture(ctx context.Context, root string, writer *Writer) (err error) {
 		}
 	}()
 	buffer := make([]byte, 256<<10)
+	var nextHeartbeat time.Time
 	for {
 		if ctx.Err() != nil {
 			return nil
 		}
-		if err := gaps.flushExpired(time.Now(), writer.Append); err != nil {
+		now := time.Now()
+		if !now.Before(nextHeartbeat) {
+			if err := markCollectorTime(writer.path+heartbeatSuffix, now); err != nil {
+				slog.Warn("workspace journal heartbeat failed", "error", err)
+			}
+			nextHeartbeat = now.Add(heartbeatInterval)
+		}
+		if err := gaps.flushExpired(now, writer.Append); err != nil {
 			return err
 		}
-		n, err := unix.Read(fd, buffer)
+		n, err := read(buffer)
 		if errors.Is(err, unix.EAGAIN) {
 			select {
 			case <-ctx.Done():
@@ -91,7 +104,7 @@ func Capture(ctx context.Context, root string, writer *Writer) (err error) {
 			}
 			event = event[:length]
 			pos += length
-			if err := captureEvent(event, mount, root, namespace, bootID, writer, &gaps); err != nil {
+			if err := captureEvent(event, mount, root, namespace, boot, writer, &gaps); err != nil {
 				return err
 			}
 		}

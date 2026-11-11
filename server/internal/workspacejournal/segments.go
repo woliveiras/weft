@@ -32,6 +32,10 @@ func archivePath(path, id string) string {
 	return fmt.Sprintf("%s%s%x", path, archiveSuffix, sha256.Sum256([]byte(id)))
 }
 
+func stagePrefix(path string) string {
+	return "." + filepath.Base(path) + ".next-"
+}
+
 func requireNoArchives(path string) error {
 	entries, err := os.ReadDir(filepath.Dir(path))
 	if err != nil {
@@ -39,8 +43,8 @@ func requireNoArchives(path string) error {
 	}
 	prefix := filepath.Base(path) + archiveSuffix
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), prefix) {
-			return fmt.Errorf("workspace journal has archives but no active segment identity; preserve the chain for recovery")
+		if strings.HasPrefix(entry.Name(), prefix) || strings.HasPrefix(entry.Name(), stagePrefix(path)) {
+			return fmt.Errorf("workspace journal has rotation files but no active segment identity; preserve the chain for recovery")
 		}
 	}
 	return nil

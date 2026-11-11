@@ -146,7 +146,9 @@ the successor at `events.jsonl`. Its first record contains
 segment must stay in the same directory on a filesystem supporting hard links
 and directory sync. An interrupted rotation can leave a staged
 `.events.jsonl.next-*` file and an archive name linked to the still-active
-inode. On retry the collector reuses that link.
+inode. On reopen the collector validates the published chain, removes
+orphaned staging files and reuses the archive link. If the published chain
+cannot be validated, it preserves the staging files for recovery.
 
 Keep all linked segments for the lifetime of the active chain. Provision disk
 space for archive growth and monitor available bytes and inodes on the volume.
@@ -157,16 +159,26 @@ cutover to a new filename in both services starts a new chain with a startup
 coverage gap. Retain the retired chain with the backup for the installation's
 audit retention period.
 
-### Near the segment limit
+### Journal alerts
 
-`WeftWorkspaceJournalNearLimit` fires when the active segment stays at or
-above 90% of its limit for one minute. The `weft_workspace_journal_*` series
-are available on the existing weftd `/metrics` endpoint.
+The weftd `/metrics` handler reads filesystem and collector status directly
+from the read-only journal mount. These series remain available when import
+is stopped or blocked. The shipped Prometheus job `weft` also alerts when
+the scrape or filesystem measurements are unavailable.
+
+| Alert | Condition |
+|---|---|
+| `WeftWorkspaceJournalVolumeLow` | Available filesystem space stays below two segment limits or 10% of capacity for two minutes. |
+| `WeftWorkspaceJournalArchiveGrowth` | Archive bytes exceed their one-hour low by more than two segments, with less than 24 times that growth available on disk, for ten minutes. |
+| `WeftWorkspaceJournalWriteFailed` | The collector recorded a write or rotation failure in the last five minutes. |
+| `WeftWorkspaceJournalCollectorUnavailable` | The collector heartbeat is missing or more than 45 seconds old for 30 seconds. |
+| `WeftWorkspaceJournalMonitoringUnavailable` | Prometheus cannot scrape the weftd job, filesystem metrics fail or collector metrics are missing on a configured controller for one minute. |
 
 | Series suffix | Meaning |
 |---|---|
-| `active_bytes`, `segment_limit_bytes` | Last active size sampled by the importer and the per-segment limit. |
-| `archived_bytes` | Total linked archive bytes at the last successful chain validation. |
+| `active_bytes`, `segment_limit_bytes` | Active size at scrape time and the per-segment limit. |
+| `archived_bytes`, `volume_available_bytes`, `volume_size_bytes` | Archive bytes on disk, and the available and total bytes of the journal filesystem. |
+| `collector_heartbeat_timestamp_seconds`, `collector_failure_timestamp_seconds` | Capture-loop heartbeat and last failure timestamp by `operation` (`write` or `rotate`). A stale heartbeat also covers failures that prevent writing status. |
 | `rotations_total` | Segment links committed by this importer process. A backlog can delay this counter after the collector logs a rotation. |
 | `gap_windows_total`, `gaps_coalesced_total` | Imported unresolved-path windows and additional kernel gaps represented by those windows, summed as `count - 1`. |
 | `records_imported_total` | Committed observation records. Each record is counted once, independent of the number of workspace scopes. |
@@ -177,9 +189,9 @@ are available on the existing weftd `/metrics` endpoint.
    `workspace journal import failed` or collector shutdown. Check free disk
    space and inodes for the journal volume.
 2. After a normal rotation, confirm that the active size dropped, the archived
-   byte count increased, and the importer crossed the link. If archive usage
-   keeps increasing, compare the rates of rotations, gap windows and imported
-   records to the workload and budget disk space accordingly.
+   byte count increased, and the importer crossed the link. When available
+   space is low, review archive growth, other users of the filesystem and
+   import errors. Expand the filesystem or run the approved prune procedure.
 3. On a missing link, wrong identity, length mismatch or incomplete archived
    record, preserve the journal directory and store. Restore the matching
    segment at its expected name from a verified backup and confirm its ID and

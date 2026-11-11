@@ -1,31 +1,103 @@
 rule_files: [alerts.yaml]
 evaluation_interval: 10s
 tests:
-  - interval: 10s
+  - name: Healthy rotation with no importer samples
+    interval: 10s
     input_series:
+      - series: 'up{instance="weftd:8080",job="weft"}'
+        values: '1+0x120'
       - series: 'weft_workspace_journal_active_bytes{instance="weftd:8080",job="weft"}'
-        values: '1000 62000000+0x7 200'
+        values: '62000000+0x8 250+0x111'
+      - series: 'weft_workspace_journal_archived_bytes{instance="weftd:8080",job="weft"}'
+        values: '0+0x8 67108864+0x111'
       - series: 'weft_workspace_journal_segment_limit_bytes{instance="weftd:8080",job="weft"}'
-        values: '67108864+0x9'
-      - series: 'weft_workspace_journal_active_bytes{instance="below:8080",job="weft"}'
-        values: '60000000+0x9'
-      - series: 'weft_workspace_journal_segment_limit_bytes{instance="below:8080",job="weft"}'
-        values: '67108864+0x9'
-      - series: 'weft_workspace_journal_active_bytes{instance="disabled:8080",job="weft"}'
-        values: '0+0x9'
-      - series: 'weft_workspace_journal_segment_limit_bytes{instance="disabled:8080",job="weft"}'
-        values: '0+0x9'
+        values: '67108864+0x120'
+      - series: 'weft_workspace_journal_volume_available_bytes{instance="weftd:8080",job="weft"}'
+        values: '4294967296+0x120'
+      - series: 'weft_workspace_journal_volume_size_bytes{instance="weftd:8080",job="weft"}'
+        values: '10737418240+0x120'
+      - series: 'weft_workspace_journal_collector_heartbeat_timestamp_seconds{instance="weftd:8080",job="weft"}'
+        values: '0+10x120'
+      - series: 'weft_workspace_journal_collector_failure_timestamp_seconds{instance="weftd:8080",job="weft",operation="rotate"}'
+        values: '0+0x120'
+      - series: 'weft_workspace_journal_filesystem_metrics_ok{instance="weftd:8080",job="weft"}'
+        values: '1+0x120'
     alert_rule_test:
-      - eval_time: 50s
-        alertname: WeftWorkspaceJournalNearLimit
-        exp_alerts: []
-      - eval_time: 1m10s
-        alertname: WeftWorkspaceJournalNearLimit
+      - {eval_time: 1m10s, alertname: WeftWorkspaceJournalVolumeLow, exp_alerts: []}
+      - {eval_time: 1m10s, alertname: WeftWorkspaceJournalWriteFailed, exp_alerts: []}
+      - {eval_time: 20m, alertname: WeftWorkspaceJournalVolumeLow, exp_alerts: []}
+      - {eval_time: 20m, alertname: WeftWorkspaceJournalArchiveGrowth, exp_alerts: []}
+      - {eval_time: 20m, alertname: WeftWorkspaceJournalWriteFailed, exp_alerts: []}
+      - {eval_time: 20m, alertname: WeftWorkspaceJournalCollectorUnavailable, exp_alerts: []}
+      - {eval_time: 20m, alertname: WeftWorkspaceJournalMonitoringUnavailable, exp_alerts: []}
+
+  - name: Low filesystem space and rapid archive growth
+    interval: 10s
+    input_series:
+      - series: 'weft_workspace_journal_segment_limit_bytes{instance="low:8080",job="weft"}'
+        values: '67108864+0x20'
+      - series: 'weft_workspace_journal_volume_available_bytes{instance="low:8080",job="weft"}'
+        values: '100663296+0x20'
+      - series: 'weft_workspace_journal_volume_size_bytes{instance="low:8080",job="weft"}'
+        values: '536870912+0x20'
+      - series: 'weft_workspace_journal_segment_limit_bytes{instance="growth:8080",job="weft"}'
+        values: '67108864+0x120'
+      - series: 'weft_workspace_journal_archived_bytes{instance="growth:8080",job="weft"}'
+        values: '0 268435456+0x119'
+      - series: 'weft_workspace_journal_volume_available_bytes{instance="growth:8080",job="weft"}'
+        values: '4294967296+0x120'
+      - series: 'weft_workspace_journal_volume_size_bytes{instance="growth:8080",job="weft"}'
+        values: '21474836480+0x120'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: WeftWorkspaceJournalVolumeLow
         exp_alerts:
-          - exp_labels: {instance: "weftd:8080", job: weft, severity: warning}
-            exp_annotations:
-              summary: "Workspace journal segment is at least 90% full"
-              description: "Check rotation and archive capacity. See the workspace journal runbook in docs/operations.md."
-      - eval_time: 1m30s
-        alertname: WeftWorkspaceJournalNearLimit
-        exp_alerts: []
+          - exp_labels: {instance: "low:8080", job: weft, severity: warning}
+            exp_annotations: {summary: "Workspace journal filesystem has low free space"}
+      - eval_time: 11m
+        alertname: WeftWorkspaceJournalArchiveGrowth
+        exp_alerts:
+          - exp_labels: {instance: "growth:8080", job: weft, severity: warning}
+            exp_annotations: {summary: "Workspace journal archive growth threatens filesystem capacity"}
+
+  - name: Collector failures and unavailable monitoring
+    interval: 10s
+    input_series:
+      - series: 'up{instance="down:8080",job="weft"}'
+        values: '0+0x40'
+      - series: 'up{instance="stalled:8080",job="weft"}'
+        values: '1+0x40'
+      - series: 'weft_workspace_journal_collector_heartbeat_timestamp_seconds{instance="stalled:8080",job="weft"}'
+        values: '1+0x40'
+      - series: 'weft_workspace_journal_collector_failure_timestamp_seconds{instance="stalled:8080",job="weft",operation="write"}'
+        values: '0+0x4 50+0x35'
+      - series: 'weft_workspace_journal_collector_failure_timestamp_seconds{instance="stalled:8080",job="weft",operation="rotate"}'
+        values: '0+0x4 50+0x35'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: WeftWorkspaceJournalWriteFailed
+        exp_alerts:
+          - exp_labels: {instance: "stalled:8080", job: weft, operation: write, severity: critical}
+            exp_annotations: {summary: "Workspace journal write failed"}
+          - exp_labels: {instance: "stalled:8080", job: weft, operation: rotate, severity: critical}
+            exp_annotations: {summary: "Workspace journal rotate failed"}
+      - eval_time: 1m20s
+        alertname: WeftWorkspaceJournalCollectorUnavailable
+        exp_alerts:
+          - exp_labels: {instance: "stalled:8080", job: weft, severity: critical}
+            exp_annotations: {summary: "Workspace journal collector heartbeat is missing or stale"}
+      - eval_time: 1m20s
+        alertname: WeftWorkspaceJournalMonitoringUnavailable
+        exp_alerts:
+          - exp_labels: {instance: "down:8080", job: weft, severity: warning}
+            exp_annotations: {summary: "Workspace journal monitoring is unavailable"}
+      - {eval_time: 5m50s, alertname: WeftWorkspaceJournalWriteFailed, exp_alerts: []}
+
+  - name: Scrape target absent
+    interval: 10s
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: WeftWorkspaceJournalMonitoringUnavailable
+        exp_alerts:
+          - exp_labels: {job: weft, severity: warning}
+            exp_annotations: {summary: "Workspace journal monitoring is unavailable"}

@@ -11,7 +11,7 @@ trap 'rm -f "$binary" "$journal"' EXIT
 # /tmp is periodically reset by Docker's entrypoint; keep this test executable
 # outside it. Tests create and clean only their own temporary fixture directory.
 docker compose cp "$binary" sandbox-daemon:/weft-workspace-journal-test
-docker compose exec -T -e WEFT_TEST_KERNEL_JOURNAL=1 -e WEFT_TEST_JOURNAL_EXPORT=/weft-workspace-journal-e2e.jsonl sandbox-daemon /weft-workspace-journal-test -test.v -test.run TestKernelJournalLive
+docker compose exec -T -e WEFT_TEST_KERNEL_JOURNAL=1 -e WEFT_TEST_JOURNAL_EXPORT=/weft-workspace-journal-e2e.jsonl sandbox-daemon /weft-workspace-journal-test -test.v -test.run '^TestKernelJournal(Live|ShutdownFlush)$'
 
 docker compose cp sandbox-daemon:/weft-workspace-journal-e2e.jsonl "$journal"
 (cd web && pnpm exec tsc --project tsconfig.e2e.json && WEFT_WORKSPACE_JOURNAL="$journal" pnpm exec playwright test --config playwright.journal.config.ts)

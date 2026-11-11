@@ -69,7 +69,6 @@ func (i *Importer) Import(ctx context.Context) (err error) {
 			observability.WorkspaceJournalImports.WithLabelValues("error").Inc()
 		}
 	}()
-	observability.WorkspaceJournalSegmentLimitBytes.Set(float64(MaxJournalBytes))
 	key := fmt.Sprintf("workspace-journal/cursor/%x", sha256.Sum256([]byte(i.Path)))
 	saved, revision, err := i.loadCursor(ctx, key)
 	if err != nil {
@@ -84,17 +83,12 @@ func (i *Importer) Import(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	observability.WorkspaceJournalActiveBytes.Set(float64(size))
 	active, err := readSegment(f, size)
 	if err == io.EOF {
 		if saved.JournalID != "" {
 			return fmt.Errorf("journal lost its initial record; refusing cursor reuse")
 		}
-		if err := requireNoArchives(i.Path); err != nil {
-			return err
-		}
-		observability.WorkspaceJournalArchivedBytes.Set(0)
-		return nil
+		return requireNoArchives(i.Path)
 	}
 	if err != nil {
 		return err
@@ -103,11 +97,6 @@ func (i *Importer) Import(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	var archivedBytes int64
-	for _, archived := range chain[:len(chain)-1] {
-		archivedBytes += archived.Bytes
-	}
-	observability.WorkspaceJournalArchivedBytes.Set(float64(archivedBytes))
 	if saved.JournalID == "" {
 		saved.JournalID = chain[0].ID
 	}
@@ -225,7 +214,10 @@ func (i *Importer) importSegment(ctx context.Context, f *os.File, s segment, off
 		// Commit the cursor after persisting all scopes. Stable event IDs make
 		// replays idempotent if the setting write fails.
 		offset += int64(len(line))
-		data, _ := json.Marshal(cursor{Offset: offset, JournalID: s.ID})
+		data, err := json.Marshal(cursor{Offset: offset, JournalID: s.ID})
+		if err != nil {
+			return fmt.Errorf("encode workspace journal cursor: %w", err)
+		}
 		progress.revision, err = i.Store.PutSetting(ctx, progress.key, data, progress.revision, "workspace-journal")
 		if err != nil {
 			return fmt.Errorf("advance workspace journal cursor: %w", err)

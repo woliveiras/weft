@@ -146,8 +146,8 @@ setting or file that implements it.
       (`traceSampleRatio` 0.1–0.2) at high volume — parent-based sampling keeps
       whole agent chains together.
 - [ ] Load `deploy/observability/alerts.yaml` (dead letters, growing backlog,
-      turn failure rate, waiting approvals, LLM errors and journal segment
-      capacity) into Prometheus / Alertmanager and route them.
+      turn failure rate, waiting approvals, LLM errors, and journal filesystem
+      and collector health) into Prometheus / Alertmanager and route them.
 - [ ] Define SLOs, e.g. *95 % of messages start processing within 2 min*
       (`weft_message_queue_latency_seconds`), *turn success ≥ 99 %*
       (`weft_executions_total`), *API availability ≥ 99.9 %*.

@@ -143,6 +143,88 @@ func TestWriterRefusesConcurrentOpen(t *testing.T) {
 	}
 }
 
+func TestWriterRefusesMissingOrCorruptActiveSegment(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		active []byte
+		want   string
+	}{
+		{"missing", nil, "no active segment identity"},
+		{"empty", []byte{}, "no active segment identity"},
+		{"corrupt", []byte("{broken}\n"), "invalid journal identity"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "events.jsonl")
+			old := recordLine(t, Record{ID: "old", Time: time.Now().UTC(), Gap: "collector_started"})
+			archive := archivePath(path, "old")
+			if err := os.WriteFile(archive, old, 0640); err != nil {
+				t.Fatal(err)
+			}
+			stage := filepath.Join(dir, stagePrefix(path)+"123")
+			if err := os.WriteFile(stage, []byte("staged evidence"), 0640); err != nil {
+				t.Fatal(err)
+			}
+			if tc.active != nil {
+				if err := os.WriteFile(path, tc.active, 0640); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if w, err := OpenWriter(path); err == nil {
+				w.Close()
+				t.Fatal("opened damaged journal")
+			} else if !strings.Contains(err.Error(), tc.want) {
+				t.Fatal(err)
+			}
+			got, err := os.ReadFile(path)
+			if tc.active == nil && !errors.Is(err, os.ErrNotExist) ||
+				tc.active != nil && (err != nil || !bytes.Equal(got, tc.active)) {
+				t.Fatalf("active segment changed: %q, %v", got, err)
+			}
+			if got, err := os.ReadFile(archive); err != nil || !bytes.Equal(got, old) {
+				t.Fatalf("archive changed: %v", err)
+			}
+			if _, err := os.Stat(stage); err != nil {
+				t.Fatalf("staged evidence removed during failed open: %v", err)
+			}
+		})
+	}
+}
+
+func TestWriterRemovesOnlyOrphanStagesForItsJournal(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events.jsonl")
+	w, err := OpenWriter(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Append(Record{Gap: "collector_started"}); err != nil {
+		w.Close()
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stage := filepath.Join(dir, stagePrefix(path)+"123")
+	other := filepath.Join(dir, ".other.jsonl.next-123")
+	for _, name := range []string{stage, other} {
+		if err := os.WriteFile(name, []byte("fixture"), 0640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w, err = OpenWriter(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	if _, err := os.Stat(stage); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("orphan stage was not cleaned: %v", err)
+	}
+	if _, err := os.Stat(other); err != nil {
+		t.Fatalf("unrelated stage was removed: %v", err)
+	}
+}
+
 func recordLine(t *testing.T, r Record) []byte {
 	t.Helper()
 	line, err := encodeRecord(r)
