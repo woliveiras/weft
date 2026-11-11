@@ -317,10 +317,11 @@ Gaps between the console and this guide. Tokens live at the top of
 - [x] Separate status colours from brand colours (§4.4).
 - [x] Add the mark and wordmark to the app shell.
 - [x] Thread motif on graph edges: flowing and selected channels are amber (§8).
-- [ ] Thread motif on active navigation (§8).
-- [ ] Self-host Inter and JetBrains Mono (needs the font files added to the repo).
-- [ ] Apply the type scale (§5), spacing and radius tokens (§7) across components.
-- [ ] Adopt one icon set (§6).
+- [x] Thread motif on active navigation (§8).
+- [x] Self-host Inter and JetBrains Mono (`@fontsource` packages, bundled by Vite).
+- [x] Apply the type scale (§5), spacing and radius tokens (§7): `web/src/design-system.css`.
+- [x] Adopt one icon set (§6): Lucide, through the `Icon` component in `web/src/components/common.tsx`.
 - [ ] Redesign page layouts (app shell, lists, forms, graph editor) on top of the tokens.
-- [ ] Add visual regression screenshots (Playwright) for light and dark themes
-      on the main destinations.
+- [x] Add visual regression screenshots (Playwright) for light and dark themes
+      on the main destinations: `pnpm run test:e2e:visual`; regenerate baselines
+      with `--update-snapshots` in the Linux Playwright container and review them.

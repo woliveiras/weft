@@ -14,7 +14,8 @@
     "e2e-provider-management",
     "playwright.provider-management.config.ts",
     "e2e-native",
-    "playwright.native.config.ts"
+    "playwright.native.config.ts",
+    "playwright.visual.config.ts"
   ],
   "compilerOptions": {
     "types": [
