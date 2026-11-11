@@ -147,8 +147,14 @@ Branch `local-first-ollama`, um commit por tarefa (autor woliveiras).
     limitado;
   - o Ollama conta o prompt inteiro mesmo quando ele vem do cache.
 
-  Próximo passo: medir com um modelo de 7–8B, cujo download depende de
-  aprovação.
+  Em 2026-11-11 a avaliação passou a usar também modelos em nuvem
+  (`make eval-cloud`, Gemini via endpoint compatível com OpenAI, camada
+  gratuita). Com o `gemini-3.5-flash`:
+  - agente único 4/4: 49 chamadas, 0 erros, cerca de 2 min;
+  - Software Factory v2 4/4: 105 chamadas, 0 erros, cerca de 6 min e 2,7
+    vezes mais tokens.
+
+  Próximo passo: casos mais difíceis, porque a suíte chegou ao teto.
 - Fase 5: jornada nativa opcional com Ollama real passou (plugin, provider,
   tarefa com ferramenta, custo local). Instalação limpa via Compose e aceite
   final dependem de baixar imagens (aprovação).

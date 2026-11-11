@@ -154,6 +154,29 @@ the development Mac on 2026-11-10). Same cases, 32k window.
 | NAT-08 small-model guidance (`EVAL_GUIDANCE=small`) | 0/4 | 45 | 20 | 111 247 / 6 572 | 1 min 24 s | holds; turns keep going instead of stopping, but the model guesses file names. A first version with concrete example paths solved 1/4, only because one example named the fixture's own file: examples now use placeholders. Off by default |
 | NAT-10 Software Factory v2 (`EVAL_WORKFLOW=factory`) | 0/4 | 6 | 5 | 23 511 / 2 869 | 1 min 44 s | holds; the 3B agents finish their turns without emitting the next message (`task.ready`, `code.ready`), so every run stops after the planner or implementer. Needs a stronger local model |
 
+### Cloud baseline (2026-11-11, `gemini-3.5-flash`)
+
+Measured with `make eval-cloud` on the Gemini API free tier, one request at a
+time, with every NAT step in place:
+
+| Workflow | Solved | Tool calls | Tool errors | Tokens in / out | Time |
+|---|---|---|---|---|---|
+| Single agent | 4/4 | 49 | 0 | 315 085 / 6 985 | 2 min 4 s |
+| Software Factory v2 | 4/4 | 105 | 0 | 855 075 / 30 519 | 6 min 2 s |
+
+What it shows:
+- The native runtime, the tools and the factory work end to end with a
+  capable model. Getting there needed two provider fixes: Gemini's thought
+  signatures are now sent back with tool calls, and its hidden thinking
+  tokens are counted as output.
+- On these four small cases the factory costs about 2.7 times the tokens and
+  3 times the time for the same result. Its review and verification steps can
+  only pay off on harder tasks.
+- The suite is now at its ceiling (4/4), so "improves or holds" can no longer
+  show an improvement. The next lever is harder cases, such as multi-package
+  changes, a failing check found only by the verifier, or ambiguous issues,
+  so that both models and workflows separate again.
+
 ## Turn context management (NAT-02)
 
 `runtime/native/context.go` budgets every model call of a native turn
