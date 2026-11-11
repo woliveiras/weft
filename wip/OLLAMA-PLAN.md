@@ -166,6 +166,8 @@ Branch `local-first-ollama`, um commit por tarefa (autor woliveiras).
   the existing cursor. Both services stayed healthy with zero restarts over
   two minutes of monitoring, and local Prometheus loaded the alert. A dedicated
   workspace filesystem is tracked with PROD-08.
+  Follow-up checks qualified cursor-gated pruning and alerts based on filesystem
+  capacity and collector health. They ran against disposable journals.
 
 Como rodar os checks neste ambiente (sem Go/Node no host):
 - Go: `./scripts/go.sh test ./...` (Docker). Falhas pré-existentes:

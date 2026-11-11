@@ -534,8 +534,9 @@ Workspace process and transient-file history uses a private `workspace-journal`
 volume, read-only in weftd and absent from agent sandboxes. The collector
 continues while weftd is offline. It records unresolved-path gaps in 10-second
 windows with counts and timestamps, and records every queue overflow immediately.
-It rotates at the 64 MiB segment limit and keeps all linked archives. On restart
-weftd drains the saved segment before advancing to its successor. A missing or
-damaged archive stops import, and a collector failure stops the dedicated daemon.
+It rotates at the 64 MiB segment limit. Approved maintenance can prune fully
+imported archives behind a verified retention anchor. On restart weftd drains
+the saved segment before advancing to its successor. A missing or damaged
+retained archive stops import, and a collector failure stops the dedicated daemon.
 See the [kernel journal contract](tool-permissions.md#kernel-journal-in-the-dedicated-linux-daemon)
 and the [workspace journal runbook](operations.md#workspace-journal).

@@ -11,7 +11,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -44,6 +43,7 @@ type Importer struct {
 	Store  storage.Store
 	Path   string
 	Scopes func(context.Context) ([]Scope, error)
+	cache  chainCache
 }
 
 type cursor struct {
@@ -59,6 +59,10 @@ type importProgress struct {
 
 const importBatchSize = 1000
 
+func cursorKey(path string) string {
+	return fmt.Sprintf("workspace-journal/cursor/%x", sha256.Sum256([]byte(path)))
+}
+
 func (i *Importer) Import(ctx context.Context) (err error) {
 	started := time.Now()
 	defer func() {
@@ -69,8 +73,8 @@ func (i *Importer) Import(ctx context.Context) (err error) {
 			observability.WorkspaceJournalImports.WithLabelValues("error").Inc()
 		}
 	}()
-	key := fmt.Sprintf("workspace-journal/cursor/%x", sha256.Sum256([]byte(i.Path)))
-	saved, revision, err := i.loadCursor(ctx, key)
+	key := cursorKey(i.Path)
+	saved, revision, err := loadCursor(ctx, i.Store, key)
 	if err != nil {
 		return err
 	}
@@ -93,14 +97,21 @@ func (i *Importer) Import(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	chain, err := readChain(ctx, i.Path, active)
+	anchor, err := readAnchor(i.Path)
 	if err != nil {
+		return err
+	}
+	chain, err := i.cache.load(ctx, i.Path, active, anchor)
+	if err != nil {
+		return err
+	}
+	if err := anchor.validateCursor(chain, saved, revision); err != nil {
 		return err
 	}
 	if saved.JournalID == "" {
 		saved.JournalID = chain[0].ID
 	}
-	start := slices.IndexFunc(chain, func(s segment) bool { return s.ID == saved.JournalID })
+	start := segmentIndex(chain, saved.JournalID)
 	if start < 0 {
 		return fmt.Errorf("journal identity changed; refusing cursor reuse: segment %q is absent from the active chain", saved.JournalID)
 	}
@@ -127,8 +138,8 @@ func (i *Importer) Import(ctx context.Context) (err error) {
 	return nil
 }
 
-func (i *Importer) loadCursor(ctx context.Context, key string) (cursor, int64, error) {
-	setting, err := i.Store.GetSetting(ctx, key)
+func loadCursor(ctx context.Context, store storage.Store, key string) (cursor, int64, error) {
+	setting, err := store.GetSetting(ctx, key)
 	if errors.Is(err, storage.ErrNotFound) {
 		return cursor{}, 0, nil
 	}
@@ -164,8 +175,8 @@ func sameLink(a, b *segmentRef) bool {
 	return *a == *b
 }
 
-func (i *Importer) importSegment(ctx context.Context, f *os.File, s segment, offset int64, archived bool, scopes []Scope, progress *importProgress) error {
-	if offset > s.Bytes {
+func validateCursorOffset(f *os.File, size, offset int64) error {
+	if offset < 0 || offset > size {
 		return fmt.Errorf("workspace journal was truncated; refusing cursor reset")
 	}
 	if offset > 0 {
@@ -176,6 +187,13 @@ func (i *Importer) importSegment(ctx context.Context, f *os.File, s segment, off
 		if last[0] != '\n' {
 			return fmt.Errorf("workspace journal cursor is not at a record boundary")
 		}
+	}
+	return nil
+}
+
+func (i *Importer) importSegment(ctx context.Context, f *os.File, s segment, offset int64, archived bool, scopes []Scope, progress *importProgress) error {
+	if err := validateCursorOffset(f, s.Bytes, offset); err != nil {
+		return err
 	}
 	if offset == s.Bytes {
 		return nil

@@ -11,7 +11,7 @@ import (
 func TestReadChainRejectsCycle(t *testing.T) {
 	ref := segmentRef{ID: "loop", Bytes: 128}
 	active := segment{segmentRef: ref, previous: &ref}
-	if _, err := readChain(context.Background(), "events", active); err == nil || !strings.Contains(err.Error(), "chain has a cycle") {
+	if _, err := readChain(context.Background(), "events", active, nil); err == nil || !strings.Contains(err.Error(), "chain has a cycle") {
 		t.Fatalf("cyclic chain: %v", err)
 	}
 }

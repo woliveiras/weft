@@ -31,6 +31,20 @@ func Types() []string { return []string{"fs", "sqlite", "postgres"} }
 
 // Open opens the configured store and runs its migrations.
 func Open(ctx context.Context, cfg Config) (storage.Store, error) {
+	s, err := OpenWithoutMigrations(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Migrate(ctx); err != nil {
+		s.Close()
+		return nil, fmt.Errorf("stores: migrate %s: %w", s.Name(), err)
+	}
+	return s, nil
+}
+
+// OpenWithoutMigrations connects maintenance commands to the configured store
+// without applying schema changes.
+func OpenWithoutMigrations(ctx context.Context, cfg Config) (storage.Store, error) {
 	dir := cfg.Dir
 	if dir == "" {
 		dir = "data"
@@ -64,10 +78,6 @@ func Open(ctx context.Context, cfg Config) (storage.Store, error) {
 	}
 	if err != nil {
 		return nil, err
-	}
-	if err := s.Migrate(ctx); err != nil {
-		s.Close()
-		return nil, fmt.Errorf("stores: migrate %s: %w", s.Name(), err)
 	}
 	return s, nil
 }

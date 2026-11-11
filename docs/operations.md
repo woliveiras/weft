@@ -82,7 +82,7 @@ a complete Weft backup.
 | `weftd-data` | Generated installation encryption key; local state when configured | Protect separately from the database backup. An external key must be retained in the secret store instead. |
 | `nats-data` | JetStream messages and consumer acknowledgement state | Use a broker-supported backup or a consistent stopped-volume snapshot. Do not infer exactly-once delivery from a restore. |
 | `workspaces` | Repositories, uncommitted edits and isolated worktrees | Preserve ownership, permissions and hidden Git metadata. A Git remote does not preserve uncommitted work. |
-| `workspace-journal` | Process evidence and replay history | Back up the active file and every linked archive with the workspace snapshot and the store containing the import cursor. Lost kernel events cannot be reconstructed. |
+| `workspace-journal` | Process evidence and replay history | Back up the active file, retained archives and retention anchor with the workspace snapshot and the store containing the import cursor. Lost kernel events cannot be reconstructed. |
 | `sandbox-daemon-data` | Suspended containers, images and shared caches | Preserve if container-local files must survive. Treat Docker state as version-sensitive, not portable workspace backup. |
 | `sandbox-certs-ca`, `sandbox-certs-server`, `sandbox-certs-client` | Mutual TLS identity for the dedicated daemon | Keep as a matching protected set; do not restore only one side. |
 | Configuration and external secrets | Database/runtime authentication, provider keys, OAuth clients, public callback URL | Retain out of band with access controls and the required historical keys. |
@@ -150,14 +150,60 @@ inode. On reopen the collector validates the published chain, removes
 orphaned staging files and reuses the archive link. If the published chain
 cannot be validated, it preserves the staging files for recovery.
 
-Keep all linked segments for the lifetime of the active chain. Provision disk
-space for archive growth and monitor available bytes and inodes on the volume.
-To retire a chain, quiesce work and stop the collector, let weftd import through
-the last complete record, and confirm the cursor has reached that byte offset.
-Stop weftd and take a matching backup of the chain and the cursor. A planned
-cutover to a new filename in both services starts a new chain with a startup
-coverage gap. Retain the retired chain with the backup for the installation's
-audit retention period.
+### Prune imported archives
+
+During approved maintenance, keep the four newest archived segments by
+default, plus the active segment and any archives still needed by the
+importer. With a caught-up importer this keeps up to 256 MiB of archives
+after each prune. The journal can grow beyond that between maintenance
+windows or when the importer falls behind. Use `--journal-keep-archives N`
+to set the minimum number of newest archives retained. Preserve exported
+backups according to the installation's audit policy.
+
+1. Quiesce sandbox work and stop `sandbox-daemon` so the maintenance command
+   can acquire the writer lock. Let the importer catch up. Back up the journal
+   directory and the store containing the cursor as a matching recovery set.
+   A filesystem-backed store also requires stopping its controller before
+   opening it from the maintenance command.
+2. Run `weftd --prune-workspace-journal` with the installation's config and
+   original `WEFT_WORKSPACE_JOURNAL` path. It prints the eligible filenames
+   and byte count. Eligibility requires a persisted cursor in a later
+   segment. A cursor at the exact end of an archive still needs that archive
+   until it commits the successor link.
+3. After reviewing and authorizing the listed removal, repeat with
+   `--apply-journal-prune`. The command reads the cursor from the configured
+   store and revalidates the chain under the writer lock. It syncs
+   `events.jsonl.anchor.json` before unlinking each eligible segment. The
+   anchor identifies the oldest retained segment, its immediate predecessor
+   and the cursor checkpoint. Retrying an interrupted prune finishes a
+   committed unlink before advancing the anchor again.
+4. Restart the collector and check daemon health and import progress.
+   Restore the anchor, retained segments and cursor together. A missing or
+   mismatched anchor, missing retained segment or cursor behind the checkpoint
+   stops import. The importer caches validated archive links and checks file
+   identities and lengths on subsequent passes.
+
+For Compose, use a maintenance override file for the one-off command. The
+normal weftd service mounts the journal read-only.
+
+```yaml
+services:
+  weftd:
+    user: "0:10001"
+    volumes:
+      - workspace-journal:/var/lib/weft/journal:rw
+```
+
+```sh
+docker compose stop sandbox-daemon
+docker compose -f docker-compose.yml -f journal-maintenance.yaml \
+  run --rm --no-deps --pull never weftd \
+  --config /etc/weft/weft.yaml --prune-workspace-journal
+```
+
+Use the same override and flags for the approved apply, adding
+`--apply-journal-prune`. Start the collector with the installation's normal
+Compose file.
 
 ### Journal alerts
 

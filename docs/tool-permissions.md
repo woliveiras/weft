@@ -338,11 +338,18 @@ available for those configurations, with its existing limits.
 A journal segment is capped at 64 MiB and each record at 60 KiB. When the
 next record would exceed the segment limit, the collector archives the current
 segment and publishes a successor at the configured path. The first record
-links the predecessor by identity and byte length. The collector retains every
-archive in the active chain indefinitely. Disk, write and rotation failures
-stop capture, and daemon supervision stops dockerd. The importer waits for a
-partial final record in the active segment. An incomplete tail prevents
-collector restart and must be preserved for recovery.
+links the predecessor by identity and byte length. Approved maintenance can
+prune archived segments strictly before the durable cursor. The default
+policy retains the four newest archives and every segment the importer still
+needs. The maintenance command persists a retention anchor before unlinking
+each archive. Missing retained segments or a cursor behind the anchor stop
+import. See the [prune procedure](operations.md#prune-imported-archives).
+
+Disk, write and rotation failures stop capture, and daemon supervision stops
+dockerd. The importer waits for a partial final record in the active segment.
+An incomplete tail prevents collector restart and must be preserved for
+recovery. The existing metrics endpoint reads the collector heartbeat and
+failure timestamps from the journal mount independently of import.
 
 Existing installations require rebuilding/restarting the sandbox-daemon image
 and adding the journal volume to weftd. Changing source files alone does not

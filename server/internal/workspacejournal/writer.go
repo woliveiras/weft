@@ -88,7 +88,11 @@ func openWriter(path string, maxBytes int64) (_ *Writer, err error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := readChain(context.Background(), path, s); err != nil {
+	anchor, err := readAnchor(path)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := readChain(context.Background(), path, s, anchor); err != nil {
 		return nil, err
 	}
 	if err := cleanStagedSegments(path); err != nil {

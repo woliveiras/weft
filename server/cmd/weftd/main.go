@@ -7,7 +7,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/woliveiras/weft/server/internal/localinstall"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -16,6 +15,8 @@ import (
 	"github.com/woliveiras/weft/server/internal/api"
 	"github.com/woliveiras/weft/server/internal/app"
 	"github.com/woliveiras/weft/server/internal/config"
+	"github.com/woliveiras/weft/server/internal/localinstall"
+	"github.com/woliveiras/weft/server/internal/workspacejournal"
 )
 
 func main() {
@@ -29,7 +30,18 @@ func main() {
 	port := flag.Int("port", 8787, "native init: loopback console port")
 	backupLocal := flag.String("backup-local", "", "write a private offline native profile archive to a new path")
 	restoreLocal := flag.String("restore-local", "", "restore a trusted native backup to its original, absent data directory")
+	pruneJournal := flag.Bool("prune-workspace-journal", false, "preview pruning fully imported workspace journal archives")
+	applyPrune := flag.Bool("apply-journal-prune", false, "apply the workspace journal prune with the collector stopped")
+	keepArchives := flag.Int("journal-keep-archives", workspacejournal.DefaultKeepArchives, "minimum number of newest workspace journal archives to retain when pruning")
 	flag.Parse()
+	if *pruneJournal && (*local || *initLocal || *backupLocal != "" || *restoreLocal != "" || *version) {
+		fmt.Fprintln(os.Stderr, "--prune-workspace-journal cannot be combined with another action")
+		os.Exit(2)
+	}
+	if *applyPrune && !*pruneJournal {
+		fmt.Fprintln(os.Stderr, "--apply-journal-prune requires --prune-workspace-journal")
+		os.Exit(2)
+	}
 	if *version {
 		fmt.Println(api.Version)
 		return
@@ -130,6 +142,13 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if *pruneJournal {
+		if err := runJournalPrune(ctx, cfg, os.Getenv("WEFT_WORKSPACE_JOURNAL"), *keepArchives, *applyPrune, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "workspace journal prune:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	a, err := app.New(ctx, cfg)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "startup:", err)
