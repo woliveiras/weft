@@ -1,0 +1,58 @@
+package conformance_test
+
+import (
+	"os"
+	"testing"
+
+	"github.com/woliveiras/weft/server/internal/llm"
+	"github.com/woliveiras/weft/server/internal/llm/conformance"
+	_ "github.com/woliveiras/weft/server/internal/llm/providers"
+)
+
+// wires maps every built-in HTTP plugin to its protocol. A new plugin must
+// be added here, so it cannot ship without passing the suite.
+var wires = map[string]conformance.Wire{
+	"openai": conformance.OpenAI, "vllm": conformance.OpenAI, "lmstudio": conformance.OpenAI,
+	"openrouter": conformance.OpenAI, "huggingface": conformance.OpenAI, "tgi": conformance.OpenAI,
+	"anthropic": conformance.Anthropic,
+	"ollama":    conformance.Ollama,
+}
+
+func TestBuiltinPluginsConform(t *testing.T) {
+	for _, m := range llm.Plugins() {
+		if m.ID == "mock" {
+			continue // no wire protocol; covered by its own tests
+		}
+		w, ok := wires[m.ID]
+		if !ok {
+			t.Errorf("plugin %q has no conformance wire", m.ID)
+			continue
+		}
+		t.Run(m.ID, func(t *testing.T) {
+			t.Parallel()
+			conformance.Run(t, w, func(c llm.ProviderConfig) (llm.Provider, error) {
+				c.Type = m.ID
+				return llm.New(c)
+			})
+		})
+	}
+}
+
+// TestOllamaLive runs the live subset against a real Ollama when
+// WEFT_TEST_OLLAMA_URL is set (model: WEFT_TEST_OLLAMA_MODEL, default
+// llama3.2). It is skipped otherwise, so CI stays deterministic.
+func TestOllamaLive(t *testing.T) {
+	url := os.Getenv("WEFT_TEST_OLLAMA_URL")
+	if url == "" {
+		t.Skip("set WEFT_TEST_OLLAMA_URL to run against a real Ollama")
+	}
+	model := os.Getenv("WEFT_TEST_OLLAMA_MODEL")
+	if model == "" {
+		model = "llama3.2:latest"
+	}
+	p, err := llm.New(llm.ProviderConfig{Name: "live-ollama", Type: "ollama", BaseURL: url, DefaultModel: model, TimeoutSec: 600})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conformance.RunLive(t, p, model)
+}

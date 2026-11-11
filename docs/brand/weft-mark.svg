@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Weft">
+  <style>@media (prefers-color-scheme: dark) { .warp { stroke: #5DCAA5 } .weft { stroke: #EF9F27 } }</style>
+  <defs>
+    <mask id="m-w" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff"/>
+      <rect x="9" y="24.6" width="12.5" height="10.8" fill="#000"/>
+      <rect x="42.5" y="24.6" width="12.5" height="10.8" fill="#000"/>
+    </mask>
+    <mask id="m-t" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff"/>
+      <polyline points="21,48 32,24 43,48" fill="none" stroke="#000" stroke-width="11.5" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="6.5">
+    <polyline class="warp" points="10,14 21,48 32,24 43,48 54,14" stroke="#0F6E56" mask="url(#m-w)"/>
+    <line class="weft" x1="4" y1="30" x2="60" y2="30" stroke="#BA7517" mask="url(#m-t)"/>
+  </g>
+</svg>

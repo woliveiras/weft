@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: weft-config
+data:
+  weft.yaml: |
+    server:
+      addr: ":8080"
+      maxBodyBytes: 8388608
+      # internalUrl is set per pod from POD_IP (WEFT_INTERNAL_URL)
+    storage:
+      type: postgres            # DSN from the secret (WEFT_STORAGE_DSN)
+    queue:
+      type: nats
+      url: nats://weft-nats:4222
+      options: {replicas: "1"}  # set "3" with a 3-node NATS cluster
+    workspaces:
+      root: /var/lib/weft/workspaces
+    llm:
+      # Providers are inference plugins enabled and configured in the console.
+      devMock: false
+    secrets:
+      # Every replica must share one key: it comes from the Secret
+      # (WEFT_SECRET_KEY); never generate one per pod.
+      keyEnv: WEFT_SECRET_KEY
+      keyFile: ""
+      generateKeyFile: false
+      previousKeysEnv: WEFT_SECRET_KEY_PREVIOUS
+    auth:
+      tokens: []                # admin token from WEFT_ADMIN_TOKEN
+      # oidc: {issuer: https://sso.example.com/realms/weft, audience: weft, roleClaim: weft_role}
+    runtimes:
+      sharedSecretEnv: WEFT_RUNTIME_SECRET
+    observability:
+      serviceName: weft
+      logFormat: json
+      logLevel: info
+      traceSampleRatio: 0.2
+      # otlpEndpoint: http://otel-collector.observability.svc:4318
+    engine:
+      leaseTTL: 20s
+      reconcileInterval: 5s
+      retryBackoff: 2s
+      maxConcurrentTurns: 64

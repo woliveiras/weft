@@ -1,0 +1,76 @@
+# Default deny in the namespace, then open exactly the paths Weft needs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# Everyone may resolve DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: allow-dns}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to: [{namespaceSelector: {}, podSelector: {matchLabels: {k8s-app: kube-dns}}}]
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+# Agents: reachable only from weftd; may only call weftd's callback API.
+# They need nothing else - models and tools are reached through the platform.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: agents}
+spec:
+  podSelector: {matchLabels: {app: weft-agents}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: weftd}}}]
+      ports: [{port: 8000}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: weftd}}}]
+      ports: [{port: 8080}]
+---
+# weftd: API from the ingress controller and monitoring, callbacks from
+# agents; egress to NATS, PostgreSQL, agents, telemetry and model providers.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: weftd}
+spec:
+  podSelector: {matchLabels: {app: weftd}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: weft-agents}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}
+      ports: [{port: 8080}]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: weft-nats}}}]
+      ports: [{port: 4222}]
+    - to: [{podSelector: {matchLabels: {app: weft-agents}}}]
+      ports: [{port: 8000}]
+    # PostgreSQL (adjust selector to your operator's labels)
+    - to: [{podSelector: {matchLabels: {cnpg.io/cluster: weft-postgres}}}]
+      ports: [{port: 5432}]
+    # OTLP collector and in-cluster model servers
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: observability}}}]
+      ports: [{port: 4318}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: models}}}]
+    # External model APIs and http.fetch: restrict with an egress gateway or
+    # FQDN policy (Cilium/Calico) in production; HTTPS only here.
+    - to: [{ipBlock: {cidr: 0.0.0.0/0, except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]}}]
+      ports: [{port: 443}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: nats}
+spec:
+  podSelector: {matchLabels: {app: weft-nats}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{podSelector: {matchLabels: {app: weftd}}}]
+      ports: [{port: 4222}]
+    - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}}]
+      ports: [{port: 8222}]

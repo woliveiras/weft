@@ -1,0 +1,61 @@
+# Example Python agents (Runtime Protocol v1). The process is stateless per
+# turn, so it scales horizontally behind a Service. Graph nodes point at it
+# with runtime.endpoint: http://weft-agents:8000
+apiVersion: v1
+kind: Service
+metadata:
+  name: weft-agents
+spec:
+  selector: {app: weft-agents}
+  ports: [{name: http, port: 8000, targetPort: 8000}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weft-agents
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: weft-agents}}
+  template:
+    metadata: {labels: {app: weft-agents}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: agents
+          image: weft/agents
+          ports: [{name: http, containerPort: 8000}]
+          env:
+            - {name: PORT, value: "8000"}
+            - {name: WEFT_RUNTIME_SECRET, valueFrom: {secretKeyRef: {name: weft, key: runtime-secret}}}
+          readinessProbe: {httpGet: {path: /v1/health, port: http}}
+          livenessProbe: {httpGet: {path: /v1/health, port: http}, initialDelaySeconds: 10}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {}}]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: weft-agents
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: weft-agents}
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: weft-agents
+spec:
+  minAvailable: 1
+  selector: {matchLabels: {app: weft-agents}}

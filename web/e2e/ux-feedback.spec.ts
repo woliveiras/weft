@@ -1,0 +1,68 @@
+import {test,expect} from '@playwright/test';
+const headers={Authorization:'Bearer e2e-admin-token'};
+test('graph cards open from whitespace and agent links preserve drafts and action boundaries',async({page})=>{
+ const id='ux-card';
+ expect((await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id,name:'UX card'},spec:{nodes:[{id:'reader',runtime:{kind:'echo'},loop:{mode:'once'}}]}}})).status()).toBe(201);
+ await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+ await page.goto('/#/graphs');
+ const card=page.locator('.graph-card').filter({has:page.getByRole('button',{name:'UX card',exact:true})});
+ await page.screenshot({path:'/tmp/weft-ux-graphs.png',fullPage:true});
+ const bounds=await card.boundingBox();expect(bounds).toBeTruthy();
+ await card.click({position:{x:bounds!.width-15,y:bounds!.height-15}});
+ await expect(page).toHaveURL(/g\/ux-card\/canvas/);
+ await page.goto('/#/graphs');
+ await card.getByRole('button',{name:'Configure reader',exact:true}).click();
+ await expect(page).toHaveURL(/agent\?agent=reader/);
+ const name=page.getByRole('region',{name:'Agent configuration',exact:true}).getByLabel('Name',{exact:true});
+ await name.fill('Unsaved reader');
+ await page.getByRole('button',{name:'Workflows',exact:true}).click();
+ await card.getByRole('button',{name:'Configure reader',exact:true}).click();
+ await expect(name).toHaveValue('Unsaved reader');
+ await page.getByRole('button',{name:'Workflows',exact:true}).click();
+ await card.getByRole('button',{name:'Start',exact:true}).click();
+ await expect(page).toHaveURL(/#\/graphs$/);
+ await card.getByRole('button',{name:'UX card',exact:true}).focus();
+ await page.keyboard.press('Enter');await expect(page).toHaveURL(/g\/ux-card\/canvas/);
+});
+
+test('automatic connection discovery stays separate from optional agent execution and preserves return context',async({page})=>{
+ await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+ await page.goto('/#/connections/new');
+ await page.getByLabel('Connection ID',{exact:true}).fill('ux-discovery');
+ await page.getByLabel('Connection name',{exact:true}).fill('UX discovery');
+ await page.getByLabel('MCP endpoint',{exact:true}).fill('https://mcp.fixture.invalid/mcp');
+ await page.getByLabel('Bearer token',{exact:true}).fill('fixture-mcp-token');
+ await page.getByRole('button',{name:'Save MCP connection',exact:true}).click();
+ await expect(page.getByRole('region',{name:'Connection readiness'})).toContainText('Grant access to agents');
+ await expect(page.getByRole('region',{name:'Connection agent grants'})).toContainText('No saved agent grants');
+ await page.getByRole('link',{name:'View discovered tools',exact:true}).click();
+ await expect(page.getByText('mcp.ux-discovery.search',{exact:true})).toBeVisible();
+ expect((await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id:'ux-origin',name:'UX origin'},spec:{nodes:[{id:'reader',runtime:{kind:'echo'},tools:[{name:'mcp.ux-discovery.search'}]}]}}})).status()).toBe(201);
+ await page.getByRole('link',{name:'Overview',exact:true}).click();
+ await page.getByRole('region',{name:'Connection agent grants'}).getByRole('link',{name:'reader',exact:true}).click();
+ await expect(page.getByRole('complementary',{name:'Connection context'})).toContainText('UX origin');
+ await page.getByRole('tab',{name:'Runs',exact:true}).click();await page.reload();
+ await page.getByRole('link',{name:'Back to connection ux-discovery',exact:true}).click();
+ await expect(page).toHaveURL(/connections\/c\/ux-discovery\/overview$/);
+ const graph=await (await page.request.get('/api/v1/graphs/ux-origin',{headers})).json();
+ expect(graph.graph.spec.nodes[0].tools).toEqual([{name:'mcp.ux-discovery.search'}]);
+ expect((await (await page.request.get('/api/v1/graphs/ux-origin/executions',{headers})).json())).toHaveLength(0);
+});
+
+test('failed automatic discovery preserves the connection and supports retry',async({page})=>{
+ await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+ await page.goto('/#/connections/new');
+ await page.getByLabel('Connection ID',{exact:true}).fill('ux-fail');
+ await page.getByLabel('Connection name',{exact:true}).fill('UX failure');
+ await page.getByLabel('MCP endpoint',{exact:true}).fill('https://unknown.fixture.invalid/mcp');
+ await page.getByRole('button',{name:'Save MCP connection',exact:true}).click();
+ await expect(page).toHaveURL(/connections\/c\/ux-fail\/overview$/);
+ await expect(page.getByRole('alert')).toContainText('Discovery failed');
+ await expect(page.getByRole('button',{name:'Test UX failure'})).toBeEnabled();
+ const saved=await page.request.get('/api/v1/mcp/connections/ux-fail',{headers});expect(saved.ok()).toBeTruthy();
+ await page.getByRole('link',{name:'Settings',exact:true}).click();await page.getByRole('button',{name:'Edit UX failure'}).click();
+ await page.getByLabel('MCP endpoint',{exact:true}).fill('https://mcp.fixture.invalid/mcp');
+ await page.getByLabel('Bearer token',{exact:true}).fill('fixture-mcp-token');
+ await page.getByRole('button',{name:'Save MCP connection'}).click();
+ await expect(page.getByRole('region',{name:'Connection readiness'})).toContainText('tools discovered');
+});

@@ -1,0 +1,194 @@
+//go:build !windows
+
+package api_test
+
+import (
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/woliveiras/weft/server/internal/config"
+)
+
+// fakeDaemonCLI answers every docker call successfully and logs it.
+func fakeDaemonCLI(t *testing.T) (bin, log string) {
+	t.Helper()
+	dir := t.TempDir()
+	bin, log = filepath.Join(dir, "docker"), filepath.Join(dir, "calls.log")
+	script := "#!/bin/sh\necho \"$*\" >> " + log + "\ncase \"$1\" in build) cat >/dev/null ;; buildx) [ \"$2\" != build ] || cat >/dev/null ;; version) echo 28.5.2 ;; esac\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin, log
+}
+
+const envGraph = `
+apiVersion: weft.io/v1
+kind: Graph
+metadata: {name: env-demo}
+spec:
+  environment:
+    image: golang:1.26
+    setup: ["go version"]
+    caches: [/home/sandbox/go/pkg/mod]
+  defaults: {runtime: {kind: echo}}
+  nodes:
+    - {id: builder, isolation: {mode: docker}}
+    - {id: other}
+`
+
+type envView struct {
+	Phase         string
+	ReuseDecision string
+	BuildReasons  []string
+	ChangeReasons []string
+	State         string
+	Defined       bool
+	UpToDate      bool
+	Image         string
+	CurrentHash   string
+	Error         string
+}
+
+func TestEnvironmentLifecycleThroughTheAPI(t *testing.T) {
+	bin, log := fakeDaemonCLI(t)
+	srv, _ := setupApp(t, func(c *config.Config) {
+		c.Isolation.Docker.Bin = bin
+		c.Isolation.Docker.Host = "tcp://sandbox-daemon:2376"
+	})
+
+	// Saving warns that the environment is not built yet.
+	var rep struct {
+		Valid    bool
+		Warnings []struct{ Path, Message string }
+	}
+	if c := call(t, srv, "POST", "/api/v1/graphs/validate", viewerTok, "application/yaml", envGraph, &rep); c != 200 || !rep.Valid ||
+		len(rep.Warnings) == 0 || rep.Warnings[0].Path != "spec.environment" {
+		t.Fatalf("validate: %d %+v", c, rep)
+	}
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/yaml", envGraph, nil); c != 201 {
+		t.Fatalf("create: %d", c)
+	}
+	var v envView
+	if c := call(t, srv, "GET", "/api/v1/graphs/env-demo/environment", viewerTok, "", "", &v); c != 200 || v.State != "absent" || !v.Defined || v.CurrentHash == "" {
+		t.Fatalf("initial: %d %+v", c, v)
+	}
+
+	// Agents that need the environment cannot start before it is built.
+	var bad struct {
+		Code    string
+		Error   string
+		Details struct {
+			Errors []struct{ Path, Message string }
+		}
+	}
+	if c := call(t, srv, "POST", "/api/v1/graphs/env-demo/start", operatorTok, "", "", &bad); c != 422 ||
+		bad.Details.Errors[0].Path != "spec.environment" || !strings.Contains(bad.Details.Errors[0].Message, "not been built yet") || !strings.HasSuffix(bad.Details.Errors[0].Message, "(needed by builder)") {
+		t.Fatalf("start before build: %d %+v", c, bad)
+	}
+	// A node that does not use it can still start on its own.
+	if c := call(t, srv, "POST", "/api/v1/graphs/env-demo/nodes/other/start", operatorTok, "", "", nil); c != 200 {
+		t.Fatalf("start unrelated node: %d", c)
+	}
+	call(t, srv, "POST", "/api/v1/graphs/env-demo/stop", operatorTok, "", "", nil)
+
+	// Roles: viewers cannot build, operators can.
+	if c := call(t, srv, "POST", "/api/v1/graphs/env-demo/environment/build", viewerTok, "application/json", "{}", nil); c != 403 {
+		t.Fatalf("viewer build: %d", c)
+	}
+	if c := call(t, srv, "POST", "/api/v1/graphs/env-demo/environment/build", operatorTok, "application/json", "{}", &v); c != 202 || v.State != "building" {
+		t.Fatalf("build: %d %+v", c, v)
+	}
+	if v.Phase != "preparing" || len(v.BuildReasons) != 1 || v.BuildReasons[0] != "not_built" {
+		t.Fatalf("build progress API: %+v", v)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for v.State == "building" && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+		call(t, srv, "GET", "/api/v1/graphs/env-demo/environment", viewerTok, "", "", &v)
+	}
+	if v.State != "ready" || !v.UpToDate || v.Image != "weft-env/env-demo:"+v.CurrentHash {
+		t.Fatalf("ready: %+v", v)
+	}
+	if c := call(t, srv, "POST", "/api/v1/graphs/env-demo/environment/build", operatorTok, "", "", &v); c != 200 || v.State != "ready" {
+		t.Fatalf("up-to-date build must be a no-op: %d %+v", c, v)
+	}
+	if c := call(t, srv, "POST", "/api/v1/graphs/env-demo/start", operatorTok, "", "", nil); c != 200 {
+		t.Fatalf("start after build: %d", c)
+	}
+	call(t, srv, "POST", "/api/v1/graphs/env-demo/stop", operatorTok, "", "", nil)
+	waitState(t, srv, "env-demo", "stopped")
+
+	// Changing the definition makes the environment stale.
+	changed := strings.Replace(envGraph, `["go version"]`, `["go version", "go env"]`, 1)
+	if c := call(t, srv, "PUT", "/api/v1/graphs/env-demo", adminTok, "application/yaml", changed, nil); c != 200 {
+		t.Fatalf("update: %d", c)
+	}
+	call(t, srv, "GET", "/api/v1/graphs/env-demo/environment", viewerTok, "", "", &v)
+	if v.State != "ready" || v.UpToDate {
+		t.Fatalf("stale: %+v", v)
+	}
+	if c := call(t, srv, "POST", "/api/v1/graphs/env-demo/start", operatorTok, "", "", &bad); c != 422 || !strings.Contains(bad.Details.Errors[0].Message, "definition changed") {
+		t.Fatalf("start with stale environment: %d %+v", c, bad)
+	}
+
+	// Reset is admin-only, refused while agents run, and removes the environment.
+	if c := call(t, srv, "POST", "/api/v1/graphs/env-demo/nodes/other/start", operatorTok, "", "", nil); c != 200 {
+		t.Fatalf("start other: %d", c)
+	}
+	waitState(t, srv, "env-demo", "running")
+	if c := call(t, srv, "POST", "/api/v1/graphs/env-demo/environment/reset", adminTok, "", "", &bad); c != 409 || !strings.Contains(bad.Error, "stop it before resetting") {
+		t.Fatalf("reset while running: %d %+v", c, bad)
+	}
+	call(t, srv, "POST", "/api/v1/graphs/env-demo/stop", operatorTok, "", "", nil)
+	waitState(t, srv, "env-demo", "stopped")
+	if c := call(t, srv, "POST", "/api/v1/graphs/env-demo/environment/reset", operatorTok, "", "", nil); c != 403 {
+		t.Fatalf("operator reset: %d", c)
+	}
+	if c := call(t, srv, "POST", "/api/v1/graphs/env-demo/environment/reset", adminTok, "", "", &v); c != 200 || v.State != "absent" {
+		t.Fatalf("reset: %d %+v", c, v)
+	}
+
+	// Build again, then deleting the graph cleans its environment up.
+	call(t, srv, "POST", "/api/v1/graphs/env-demo/environment/build", operatorTok, "", "", &v)
+	for v.State == "building" {
+		time.Sleep(50 * time.Millisecond)
+		call(t, srv, "GET", "/api/v1/graphs/env-demo/environment", viewerTok, "", "", &v)
+	}
+	before, _ := os.ReadFile(log)
+	if c := call(t, srv, "DELETE", "/api/v1/graphs/env-demo", adminTok, "", "", nil); c != 204 {
+		t.Fatalf("delete: %d", c)
+	}
+	after, _ := os.ReadFile(log)
+	if !strings.Contains(string(after[len(before):]), "volume ls -q --filter label=weft.graph=env-demo") {
+		t.Fatalf("deleting the graph must clean its environment:\n%s", after[len(before):])
+	}
+	if c := call(t, srv, "GET", "/api/v1/graphs/env-demo/environment", viewerTok, "", "", nil); c != 404 {
+		t.Fatalf("environment of a deleted graph: %d", c)
+	}
+
+	// Graphs without an environment: build is a client error.
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/yaml", doc, nil); c != 201 {
+		t.Fatalf("create plain graph: %d", c)
+	}
+	if c := call(t, srv, "POST", "/api/v1/graphs/api-demo/environment/build", operatorTok, "", "", nil); c != 400 {
+		t.Fatalf("build without environment: %d", c)
+	}
+}
+
+func waitState(t *testing.T, srv *httptest.Server, graph, state string) {
+	t.Helper()
+	var st struct{ State string }
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		call(t, srv, "GET", "/api/v1/graphs/"+graph+"/status", viewerTok, "", "", &st)
+		if st.State == state {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("graph %s did not reach %s (now %s)", graph, state, st.State)
+}

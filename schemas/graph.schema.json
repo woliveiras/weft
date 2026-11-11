@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weft.io/schemas/v1/graph.schema.json",
+  "title": "Weft Graph document (weft.io/v1)",
+  "description": "Declarative agent graph: nodes (agents) wired by channels. Mirrors server/internal/domain/graph.go. Omitted fields take the defaults applied by graph.Normalize (documented per field). Structural rules that JSON Schema cannot express (unique ids, references resolving, 'when' compiling, event mode not combined with auto stop, ...) are enforced by POST /api/v1/graphs/validate.",
+  "type": "object",
+  "required": ["metadata", "spec"],
+  "additionalProperties": false,
+  "patternProperties": {"^x-.+": {"description": "Extension: stored and returned verbatim, never interpreted."}},
+  "properties": {
+    "apiVersion": {"const": "weft.io/v1", "description": "Defaults to weft.io/v1."},
+    "kind": {"const": "Graph", "description": "Defaults to Graph."},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {"^x-.+": {"description": "Extension: stored and returned verbatim, never interpreted."}},
+      "anyOf": [{"required": ["id"]}, {"required": ["name"]}],
+      "properties": {
+        "id": {"$ref": "#/$defs/DNSLabel", "description": "Stable id; derived from name (slug) when omitted."},
+        "name": {"type": "string"},
+        "description": {"type": "string"},
+        "labels": {"type": "object", "additionalProperties": {"type": "string"}, "description": "'weft.io/author' is recorded as the version author."},
+        "version": {"type": "integer", "description": "Assigned by the server on every save; ignored on input."},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"}
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["nodes"],
+      "additionalProperties": false,
+      "properties": {
+        "instructions": {"$ref": "#/$defs/Instructions"},
+        "parameters": {"type": "array", "items": {"$ref": "#/$defs/Parameter"}},
+        "workspace": {"$ref": "#/$defs/Workspace"},
+        "environment": {"$ref": "#/$defs/Environment"},
+        "defaults": {"$ref": "#/$defs/NodeDefaults"},
+        "nodes": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Node"}},
+        "channels": {"type": "array", "items": {"$ref": "#/$defs/Channel"}},
+        "checks": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/Check"}, "description": "Declared verification commands run by check.run; merged with the project's checks at task start."},
+        "maxHops": {"type": "integer", "minimum": 0, "description": "Cycle guard: messages whose hop count exceeds it are dropped. 0 = 64."}
+      }
+    }
+  },
+  "$defs": {
+    "Check": {
+      "type": "object", "additionalProperties": false, "required": ["name", "command"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,39}$", "description": "test, lint, build or a custom name."},
+        "command": {"type": "string", "minLength": 1, "maxLength": 1024, "description": "Shell command line run under the agent's shell.exec grant."},
+        "cwd": {"type": "string", "maxLength": 512, "description": "Directory relative to the workspace."},
+        "timeoutSec": {"type": "integer", "minimum": 0, "maximum": 1800, "description": "0 = 600."}
+      }
+    },
+    "Instructions": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "skillIds": {"type":"array", "maxItems":128, "uniqueItems":true, "items":{"$ref":"#/$defs/DNSLabel"}},
+        "projectSteering": {"type":"boolean", "description":"Authorize .weft/steering/*.md from this graph/replica workspace."},
+        "installationDefaults": {"type":"boolean", "description":"Opt into installation default skills. False by default."}
+      }
+    },
+    "DNSLabel": {"type": "string", "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"},
+    "Duration": {
+      "description": "Go duration string ('90s', '1h30m') or a number of seconds. Empty string = unset.",
+      "oneOf": [{"type": "string", "pattern": "^$|^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"}, {"type": "number", "minimum": 0}]
+    },
+    "Parameter": {
+      "type": "object", "required": ["name"], "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$", "not": {"enum": ["input", "output", "project", "workspace", "loop", "self"]}},
+        "value": {"type": "string"},
+        "description": {"type": "string"}
+      }
+    },
+    "Workspace": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string", "description": "Relative to the platform workspace root (absolute only with workspaces.allowAbsolute). Default <root>/<graph-id>."},
+        "git": {"type": "boolean", "description": "Initialise as a git repository."},
+        "repo": {"type": "string", "description": "Remote repository (https://, ssh://, git:// or user@host:path) cloned into an empty workspace on first start. Local paths and other transports are rejected."}
+      }
+    },
+    "Environment": {
+      "type": "object", "additionalProperties": false,
+      "description": "Project environment: the image docker-isolated agents without an image of their own run commands in. Built by Weft on the sandbox daemon. Exactly one of image or dockerfile.",
+      "properties": {
+        "companions": {"type": "array", "maxItems": 3, "items": {"type": "object", "additionalProperties": false, "required": ["name", "image"], "properties": {"name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$"}, "image": {"type": "string", "minLength": 1}, "command": {"type": "array", "maxItems": 64, "items": {"type": "string"}}}}},
+        "image": {"type": "string", "description": "Base image to pull, e.g. golang:1.26."},
+        "dockerfile": {"type": "string", "description": "Inline Dockerfile; accepted repository definitions include a validated build context."},
+        "context": {"type": "string", "description": "Repository-relative context for an accepted environment."},
+        "target": {"type": "string", "description": "Named Dockerfile stage; omitted builds the final stage."},
+        "origin": {
+          "type": "object", "additionalProperties": false,
+          "required": ["source", "path", "sha256", "files"],
+          "properties": {
+            "source": {"type": "string"}, "path": {"type": "string"}, "sha256": {"type": "string"},
+            "service": {"type": "string"}, "target": {"type": "string"},
+            "dockerfilePath": {"type": "string"}, "contextSHA256": {"type": "string"},
+            "files": {"type": "object", "additionalProperties": {"type": "string"}}
+          }
+        },
+        "setup": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "Commands run once per build, in order, as uid 10001 in /workspace with the graph workspace mounted; their effect outside the workspace is kept in the image."},
+        "network": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "setupAllowedHosts": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string"}, "description": "Exact hosts for build and setup; requires setup egress and installation approval."},
+            "setup": {"enum": ["none", "bridge", "egress"], "description": "Network of setup commands. Default bridge."},
+            "allowedHosts": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string"}, "description": "Exact lowercase DNS hosts; requires run egress and installation approval."},
+            "run": {"enum": ["none", "bridge", "egress"], "description": "Default network of agents using the environment. Default none; a node's isolation.network overrides it."}
+          }
+        },
+        "caches": {"type": "array", "items": {"type": "string", "pattern": "^/"}, "description": "Absolute directories kept in named volumes across sandboxes and rebuilds (not /workspace or system directories)."},
+        "timeout": {"$ref": "#/$defs/Duration", "description": "Build timeout. Default 30m, at most 2h."},
+        "cpu": {"type": "string", "description": "CPU limit of the setup container."},
+        "memory": {"type": "string", "description": "Memory limit of the setup container."}
+      },
+      "oneOf": [{"required": ["image"]}, {"required": ["dockerfile"]}]
+    },
+    "Runtime": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["native", "external", "echo"], "description": "Default: defaults.runtime.kind, else native."},
+        "framework": {"type": "string", "description": "Informational for external runtimes: langgraph, autogen, crewai, custom."},
+        "agent": {"type": "string", "description": "Agent name in the external runtime (default: node id)."},
+        "endpoint": {"type": "string", "format": "uri", "description": "Already-running Runtime Protocol v1 server."},
+        "command": {"type": "array", "items": {"type": "string"}, "description": "Process isolation: command started with PORT/HOST env."},
+        "image": {"type": "string", "description": "Docker isolation: container image serving the protocol on :8000."},
+        "env": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "Model": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "provider": {"type": "string", "description": "Configured provider name; empty or 'default' = platform default."},
+        "name": {"type": "string", "description": "Model id; empty = provider defaultModel."},
+        "temperature": {"type": "number"},
+        "maxTokens": {"type": "integer", "minimum": 0}
+      }
+    },
+    "ToolGrant": {
+      "description": "A capability ('filesystem.read'), tool name ('filesystem.list') or wildcard ('git.*', '*'); as a bare string or an object with constraints. See docs/tool-permissions.md.",
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {
+          "type": "object", "required": ["name"], "additionalProperties": false,
+          "properties": {
+            "name": {"type": "string", "minLength": 1},
+            "paths": {"type": "array", "items": {"type": "string"}, "description": "Workspace-relative globs ('src/**')."},
+            "commands": {"type": "array", "items": {"type": "string"}, "description": "shell.exec allowlist ('go', 'npm *')."},
+            "hosts": {"type": "array", "items": {"type": "string"}, "description": "http.fetch host globs ('*.wikipedia.org')."},
+            "requiresApproval": {"type": "boolean"},
+            "rateLimit": {"type": "integer", "minimum": 0, "description": "Calls per minute per graph/node/tool (0 = unlimited)."}
+          }
+        }
+      ]
+    },
+    "Loop": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["once", "continuous", "scheduled", "event"], "description": "Default: event if the node has inputs, else once."},
+        "schedule": {"type": "string", "description": "Required for scheduled: 5/6-field cron or descriptor ('@hourly', '@every 15m')."},
+        "interval": {"$ref": "#/$defs/Duration", "description": "Pause between turns (pacing)."},
+        "stop": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "policy": {"enum": ["never", "auto", "iterations", "duration", "idle"], "description": "Default inferred from the limit set, else never. 'auto' cannot be combined with mode event."},
+            "maxIterations": {"type": "integer", "minimum": 0},
+            "maxDuration": {"$ref": "#/$defs/Duration"},
+            "idleTimeout": {"$ref": "#/$defs/Duration"}
+          }
+        },
+        "batchSize": {"type": "integer", "minimum": 0, "description": "Max input messages claimed per turn (default 1)."}
+      }
+    },
+    "Cluster": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["fixed", "autoscale"], "description": "Default fixed."},
+        "replicas": {"type": "integer", "minimum": 0, "maximum": 256, "description": "Fixed size (default 1)."},
+        "minReplicas": {"type": "integer", "minimum": 0, "description": "Autoscale floor (default 1)."},
+        "maxReplicas": {"type": "integer", "minimum": 0, "maximum": 256, "description": "Autoscale ceiling (default max(replicas, 4))."},
+        "comms": {"enum": ["isolated", "ring"], "description": "Default isolated."},
+        "scaleDownAfter": {"$ref": "#/$defs/Duration", "description": "Idle time before an autoscaled replica is shed (default 60s)."}
+      }
+    },
+    "Isolation": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "mode": {"enum": ["process", "docker", "kubernetes"], "description": "Default process."},
+        "image": {"type": "string"},
+        "cpu": {"type": "string"},
+        "memory": {"type": "string"},
+        "network": {"type": "string", "description": "'none' (docker default) or a network name."},
+        "env": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
+    },
+    "NodeDefaults": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "runtime": {"$ref": "#/$defs/Runtime"},
+        "model": {"$ref": "#/$defs/Model"},
+        "tools": {"type": "array", "items": {"$ref": "#/$defs/ToolGrant"}},
+        "isolation": {"$ref": "#/$defs/Isolation"},
+        "loop": {"$ref": "#/$defs/Loop"}
+      }
+    },
+    "Node": {
+      "type": "object", "additionalProperties": false,
+      "patternProperties": {"^x-.+": {"description": "Extension: stored and returned verbatim, never interpreted."}},
+      "anyOf": [{"required": ["id"]}, {"required": ["name"]}],
+      "properties": {
+        "skillIds": {"type":["array","null"], "uniqueItems":true, "items":{"$ref":"#/$defs/DNSLabel"}, "description":"Null/absent inherits graph skillIds; [] selects none; otherwise a subset of graph skillIds."},
+        "id": {"$ref": "#/$defs/DNSLabel"},
+        "name": {"type": "string"},
+        "description": {"type": "string"},
+        "runtime": {"$ref": "#/$defs/Runtime"},
+        "model": {"$ref": "#/$defs/Model"},
+        "prompt": {"type": "string", "description": "Required for native nodes. @param tokens are substituted; @input/@output/@workspace/@project/@loop are defined by the platform preamble."},
+        "tools": {"type": "array", "items": {"$ref": "#/$defs/ToolGrant"}, "description": "Default deny: no grants = no tools (except emit/state/finish for native agents)."},
+        "loop": {"$ref": "#/$defs/Loop"},
+        "cluster": {"$ref": "#/$defs/Cluster"},
+        "isolation": {"$ref": "#/$defs/Isolation"},
+        "workspace": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "mode": {"enum": ["shared", "worktree"], "description": "worktree = git worktree + branch per replica."},
+            "subdir": {"type": "string"},
+            "readOnly": {"type": "boolean", "description": "Native runtime only. Denies filesystem mutations, agent Git tools, shell execution, environment proposals and review requests regardless of tool grants."}
+          }
+        },
+        "approval": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "beforeTurn": {"type": "boolean"},
+            "beforeEmit": {"type": "boolean"},
+            "timeout": {"$ref": "#/$defs/Duration"},
+            "onTimeout": {"enum": ["", "reject", "approve"]}
+          }
+        },
+        "subscribe": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "Topic name patterns this node consumes."},
+        "limits": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "turnTimeout": {"$ref": "#/$defs/Duration", "description": "Default 30m."},
+            "maxToolCalls": {"type": "integer", "minimum": 0, "description": "Default 50."},
+            "maxTokens": {"type": "integer", "minimum": 0}
+          }
+        },
+        "disabled": {"type": "boolean"},
+        "config": {"type": "object", "description": "Passed verbatim to the runtime (TurnInput.config)."},
+        "position": {"type": "object", "required": ["x", "y"], "properties": {"x": {"type": "number"}, "y": {"type": "number"}}, "additionalProperties": false}
+      }
+    },
+    "Channel": {
+      "type": "object", "additionalProperties": false,
+      "patternProperties": {"^x-.+": {"description": "Extension: stored and returned verbatim, never interpreted."}},
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$", "description": "Derived from from/to when omitted."},
+        "type": {"enum": ["queue", "topic", "fanout", "broadcast"], "description": "Default queue."},
+        "from": {"type": "string", "description": "Producing node; omit for an ingress channel fed by the API."},
+        "to": {"type": "array", "items": {"type": "string"}},
+        "topic": {"type": "string", "description": "Topic name (topic channels; default: id). Matched by Node.subscribe."},
+        "types": {"type": "array", "items": {"type": "string"}, "description": "Message type globs routed onto this channel."},
+        "when": {"type": "string", "description": "expr-lang boolean over {type, source, target, payload, metadata}."},
+        "approval": {"type": "boolean", "description": "Hold every message at a human gate."},
+        "maxDeliver": {"type": "integer", "minimum": 0, "description": "Attempts before dead-lettering (default 5)."},
+        "ackWait": {"$ref": "#/$defs/Duration", "description": "Delivery lease (default 10m)."},
+        "retention": {"$ref": "#/$defs/Duration", "description": "Broker retention (default 7d)."},
+        "label": {"type": "string"}
+      }
+    }
+  }
+}

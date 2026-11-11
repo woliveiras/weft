@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "weft-agents"
+version = "0.1.0"
+description = "Example Weft agents: planner, researcher, developer, reviewer, qa"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = ["weft>=0.1.0"]
+
+[project.optional-dependencies]
+langgraph = ["weft[langgraph]"]
+
+[project.scripts]
+weft-agents = "weft_agents.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["weft_agents*"]

@@ -1,0 +1,245 @@
+# Weft — the whole platform on one machine, no Internet needed at runtime.
+#
+#   docker compose up                       # after creating a local .env (see docs/getting-started.md)
+#   docker compose --profile ollama up      # + local Ollama models (enable the Ollama plugin in the console)
+#   docker compose --profile hf up          # + HuggingFace Text Generation Inference (local weights)
+#
+# Console  http://localhost:8080   (token: WEFT_ADMIN_TOKEN from local .env)
+# Grafana  http://localhost:3000   (anonymous viewer; admin password from local .env)
+#
+# Agent tool sandboxes (isolation.mode: docker) run on sandbox-daemon, a Docker
+# daemon dedicated to Weft: nothing is built or started on the host's Docker,
+# and `docker compose down -v` removes every image, container and cache it made.
+# See docs/sandbox-runtime.md.
+#
+# Images are pinned; to run fully air-gapped, `docker compose pull && docker compose build`
+# once while online (or load images from a registry mirror) and models into the volumes.
+
+name: weft
+
+x-weftd-env: &weftd-env
+  WEFT_INSTANCE: weftd-1
+  # Only the host loopback publication below exposes the built-in gateway.
+  WEFT_PREVIEW_ADDR: 0.0.0.0:8082
+  WEFT_PREVIEW_CONTAINER_LOCAL: "true"
+  WEFT_ADMIN_TOKEN: ${WEFT_ADMIN_TOKEN:?Set WEFT_ADMIN_TOKEN in .env}
+  WEFT_STORAGE_TYPE: ${WEFT_STORAGE_TYPE:-postgres}
+  WEFT_STORAGE_DSN: ${WEFT_STORAGE_DSN:-postgres://weft:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/weft?sslmode=disable}
+  WEFT_QUEUE_TYPE: ${WEFT_QUEUE_TYPE:-nats}
+  WEFT_QUEUE_URL: ${WEFT_QUEUE_URL:-nats://nats:4222}
+  WEFT_INTERNAL_URL: http://weftd:8080
+  # Model providers are inference plugins enabled and configured in the
+  # console. WEFT_DEV_MOCK=true adds the offline development mock.
+  WEFT_DEV_MOCK: ${WEFT_DEV_MOCK:-false}
+  WEFT_RUNTIME_SECRET: ${WEFT_RUNTIME_SECRET:?Set WEFT_RUNTIME_SECRET in .env}
+  # Encrypts credentials entered in the console (model providers). Without
+  # WEFT_SECRET_KEY a key is generated on first start in the weftd-data
+  # volume - back that volume up, or set the key here (openssl rand -base64 32).
+  WEFT_SECRET_KEY: ${WEFT_SECRET_KEY:-}
+  WEFT_SECRET_KEY_PREVIOUS: ${WEFT_SECRET_KEY_PREVIOUS:-}
+  WEFT_SECRET_KEY_FILE: /var/lib/weft/data/secret.key
+  WEFT_GRAFANA_URL: ${WEFT_GRAFANA_URL:-http://localhost:3000}
+  WEFT_BOOTSTRAP_GRAPHS: /app/examples/graphs
+  WEFT_BOOTSTRAP_START: ${WEFT_BOOTSTRAP_START:-}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  # Tool sandboxes run on the dedicated sandbox-daemon over mutual TLS. The
+  # workspaces volume is mounted at the same path there, so no host path
+  # translation (WEFT_WORKSPACES_HOST) is needed.
+  WEFT_WORKSPACE_JOURNAL: ${WEFT_WORKSPACE_JOURNAL:-/var/lib/weft/journal/events.jsonl}
+  WEFT_SANDBOX_DOCKER_HOST: tcp://sandbox-daemon:2376
+  DOCKER_TLS_VERIFY: "1"
+  DOCKER_CERT_PATH: /certs/client
+
+services:
+  weftd:
+    build: {context: ., dockerfile: Dockerfile}
+    image: weft/weftd:dev
+    environment: *weftd-env
+    ports: ["${WEFT_BIND_ADDRESS:-127.0.0.1}:8080:8080", "127.0.0.1:8082:8082"]
+    volumes:
+      - workspaces:/var/lib/weft/workspaces
+      - weftd-data:/var/lib/weft/data
+      - workspace-journal:/var/lib/weft/journal:ro
+      - sandbox-certs-client:/certs/client:ro
+    networks: [default, sandbox]
+    depends_on:
+      nats: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+      agents: {condition: service_healthy}
+    restart: unless-stopped
+    stop_grace_period: 60s   # lets in-flight turns finish (graceful stop)
+
+  agents:
+    build: {context: ., dockerfile: agents/Dockerfile}
+    image: weft/agents:dev
+    environment:
+      WEFT_RUNTIME_SECRET: ${WEFT_RUNTIME_SECRET:?Set WEFT_RUNTIME_SECRET in .env}
+    # Agents hold no credentials and reach nothing but the platform callback.
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  nats:
+    image: nats:2.11-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    volumes: [nats-data:/data]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8222/healthz"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: weft
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: weft
+    volumes: [pg-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U weft -d weft"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # --- observability -----------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.116.1
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes: ["./deploy/observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro"]
+    depends_on: [tempo, loki]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    command: ["--config.file=/etc/prometheus/prometheus.yaml", "--storage.tsdb.retention.time=15d", "--web.enable-remote-write-receiver"]
+    volumes:
+      - ./deploy/observability/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - ./deploy/observability/alerts.yaml:/etc/prometheus/alerts.yaml:ro
+      - prom-data:/prometheus
+    ports: ["${WEFT_BIND_ADDRESS:-127.0.0.1}:9090:9090"]
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo.yaml"]
+    user: "0"
+    volumes: ["./deploy/observability/tempo.yaml:/etc/tempo.yaml:ro", "tempo-data:/var/tempo"]
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.3.2
+    command: ["-config.file=/etc/loki/config.yaml"]
+    user: "0"
+    volumes: ["./deploy/observability/loki.yaml:/etc/loki/config.yaml:ro", "loki-data:/loki"]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/weft-overview.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["${WEFT_BIND_ADDRESS:-127.0.0.1}:3000:3000"]
+    depends_on: [prometheus, tempo, loki]
+    restart: unless-stopped
+
+  # --- optional local model servers ---------------------------------------
+  ollama:
+    profiles: [ollama]
+    image: ollama/ollama:0.5.4
+    volumes: [ollama-models:/root/.ollama]
+    ports: ["${WEFT_BIND_ADDRESS:-127.0.0.1}:11434:11434"]
+    restart: unless-stopped
+
+  tgi:
+    profiles: [hf]
+    image: ghcr.io/huggingface/text-generation-inference:3.0.1
+    command: ["--model-id", "${HF_MODEL_ID:-Qwen/Qwen2.5-0.5B-Instruct}"]
+    environment: {HF_HUB_OFFLINE: "${HF_HUB_OFFLINE:-0}"}
+    volumes: [hf-models:/data]
+    shm_size: 1g
+    restart: unless-stopped
+
+  # --- tool sandboxes -------------------------------------------------------
+  # Docker daemon dedicated to Weft (Docker-in-Docker). weftd starts one
+  # sandbox container per replica here; agents never talk to it. It shares
+  # only the workspaces volume and the "sandbox" network with weftd, and its
+  # firewall keeps sandbox containers away from every private network
+  # (postgres, nats, weftd, your LAN). privileged is required by
+  # Docker-in-Docker; see docs/sandbox-runtime.md for what that means.
+  sandbox-daemon:
+    build: {context: ., dockerfile: deploy/sandbox-daemon/Dockerfile}
+    image: weft/sandbox-daemon:dev
+    hostname: sandbox-daemon
+    privileged: true
+    entrypoint: ["/weft/entrypoint.sh"]
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+      DOCKER_TLS_SAN: DNS:sandbox-daemon
+      WEFT_WORKSPACE_JOURNAL: ${WEFT_WORKSPACE_JOURNAL:-/var/lib/weft/journal/events.jsonl}
+    volumes:
+      - ./deploy/sandbox-daemon/entrypoint.sh:/weft/entrypoint.sh:ro
+      - ./deploy/sandbox-daemon/healthcheck.sh:/weft/healthcheck.sh:ro
+      - workspace-journal:/var/lib/weft/journal
+      - sandbox-daemon-data:/var/lib/docker
+      - sandbox-certs-ca:/certs/ca
+      - sandbox-certs-server:/certs/server
+      - sandbox-certs-client:/certs/client
+      - workspaces:/var/lib/weft/workspaces
+    networks: [sandbox]
+    healthcheck:
+      test: ["CMD", "/weft/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+    restart: unless-stopped
+
+  # Builds the default sandbox image (Dockerfile.sandbox) inside sandbox-daemon
+  # on every `up`; layers are cached in its volume, so later runs are instant.
+  # Rebuild after editing Dockerfile.sandbox: docker compose up sandbox-image
+  sandbox-image:
+    image: docker:28.5.2-cli
+    environment:
+      DOCKER_HOST: tcp://sandbox-daemon:2376
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /certs/client
+    volumes:
+      - ./Dockerfile.sandbox:/src/Dockerfile.sandbox:ro
+      - sandbox-certs-client:/certs/client:ro
+    command: ["sh", "-c", "docker build --quiet -t weft/sandbox:latest - < /src/Dockerfile.sandbox"]
+    networks: [sandbox]
+    depends_on:
+      sandbox-daemon: {condition: service_healthy}
+    restart: "no"
+
+networks:
+  default:
+  # Only weftd, sandbox-daemon and sandbox-image join it. Sandbox containers
+  # live on sandbox-daemon's own bridges behind its firewall.
+  sandbox:
+
+volumes:
+  workspaces:
+  weftd-data:
+  nats-data:
+  pg-data:
+  prom-data:
+  tempo-data:
+  loki-data:
+  ollama-models:
+  hf-models:
+  workspace-journal:
+  sandbox-daemon-data:
+  sandbox-certs-ca:
+  sandbox-certs-server:
+  sandbox-certs-client:

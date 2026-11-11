@@ -1,0 +1,13 @@
+{
+  "name": "weft-mise-example",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node -e \"require('node:fs').copyFileSync('sum.cjs', 'built.cjs')\"",
+    "test": "node --test sum.test.cjs"
+  },
+  "dependencies": {
+    "is-number": "7.0.0"
+  },
+  "packageManager": "pnpm@10.33.4"
+}

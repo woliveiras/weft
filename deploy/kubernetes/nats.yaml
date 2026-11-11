@@ -1,0 +1,42 @@
+# Single-node NATS with JetStream for evaluation. For production use the
+# official chart (https://github.com/nats-io/k8s): 3 servers, JetStream
+# file storage on fast disks, and queue.options.replicas: "3".
+apiVersion: v1
+kind: Service
+metadata:
+  name: weft-nats
+spec:
+  selector: {app: weft-nats}
+  ports:
+    - {name: client, port: 4222}
+    - {name: monitor, port: 8222}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: weft-nats
+spec:
+  serviceName: weft-nats
+  replicas: 1
+  selector: {matchLabels: {app: weft-nats}}
+  template:
+    metadata: {labels: {app: weft-nats}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: nats
+          image: nats:2.11-alpine
+          args: ["-js", "-sd", "/data", "-m", "8222"]
+          ports: [{containerPort: 4222}, {containerPort: 8222}]
+          readinessProbe: {httpGet: {path: /healthz, port: 8222}}
+          livenessProbe: {httpGet: {path: /healthz, port: 8222}, initialDelaySeconds: 10}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: data, mountPath: /data}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 20Gi}}

@@ -1,0 +1,27 @@
+# Requires the Prometheus Operator CRDs.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: weftd
+spec:
+  selector: {matchLabels: {app.kubernetes.io/part-of: weft}}
+  endpoints:
+    - {port: http, path: /metrics, interval: 15s}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: weft
+spec:
+  groups:
+    - name: weft
+      rules:
+        - alert: WeftDeadLetters
+          expr: increase(weft_messages_consumed_total{outcome="dead"}[10m]) > 0
+          labels: {severity: warning}
+          annotations: {summary: "Messages dead-lettered on {{ $labels.graph }}/{{ $labels.node }}"}
+        - alert: WeftTurnFailureRate
+          expr: sum by (graph, node) (rate(weft_executions_total{status="failed"}[10m])) / clamp_min(sum by (graph, node) (rate(weft_executions_total[10m])), 1e-9) > 0.25
+          for: 10m
+          labels: {severity: warning}
+          annotations: {summary: "More than 25% of turns fail on {{ $labels.graph }}/{{ $labels.node }}"}

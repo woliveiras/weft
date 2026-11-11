@@ -1,0 +1,23 @@
+import {test,expect} from '@playwright/test';
+const headers={Authorization:'Bearer e2e-admin-token'};
+test('saves explicit stateless transport without granting agents or silently changing templates',async({page})=>{
+ await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+ await page.goto('/#/integrations');
+ const form=page.getByRole('region',{name:'MCP connections',exact:true});
+ await form.getByLabel('Connection ID',{exact:true}).fill('stateless-browser');
+ await form.getByLabel('Connection name',{exact:true}).fill('Stateless browser');
+ await form.getByLabel('MCP endpoint',{exact:true}).fill('https://bigquery.googleapis.com/mcp');
+ await form.getByLabel('Transport profile',{exact:true}).selectOption('stateless-2026-07-28');
+ await expect(form).toContainText('does not limit query costs');
+ await form.getByLabel('Connection enabled',{exact:true}).uncheck();
+ await form.getByRole('button',{name:'Save MCP connection',exact:true}).click();
+ const card=form.getByRole('article',{name:'MCP Stateless browser',exact:true});
+ await expect(card).toBeVisible();
+ await page.reload();
+ await form.getByRole('button',{name:'Edit Stateless browser',exact:true}).click();
+ await expect(form.getByLabel('Transport profile',{exact:true})).toHaveValue('stateless-2026-07-28');
+ const connections=await(await page.request.get('/api/v1/mcp/connections',{headers})).json();
+ const saved=connections.find((c:{id:string})=>c.id==='stateless-browser');
+ expect(saved.enabled).toBe(false);expect(saved.tools).toEqual([]);expect(saved.credentialConfigured).toBe(false);
+ expect((await page.request.post('/api/v1/mcp/connections',{headers,data:{id:'unknown-profile',name:'Unknown',service:'generic',endpoint:'https://example.com/mcp',enabled:false,transportProfile:'auto'}})).status()).toBe(422);
+});

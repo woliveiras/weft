@@ -1,0 +1,27 @@
+groups:
+  - name: weft
+    rules:
+      - alert: WeftDeadLetters
+        expr: increase(weft_messages_consumed_total{outcome="dead"}[10m]) > 0
+        labels: {severity: warning}
+        annotations: {summary: "Messages dead-lettered on {{ $labels.graph }}/{{ $labels.node }}"}
+      - alert: WeftBacklogGrowing
+        expr: sum by (graph, channel) (weft_queue_pending) > 100 and deriv(sum by (graph, channel) (weft_queue_pending)[15m:1m]) > 0
+        for: 15m
+        labels: {severity: warning}
+        annotations: {summary: "Backlog on {{ $labels.graph }}/{{ $labels.channel }} keeps growing"}
+      - alert: WeftTurnFailureRate
+        expr: sum by (graph, node) (rate(weft_executions_total{status="failed"}[10m])) / clamp_min(sum by (graph, node) (rate(weft_executions_total[10m])), 1e-9) > 0.25
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "More than 25% of turns fail on {{ $labels.graph }}/{{ $labels.node }}"}
+      - alert: WeftApprovalsWaiting
+        expr: weft_approvals_pending > 0
+        for: 1h
+        labels: {severity: info}
+        annotations: {summary: "{{ $value }} approvals waiting for a human for over an hour"}
+      - alert: WeftLLMErrors
+        expr: sum by (provider) (rate(weft_llm_requests_total{outcome!="ok"}[5m])) > 0.1
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "LLM provider {{ $labels.provider }} is failing"}

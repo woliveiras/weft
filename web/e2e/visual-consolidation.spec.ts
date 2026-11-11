@@ -1,0 +1,35 @@
+import {test,expect} from '@playwright/test';
+test('viewer opens contextual help with the keyboard and navigates remaining screens',async({page})=>{
+ await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
+ await page.setViewportSize({width:580,height:850});
+ await page.goto('/#/models');
+ const help=page.locator('summary').filter({hasText:'What a provider test does'});
+ await expect(page.getByText(/may incur usage charges/)).not.toBeVisible();
+ await help.focus();await page.keyboard.press('Enter');
+ await expect(page.getByText(/may incur usage charges/)).toBeVisible();
+ await page.keyboard.press('Enter');
+ await expect(page.getByText(/may incur usage charges/)).not.toBeVisible();
+ await expect(page.getByRole('button',{name:'Add provider',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Skills & instructions',exact:true}).click();
+ await expect(page.getByText('Guidance never grants tools, credentials or permissions.')).toBeVisible();
+ await expect(page.getByRole('button',{name:'Save skill',exact:true})).toBeDisabled();
+ await page.locator('summary').filter({hasText:'How instruction precedence works'}).click();
+ await expect(page.getByText(/Later scopes take precedence/)).toBeVisible();
+ await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:/^Approvals(?: \d+)?$/}).click();
+ await expect(page.getByRole('heading',{name:'Approvals',level:1})).toBeVisible();
+ await page.getByRole('button',{name:'Administration',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'System health',exact:true})).toBeVisible();
+ await expect.poll(()=>page.locator('main').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+});
+test('canvas guidance stays separate from graph editing and preserves the add action',async({page})=>{
+ await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+ await page.goto('/#/g/journal-capture/canvas');
+ await expect(page.getByRole('button',{name:'Add agent',exact:true})).toBeVisible();
+ const guidance=page.getByText(/Drag between agent handles to add a channel/);
+ await expect(guidance).not.toBeVisible();
+ await page.locator('summary').filter({hasText:'Canvas controls'}).click();
+ await expect(guidance).toBeVisible();
+ await expect(page.getByRole('button',{name:'Save graph',exact:true})).toBeDisabled();
+ await page.locator('summary').filter({hasText:'Canvas controls'}).click();
+ await expect(guidance).not.toBeVisible();
+});

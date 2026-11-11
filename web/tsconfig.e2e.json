@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "e2e",
+    "e2e-journal",
+    "playwright.journal.config.ts",
+    "playwright.config.ts",
+    "playwright.oauth-cimd.config.ts",
+    "playwright.instructions.config.ts",
+    "e2e-real",
+    "playwright.real.config.ts",
+    "e2e-providers",
+    "playwright.providers.config.ts",
+    "e2e-provider-management",
+    "playwright.provider-management.config.ts",
+    "e2e-native",
+    "playwright.native.config.ts"
+  ],
+  "compilerOptions": {
+    "types": [
+      "node",
+      "vite/client"
+    ]
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weft.io/schemas/v1/turn.schema.json",
+  "title": "Weft Runtime Protocol v1",
+  "description": "Request (TurnInput) and response (TurnResult) of POST /v1/turn, and the Emit object (server/internal/runtime/runtime.go). Use '#/$defs/TurnInput', '#/$defs/TurnResult' or '#/$defs/Emit'.",
+  "$defs": {
+    "Message": {"$ref": "https://weft.io/schemas/v1/message.schema.json"},
+    "ToolSchema": {
+      "type": "object", "required": ["name", "description", "parameters"],
+      "properties": {"name": {"type": "string"}, "description": {"type": "string"}, "parameters": {"type": "object"}}
+    },
+    "ModelRef": {
+      "type": "object",
+      "properties": {"provider": {"type": "string"}, "name": {"type": "string"}, "temperature": {"type": "number"}, "maxTokens": {"type": "integer"}}
+    },
+    "TurnInput": {
+      "type": "object",
+      "required": ["executionId", "graphId", "graphName", "nodeId", "nodeName", "replica", "replicas", "iteration", "prompt", "system", "inputs", "outputs", "tools", "model", "workdir"],
+      "properties": {
+        "instructions": {"$ref":"instructions.schema.json#/$defs/Snapshot"},
+        "executionId": {"type": "string"},
+        "graphId": {"type": "string"},
+        "graphName": {"type": "string"},
+        "nodeId": {"type": "string"},
+        "nodeName": {"type": "string"},
+        "replica": {"type": "integer", "minimum": 0},
+        "replicas": {"type": "integer", "minimum": 0},
+        "iteration": {"type": "integer", "minimum": 1, "description": "Lifetime turn counter of this replica."},
+        "agent": {"type": "string", "description": "Agent name to dispatch to (node runtime.agent)."},
+        "prompt": {"type": "string", "description": "Node prompt with parameters substituted, prefixed with opt-in untrusted guidance. Legacy graphs retain the original prompt."},
+        "system": {"type": "string", "description": "Platform preamble: situation, inputs, outputs, tools, stop protocol."},
+        "inputs": {"type": "array", "items": {"$ref": "#/$defs/Message"}, "description": "Messages claimed for this turn (leased to it)."},
+        "operatorMessages": {"type": "array", "items": {"type": "string"}},
+        "neighbors": {"type": "array", "items": {"type": "object", "required": ["replica", "text", "at"], "properties": {"replica": {"type": "integer"}, "text": {"type": "string"}, "at": {"type": "string"}}}},
+        "outputs": {"type": "array", "items": {"type": "object", "required": ["channel", "type", "targets"], "properties": {"channel": {"type": "string"}, "type": {"enum": ["queue", "topic", "fanout", "broadcast"]}, "targets": {"type": ["array", "null"], "items": {"type": "string"}}, "types": {"type": "array", "items": {"type": "string"}}, "when": {"type": "string"}}}},
+        "tools": {"type": "array", "items": {"$ref": "#/$defs/ToolSchema"}, "description": "Only the tools this node is granted."},
+        "model": {"$ref": "#/$defs/ModelRef"},
+        "pendingStop": {"type": "boolean"},
+        "workdir": {"type": "string", "description": "Replica working directory as seen by the platform's tools (informational)."},
+        "branch": {"type": "string"},
+        "parameters": {"type": "object", "additionalProperties": {"type": "string"}},
+        "config": {"type": "object"},
+        "callback": {"type": "object", "required": ["url", "token"], "properties": {"url": {"type": "string", "format": "uri"}, "token": {"type": "string"}}}
+      }
+    },
+    "Emit": {
+      "type": "object", "required": ["type"],
+      "properties": {
+        "type": {"type": "string", "minLength": 1},
+        "payload": {"description": "JSON value (objects recommended); empty becomes {}."},
+        "target": {"type": "string"},
+        "channel": {"type": "string"},
+        "metadata": {"type": "object", "description": "Merged into message metadata; reserved platform keys are ignored."}
+      }
+    },
+    "TurnResult": {
+      "type": "object",
+      "properties": {
+        "emits": {"type": "array", "items": {"$ref": "#/$defs/Emit"}, "maxItems": 1000},
+        "summary": {"type": "string"},
+        "broadcast": {"type": "string"},
+        "signal": {"enum": ["", "no_further_work", "confirm_stop"]},
+        "usage": {"type": "object", "properties": {"inputTokens": {"type": "integer"}, "outputTokens": {"type": "integer"}}},
+        "toolCalls": {"type": "integer"},
+        "retry": {"type": "boolean", "description": "Nack the inputs (redelivered with back-off) instead of acking them."}
+      }
+    }
+  }
+}
