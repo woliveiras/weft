@@ -48,6 +48,10 @@ type ToolCall struct {
 	ID        string          `json:"id"`
 	Name      string          `json:"name"` // platform name, e.g. "filesystem.read"
 	Arguments json.RawMessage `json:"arguments"`
+	// ProviderData is opaque provider state attached to the call that must
+	// be sent back unchanged with the conversation (Gemini 3's
+	// thought_signature in extra_content). Runtimes keep it, never read it.
+	ProviderData json.RawMessage `json:"providerData,omitempty"`
 }
 
 // ToolSchema describes a tool to the model (JSON Schema for parameters).

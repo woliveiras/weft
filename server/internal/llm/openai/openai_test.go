@@ -168,3 +168,47 @@ func TestHiddenThinkingTokensCountAsOutput(t *testing.T) {
 		})
 	}
 }
+
+// Gemini 3 rejects a follow-up request whose earlier tool calls lack the
+// thought_signature it attached; the call's extra_content is echoed back.
+func TestToolCallExtraContentRoundTrips(t *testing.T) {
+	var second map[string]any
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"c1","type":"function",
+				"function":{"name":"echo","arguments":"{\"word\":\"OK\"}"},"extra_content":{"google":{"thought_signature":"SIG=="}}},
+				{"id":"c2","type":"function","function":{"name":"echo","arguments":"{}"},"extra_content":"not an object"}]},"finish_reason":"tool_calls"}]}`))
+			return
+		}
+		_ = json.NewDecoder(r.Body).Decode(&second)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}]}`))
+	}))
+	defer srv.Close()
+	p, err := New(llm.ProviderConfig{Name: "g", BaseURL: srv.URL + "/v1", DefaultModel: "m"}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgs := []llm.ChatMessage{{Role: llm.RoleUser, Content: "echo"}}
+	first, err := p.Chat(context.Background(), &llm.ChatRequest{Messages: msgs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(first.Message.ToolCalls[0].ProviderData) != `{"google":{"thought_signature":"SIG=="}}` || first.Message.ToolCalls[1].ProviderData != nil {
+		t.Fatalf("provider data %s / %s", first.Message.ToolCalls[0].ProviderData, first.Message.ToolCalls[1].ProviderData)
+	}
+	msgs = append(msgs, first.Message,
+		llm.ChatMessage{Role: llm.RoleTool, ToolCallID: "c1", Name: "echo", Content: "OK"},
+		llm.ChatMessage{Role: llm.RoleTool, ToolCallID: "c2", Name: "echo", Content: "OK"})
+	if _, err := p.Chat(context.Background(), &llm.ChatRequest{Messages: msgs}); err != nil {
+		t.Fatal(err)
+	}
+	sent := second["messages"].([]any)[1].(map[string]any)["tool_calls"].([]any)
+	if sig := sent[0].(map[string]any)["extra_content"]; sig == nil || sig.(map[string]any)["google"].(map[string]any)["thought_signature"] != "SIG==" {
+		t.Fatalf("signature not echoed: %v", sent[0])
+	}
+	if _, has := sent[1].(map[string]any)["extra_content"]; has {
+		t.Fatalf("invalid extra content must not be echoed: %v", sent[1])
+	}
+}

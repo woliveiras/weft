@@ -347,18 +347,33 @@ func RunLive(t *testing.T, p llm.Provider, model string) {
 		}
 	})
 	t.Run("tool call", func(t *testing.T) {
+		tools := []llm.ToolSchema{{Name: "fixture.echo", Description: "Echo a word back.",
+			Parameters: json.RawMessage(`{"type":"object","properties":{"word":{"type":"string"}},"required":["word"]}`)}}
 		resp, err := p.Chat(ctx, &llm.ChatRequest{
 			Model:    model,
 			System:   "You can only act through tools. Always call the provided tool.",
 			Messages: []llm.ChatMessage{{Role: llm.RoleUser, Content: "Use the echo tool to echo the word OK."}},
-			Tools: []llm.ToolSchema{{Name: "fixture.echo", Description: "Echo a word back.",
-				Parameters: json.RawMessage(`{"type":"object","properties":{"word":{"type":"string"}},"required":["word"]}`)}},
+			Tools:    tools,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(resp.Message.ToolCalls) == 0 || resp.Message.ToolCalls[0].Name != "fixture.echo" || !json.Valid(resp.Message.ToolCalls[0].Arguments) {
 			t.Fatalf("no structured tool call (the model may not support tool calling): %+v", resp.Message)
+		}
+		// The agent loop sends the call and its result back: providers
+		// that attach state to calls (Gemini's thought signatures) must
+		// accept their own calls on the next turn.
+		msgs := []llm.ChatMessage{{Role: llm.RoleUser, Content: "Use the echo tool to echo the word OK."}, resp.Message}
+		for _, tc := range resp.Message.ToolCalls {
+			msgs = append(msgs, llm.ChatMessage{Role: llm.RoleTool, ToolCallID: tc.ID, Name: tc.Name, Content: "OK"})
+		}
+		next, err := p.Chat(ctx, &llm.ChatRequest{Model: model, System: "You can only act through tools. Always call the provided tool.", Messages: msgs, Tools: tools, MaxTokens: liveAnswerTokens})
+		if err != nil {
+			t.Fatalf("second turn with the tool result: %v", err)
+		}
+		if strings.TrimSpace(next.Message.Content) == "" && len(next.Message.ToolCalls) == 0 {
+			t.Fatalf("empty second turn: %+v", next)
 		}
 	})
 	t.Run("json mode", func(t *testing.T) {

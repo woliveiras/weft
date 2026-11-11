@@ -107,6 +107,9 @@ type wireToolCall struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
 	} `json:"function"`
+	// ExtraContent is vendor data on the call (Gemini's thought_signature);
+	// it is echoed back verbatim on later turns.
+	ExtraContent json.RawMessage `json:"extra_content,omitempty"`
 }
 
 type wireTool struct {
@@ -198,6 +201,7 @@ func (p *Provider) buildRequest(req *llm.ChatRequest) *wireRequest {
 				// The OpenAI wire format carries arguments as a JSON string.
 				s, _ := json.Marshal(string(llm.NormalizeArgs(tc.Arguments)))
 				wtc.Function.Arguments = s
+				wtc.ExtraContent = tc.ProviderData
 				wm.ToolCalls = append(wm.ToolCalls, wtc)
 			}
 		default:
@@ -238,6 +242,8 @@ func (p *Provider) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatRes
 			ID:        id,
 			Name:      llm.PlatformToolName(tc.Function.Name),
 			Arguments: llm.NormalizeArgs(tc.Function.Arguments),
+			// Only a JSON object is kept, so arbitrary values never reach a later request.
+			ProviderData: objectOrNil(tc.ExtraContent),
 		})
 	}
 	model := out.Model
@@ -305,4 +311,12 @@ func outputTokens(prompt, completion, total int) int {
 		return completion + hidden
 	}
 	return completion
+}
+
+func objectOrNil(raw json.RawMessage) json.RawMessage {
+	var obj map[string]json.RawMessage
+	if len(raw) == 0 || json.Unmarshal(raw, &obj) != nil || len(obj) == 0 {
+		return nil
+	}
+	return raw
 }
