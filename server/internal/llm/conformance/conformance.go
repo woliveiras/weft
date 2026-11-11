@@ -326,7 +326,8 @@ func RunLive(t *testing.T, p llm.Provider, model string) {
 			t.Fatal(err)
 		}
 		for _, m := range ms {
-			if m.ID == model {
+			// Gemini lists models as models/<id> and accepts <id>.
+			if strings.TrimPrefix(m.ID, "models/") == strings.TrimPrefix(model, "models/") {
 				return
 			}
 		}

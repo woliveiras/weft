@@ -108,6 +108,13 @@ a model that does nothing fails every case. Real models are measured with
 `make eval-local EVAL_MODELS=llama3.2:latest,qwen3.6:27b-q4_K_M`, which writes
 the tables to `server/eval-report.md`.
 
+Hosted models behind an OpenAI-compatible endpoint (Gemini by default) are
+measured with `make eval-cloud CLOUD_MODEL=gemini-3.5-flash` (add
+`EVAL_WORKFLOW=factory` for Software Factory v2), and the provider itself is
+checked first with `make test-llm-cloud`. Both read the key from
+`WEFT_CLOUD_API_KEY` in the local `.env` and send one request at a time with
+retries, so free-tier rate limits slow a run instead of failing it.
+
 A run counts as solved only when the checks pass **and** the agent finished
 its turn: a correct workspace from a turn that never ends is not usable.
 

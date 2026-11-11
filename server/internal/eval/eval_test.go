@@ -262,20 +262,41 @@ func TestLocalModels(t *testing.T) {
 	if url == "" {
 		t.Skip("set WEFT_EVAL_OLLAMA_URL to measure local models")
 	}
+	measure(t, "ollama", url, "", "llama3.2:latest", 900)
+}
+
+// TestCloudModels measures models behind an OpenAI-compatible endpoint
+// (WEFT_EVAL_OPENAI_URL, key in WEFT_EVAL_OPENAI_KEY, comma-separated
+// WEFT_EVAL_MODELS). Calls go one at a time with retries, so free-tier
+// rate limits slow a run down instead of failing it.
+func TestCloudModels(t *testing.T) {
+	url := os.Getenv("WEFT_EVAL_OPENAI_URL")
+	if url == "" {
+		t.Skip("set WEFT_EVAL_OPENAI_URL and WEFT_EVAL_OPENAI_KEY to measure hosted models")
+	}
+	measure(t, "openai", url, os.Getenv("WEFT_EVAL_OPENAI_KEY"), "", 300)
+}
+
+func measure(t *testing.T, typ, url, key, defaultModel string, timeoutSec int) {
+	t.Helper()
 	models := strings.Split(os.Getenv("WEFT_EVAL_MODELS"), ",")
 	if models[0] == "" {
-		models = []string{"llama3.2:latest"}
+		if defaultModel == "" {
+			t.Fatal("set WEFT_EVAL_MODELS")
+		}
+		models = []string{defaultModel}
 	}
 	a, ws := newApp(t)
 	var results []eval.Result
 	n := 0
 	for _, m := range models {
-		name := "ollama-" + strings.NewReplacer(":", "-", ".", "-", "/", "-").Replace(m)
-		p, err := llm.New(llm.ProviderConfig{Name: name, Type: "ollama", BaseURL: url, DefaultModel: m, TimeoutSec: 900})
+		name := typ + "-" + strings.NewReplacer(":", "-", ".", "-", "/", "-").Replace(m)
+		cfg := llm.ProviderConfig{Name: name, Type: typ, BaseURL: url, DefaultModel: m, TimeoutSec: timeoutSec, MaxRetries: 4, Concurrency: 1, APIKeyValue: key}
+		p, err := llm.New(cfg)
 		if err != nil {
 			t.Fatal(err)
 		}
-		a.Models.Add(llm.ProviderConfig{Name: name, Type: "ollama", DefaultModel: m, ModelGuidance: os.Getenv("WEFT_EVAL_GUIDANCE")}, p)
+		a.Models.Add(llm.ProviderConfig{Name: name, Type: typ, DefaultModel: m, Concurrency: 1, ModelGuidance: os.Getenv("WEFT_EVAL_GUIDANCE")}, p)
 		for _, c := range eval.Cases {
 			w := eval.Single
 			if os.Getenv("WEFT_EVAL_WORKFLOW") == string(eval.Factory) {

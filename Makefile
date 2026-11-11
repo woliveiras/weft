@@ -8,6 +8,10 @@ PYTHON    ?= python3
 VERSION   ?= dev
 NAMESPACE ?= weft
 GRAPH     ?= examples/graphs/software-factory.yaml
+# Hosted OpenAI-compatible endpoint for test-llm-cloud and eval-cloud; the
+# key is WEFT_CLOUD_API_KEY in the local .env (never committed, never echoed).
+CLOUD_URL   ?= https://generativelanguage.googleapis.com/v1beta/openai/
+CLOUD_MODEL ?= gemini-3.5-flash
 
 .PHONY: egress-image test-egress test-environment-policy help build test test-compose test-go test-python test-web test-sandbox test-sandbox-capacity test-environment-context lint fmt up down logs images k8s-render clean
 
@@ -99,6 +103,19 @@ test-e2e-real: ## Browser journey with shell.exec on the running dedicated sandb
 eval-local: ## Measure the native coding runtime with local Ollama models (EVAL_MODELS=llama3.2:latest,... EVAL_GUIDANCE=small EVAL_WORKFLOW=factory)
 	WEFT_EVAL_OLLAMA_URL=$${WEFT_EVAL_OLLAMA_URL:-http://host.docker.internal:11434} WEFT_EVAL_MODELS=$${EVAL_MODELS:-llama3.2:latest} WEFT_EVAL_GUIDANCE=$(EVAL_GUIDANCE) WEFT_EVAL_WORKFLOW=$(EVAL_WORKFLOW) \
 		WEFT_EVAL_REPORT=/repo/server/eval-report.md $(GO) test ./internal/eval -run TestLocalModels -count=1 -timeout 4h -v
+
+.PHONY: test-llm-cloud
+test-llm-cloud: ## Live provider conformance against CLOUD_URL/CLOUD_MODEL (key: WEFT_CLOUD_API_KEY in .env)
+	@set -a; . ./.env; set +a; test -n "$$WEFT_CLOUD_API_KEY" || { echo "set WEFT_CLOUD_API_KEY in .env"; exit 2; }; \
+		WEFT_TEST_OPENAI_URL="$(CLOUD_URL)" WEFT_TEST_OPENAI_MODEL="$(CLOUD_MODEL)" WEFT_TEST_OPENAI_KEY="$$WEFT_CLOUD_API_KEY" \
+		$(GO) test ./internal/llm/conformance -run TestOpenAICompatibleLive -count=1 -v
+
+.PHONY: eval-cloud
+eval-cloud: ## Measure the native coding runtime with hosted models (CLOUD_MODEL=a,b EVAL_WORKFLOW=factory; key: WEFT_CLOUD_API_KEY in .env)
+	@set -a; . ./.env; set +a; test -n "$$WEFT_CLOUD_API_KEY" || { echo "set WEFT_CLOUD_API_KEY in .env"; exit 2; }; \
+		WEFT_EVAL_OPENAI_URL="$(CLOUD_URL)" WEFT_EVAL_OPENAI_KEY="$$WEFT_CLOUD_API_KEY" WEFT_EVAL_MODELS="$(CLOUD_MODEL)" \
+		WEFT_EVAL_GUIDANCE="$(EVAL_GUIDANCE)" WEFT_EVAL_WORKFLOW="$(EVAL_WORKFLOW)" WEFT_EVAL_REPORT=/repo/server/eval-report.md \
+		$(GO) test ./internal/eval -run TestCloudModels -count=1 -timeout 4h -v
 
 .PHONY: test-e2e-providers
 test-e2e-providers: ## Real LangGraph + browser provider journey, no Docker (set WEFT_E2E_PYTHON)

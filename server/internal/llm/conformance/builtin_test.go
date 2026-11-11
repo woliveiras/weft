@@ -56,3 +56,20 @@ func TestOllamaLive(t *testing.T) {
 	}
 	conformance.RunLive(t, p, model)
 }
+
+// TestOpenAICompatibleLive runs the live subset against a hosted
+// OpenAI-compatible endpoint (e.g. Gemini's) when WEFT_TEST_OPENAI_URL is
+// set, with WEFT_TEST_OPENAI_MODEL and the key in WEFT_TEST_OPENAI_KEY. It
+// is skipped otherwise; the key never appears in output.
+func TestOpenAICompatibleLive(t *testing.T) {
+	url, model := os.Getenv("WEFT_TEST_OPENAI_URL"), os.Getenv("WEFT_TEST_OPENAI_MODEL")
+	if url == "" || model == "" {
+		t.Skip("set WEFT_TEST_OPENAI_URL, WEFT_TEST_OPENAI_MODEL and WEFT_TEST_OPENAI_KEY to run against a hosted endpoint")
+	}
+	p, err := llm.New(llm.ProviderConfig{Name: "live-openai", Type: "openai", BaseURL: url, DefaultModel: model, TimeoutSec: 120, MaxRetries: 3,
+		APIKeyValue: os.Getenv("WEFT_TEST_OPENAI_KEY")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conformance.RunLive(t, p, model)
+}
