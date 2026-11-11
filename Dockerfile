@@ -3,12 +3,14 @@
 # Multi-stage: the console is built with Node, the binaries with Go, and the
 # runtime image carries only what agents' tools need (git, python3, a shell).
 
-FROM node:22-alpine AS web
+FROM node:22-alpine AS web-source
 RUN corepack enable
 WORKDIR /web
 COPY web/package.json web/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY web/ ./
+
+FROM web-source AS web
 RUN pnpm run build
 
 FROM golang:1.26-alpine AS build

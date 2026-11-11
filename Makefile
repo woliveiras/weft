@@ -1,6 +1,6 @@
 # Weft developer tasks. Standard Go targets use Docker via scripts/go.sh.
 # build-native and test-native-browser use the installed host Go toolchain.
-# Python and Node/pnpm run locally for their corresponding suites.
+# Console tests use the Dockerfile's web toolchain. Python tests run locally.
 
 GO        := ./scripts/go.sh
 COMPOSE   := docker compose
@@ -45,7 +45,8 @@ test-python: ## SDK and example agent tests (stdlib unittest)
 	$(PYTHON) -m unittest discover -s scripts/tests -v
 
 test-web: ## Type-check and run the web console tests (Vitest, jsdom)
-	cd web && pnpm install --frozen-lockfile && pnpm exec tsc --noEmit && pnpm test
+	image=$$(docker build -q --target web-source .) && \
+		docker run --rm "$$image" sh -ec 'pnpm exec tsc --noEmit && pnpm test'
 
 test-compose: ## Reviewed Compose services on the dedicated daemon (cached alpine:3.22 required)
 	./scripts/test-compose-runtime.sh
