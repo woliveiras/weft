@@ -21,20 +21,22 @@ import (
 const MaxJournalBytes int64 = 64 << 20
 
 type Record struct {
-	ID           string    `json:"id"`
-	Time         time.Time `json:"time"`
-	Path         string    `json:"path,omitempty"`
-	Operation    string    `json:"operation,omitempty"`
-	PID          int32     `json:"pid,omitempty"`
-	ProcessStart string    `json:"processStart,omitempty"`
-	Namespace    string    `json:"namespace,omitempty"`
-	BootID       string    `json:"bootId,omitempty"`
-	Gap          string    `json:"gap,omitempty"`
+	ID           string     `json:"id"`
+	Time         time.Time  `json:"time"`
+	Path         string     `json:"path,omitempty"`
+	Operation    string     `json:"operation,omitempty"`
+	PID          int32      `json:"pid,omitempty"`
+	ProcessStart string     `json:"processStart,omitempty"`
+	Namespace    string     `json:"namespace,omitempty"`
+	BootID       string     `json:"bootId,omitempty"`
+	Gap          string     `json:"gap,omitempty"`
+	GapWindow    *gapWindow `json:"gapWindow,omitempty"`
 }
 
 type Writer struct {
 	f    *os.File
 	size int64
+	err  error
 }
 
 func OpenWriter(path string) (*Writer, error) {
@@ -54,10 +56,13 @@ func OpenWriter(path string) (*Writer, error) {
 			return nil, fmt.Errorf("journal ends with an incomplete record; preserve it for recovery")
 		}
 	}
-	return &Writer{f, info.Size()}, nil
+	return &Writer{f: f, size: info.Size()}, nil
 }
 func (w *Writer) Close() error { return w.f.Close() }
 func (w *Writer) Append(r Record) error {
+	if w.err != nil {
+		return w.err
+	}
 	if r.ID == "" {
 		r.ID = domain.NewID("wj")
 	}
@@ -77,13 +82,17 @@ func (w *Writer) Append(r Record) error {
 	}
 	n, err := w.f.Write(data)
 	w.size += int64(n)
+	if err == nil && n != len(data) {
+		err = io.ErrShortWrite
+	}
+	if err == nil {
+		err = w.f.Sync()
+	}
 	if err != nil {
-		return err
+		// A failed append may have left a partial record on disk.
+		w.err = fmt.Errorf("persist workspace journal record: %w", err)
 	}
-	if n != len(data) {
-		return io.ErrShortWrite
-	}
-	return w.f.Sync()
+	return w.err
 }
 
 // Scope is installation-derived, not supplied by an agent or journal record.
@@ -179,6 +188,10 @@ func (i *Importer) Import(ctx context.Context) error {
 		if r.Gap == "" && (!validPath(r.Path) || !validOperation(r.Operation)) {
 			return fmt.Errorf("invalid workspace journal operation")
 		}
+		if window := r.GapWindow; window != nil && (r.Gap != unresolvedKernelPath || window.Count == 0 ||
+			window.Start.IsZero() || window.End.IsZero() || window.End.Before(window.Start)) {
+			return fmt.Errorf("invalid workspace journal gap window")
+		}
 		for _, s := range scopes {
 			rel, ok := scopePath(s.RelativeRoot, r.Path)
 			if r.Gap == "" && !ok {
@@ -194,6 +207,9 @@ func (i *Importer) Import(ctx context.Context) error {
 				data["status"] = "partial"
 				data["changes"] = []any{}
 				data["attribution"] = "unknown"
+				if r.GapWindow != nil {
+					data["gapWindow"] = r.GapWindow
+				}
 			}
 			ev := domain.NewEvent("workspace.observed", s.GraphID, data).WithActor("workspace-journal")
 			ev.ID = r.ID + "_" + s.GraphID + "_" + s.NodeID + fmt.Sprint(s.Replica)

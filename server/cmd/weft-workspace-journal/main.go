@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log"
 	"os"
@@ -19,10 +20,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer writer.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := workspacejournal.Capture(ctx, *root, writer); err != nil {
+	err = workspacejournal.Capture(ctx, *root, writer)
+	if err := errors.Join(err, writer.Close()); err != nil {
 		log.Fatal(err)
 	}
 }

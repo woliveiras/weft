@@ -178,11 +178,54 @@ func TestKernelQueueOverflowBecomesGap(t *testing.T) {
 	event := make([]byte, 24)
 	binary.NativeEndian.PutUint64(event[8:16], unix.FAN_Q_OVERFLOW)
 	binary.NativeEndian.PutUint32(event[16:20], ^uint32(0))
-	if err := captureEvent(event, -1, "/workspace", "namespace", "boot", w); err != nil {
+	var gaps unresolvedGaps
+	if err := gaps.observe(time.Now(), w.Append); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := captureEvent(event, -1, "/workspace", "namespace", "boot", w, &gaps); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || strings.Count(string(data), "kernel_queue_overflow") != 2 ||
+		strings.Contains(string(data), unresolvedKernelPath) {
+		t.Fatalf("%s %v", data, err)
+	}
+}
+
+func TestUnresolvableDirectoryHandlesShareGapWindow(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events")
+	w, err := OpenWriter(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	order := binary.NativeEndian
+	event := make([]byte, 50)
+	order.PutUint16(event[6:8], 24)
+	order.PutUint64(event[8:16], unix.FAN_CREATE)
+	order.PutUint32(event[16:20], ^uint32(0))
+	info := event[24:]
+	info[0] = unix.FAN_EVENT_INFO_TYPE_DFID_NAME
+	order.PutUint16(info[2:4], uint16(len(info)))
+	order.PutUint32(info[12:16], 4)
+	copy(info[24:], "x\x00")
+	var gaps unresolvedGaps
+	for range 3 {
+		if err := captureEvent(event, -1, "/workspace", "namespace", "boot", w, &gaps); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := gaps.flush(w.Append); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(path)
-	if err != nil || !strings.Contains(string(data), "kernel_queue_overflow") {
-		t.Fatalf("%s %v", data, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var r Record
+	if err := json.Unmarshal(data, &r); err != nil || r.Gap != unresolvedKernelPath || r.GapWindow == nil || r.GapWindow.Count != 3 {
+		t.Fatalf("unresolved handles: %s (%v)", data, err)
 	}
 }

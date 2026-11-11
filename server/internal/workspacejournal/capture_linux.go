@@ -17,8 +17,8 @@ import (
 
 // Capture runs in the already privileged dedicated daemon's PID namespace.
 // It does not change sandbox capabilities, mounts or authorization policies.
-func Capture(ctx context.Context, root string, writer *Writer) error {
-	root, err := filepath.EvalSymlinks(root)
+func Capture(ctx context.Context, root string, writer *Writer) (err error) {
+	root, err = filepath.EvalSymlinks(root)
 	if err != nil {
 		return err
 	}
@@ -47,13 +47,23 @@ func Capture(ctx context.Context, root string, writer *Writer) error {
 	if strings.TrimSpace(string(boot)) == "" {
 		return fmt.Errorf("collector boot identity is empty")
 	}
-	if err := writer.Append(Record{Gap: "collector_started", Namespace: namespace, BootID: strings.TrimSpace(string(boot))}); err != nil {
+	bootID := strings.TrimSpace(string(boot))
+	if err := writer.Append(Record{Gap: "collector_started", Namespace: namespace, BootID: bootID}); err != nil {
 		return err
 	}
+	var gaps unresolvedGaps
+	defer func() {
+		if flushErr := gaps.flush(writer.Append); flushErr != nil && !errors.Is(err, flushErr) {
+			err = errors.Join(err, flushErr)
+		}
+	}()
 	buffer := make([]byte, 256<<10)
 	for {
 		if ctx.Err() != nil {
 			return nil
+		}
+		if err := gaps.flushExpired(time.Now(), writer.Append); err != nil {
+			return err
 		}
 		n, err := unix.Read(fd, buffer)
 		if errors.Is(err, unix.EAGAIN) {
@@ -81,14 +91,14 @@ func Capture(ctx context.Context, root string, writer *Writer) error {
 			}
 			event = event[:length]
 			pos += length
-			if err := captureEvent(event, mount, root, namespace, strings.TrimSpace(string(boot)), writer); err != nil {
+			if err := captureEvent(event, mount, root, namespace, bootID, writer, &gaps); err != nil {
 				return err
 			}
 		}
 	}
 }
 
-func captureEvent(event []byte, mount int, root, namespace, boot string, writer *Writer) error {
+func captureEvent(event []byte, mount int, root, namespace, boot string, writer *Writer, gaps *unresolvedGaps) error {
 	order := binary.NativeEndian
 	mask := order.Uint64(event[8:16])
 	pid := int32(order.Uint32(event[20:24]))
@@ -158,7 +168,7 @@ func captureEvent(event []byte, mount int, root, namespace, boot string, writer 
 		}
 	}
 	if unresolved {
-		return writer.Append(Record{Gap: "unresolved_kernel_path"})
+		return gaps.observe(time.Now(), writer.Append)
 	}
 	if path == "" {
 		return nil

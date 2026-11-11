@@ -320,9 +320,14 @@ also checks journal identity and refuses truncation/replacement. Original record
 times survive replay. This recovers events collected while **weftd was offline**;
 it cannot recover events never captured while the collector itself was offline.
 
-Startup emits a coverage gap. Kernel queue overflow and unresolved file handles
-also emit gaps; deleted parent directories can prevent path resolution. Kernel
-notifications can coalesce operations and are not a complete syscall trace.
+Startup and each kernel queue overflow are recorded immediately as coverage
+gaps. Repeated unresolved paths, such as when parent directories are deleted,
+share one partial observation per scope for each 10-second window. Its
+`gapWindow` contains the observation count and the earliest and latest
+observation times. The collector flushes pending windows when they expire or
+when it shuts down. An abrupt stop can lose pending counts, and the next startup
+records a new coverage gap. Kernel notifications can coalesce operations and
+are not a complete syscall trace.
 Files outside the mounted workspace root and `.git` metadata are excluded. The
 collector does not inspect other PID namespaces or claim support for native
 macOS/Windows, rootless or arbitrary external hosts. Snapshot monitoring remains
