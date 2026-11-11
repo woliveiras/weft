@@ -206,14 +206,14 @@ function Canvas({
           nodeColor={(n) => {
             const st = (n.data as AgentNodeData).status?.state;
             return st === 'running'
-              ? 'var(--green)'
+              ? 'var(--success)'
               : st === 'idle'
-                ? 'var(--blue)'
+                ? 'var(--info)'
                 : st === 'failed'
-                  ? 'var(--red)'
-                  : '#c6c3bc';
+                  ? 'var(--danger)'
+                  : 'var(--status-neutral)';
           }}
-          maskColor="rgba(41,42,50,0.12)"
+          maskColor="var(--minimap-mask)"
         />
       </ReactFlow>
     </div>

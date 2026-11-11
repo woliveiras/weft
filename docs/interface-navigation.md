@@ -30,6 +30,12 @@ Existing `#/integrations`, `#/integrations/connect?...` and
 callback URLs and query validation are unchanged. New navigation uses Connections.
 Provider management previously located under Integrations is now under Models.
 
+The top bar has a **Theme** selector (System, Light, Dark). System follows the
+operating system's light/dark setting; an explicit choice is stored in this
+browser only (`localStorage` key `weftTheme`) and is not installation
+configuration. If the browser blocks storage, the choice applies to the current
+tab and the selector says so. Colours follow [the brand guidelines](brand/brand-guidelines.md).
+
 Roles and API authorization remain unchanged. Viewers inspect; operators can perform
 existing permitted tests; administrative edits remain admin-only. An OAuth grant
 never assigns tools to agents. Credentials remain managed by the existing server APIs.

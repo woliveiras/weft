@@ -16,6 +16,8 @@ import { connectionTabs, type ConnectionTab } from './components/mcpNavigation';
 import { SkillsView } from './components/SkillsView';
 import { useAsync, useThrottled } from './hooks/useData';
 import { EventStreamProvider, useEventStream } from './hooks/useEventStream';
+import { BrandMark } from './components/BrandMark';
+import { ThemeSwitcher } from './components/ThemeSwitcher';
 
 /**
  * Routes live in the hash so a reload (or a shared link) returns to the same
@@ -161,8 +163,8 @@ function Shell() {
   return (
     <div className="app">
       <header className="topbar">
-        <button type="button" className="brand" onClick={() => go({ view: 'graphs' })}>
-          <img src="/favicon.svg?v=2" alt="" width={22} height={22} /> Weft
+        <button type="button" className="brand" aria-label="Weft" onClick={() => go({ view: 'graphs' })}>
+          <BrandMark size={26} /><span className="brand-name" aria-hidden="true">weft</span>
         </button>
         <GraphSelector graphs={list} currentId={route.view === 'graph' ? route.id : undefined} dirty={dirty} loading={graphs.loading} error={graphs.error}
           onReload={() => void graphs.reload()}
@@ -174,6 +176,7 @@ function Shell() {
             {MOCK && <Badge tone="warn">mock</Badge>}
           </span>
         )}
+        <ThemeSwitcher />
         <span className={`conn ${connected ? 'on' : ''}`} title="Event stream">
           {connected ? '● live' : '○ offline'}
         </span>

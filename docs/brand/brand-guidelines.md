@@ -304,17 +304,23 @@ Weft speaks like a careful senior operator: direct, specific, never alarmist.
 
 ## 13. Redesign checklist
 
-Current gaps between `web/src/styles.css` and this guide:
+Gaps between the console and this guide. Tokens live at the top of
+`web/src/styles.css`; the theme preference is handled by `web/src/theme.ts`
+(stored per browser as `weftTheme`).
 
-- [ ] Replace the old indigo accent (`--accent: #5b55d9`) with teal tokens.
-- [ ] Replace `web/public/favicon.svg` with the Weft app icon.
-- [ ] Introduce semantic tokens (§4.3) and remove raw hex values from
-      component styles (≈ 70 distinct literals today).
-- [ ] Add dark theme (none exists today).
-- [ ] Separate status colours from brand colours (§4.4).
-- [ ] Self-host Inter and JetBrains Mono.
-- [ ] Add the lockup / mark to the app shell.
-- [ ] Apply the thread motif to graph edges and active navigation (§8).
+- [x] Replace the old indigo accent (`--accent: #5b55d9`) with teal tokens.
+- [x] Replace `web/public/favicon.svg` with the Weft app icon.
+- [x] Introduce semantic tokens (§4.3) and remove raw hex values from
+      component styles.
+- [x] Add dark theme: follows `prefers-color-scheme`, with a System / Light /
+      Dark selector in the top bar.
+- [x] Separate status colours from brand colours (§4.4).
+- [x] Add the mark and wordmark to the app shell.
+- [x] Thread motif on graph edges: flowing and selected channels are amber (§8).
+- [ ] Thread motif on active navigation (§8).
+- [ ] Self-host Inter and JetBrains Mono (needs the font files added to the repo).
+- [ ] Apply the type scale (§5), spacing and radius tokens (§7) across components.
 - [ ] Adopt one icon set (§6).
+- [ ] Redesign page layouts (app shell, lists, forms, graph editor) on top of the tokens.
 - [ ] Add visual regression screenshots (Playwright) for light and dark themes
       on the main destinations.
