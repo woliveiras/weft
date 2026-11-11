@@ -43,6 +43,18 @@ conditions. Historical task IDs remain source references.
 - [TASK-007 — Task Execution Admission and Recovery](./product-and-tasks/task-execution-admission-and-recovery/spec.md) — `implemented`. Start a reviewed workflow copy once, preserve its scoped execution state and recover without inventing success.
 - [TASK-008 — Registered Projects and Task Worktrees](./product-and-tasks/registered-projects-and-task-worktrees/spec.md) — `implemented`. Register repositories and create isolated task worktrees with reviewed cleanup.
 
+## Workspaces and environments
+
+- [ENV-001 — Repository Snapshot Imports](./workspaces-and-environments/repository-snapshot-imports/spec.md) — `implemented`. Import reviewed Git snapshots and retain safe retry, authentication and worktree boundaries.
+- [ENV-002 — Read-only Workspace and Git Review](./workspaces-and-environments/read-only-workspace-and-git-review/spec.md) — `implemented`. Inspect authorized files and Git evidence and hand off a selected workspace for human review.
+- [ENV-003 — Workspace Change Journal and Attribution](./workspaces-and-environments/workspace-change-journal-and-attribution/spec.md) — `in-progress`. Record bounded change evidence, preserve honest attribution and recover the Linux workspace journal.
+- [ENV-004 — Durable Human Review and Protected Previews](./workspaces-and-environments/durable-human-review-and-protected-previews/spec.md) — `implemented`. Bind review to a durable candidate and expose protected Docker previews through the gateway.
+- [ENV-005 — Dedicated Docker Sandbox Isolation](./workspaces-and-environments/dedicated-docker-sandbox-isolation/spec.md) — `implemented`. Run Docker-isolated agents on the dedicated daemon and keep sandbox resources and access separate from the host.
+- [ENV-006 — Sandbox Capacity and Idle Resume](./workspaces-and-environments/sandbox-capacity-and-idle-resume/spec.md) — `implemented`. Bound preparation and execution resources and resume idle containers through admission.
+- [ENV-007 — Environment Discovery and Reviewed Definitions](./workspaces-and-environments/environment-discovery-and-reviewed-definitions/spec.md) — `implemented`. Discover repository environment candidates and require review before adopting a definition or an agent proposal.
+- [ENV-008 — Environment Build, Reuse and Cleanup](./workspaces-and-environments/environment-build-reuse-and-cleanup/spec.md) — `implemented`. Build and reuse compatible environments while retaining isolated workspaces and protecting referenced generations.
+- [ENV-009 — Environment Network Policy and Egress](./workspaces-and-environments/environment-network-policy-and-egress/spec.md) — `implemented`. Enforce installation policy across environment preparation and execution and expose bounded proxy denial history.
+
 ## Production readiness
 
 The first four items are production blockers in the order listed. The remaining
