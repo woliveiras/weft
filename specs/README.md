@@ -66,6 +66,15 @@ conditions. Historical task IDs remain source references.
 - [INT-007 — MCP Vendor Profiles and Qualification](./providers-and-integrations/mcp-vendor-profiles-and-qualification/spec.md) — `in-progress`. Preserve provider-specific connection and resource boundaries and qualify each selected profile separately.
 - [INT-008 — Managed MCP Hosting](./providers-and-integrations/managed-mcp-hosting/spec.md) — `planned`. Preserve the reviewed design for isolated, installation-managed MCP server generations.
 
+## Runtime and delivery
+
+- [RUN-001 — Skills and Project Steering](./runtime-and-delivery/skills-and-project-steering/spec.md) — `implemented`. Compose explicitly selected managed skills and bounded project steering and preserve the execution snapshot.
+- [RUN-002 — Dynamic Delegation and Execution Trees](./runtime-and-delivery/dynamic-delegation-and-execution-trees/spec.md) — `in-progress`. Run bounded native children under inherited grants and preserve execution-tree control and token accounting.
+- [RUN-003 — Native Coding Runtime](./runtime-and-delivery/native-coding-runtime/spec.md) — `implemented`. Keep coding turns, tool execution and verification within Weft's native runtime and gateways.
+- [RUN-004 — Coding Evaluation and Model Benchmarks](./runtime-and-delivery/coding-evaluation-and-model-benchmarks/spec.md) — `implemented`. Measure coding workflows with independent task checks and retain the conditions and limits of each benchmark.
+- [RUN-005 — Gateway-mediated Source Control Delivery](./runtime-and-delivery/gateway-mediated-source-control-delivery/spec.md) — `in-progress`. Push and open pull requests through the reviewed SCM gateway with task-scoped credentials and evidence.
+- [RUN-006 — Issue References and Polling Triggers](./runtime-and-delivery/issue-references-and-polling-triggers/spec.md) — `implemented`. Read reviewed issue references and start eligible labeled work through consent-bound polling.
+
 ## Production readiness
 
 The first four items are production blockers in the order listed. The remaining

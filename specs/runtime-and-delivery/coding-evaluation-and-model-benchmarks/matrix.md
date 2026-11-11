@@ -1,0 +1,9 @@
+# RUN-004 behavior and oracle matrix
+
+Verification paths identify existing checks unless marked pending. Historical runs are scoped in the evidence record.
+
+| Criterion | Scenario | Invariant | Observable oracle | Oracle provenance | Verification | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| [AC-001](./spec.md#ac-001--task-verdict) | Correct edit, unfinished turn, no work or plausible wrong fix | Task verdict | A case runs through the engine, runtime and gateway. A solve requires both the independent repository check and turn completion. Scripted correct solutions pass, idle runs and plausible wrong fixes fail. | spec-derived (Native Coding Runtime, Evaluation suite and Implementation Tasks NAT-01) | [server/internal/eval/eval_test.go](../../../server/internal/eval/eval_test.go) | [Historical record](./evidence.md) |
+| [AC-002](./spec.md#ac-002--repeatable-benchmark-report) | Repeated or partial trial, changed workload or unavailable model | Repeatable benchmark report | A run records model, workflow, case and attempt outcomes, tool calls/errors, usage and time. Repeat counts preserve the per-attempt denominator; fixtures and live opt-in report separately. | spec-derived (Native Coding Runtime, Evaluation suite and Harder cases) | [server/internal/eval/eval_test.go](../../../server/internal/eval/eval_test.go) | [Historical record](./evidence.md) |
+| [AC-003](./spec.md#ac-003--harness-collision-attribution) | Hidden fixture collides with an agent-written helper | Harness collision attribution | The recorded repeated run keeps the observed 17/18 single-agent score and annotates the helper-name collision separately. A rerun under the corrected harness would produce a separate result. | diagnostic-probe (recorded collision and subsequent fixture rename) | Pending comparable rerun if needed | [Historical record](./evidence.md) |
