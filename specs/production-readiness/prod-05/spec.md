@@ -35,6 +35,7 @@ Assess and record the actual boundary for each runtime. Repository instructions,
 ## History
 
 - 2026-11-11. The production checklist called for assessment of the installed security boundaries.
+- 2026-11-11. The security review found that task consent treated the Kubernetes configuration as a sandbox while weftd used process execution. TASK-006 now rejects Workspace shell consent for that mode. Production assessment must verify the actual runtime boundary before qualifying any future per-replica pod implementation.
 
 ## Capability criteria
 

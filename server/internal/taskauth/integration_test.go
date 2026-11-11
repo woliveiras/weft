@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
+	"testing"
+
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/storage/fsstore"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"github.com/woliveiras/weft/server/internal/tools"
-	"strings"
-	"testing"
 )
 
 type sampleTool struct{ calls int }
@@ -283,14 +284,23 @@ func TestConsentSurvivesStoreRestart(t *testing.T) {
 	}
 }
 
-func TestNativeShellRequiresAskOrExplicitFull(t *testing.T) {
-	for _, mode := range []Mode{Ask, Full} {
-		t.Run(string(mode), func(t *testing.T) {
+func TestProcessShellRequiresAskOrExplicitFull(t *testing.T) {
+	for _, tc := range []struct {
+		isolation domain.IsolationMode
+		mode      Mode
+	}{
+		{domain.IsolationProcess, Ask},
+		{domain.IsolationProcess, Full},
+		{domain.IsolationKubernetes, Ask},
+		{domain.IsolationKubernetes, Full},
+	} {
+		t.Run(string(tc.isolation)+"/"+string(tc.mode), func(t *testing.T) {
 			m, d, p := setup(t)
 			g, err := m.Store.GetGraph(t.Context(), d.GraphID, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
+			g.Spec.Nodes[0].Isolation.Mode = tc.isolation
 			g.Spec.Nodes[0].Tools = []domain.ToolGrant{{Name: "shell.exec"}}
 			if _, err = m.Store.SaveGraph(t.Context(), g, 1); err != nil {
 				t.Fatal(err)
@@ -306,14 +316,15 @@ func TestNativeShellRequiresAskOrExplicitFull(t *testing.T) {
 				t.Fatal(err)
 			}
 			if _, err = m.Save(t.Context(), d.ID, Workspace, r.Scope, 0, "admin", true); !errors.Is(err, ErrInvalid) {
-				t.Fatal("native workspace admitted", err)
+				t.Fatal("process shell admitted under Workspace access", err)
 			}
-			if _, err = m.Save(t.Context(), d.ID, mode, r.Scope, 0, "admin", true); err != nil {
+			if _, err = m.Save(t.Context(), d.ID, tc.mode, r.Scope, 0, "admin", true); err != nil {
 				t.Fatal(err)
 			}
 			launch(t, m, d, p)
 			p.Grants = g.Spec.Nodes[0].Tools
 			p.Workdir = t.TempDir()
+			p.Sandbox = &tools.ProcessSandbox{Root: p.Workdir}
 			ap := &approver{}
 			gw := tools.NewGateway(tools.Builtin(tools.BuiltinConfig{}), ap, nil)
 			gw.TaskAuthorization = m.Check
@@ -322,7 +333,7 @@ func TestNativeShellRequiresAskOrExplicitFull(t *testing.T) {
 				t.Fatal(res, err)
 			}
 			want := 0
-			if mode == Ask {
+			if tc.mode == Ask {
 				want = 1
 			}
 			if ap.calls != want {

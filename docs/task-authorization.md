@@ -8,9 +8,11 @@ Precedence is: installation restrictions and cancellation; exact agent grants
 then task-mode approval. Tool path, command, host and rate constraints still apply.
 
 - **Ask for approval** adds a human decision before each granted tool call.
-- **Workspace access** preauthorizes jailed filesystem tools, Git reads and sandbox
-  shell calls. Other tools require a decision. Native shell is refused in this
-  mode: a working directory or Git worktree is not OS confinement.
+- **Workspace access** preauthorizes jailed filesystem tools, Git reads and shell
+  calls in Docker sandboxes. Other tools require a decision. It refuses process
+  shell execution, including `isolation.mode: kubernetes`, which currently runs
+  tools inside the weftd pod. Ask still requires a human decision for granted
+  shell calls in that pod.
 - **Full access** preauthorizes granted operations within the reviewed scope.
   Mandatory grant approvals, human questions, delegation and environment gates
   remain mandatory. This is not a risk classifier or a permission wildcard.

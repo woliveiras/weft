@@ -12,13 +12,16 @@ func TestApproval(t *testing.T) {
 		{Workspace, "filesystem.write", "process", false, false, false},
 		{Workspace, "shell.exec", "process", false, false, true},
 		{Workspace, "shell.exec", "docker", false, false, false},
+		{Workspace, "shell.exec", "kubernetes", false, false, true},
+		{Workspace, "shell.exec", "kubernetes", true, false, true},
+		{Ask, "shell.exec", "kubernetes", false, true, false},
 		{Workspace, "mcp.remote.read", "docker", false, true, false},
 		{Workspace, "git.write", "process", false, true, false},
 		{Full, "shell.exec", "process", false, false, false},
 		{Full, "mcp.remote.write", "process", true, true, false},
 		{"invalid", "filesystem.read", "process", false, false, true},
 	} {
-		t.Run(string(tc.mode)+tc.capability+tc.isolation, func(t *testing.T) {
+		t.Run(string(tc.mode)+"/"+tc.capability+"/"+tc.isolation, func(t *testing.T) {
 			got, err := Approval(tc.mode, tc.capability, tc.isolation, tc.mandatory)
 			if (err != nil) != tc.denied || got != tc.approval {
 				t.Fatalf("%v %v", got, err)

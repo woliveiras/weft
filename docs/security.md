@@ -144,7 +144,9 @@ credentials are re-encrypted at startup.
    on the internal network.
 3. Use OIDC for humans, scoped static tokens (`viewer`/`operator`) for automation.
 4. Run any node holding `shell.exec`, `git.write` or broad `filesystem.write` with
-   `isolation.mode: docker` (or Kubernetes). With Compose, sandboxes run on `sandbox-daemon`, a
+   `isolation.mode: docker`. The current Kubernetes mode runs tools in the weftd
+   pod, so Workspace access refuses shell calls there and Ask requires approval.
+   With Compose, sandboxes run on `sandbox-daemon`, a
    Docker daemon dedicated to Weft — never mount the host's Docker socket. That service is
    privileged (Docker-in-Docker): on shared Linux servers run Weft on a dedicated host or VM.
    See [sandbox-runtime.md](sandbox-runtime.md).

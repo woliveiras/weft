@@ -24,7 +24,7 @@ Bind task authorization to reviewed scope and preserve gateway grants and mandat
 
 ### AC-001 — Reviewed authorization modes
 
-Ask for approval, Workspace access and Full access apply within the effective grants and mandatory approvals. Workspace access denies native shell. Task consent is revision-fenced and binds the actor, workflow, policy and reviewed capability scope.
+Ask for approval, Workspace access and Full access apply within the effective grants and mandatory approvals. Workspace access allows shell only in a Docker sandbox. Process execution, including the current Kubernetes mode in the weftd pod, is refused in Workspace. Ask requires approval for granted shell calls there. Task consent is revision-fenced and binds the actor, workflow, policy and reviewed capability scope.
 
 ### AC-002 — Live reduction and stale consent
 

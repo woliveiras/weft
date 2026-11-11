@@ -20,13 +20,16 @@ var ErrDenied = errors.New("task authorization denied")
 
 func Valid(m Mode) bool { return m == Ask || m == Workspace || m == Full }
 
+// Kubernetes currently uses process execution in the weftd pod.
+func workspaceShellAllowed(isolation string) bool { return isolation == "docker" }
+
 // Approval is evaluated only after exact grants and installation restrictions.
 // Mandatory grant approvals are never converted into automatic decisions.
 func Approval(mode Mode, capability, isolation string, mandatory bool) (bool, error) {
 	if !Valid(mode) {
 		return false, ErrInvalid
 	}
-	if mode == Workspace && capability == "shell.exec" && isolation != "docker" && isolation != "kubernetes" {
+	if mode == Workspace && capability == "shell.exec" && !workspaceShellAllowed(isolation) {
 		return false, ErrDenied // cwd/worktrees are not an OS boundary.
 	}
 	if mandatory {

@@ -131,8 +131,8 @@ func (m Manager) Save(ctx context.Context, id string, mode Mode, scope string, r
 				continue
 			}
 			for _, g := range n.Tools {
-				if (g.Name == "*" || g.Name == "shell.*" || g.Name == "shell.exec") && n.Isolation.Mode != domain.IsolationDocker && n.Isolation.Mode != domain.IsolationKubernetes {
-					return nil, fmt.Errorf("%w: native shell cannot be confined to a worktree; use Ask for approval, Full access or sandbox isolation", ErrInvalid)
+				if (g.Name == "*" || g.Name == "shell.*" || g.Name == "shell.exec") && !workspaceShellAllowed(string(n.Isolation.Mode)) {
+					return nil, fmt.Errorf("%w: process shell cannot be confined to a worktree; use Ask for approval, Full access or Docker isolation", ErrInvalid)
 				}
 			}
 		}

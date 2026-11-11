@@ -544,14 +544,12 @@ func sandboxFactory(cfg *config.Config, envs *environment.Manager, store storage
 				return nil, err // Start reconciles failures without deleting a resumable container.
 			}
 			return sb, nil
-		case domain.IsolationKubernetes:
-			// In Kubernetes the platform pod runs tools in its own (restricted)
-			// container; per-replica tool pods are an extension point.
-			return &tools.ProcessSandbox{Root: s.Workdir}, nil
 		default:
+			// Kubernetes also runs tools as processes in the platform pod until
+			// per-replica tool pods are implemented.
 			for _, g := range s.Node.Tools {
 				if g.Name == "*" || strings.HasPrefix(g.Name, "shell") {
-					slog.Warn("node holds shell.exec under process isolation: commands run as the platform user and can read its environment and files; use isolation.mode docker (or kubernetes) for untrusted work",
+					slog.Warn("node holds shell.exec under process isolation: commands run as the platform user and can read its environment and files; use isolation.mode docker for untrusted work",
 						"graph", s.Graph.Metadata.ID, "node", s.Node.ID)
 					break
 				}
