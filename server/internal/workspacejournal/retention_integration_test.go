@@ -321,3 +321,77 @@ func TestImportCacheReusesArchiveLinksAndRejectsReplacement(t *testing.T) {
 		t.Fatalf("cached importer accepted a same-sized replacement: %v", err)
 	}
 }
+
+type cursorReadHook struct {
+	storage.Store
+	key    string
+	onRead func(context.Context) error
+}
+
+func (s *cursorReadHook) GetSetting(ctx context.Context, key string) (*storage.Setting, error) {
+	setting, err := s.Store.GetSetting(ctx, key)
+	if err == nil && key == s.key {
+		err = s.onRead(ctx)
+	}
+	return setting, err
+}
+
+func TestImportStopsWhenAnchorChangesDuringRetry(t *testing.T) {
+	ctx := t.Context()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events")
+	store := openTestSQLite(t, filepath.Join(dir, "state.db"))
+	importer := journalTestImporter(path, store)
+	w, err := openWriter(path, 1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	for _, id := range []string{"first", "second", "third"} {
+		appendLargeObservation(t, w, id)
+	}
+	if err := importer.Import(ctx); err != nil {
+		t.Fatal(err)
+	}
+	wantCursor, wantRevision := readTestCursor(t, store)
+	if err := w.Append(Record{ID: "pending", Path: "file", Operation: "created"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Each attempt has read its anchor by the time it loads the cursor.
+	// Prune one real archive on each read, leaving the pending record
+	// available to a later pass with a stable anchor.
+	attempts := 0
+	hooked := journalTestImporter(path, &cursorReadHook{
+		Store: store,
+		key:   cursorKey(path),
+		onRead: func(ctx context.Context) error {
+			attempts++
+			if attempts > 2 {
+				return errors.New("unexpected third import attempt")
+			}
+			plan, err := Prune(ctx, store, path, 2-attempts, true)
+			if err != nil {
+				return err
+			}
+			if len(plan.Archives) != 1 {
+				return errors.New("expected one archive pruned on each attempt")
+			}
+			return nil
+		},
+	})
+	if err := hooked.Import(ctx); !errors.Is(err, errAnchorChanged) || attempts != 2 {
+		t.Fatalf("import should stop on the second anchor change: attempts %d, error %v", attempts, err)
+	}
+	if saved, revision := readTestCursor(t, store); saved != wantCursor || revision != wantRevision {
+		t.Fatalf("failed import advanced the cursor: got %+v revision %d, want %+v revision %d", saved, revision, wantCursor, wantRevision)
+	}
+	checkEventOrder(t, store, "first", "second", "third")
+	if err := importer.Import(ctx); err != nil {
+		t.Fatal(err)
+	}
+	checkEventOrder(t, store, "first", "second", "third", "pending")
+}

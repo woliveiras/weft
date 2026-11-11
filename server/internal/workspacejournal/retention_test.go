@@ -55,7 +55,7 @@ func TestReadAnchorRejectsCorruptMetadata(t *testing.T) {
 	}
 }
 
-func TestReadAnchorWithValidJSONRejectsInconsistentChain(t *testing.T) {
+func TestValidateChainRejectsAnchorCursorPastSegmentEnd(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events")
 	const data = `{"version":1,"first":{"id":"first","bytes":100},"previous":{"id":"pruned","bytes":90},"cursor":{"JournalID":"first","Offset":101},"revision":9}`
 	if err := os.WriteFile(anchorPath(path), []byte(data), 0640); err != nil {
