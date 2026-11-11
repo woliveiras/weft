@@ -1,0 +1,31 @@
+rule_files: [alerts.yaml]
+evaluation_interval: 10s
+tests:
+  - interval: 10s
+    input_series:
+      - series: 'weft_workspace_journal_active_bytes{instance="weftd:8080",job="weft"}'
+        values: '1000 62000000+0x7 200'
+      - series: 'weft_workspace_journal_segment_limit_bytes{instance="weftd:8080",job="weft"}'
+        values: '67108864+0x9'
+      - series: 'weft_workspace_journal_active_bytes{instance="below:8080",job="weft"}'
+        values: '60000000+0x9'
+      - series: 'weft_workspace_journal_segment_limit_bytes{instance="below:8080",job="weft"}'
+        values: '67108864+0x9'
+      - series: 'weft_workspace_journal_active_bytes{instance="disabled:8080",job="weft"}'
+        values: '0+0x9'
+      - series: 'weft_workspace_journal_segment_limit_bytes{instance="disabled:8080",job="weft"}'
+        values: '0+0x9'
+    alert_rule_test:
+      - eval_time: 50s
+        alertname: WeftWorkspaceJournalNearLimit
+        exp_alerts: []
+      - eval_time: 1m10s
+        alertname: WeftWorkspaceJournalNearLimit
+        exp_alerts:
+          - exp_labels: {instance: "weftd:8080", job: weft, severity: warning}
+            exp_annotations:
+              summary: "Workspace journal segment is at least 90% full"
+              description: "Check rotation and archive capacity. See the workspace journal runbook in docs/operations.md."
+      - eval_time: 1m30s
+        alertname: WeftWorkspaceJournalNearLimit
+        exp_alerts: []

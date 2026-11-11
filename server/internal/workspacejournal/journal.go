@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/observability"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
@@ -58,7 +59,17 @@ type importProgress struct {
 
 const importBatchSize = 1000
 
-func (i *Importer) Import(ctx context.Context) error {
+func (i *Importer) Import(ctx context.Context) (err error) {
+	started := time.Now()
+	defer func() {
+		observability.WorkspaceJournalImportSeconds.Observe(time.Since(started).Seconds())
+		if err == nil {
+			observability.WorkspaceJournalImports.WithLabelValues("ok").Inc()
+		} else if ctx.Err() == nil {
+			observability.WorkspaceJournalImports.WithLabelValues("error").Inc()
+		}
+	}()
+	observability.WorkspaceJournalSegmentLimitBytes.Set(float64(MaxJournalBytes))
 	key := fmt.Sprintf("workspace-journal/cursor/%x", sha256.Sum256([]byte(i.Path)))
 	saved, revision, err := i.loadCursor(ctx, key)
 	if err != nil {
@@ -73,12 +84,17 @@ func (i *Importer) Import(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	observability.WorkspaceJournalActiveBytes.Set(float64(size))
 	active, err := readSegment(f, size)
 	if err == io.EOF {
 		if saved.JournalID != "" {
 			return fmt.Errorf("journal lost its initial record; refusing cursor reuse")
 		}
-		return requireNoArchives(i.Path)
+		if err := requireNoArchives(i.Path); err != nil {
+			return err
+		}
+		observability.WorkspaceJournalArchivedBytes.Set(0)
+		return nil
 	}
 	if err != nil {
 		return err
@@ -87,6 +103,11 @@ func (i *Importer) Import(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	var archivedBytes int64
+	for _, archived := range chain[:len(chain)-1] {
+		archivedBytes += archived.Bytes
+	}
+	observability.WorkspaceJournalArchivedBytes.Set(float64(archivedBytes))
 	if saved.JournalID == "" {
 		saved.JournalID = chain[0].ID
 	}
@@ -209,9 +230,22 @@ func (i *Importer) importSegment(ctx context.Context, f *os.File, s segment, off
 		if err != nil {
 			return fmt.Errorf("advance workspace journal cursor: %w", err)
 		}
+		observeImportedRecord(r)
 		progress.remaining--
 	}
 	return nil
+}
+
+func observeImportedRecord(r Record) {
+	if r.PreviousSegment != nil {
+		observability.WorkspaceJournalRotations.Inc()
+		return
+	}
+	observability.WorkspaceJournalRecordsImported.Inc()
+	if r.GapWindow != nil {
+		observability.WorkspaceJournalGapWindows.Inc()
+		observability.WorkspaceJournalGapsCoalesced.Add(float64(r.GapWindow.Count - 1))
+	}
 }
 
 func decodeRecord(line []byte) (Record, error) {

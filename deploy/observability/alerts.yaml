@@ -25,3 +25,10 @@ groups:
         for: 5m
         labels: {severity: warning}
         annotations: {summary: "LLM provider {{ $labels.provider }} is failing"}
+      - alert: WeftWorkspaceJournalNearLimit
+        expr: weft_workspace_journal_active_bytes >= 0.90 * weft_workspace_journal_segment_limit_bytes and weft_workspace_journal_segment_limit_bytes > 0
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: "Workspace journal segment is at least 90% full"
+          description: "Check rotation and archive capacity. See the workspace journal runbook in docs/operations.md."
