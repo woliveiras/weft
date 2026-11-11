@@ -38,6 +38,13 @@ Persisted links and approvals identify each execution. An authorized child or tr
 
 A shared ledger reserves bounded calls before dispatch, settles once and charges uncertain dispatched usage conservatively. Terminal recovery and retention preserve totals, fail closed on missing evidence, and reject a late attempt to reopen a closed ledger.
 
+### AC-005 — Delegation decision audit
+
+Runs shows the durable parent/child relationship, objective, model and profile
+configuration, effective grants and bounds, and final approval outcome, actor
+and time. Automatic admission is distinct from a human decision. Reported
+usage and tree reservations are distinct, and legacy missing evidence is labeled.
+
 ## Explicit exclusions
 
 - External child launch, arbitrary model/runtime overrides, cancellation rollback and an enforceable tree-wide monetary ceiling are outside the delivered scope.

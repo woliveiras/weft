@@ -15,7 +15,7 @@ documentation: Update instruction, graph, API, runtime and Activity contracts wh
 authority:
   granted: [specification and matrix drafting]
   withheld: [implementation, new tool grants, new permissions, push, pull request, deployment, release]
-dependencies: [existing instruction composition, selected execution workspace, gateway authorization, execution Activity]
+dependencies: [RUN-001, TASK-007, TASK-008, TASK-006, TASK-004]
 ---
 
 # Load agent guidance from repository workspaces
@@ -57,6 +57,10 @@ Activity already links executions to their run details.
   file grants, even when guidance discovery is disabled. A normal file read
   is recorded as a file operation under existing rules and does not implicitly
   activate a skill.
+- Residual prompt-injection risk remains after enforcing grants. Repository
+  guidance can steer the use of tools already granted to the agent. In Full
+  access this can include writes without a human decision where the effective
+  grant and other mandatory gates allow them.
 - For progressive loading, initial model context carries a skill's name and
   description with enough identity to select it. Only a requested skill body
   or requested local reference is delivered as guidance. The request is bound
@@ -123,14 +127,22 @@ Activity already links executions to their run details.
   and repository guidance and the effective order, managed skill revision,
   repository path and stage hash, on-demand reads and omission reasons. A
   change to saved configuration or workspace bytes after execution does not
-  rewrite history. An unauthorized reader cannot obtain another execution's
-  provenance. A failed or interrupted load is visible as such.
+  rewrite history. The read follows the existing installation-wide Viewer
+  role and the API denies requests that fail authentication or lack that role.
+  A failed or interrupted load is visible as such.
 - **AC-008 — Compatibility and recovery.** Existing graphs retain the
   documented behavior under the chosen rollout rule, including
   `.weft/steering` ordering, prompt/message handling, and old snapshots.
   Discovery does not report success after a policy or audit storage failure.
   Runtimes that cannot preserve the chosen loading contract surface an
   explicit compatibility outcome. Retrying does not duplicate an applied read.
+
+## Explicit exclusions
+
+- Per-execution or per-graph reader authorization, new roles and new grants.
+- Running repository scripts or hooks, importing remote guidance or downloading
+  skills, and granting access to the host or other workspaces.
+- Protection against every instruction that steers an already granted action.
 
 ## Upstream conventions
 

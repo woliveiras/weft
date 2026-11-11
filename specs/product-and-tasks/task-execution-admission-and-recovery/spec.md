@@ -38,6 +38,15 @@ Durable pause state is checked before and after a queue wait. Paused input waits
 
 Progress tracks owned executions and pending work. Retained output, failed/expired gates and failed preparation remain distinguishable from successful completion.
 
+### AC-005 — Task-to-workflow contract
+
+A workflow is a saved graph definition, a task is a durable request against a
+reviewed workflow version, and a registered project identifies the source
+repository for task workspaces. Admission captures the selected graph version,
+entry point and input bindings. The task owns its execution and result links,
+which remain available after refresh. Concurrent reuse preserves independent
+execution scope and uses the existing engine.
+
 ## Explicit exclusions
 
 - Final installed acceptance is PROD-04. Task consent and project worktree ownership are TASK-006 and TASK-008.

@@ -21,7 +21,10 @@ Protect new workflows with human approval on write tools, push and pull requests
 
 ## Behavior and invariants
 
-The scope is conservative defaults for new workflows. Existing grants, operator decisions and gateway controls still apply, including default-deny tool grants.
+Tool grants are default-deny. New task admission defaults to Ask. A granted
+write or push has no universal independent approval default. Its gateway
+approval depends on the task mode and merged grant. SCM connections require
+separate pull-request approval when the connection setting is omitted.
 
 ## Acceptance criteria
 
@@ -31,6 +34,10 @@ The scope is conservative defaults for new workflows. Existing grants, operator 
 ## Open decisions
 
 - Definition of write-capable tools, applicable workflow creation paths, timeout/denial behavior and treatment of existing workflows.
+- Decide whether production defaults can be overridden by
+  `requirePullRequestApproval: false`, which disables the separate SCM gate.
+- Decide how overlapping grants interact with the production default.
+  Currently `requiresApproval` holds only if every matching grant requires it.
 
 ## History
 

@@ -18,13 +18,21 @@ Bind task authorization to reviewed scope and preserve gateway grants and mandat
 
 ## Behavior and invariants
 
-- Ask for approval, Workspace access and Full access apply within the effective grants and mandatory approvals. Workspace access denies native shell. Task consent is revision-fenced and binds the actor, workflow, policy and reviewed capability scope.
+- New tasks default to Ask at admission. The chosen mode applies within
+  effective grants and mandatory approvals.
 
 ## Acceptance criteria
 
 ### AC-001 — Reviewed authorization modes
 
-Ask for approval, Workspace access and Full access apply within the effective grants and mandatory approvals. Workspace access allows shell only in a Docker sandbox. Process execution, including the current Kubernetes mode in the weftd pod, is refused in Workspace. Ask requires approval for granted shell calls there. Task consent is revision-fenced and binds the actor, workflow, policy and reviewed capability scope.
+Ask for approval, Workspace access and Full access apply within the effective
+grants and mandatory approvals. New tasks default to Ask unless another mode
+was explicitly confirmed. Workspace allows shell only in a Docker sandbox.
+Process execution, including Kubernetes mode in the weftd pod, is refused in
+Workspace. Ask requires approval for granted shell calls there.
+Revision-fenced consent binds the actor, task, workflow version, policy,
+reviewed capabilities, and selected environment, repository and base commit
+when applicable.
 
 ### AC-002 — Live reduction and stale consent
 
@@ -37,10 +45,17 @@ The task and global inbox expose the same pending approval and terminal decision
 ## Explicit exclusions
 
 - Task consent confers no new grants. Cancellation does not roll back completed external effects.
+- Legacy execution copies without consent retain workflow grants and approvals.
+  They cannot adopt a new mode while running.
+- Local qualification exercised the native gateway and fixtures. Real Docker
+  sandbox execution remains outside that evidence.
 
 ## Open decisions
 
 - Production defaults for newly created workflows and live credential qualification remain with PROD-07 and PROD-04.
+- Go API role coverage checks viewer reads, operator mutation denial and admin
+  mutation. Viewer mutation denial and complete role coverage across approval
+  and cancellation routes remain pending.
 
 ## History
 

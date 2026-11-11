@@ -19,6 +19,11 @@ Enforce installation policy across environment preparation and execution and exp
 ## Behavior and invariants
 
 - The effective policy checks manual, repository and agent definitions, stored approvals, cached builds and node overrides. New admission and idle resume use the applicable policy revision.
+- Egress is opt-in for each phase. Omitted mode lists permit `none` and
+  `bridge`; preparation defaults to `bridge` and execution to `none`.
+  Preparation policy governs Dockerfile RUN and setup commands. The daemon
+  firewall and registry provisioning have separate boundaries. Base images
+  remain trusted installation inputs.
 
 ## Acceptance criteria
 
@@ -41,6 +46,11 @@ Admins review revisioned network settings and see current proxy status. Collecte
 ## Open decisions
 
 - Guaranteeing complete denial audit or expanding registry controls needs a separate decision. Dynamic host settings and static daemon restrictions have distinct rollout behavior.
+- In `ad5cfd5:docs/security.md`, line 171 described egress allowlists as planned,
+  and line 87 described Git hooks and fsmonitor protections as absent,
+  contradicting lines 157–163. The review reconciled both descriptions.
+  Daemon-wide registry controls and direct repository writes through arbitrary
+  shell remain outside the implemented guarantees.
 
 ## History
 

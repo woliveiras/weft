@@ -32,6 +32,12 @@ such as `ENV-003 AC-004` links to that owner's criterion. Production specs
 reference capability criteria and own only the extra production acceptance
 conditions. Historical task IDs remain source references.
 
+Oracle provenance describes the source of each expectation. A retrospective
+test or operating guide can establish an implementation-aware oracle.
+Use spec-derived only when a recorded decision predates the behavior it
+governs. Where a historical capability has only implementation-aware or
+diagnostic evidence, independent qualification remains open.
+
 The [historical source map](./historical-source-map.md) records the migration of the planning and evidence files. See the [architecture decisions](../docs/adr/README.md) for cross-cutting policy.
 
 ## Product and tasks

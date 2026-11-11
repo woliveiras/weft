@@ -28,19 +28,34 @@ Docker isolation uses the configured dedicated daemon and workspace mount. Agent
 
 ### AC-002 — Daemon and service boundary
 
-Mutual TLS restricts daemon clients. Network policy keeps sandbox traffic away from private infrastructure and setup fails closed if the firewall cannot be installed.
+In the supported Compose topology, mutual TLS rejects daemon clients without a
+valid client certificate. The daemon firewall keeps sandbox traffic away from
+private infrastructure. Its entrypoint exits if firewall installation fails.
 
 ### AC-003 — Optional dependency readiness
 
 The console and readiness report daemon availability without globally blocking non-sandbox work. Docker work that requires the unavailable daemon remains blocked.
 
+### AC-004 — Default container hardening
+
+Default Docker execution drops all capabilities, sets no-new-privileges,
+uses network `none`, and mounts only the replica workspace. Reviewed
+environments can add declared cache mounts and explicitly selected networking.
+Agent containers receive no Docker socket.
+
 ## Explicit exclusions
 
 - Rootless Docker-in-Docker remains deferred. Native host execution is an explicit separate choice. Final cross-scope acceptance belongs to PROD-04.
+- The Compose daemon is privileged. Graphs share one daemon, images and
+  caches. Kubernetes mode runs tools in weftd without a per-replica boundary.
+- External runtimes started via `runtime.image` cannot use the dedicated daemon
+  because they need to call weftd back. Other topologies need separate qualification.
 
 ## Open decisions
 
 - Clean-install coverage for the selected production topology remains with OPS-001 and PROD-04.
+- Direct tests for refusal of a client without a certificate and entrypoint
+  exit on firewall setup failure are pending.
 
 ## History
 

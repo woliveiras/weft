@@ -40,7 +40,7 @@ A future authenticated readiness check precedes use. Update and retirement drain
 
 ## History
 
-- 2026-10-18. The Evolution Plan records the managed hosting design only, with isolation, lifecycle, authenticated transport and candidate validation boundaries.
+- 2026-10-18. The [Evolution Plan](../../historical-source-map.md#planmd) records the managed hosting design only, with isolation, lifecycle, authenticated transport and candidate validation boundaries.
 
 ## Reconciliation
 

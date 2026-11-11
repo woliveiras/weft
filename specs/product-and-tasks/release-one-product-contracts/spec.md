@@ -44,7 +44,7 @@ Users edit and operate Weft graphs directly. Legacy converter routes and UI entr
 
 ## History
 
-- 2026-10-19 delivery checkpoint. The Implementation Tasks §§0–1 record contract inventory, architecture references and legacy converter removal as complete. The original checklist does not date the individual removals.
+- 2026-10-19 delivery checkpoint. The [Implementation Tasks §§0–1](../../historical-source-map.md#tasksmd) record contract inventory, architecture references and legacy converter removal as complete. The original checklist does not date the individual removals.
 - 2026-11-11. The initial Git snapshot preserves the product plan and existing contracts.
 
 ## Reconciliation
