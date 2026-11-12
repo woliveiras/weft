@@ -112,6 +112,19 @@ flowchart LR
   hpa[HPA] -.-> a1 & a2
 ```
 
+## MCP servers in Compose and cloud deployments
+
+Outside the native profile, Weft supports only remote MCP servers over
+Streamable HTTP with HTTPS. Local stdio connections are available only in
+the [native profile](mcp.md).
+
+Servers that only support stdio depend on managed MCP hosting, which is
+still planned. See the [hosting design](mcp-hosting.md) and the
+[Managed MCP Hosting specification](../specs/providers-and-integrations/managed-mcp-hosting/spec.md).
+
+Prefer the vendor's official remote endpoint when available, such as
+[GitHub's remote MCP endpoint](mcp-integrations.md#github).
+
 ## Sizing guidance
 
 The control plane does little work itself; turns are dominated by model
