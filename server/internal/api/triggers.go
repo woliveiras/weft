@@ -93,11 +93,17 @@ func (s *Server) resolveTriggerHold(w http.ResponseWriter, r *http.Request) erro
 	var input struct {
 		Key        string `json:"key"`
 		Generation string `json:"generation"`
+		Force      bool   `json:"force"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.Key == "" || len(input.Key) > 160 || input.Generation == "" || len(input.Generation) > 160 {
 		return badRequest("an issue key and hold generation are required")
 	}
-	t, err := s.triggers().ResolveHold(r.Context(), r.PathValue("trigger"), input.Key, input.Generation, identityFrom(r.Context()).Name)
+	m := s.triggers()
+	resolve := m.ResolveHold
+	if input.Force {
+		resolve = m.ForceResolveHold
+	}
+	t, err := resolve(r.Context(), r.PathValue("trigger"), input.Key, input.Generation, identityFrom(r.Context()).Name)
 	if err != nil {
 		return err
 	}

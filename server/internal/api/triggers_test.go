@@ -453,7 +453,7 @@ func TestOperatorResolvesHoldWhileReadinessIsDisabled(t *testing.T) {
 	if c := call(t, srv, "POST", path, operatorTok, "application/json", string(stale), nil); c != 409 {
 		t.Fatal(c)
 	}
-	for _, pending := range []trigger.Hold{{UndoOwner: "owner"}, {Publication: "label_pending"}, {Publication: "label_pending_only"}} {
+	for _, pending := range []trigger.Hold{{UndoOwner: "owner"}, {Publication: "label_pending"}, {Publication: "label_pending_only"}, {Publication: "label_failed"}} {
 		_, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
 			current.Holds[0].UndoOwner, current.Holds[0].Publication = pending.UndoOwner, pending.Publication
 			return nil
@@ -469,14 +469,16 @@ func TestOperatorResolvesHoldWhileReadinessIsDisabled(t *testing.T) {
 			t.Fatalf("pending hold lost: %+v %v", saved, err)
 		}
 	}
-	if _, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
-		current.Holds[0] = h
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if c := call(t, srv, "POST", path, operatorTok, "application/json", string(raw), &tr); c != 200 {
+	forced, _ := json.Marshal(map[string]any{"key": h.Key, "generation": h.Generation, "force": true})
+	if c := call(t, srv, "POST", path, viewerTok, "application/json", string(forced), nil); c != 403 {
 		t.Fatal(c)
+	}
+	if c := call(t, srv, "POST", path, operatorTok, "application/json", string(forced), &tr); c != 200 {
+		t.Fatal(c)
+	}
+	if len(tr.HoldResolutions) != 1 || !strings.Contains(tr.HoldResolutions[0].Reason, "current labels") ||
+		!strings.Contains(tr.HoldResolutions[0].Reason, "assignment") {
+		t.Fatalf("abandoned tracker writes were not recorded: %+v", tr.HoldResolutions)
 	}
 	var view activity.View
 	if c := call(t, srv, "GET", "/api/v1/activity", viewerTok, "", "", &view); c != 200 {

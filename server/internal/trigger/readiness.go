@@ -12,6 +12,7 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/storage"
+	"github.com/woliveiras/weft/server/internal/tools"
 )
 
 const readinessCapacity = "The trigger has 10 held issues. Resolve a hold before it evaluates new issues."
@@ -22,6 +23,8 @@ type Hold struct {
 	CommentAuthor      string     `json:"commentAuthor,omitempty"`
 	UndoOwner          string     `json:"undoOwner,omitempty"`
 	PublicationMessage string     `json:"publicationMessage,omitempty"`
+	LabelAttempts      int        `json:"labelAttempts,omitempty"`
+	RetryLabelAt       *time.Time `json:"retryLabelAt,omitempty"`
 	CommentAttempts    int        `json:"commentAttempts,omitempty"`
 	RetryCommentAt     *time.Time `json:"retryCommentAt,omitempty"`
 
@@ -141,10 +144,20 @@ func ReadinessReason(reason string) string {
 }
 
 func (r *Runner) saveHold(ctx context.Context, t *Trigger, h Hold) error {
+	return r.saveHoldState(ctx, t, h, false)
+}
+
+func (r *Runner) saveHoldState(ctx context.Context, t *Trigger, h Hold, rollback bool) error {
 	h.Message = ReadinessReason(h.Reason)
 	current, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
-		if current.State != Active || current.Consent.Scope != t.Consent.Scope || current.Consent.RecordedAt != t.Consent.RecordedAt {
+		if current.State != t.State || current.ReadinessDisabled != t.ReadinessDisabled || current.Consent.Scope != t.Consent.Scope || current.Consent.RecordedAt != t.Consent.RecordedAt {
 			return errTriggerChanged
+		}
+		if rollback {
+			if current.Claiming != h.Key {
+				return errTriggerChanged
+			}
+			current.Claiming, current.ClaimAdmission = "", ""
 		}
 		idx := current.holdIndex(h.Key)
 		if idx >= 0 {
@@ -180,7 +193,11 @@ func trackerRead[T any](ctx context.Context, call Invoker, name string, args tra
 }
 
 func trackerWrite(ctx context.Context, call Invoker, name string, args trackerArgs) error {
-	return result(call(ctx, name, args))
+	res, err := call(ctx, name, args)
+	if failure := trackerResultFailure(res, err); failure != nil {
+		return failure
+	}
+	return result(res, err)
 }
 
 func relabel(ctx context.Context, call Invoker, key string, remove []string, add, owner string) error {
@@ -194,18 +211,76 @@ func comment(ctx context.Context, call Invoker, key, body string) error {
 
 func writeComment(ctx context.Context, call Invoker, key, body string) (commentReceipt, error) {
 	res, err := call(ctx, trackerComment, trackerArgs{Key: key, Body: body})
-	if err == nil && res != nil && res.IsError {
-		var failure trackerCommentFailure
-		if json.Unmarshal(res.Data, &failure) == nil && failure.Status >= 400 && failure.Status <= 599 {
-			return commentReceipt{}, failure
-		}
+	if failure := trackerResultFailure(res, err); failure != nil {
+		return commentReceipt{}, failure
 	}
 	var receipt commentReceipt
 	err = decode(res, err, &receipt)
 	return receipt, err
 }
 
+func trackerResultFailure(res *tools.Result, err error) error {
+	if err == nil && res != nil && res.IsError {
+		var failure trackerHTTPFailure
+		if json.Unmarshal(res.Data, &failure) == nil && failure.Status >= 400 && failure.Status <= 599 {
+			return failure
+		}
+	}
+	return nil
+}
+
 const maxCommentAttempts = 3
+
+const maxLabelAttempts = 3
+
+func (r *Runner) failHoldLabels(ctx context.Context, t *Trigger, h Hold, message string) error {
+	h.Publication, h.PublicationMessage, h.RetryLabelAt = "label_failed", message+" "+abandonTrackerWriteWarning, nil
+	return r.saveHold(ctx, t, h)
+}
+
+func (r *Runner) publishHoldLabels(ctx context.Context, t *Trigger, call Invoker, h Hold) error {
+	now := r.Triggers.now()
+	if h.RetryLabelAt != nil && now.Before(*h.RetryLabelAt) {
+		return nil
+	}
+	const exhausted = "The tracker label update could not be confirmed after three attempts."
+	if h.LabelAttempts >= maxLabelAttempts {
+		return r.failHoldLabels(ctx, t, h, exhausted)
+	}
+	h.LabelAttempts++
+	next := now.Add(time.Minute << (h.LabelAttempts - 1))
+	h.RetryLabelAt = &next
+	h.PublicationMessage = "The tracker label update is unconfirmed. Weft will retry after backoff."
+	if err := r.saveHold(ctx, t, h); err != nil {
+		return err
+	}
+	err := trackerWrite(ctx, call, trackerLabels, trackerArgs{Key: h.Key, Remove: h.Removals, Add: LabelFailed, UndoOwner: h.UndoOwner})
+	if errors.Is(err, errTriggerChanged) {
+		return err
+	}
+	if err != nil {
+		var failure trackerHTTPFailure
+		if errors.As(err, &failure) && failure.definitive() {
+			return r.failHoldLabels(ctx, t, h, fmt.Sprintf("The tracker refused the label or assignment update (HTTP %d).", failure.Status))
+		}
+		if h.LabelAttempts >= maxLabelAttempts {
+			return r.failHoldLabels(ctx, t, h, exhausted)
+		}
+		return nil
+	}
+	h.UndoOwner, h.LabelAttempts, h.RetryLabelAt, h.PublicationMessage = "", 0, nil, ""
+	if h.Publication == "label_pending_only" {
+		return r.confirmHoldComment(ctx, t, h)
+	}
+	h.Publication = "label_applied"
+	if err := r.saveHold(ctx, t, h); err != nil {
+		return err
+	}
+	if t.State != Active || t.ReadinessDisabled {
+		return nil
+	}
+	return r.postHoldComment(ctx, t, call, h)
+}
 
 func (r *Runner) postHoldComment(ctx context.Context, t *Trigger, call Invoker, h Hold) error {
 	author, err := trackerRead[string](ctx, call, trackerIdentity, trackerArgs{Key: h.Key})
@@ -239,7 +314,7 @@ func (r *Runner) postHoldComment(ctx context.Context, t *Trigger, call Invoker, 
 		}
 		return r.saveHold(ctx, t, h)
 	}
-	var failure trackerCommentFailure
+	var failure trackerHTTPFailure
 	if errors.As(err, &failure) && failure.definitive() {
 		return r.failHoldComment(ctx, t, h, failure.guidance())
 	}
@@ -261,13 +336,8 @@ func (r *Runner) failHoldComment(ctx context.Context, t *Trigger, h Hold, messag
 func (r *Runner) publishHold(ctx context.Context, t *Trigger, call Invoker, h Hold) error {
 	switch h.Publication {
 	case "label_pending", "label_pending_only":
-		if err := trackerWrite(ctx, call, trackerLabels, trackerArgs{Key: h.Key, Remove: h.Removals, Add: LabelFailed, UndoOwner: h.UndoOwner}); err != nil {
-			return errors.New("readiness label write did not complete")
-		}
-		h.UndoOwner = ""
-		if h.Publication == "label_pending_only" {
-			return r.confirmHoldComment(ctx, t, h)
-		}
+		return r.publishHoldLabels(ctx, t, call, h)
+	case "label_applied":
 		return r.postHoldComment(ctx, t, call, h)
 	case "comment_pending":
 		if h.RetryCommentAt != nil && r.Triggers.now().Before(*h.RetryCommentAt) {
@@ -460,14 +530,22 @@ func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Is
 
 func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Invoker, h Hold) (bool, error) {
 	if h.Scope != holdScope(t) {
-		return false, r.releaseHold(ctx, t, h, ReadinessReason("scope_changed"))
+		if holdHasPendingWrite(h) {
+			return false, r.failHoldLabels(ctx, t, h, "The pending update belongs to a different trigger scope.")
+		}
+		if h.Publication != "label_failed" {
+			return false, r.releaseHold(ctx, t, h, ReadinessReason("scope_changed"))
+		}
+	}
+	if holdHasPendingWrite(h) {
+		return false, r.publishHold(ctx, t, call, h)
+	}
+	if h.Publication == "label_failed" {
+		return false, nil
 	}
 	i, err := trackerRead[Issue](ctx, call, trackerGet, trackerArgs{Key: h.Key})
 	if err != nil {
 		return false, err
-	}
-	if (h.Publication == "label_pending" || h.Publication == "label_pending_only") && h.UndoOwner != "" {
-		return false, r.publishHold(ctx, t, call, h)
 	}
 	if reason := holdReleaseReason(t, h, i); reason != "" {
 		return false, r.releaseHold(ctx, t, h, reason)
@@ -495,7 +573,7 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 			return false, r.releaseHold(ctx, t, h, "The issue no longer matches the trigger query.")
 		}
 	}
-	if h.Publication == "label_pending" || h.Publication == "label_pending_only" || h.Publication == "comment_pending" {
+	if h.Publication == "label_applied" || h.Publication == "comment_pending" {
 		return false, r.publishHold(ctx, t, call, h)
 	}
 	if h.Publication == "comment_failed" || (h.Reason == "failure_round_limit" || h.Reason == "history_limit" || h.Reason == "snapshot_round_limit") {

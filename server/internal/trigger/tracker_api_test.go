@@ -118,7 +118,7 @@ func TestJiraVerifiedManualRequeueUsesHistoryAndProjectPermission(t *testing.T) 
 
 func TestDefinitiveTrackerCommentFailures(t *testing.T) {
 	for _, status := range []int{401, 403, 404, 422, 408, 429, 500, 503} {
-		failure := trackerCommentFailure{Status: status}
+		failure := trackerHTTPFailure{Status: status}
 		want := status < 500 && status != 408 && status != 429
 		if failure.definitive() != want || failure.guidance() == "" {
 			t.Fatalf("wrong disposition for %d", status)

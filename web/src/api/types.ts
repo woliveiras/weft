@@ -543,7 +543,7 @@ export interface Trigger extends TriggerInput {
   nextRunAt?: string;
   readinessBlock?: string;
   holdResolutions?: { key: string; reason: string; round: number; resolvedAt: string }[];
-  holds?: { generation: string; key: string; url?: string; message: string; reason: string; round: number; eligibility?: string; publication?: string; publicationMessage?: string }[];
+  holds?: { generation: string; undoOwner?: string; key: string; url?: string; message: string; reason: string; round: number; eligibility?: string; publication?: string; publicationMessage?: string }[];
   currentTask?: string;
   currentIssue?: TriggerIssue;
   skipped?: { key: string; title?: string; reason: string }[];

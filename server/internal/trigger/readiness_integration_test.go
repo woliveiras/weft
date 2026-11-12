@@ -670,3 +670,95 @@ func TestRepeatedSnapshotChangesStopReadinessAndPublishOnlyIntervention(t *testi
 		})
 	}
 }
+
+func TestReadinessLabelWriteStopsOnTrackerRefusalOrMissingIssue(t *testing.T) {
+	for _, status := range []int{403, 404, 503} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			st := triggerStore(t)
+			c := &clock{t: time.Now().UTC()}
+			gh := newTracker("gh")
+			gh.issues = []map[string]any{ghIssue(1, "Issue", "weft")}
+			const write = "POST /repos/acme/app/issues/1/labels"
+			gh.status[write] = status
+			if status == 404 {
+				gh.status[write] = 503
+			}
+			r := runner(st, c, "one", gh)
+			r.Tasks = &tasks{}
+			r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+				return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+			})
+			tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			if status == 404 {
+				gh.issues = nil
+				delete(gh.status, write)
+			}
+			for range 5 {
+				tr = advance(r, c, t, tr.ID)
+			}
+			wantAttempts := map[int]int{403: 1, 404: 2, 503: 3}[status]
+			if len(tr.Holds) != 1 || tr.Holds[0].Publication != "label_failed" ||
+				!strings.Contains(tr.Holds[0].PublicationMessage, "assignment") ||
+				strings.Count(strings.Join(gh.rest, "\n"), write) != wantAttempts || len(gh.comments) != 0 {
+				t.Fatalf("hold: %+v, requests: %v", tr.Holds, gh.rest)
+			}
+			h := tr.Holds[0]
+			if _, err := r.Triggers.ResolveHold(t.Context(), tr.ID, h.Key, h.Generation, "operator"); !errors.Is(err, storage.ErrConflict) {
+				t.Fatalf("regular resolution returned %v", err)
+			}
+			resolved, err := r.Triggers.ForceResolveHold(t.Context(), tr.ID, h.Key, h.Generation, "operator")
+			if err != nil || len(resolved.Holds) != 0 || !strings.Contains(resolved.HoldResolutions[0].Reason, "abandoned") {
+				t.Fatalf("forced resolution: %+v %v", resolved, err)
+			}
+		})
+	}
+}
+
+func TestPendingClaimRollbackRunsWithoutReadiness(t *testing.T) {
+	for _, disabled := range []bool{false, true} {
+		t.Run(fmt.Sprint(disabled), func(t *testing.T) {
+			c := &clock{t: time.Now().UTC()}
+			gh := newTracker("gh")
+			row := ghIssue(1, "Issue", "weft", "bug")
+			gh.issues = []map[string]any{row}
+			gh.editOnAssignment = true
+			const undo = "DELETE /repos/acme/app/issues/1/assignees"
+			gh.status[undo] = 503
+			r := runner(triggerStore(t), c, "one", gh)
+			starter := &tasks{}
+			r.Tasks = starter
+			in := input()
+			tr, err := r.Triggers.Create(t.Context(), in, "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			if len(tr.Holds) != 1 || tr.Holds[0].UndoOwner == "" || tr.Claiming != "" {
+				t.Fatalf("rollback was not persisted: %+v", tr)
+			}
+			delete(gh.status, undo)
+			if disabled {
+				in.ReadinessDisabled = true
+				if _, err := r.Triggers.Edit(t.Context(), tr.ID, in, "admin"); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := r.Triggers.Resume(t.Context(), tr.ID, "admin"); err != nil {
+					t.Fatal(err)
+				}
+			} else if _, err := r.Triggers.Pause(t.Context(), tr.ID, "operator paused", "admin"); err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			labels := row["labels"].([]map[string]any)
+			if len(tr.Holds) != 1 || tr.Holds[0].Publication != "confirmed" || tr.Holds[0].UndoOwner != "" ||
+				len(starter.started) != 0 || len(gh.comments) != 0 || len(row["assignees"].([]map[string]any)) != 0 ||
+				len(labels) != 2 || labels[0]["name"] != "bug" || labels[1]["name"] != trigger.LabelFailed {
+				t.Fatalf("rollback not completed: %+v, issue %+v", tr, row)
+			}
+		})
+	}
+}

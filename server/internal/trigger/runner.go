@@ -76,7 +76,7 @@ func (r *Runner) Tick(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if !Due(t, now) {
+		if !Due(t, now) && !pausedRollbackDue(t, now) {
 			continue
 		}
 		r.runOne(ctx, t.ID)
@@ -91,7 +91,7 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 	}
 	defer func() { _ = r.Store.ReleaseLease(context.WithoutCancel(ctx), key, r.Instance) }()
 	t, err := r.Triggers.Get(ctx, id)
-	if err != nil || !Due(t, r.Triggers.now()) {
+	if err != nil || (!Due(t, r.Triggers.now()) && !pausedRollbackDue(t, r.Triggers.now())) {
 		return // changed or ran elsewhere meanwhile
 	}
 	started := time.Now()
@@ -132,8 +132,16 @@ func (r *Runner) step(ctx context.Context, t *Trigger) (string, error) {
 		return "", err
 	}
 	if problem != "" {
+		if t.State == Paused {
+			return "consent_stale", r.recoverPausedRollbacks(ctx, t, problem)
+		}
 		_, err := r.Triggers.Pause(ctx, t.ID, problem, "system:trigger")
 		return "consent_stale", err
+	}
+	if t.State == Paused || t.ReadinessDisabled {
+		if err := r.recoverPausedRollbacks(ctx, t, ""); err != nil || t.State == Paused {
+			return "readiness_rollback", err
+		}
 	}
 	if t.Claiming != "" {
 		_, err := r.Triggers.Pause(ctx, t.ID, "The claim for "+t.Claiming+" was interrupted. Review the tracker and any task before resuming.", "system:trigger")
@@ -199,11 +207,15 @@ func (r *Runner) step(ctx context.Context, t *Trigger) (string, error) {
 var errTriggerChanged = errors.New("trigger changed during polling")
 
 func (r *Runner) ensureCurrent(ctx context.Context, t *Trigger) error {
+	return r.ensureTriggerState(ctx, t, Active)
+}
+
+func (r *Runner) ensureTriggerState(ctx context.Context, t *Trigger, state string) error {
 	current, err := r.Triggers.Get(ctx, t.ID)
 	if err != nil {
 		return err
 	}
-	if current.State != Active || current.Consent.Scope != t.Consent.Scope || current.Consent.RecordedAt != t.Consent.RecordedAt {
+	if current.State != state || current.Consent.Scope != t.Consent.Scope || current.Consent.RecordedAt != t.Consent.RecordedAt {
 		return errTriggerChanged
 	}
 	problem, err := r.Triggers.ConsentProblem(ctx, current)
@@ -217,9 +229,13 @@ func (r *Runner) ensureCurrent(ctx context.Context, t *Trigger) error {
 }
 
 func (r *Runner) checkedInvoker(t *Trigger) Invoker {
+	return r.invokerForState(t, Active)
+}
+
+func (r *Runner) invokerForState(t *Trigger, state string) Invoker {
 	call := GatewayInvoker(r.Gateway, Principal(t))
 	return func(ctx context.Context, name string, args any) (*tools.Result, error) {
-		if err := r.ensureCurrent(ctx, t); err != nil {
+		if err := r.ensureTriggerState(ctx, t, state); err != nil {
 			return nil, err
 		}
 		ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -304,13 +320,7 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 			if i.Assignee == "" {
 				h.UndoOwner = t.Owner
 			}
-			if err := r.saveHold(ctx, t, h); err != nil {
-				return "readiness_changed", err
-			}
-			if _, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
-				current.Claiming, current.ClaimAdmission = "", ""
-				return nil
-			}); err != nil {
+			if err := r.saveHoldState(ctx, t, h, true); err != nil {
 				return "readiness_changed", err
 			}
 			return "readiness_changed", r.publishHold(ctx, t, call, h)
@@ -434,4 +444,29 @@ func (r *Runner) followTask(ctx context.Context, t *Trigger) (string, error) {
 		return nil
 	})
 	return outcome, errors.Join(writeErr, err)
+}
+
+// A paused trigger can finish an already recorded rollback under current
+// consent. It performs no discovery, assessment, comment or admission.
+func pausedRollbackDue(t *Trigger, now time.Time) bool {
+	return t.State == Paused && slices.ContainsFunc(t.Holds, func(h Hold) bool {
+		return holdHasPendingWrite(h) && slices.Contains(h.Removals, LabelInProgress) &&
+			(h.RetryLabelAt == nil || !now.Before(*h.RetryLabelAt))
+	})
+}
+
+func (r *Runner) recoverPausedRollbacks(ctx context.Context, t *Trigger, consentProblem string) error {
+	for _, h := range slices.Clone(t.Holds) {
+		if !holdHasPendingWrite(h) || !slices.Contains(h.Removals, LabelInProgress) {
+			continue
+		}
+		if consentProblem != "" || h.Scope != holdScope(t) || (h.UndoOwner != "" && h.UndoOwner != t.Owner) {
+			if err := r.failHoldLabels(ctx, t, h, "Current trigger consent does not cover the pending rollback."); err != nil {
+				return err
+			}
+		} else if err := r.publishHoldLabels(ctx, t, r.invokerForState(t, t.State), h); err != nil {
+			return err
+		}
+	}
+	return nil
 }

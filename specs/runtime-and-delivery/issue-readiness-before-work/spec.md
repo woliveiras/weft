@@ -95,7 +95,13 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   publication outcome is resolved. Retry a transient comment failure only
   after the backoff window and a complete tracker read showing no matching
   publication marker. Cap attempts and expose permanent failures with a
-  correction or explicit hold resolution action.
+  correction or explicit hold resolution action. A pending label write has
+  at most three attempts, with one- and two-minute minimum retry delays.
+  A definitive tracker refusal or missing issue ends retries immediately.
+  An existing claim rollback can finish while paused or disabled if the
+  current consent still covers it. The operator can explicitly abandon an
+  unfinished write by confirming that the planned label and assignment
+  changes may remain incomplete. The forced resolution is audited.
 
 ## Acceptance criteria
 

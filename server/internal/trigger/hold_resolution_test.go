@@ -118,3 +118,20 @@ func TestLegacyHoldHasStableGenerationWhileDisabled(t *testing.T) {
 		t.Fatal("independent reads returned different generations for the legacy hold")
 	}
 }
+
+func TestPausedRollbackDueUsesBackoffAndRequiresPendingRollback(t *testing.T) {
+	now := time.Now().UTC()
+	next := now.Add(time.Minute)
+	tr := &Trigger{State: Paused, Holds: []Hold{{Publication: "label_pending_only", Removals: []string{LabelInProgress}, RetryLabelAt: &next}}}
+	if pausedRollbackDue(tr, now) || !pausedRollbackDue(tr, next) {
+		t.Fatal("rollback ignored its backoff")
+	}
+	tr.Holds[0].Publication = "label_failed"
+	if pausedRollbackDue(tr, next) {
+		t.Fatal("terminal failure retried")
+	}
+	tr.Holds[0] = Hold{Publication: "label_pending", Removals: []string{LabelTodo}}
+	if pausedRollbackDue(tr, next) {
+		t.Fatal("paused trigger scheduled ordinary publication")
+	}
+}

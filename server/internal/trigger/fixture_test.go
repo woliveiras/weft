@@ -19,6 +19,7 @@ type tracker struct {
 	transientComments   int
 	loseCommentResponse bool
 	rest                []string
+	status              map[string]int
 	replies             map[string][]map[string]any
 	labelEvents         map[string][]map[string]any
 	roles               map[string]string
@@ -33,7 +34,7 @@ type tracker struct {
 }
 
 func newTracker(conn string) *tracker {
-	return &tracker{conn: conn, comments: map[string][]string{}, fail: map[string]bool{}, replies: map[string][]map[string]any{}, labelEvents: map[string][]map[string]any{}, roles: map[string]string{}}
+	return &tracker{conn: conn, status: map[string]int{}, comments: map[string][]string{}, fail: map[string]bool{}, replies: map[string][]map[string]any{}, labelEvents: map[string][]map[string]any{}, roles: map[string]string{}}
 }
 
 // toolFn is a tools.Tool backed by the tracker.
@@ -166,6 +167,9 @@ func (t *tracker) request(_ context.Context, connection, kind string, _ int64, m
 		index = 7
 	}
 	t.rest = append(t.rest, method+" "+u.Path)
+	if status := t.status[method+" "+u.Path]; status != 0 {
+		return nil, status, fmt.Errorf("tracker fixture returned HTTP %d", status)
+	}
 	if t.fail[method+" "+u.Path] {
 		return nil, 403, fmt.Errorf("tracker fixture refused operation")
 	}

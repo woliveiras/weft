@@ -177,7 +177,7 @@ administrator's current consent.
 | `GET /api/v1/triggers/{trigger}` | viewer | Read one trigger. |
 | `PUT /api/v1/triggers/{trigger}` | admin | Edit using the create body. Changing consent scope pauses the trigger. After consent and resumption, readiness-enabled polling releases holds that fall outside the updated scope. Holds stay in place while readiness is disabled until an operator resolves them. |
 | `GET /api/v1/triggers/{trigger}/matches` | operator | Read-only preview returning `{next, waiting[], skipped[], busy}`. Preview never evaluates readiness or writes to the tracker. |
-| `POST /api/v1/triggers/{trigger}/resolve-hold` | operator | Resolve the hold identified by `{key, generation}`. Records the reason and frees capacity without writing to the tracker or starting work. Returns 409 if polling is in progress, tracker rollback or label updates are pending, or the hold generation changed. Reload the trigger to review the current hold. |
+| `POST /api/v1/triggers/{trigger}/resolve-hold` | operator | Resolve the hold identified by `{key, generation}`. Use `force: true` to explicitly abandon a pending or failed label or assignment update. The tracker keeps its current labels and assignment. The API audits the resolution and frees capacity. It returns 409 if polling is in progress, the claim was interrupted, the hold generation changed, or tracker write-back requires forced resolution. |
 | `POST /api/v1/triggers/{trigger}/pause` | admin | Pause polling. |
 | `POST /api/v1/triggers/{trigger}/resume` | admin | Record current consent and activate polling. |
 | `DELETE /api/v1/triggers/{trigger}` | admin | Remove the trigger. |

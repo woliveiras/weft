@@ -42,19 +42,19 @@ type trackerArgs struct {
 	Since     time.Time `json:"since,omitempty"`
 }
 
-type trackerCommentFailure struct {
+type trackerHTTPFailure struct {
 	Status int `json:"status"`
 }
 
-func (e trackerCommentFailure) Error() string {
-	return fmt.Sprintf("tracker comment returned HTTP %d", e.Status)
+func (e trackerHTTPFailure) Error() string {
+	return fmt.Sprintf("tracker returned HTTP %d", e.Status)
 }
 
-func (e trackerCommentFailure) definitive() bool {
+func (e trackerHTTPFailure) definitive() bool {
 	return e.Status >= 400 && e.Status < 500 && e.Status != http.StatusRequestTimeout && e.Status != http.StatusTooManyRequests
 }
 
-func (e trackerCommentFailure) guidance() string {
+func (e trackerHTTPFailure) guidance() string {
 	switch e.Status {
 	case http.StatusUnauthorized:
 		return "The tracker rejected the credential. Check the connection and review trigger consent again."
@@ -128,6 +128,7 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 		return t.call(ctx, scope.Source.ConnectionID, scope.Source.Kind, scope.Consent.TrackerRevision, method, path, body)
 	}
 	var out any
+	var labelStatus int
 	switch t.name {
 	case trackerGet:
 		out, err = readIssue(request, scope.Source, path, a.Key)
@@ -139,7 +140,16 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 		if !validLabelChange(scope, a) {
 			return nil, tools.ErrDenied
 		}
-		err = changeLabels(request, scope.Source.Kind, path, a)
+		err = changeLabels(func(method, path string, body any) (json.RawMessage, int, error) {
+			raw, status, err := request(method, path, body)
+			labelStatus = status
+			return raw, status, err
+		}, scope.Source.Kind, path, a)
+		if err != nil && labelStatus >= 400 && labelStatus <= 599 {
+			failure := trackerHTTPFailure{Status: labelStatus}
+			data, _ := json.Marshal(failure)
+			return &tools.Result{IsError: true, Content: failure.Error(), Data: data}, nil
+		}
 	case trackerIdentity:
 		identityPath := "/user"
 		if scope.Source.Kind == "jira" {
@@ -165,7 +175,7 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 			out, err = decodeCommentReceipt(scope.Source.Kind, raw)
 		}
 		if err != nil && status >= 400 && status <= 599 {
-			failure := trackerCommentFailure{Status: status}
+			failure := trackerHTTPFailure{Status: status}
 			data, _ := json.Marshal(failure)
 			return &tools.Result{IsError: true, Content: failure.Error(), Data: data}, nil
 		}
