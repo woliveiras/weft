@@ -145,3 +145,29 @@ Go used cached Docker images with pulls disabled. Browser verification
 used the installed web tools and Chromium. The browser fixture built the
 production web bundle and a disposable Darwin backend. All tracker
 operations used fixtures.
+
+## Independent review of 6ce5470 through 29b552d
+
+Fixture verification on 2026-11-12.
+
+`TestSearchBudgetReportsOldestReservationExpiry` verified that the
+rolling window reopens as the oldest reservation expires.
+`TestDeferredLongTriggerGetsFirstTurnInReopenedWindow` exhausted the
+budget with five-minute triggers, then verified that the deferred
+15-minute trigger ran before another five-minute trigger at the
+reopening, without waiting its configured interval.
+
+| Command | Result |
+| --- | --- |
+| `go test -count=1 ./internal/trigger ./internal/api ./internal/activity ./internal/mcpconfig` | All four affected packages passed. |
+| `go test -count=1 -p 1 ./...` | The full suite passed on repeat. The first run failed in the existing `TestBoundedBuildPipelineIntegration` fixture, which passed on repeat. |
+| `./scripts/go.sh vet ./...` and `gofmt -l .` in `server/` | Vet passed. Gofmt listed no files. |
+| `GOOS=linux CGO_ENABLED=0 go build ./...` and `GOOS=darwin CGO_ENABLED=0 go build ./...` | Both arm64 builds passed. |
+| `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed the disposable browser fixture tests. |
+| `./node_modules/.bin/vitest run` in `web/` | 447 tests passed in 88 files. |
+| `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/tsc --project tsconfig.e2e.json` in `web/` | Both type checks passed. |
+| `./node_modules/.bin/playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` in `web/` | Four trigger and three Activity scenarios passed. |
+
+Go used cached Docker images with pulls disabled. Web checks used the
+installed tools and Chromium. Playwright built the web bundle and a
+disposable Darwin backend. Tracker verification used fixtures.

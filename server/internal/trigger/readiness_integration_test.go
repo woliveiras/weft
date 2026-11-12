@@ -1414,3 +1414,68 @@ func TestDeferredLongTriggerGetsFirstTurnInReopenedWindow(t *testing.T) {
 		t.Fatalf("deferred trigger did not get first turn: long %+v, short %+v, searches=%d", long, short, len(gh.args))
 	}
 }
+
+func TestGitHubIndexLagDefersQuestionsUntilQueryConfirmation(t *testing.T) {
+	for _, changeAfterEvaluation := range []bool{false, true} {
+		t.Run(fmt.Sprintf("changed=%v", changeAfterEvaluation), func(t *testing.T) {
+			c := &clock{t: time.Now().UTC()}
+			st := triggerStore(t)
+			gh := newTracker("gh")
+			gh.pageSearch = true
+			row := ghIssue(1, "Issue", "weft")
+			gh.issues = []map[string]any{row}
+			calls := 0
+			assessor := assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+				calls++
+				return trigger.ReadinessAssessment{Missing: []string{[]string{"objective", "acceptance", "scope"}[min(calls-1, 2)]}}
+			})
+			r := runner(st, c, "first", gh)
+			r.Tasks, r.Assessor = &tasks{}, assessor
+			in := input()
+			in.Source.Query = "milestone:release"
+			tr, err := r.Triggers.Create(t.Context(), in, "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			gh.unindexed[1] = true
+			if changeAfterEvaluation {
+				gh.roles["maintainer"] = "maintain"
+				gh.labelEvents["#1"] = []map[string]any{ghTodoEvent(3, "maintainer", "User", c.t.Add(time.Second))}
+				row["labels"] = append(row["labels"].([]map[string]any), map[string]any{"name": trigger.LabelTodo})
+			} else {
+				gh.replies["#1"] = append(gh.replies["#1"], ghReply(7, "author", "User", "The parser should export CSV.", c.t.Add(time.Second)))
+			}
+			writes := func() int {
+				return strings.Count(strings.Join(gh.rest, "\n"), "POST /repos/acme/app/issues/1/")
+			}
+			originalWrites := writes()
+			for range 3 {
+				tr = advance(r, c, t, tr.ID)
+			}
+			h := tr.Holds[0]
+			if calls != 2 || writes() != originalWrites || h.Round != 1 || h.ScopeAssessment == nil ||
+				!slices.Equal(h.ScopeAssessment.Missing, []string{"acceptance"}) || len(gh.comments["#1"]) != 1 {
+				t.Fatalf("fallback did not hold back the second question: %+v, calls=%d, writes=%d", h, calls, writes())
+			}
+			r = runner(st, c, "restarted", gh)
+			r.Tasks, r.Assessor = &tasks{}, assessor
+			tr = advance(r, c, t, tr.ID)
+			if calls != 2 || writes() != originalWrites || tr.Holds[0].ScopeAssessment == nil {
+				t.Fatal("restart lost the deferred assessment or repeated an external operation")
+			}
+			wantCalls, wantText := 2, "What input, observable result"
+			if changeAfterEvaluation {
+				row["body"] = "The proposal now covers only the report endpoint."
+				wantCalls, wantText = 3, "Which behavior or surfaces"
+			}
+			delete(gh.unindexed, 1)
+			tr = advance(r, c, t, tr.ID)
+			comments := gh.comments["#1"]
+			if calls != wantCalls || tr.Holds[0].Round != 2 || tr.Holds[0].ScopeAssessment != nil ||
+				len(comments) != 2 || !strings.Contains(comments[1], wantText) {
+				t.Fatalf("confirmed query did not publish the current question: %+v, comments=%v, calls=%d", tr.Holds, comments, calls)
+			}
+		})
+	}
+}

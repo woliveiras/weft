@@ -64,8 +64,8 @@ var readinessQuestions = map[string]string{
 }
 
 type ReadinessAssessment struct {
-	Missing []string
-	Failure string
+	Missing []string `json:"missing,omitempty"`
+	Failure string   `json:"failure,omitempty"`
 }
 
 type Assessor interface {

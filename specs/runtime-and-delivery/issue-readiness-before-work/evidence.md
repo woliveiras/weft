@@ -206,3 +206,36 @@ Go used cached Docker images with pulls disabled. Browser verification
 used the installed web tools and Chromium. The browser fixture built the
 production web bundle and a disposable Darwin backend. All tracker
 operations used fixtures.
+
+## Independent review of 6ce5470 through 29b552d
+
+Fixture verification on 2026-11-12.
+
+- The gateway and runner fixtures covered a GitHub 404 with repository
+  access, a repository 404 or 403, immediate deletion on 410, and
+  operator holds with missing issues. Two consecutive polls were
+  required for a 404 release. Automatic releases preserved rounds
+  and edits and produced an Activity event.
+  [GitHub issue status contract](https://docs.github.com/en/rest/issues/issues#get-an-issue).
+- The transport, runner and console tests covered oversized Retry-After
+  and primary reset values, a one-hour cap, and a visible retry deadline.
+- The GitHub scope fixture covered both an author reply and a verified
+  maintainer requeue while search lagged. The deferred question survived
+  restart without a tracker write or a spent round. Query confirmation
+  allowed publication of the saved question or reevaluation if the
+  issue changed.
+
+| Command | Result |
+| --- | --- |
+| `go test -count=1 ./internal/trigger ./internal/api ./internal/activity ./internal/mcpconfig` | All four affected packages passed. |
+| `go test -count=1 -p 1 ./...` | The full suite passed on repeat. The first run failed in the existing `TestBoundedBuildPipelineIntegration` fixture, which passed on repeat. |
+| `./scripts/go.sh vet ./...` and `gofmt -l .` in `server/` | Vet passed. Gofmt listed no files. |
+| `GOOS=linux CGO_ENABLED=0 go build ./...` and `GOOS=darwin CGO_ENABLED=0 go build ./...` | Both arm64 builds passed. |
+| `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed the disposable browser fixture tests. |
+| `./node_modules/.bin/vitest run` in `web/` | 447 tests passed in 88 files. |
+| `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/tsc --project tsconfig.e2e.json` in `web/` | Both type checks passed. |
+| `./node_modules/.bin/playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` in `web/` | Four trigger and three Activity scenarios passed. |
+
+Go used cached Docker images with pulls disabled. Web checks used the
+installed tools and Chromium. Playwright built the web bundle and a
+disposable Darwin backend. Tracker verification used fixtures.

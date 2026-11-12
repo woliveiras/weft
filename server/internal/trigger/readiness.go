@@ -33,30 +33,31 @@ type Hold struct {
 	CommentAttempts    int        `json:"commentAttempts,omitempty"`
 	RetryCommentAt     *time.Time `json:"retryCommentAt,omitempty"`
 
-	RetryFailures  int        `json:"retryFailures,omitempty"`
-	RetryAt        *time.Time `json:"retryAt,omitempty"`
-	ScopeCheckedAt time.Time  `json:"scopeCheckedAt,omitzero"`
-	ScopeLagPolls  int        `json:"scopeLagPolls,omitempty"`
-	MissingPoll    uint64     `json:"missingPoll,omitempty"`
-	ScopeMiss      string     `json:"scopeMiss,omitempty"`
-	SnapshotEdits  int        `json:"snapshotEdits,omitempty"`
-	Eligibility    string     `json:"eligibility,omitempty"`
-	Message        string     `json:"message"`
-	Key            string     `json:"key"`
-	URL            string     `json:"url,omitempty"`
-	Reason         string     `json:"reason"`
-	State          string     `json:"state"`
-	Round          int        `json:"round"`
-	OpenedAt       time.Time  `json:"openedAt"`
-	RoundAt        time.Time  `json:"roundAt"`
-	Publication    string     `json:"publication,omitempty"`
-	Scope          string     `json:"scope"`
-	Evaluated      string     `json:"evaluated,omitempty"`
-	Signal         string     `json:"signal,omitempty"`
-	Questions      []string   `json:"questions,omitempty"`
-	Marker         string     `json:"marker,omitempty"`
-	Intervention   bool       `json:"intervention,omitempty"`
-	Removals       []string   `json:"removals,omitempty"`
+	RetryFailures   int                  `json:"retryFailures,omitempty"`
+	RetryAt         *time.Time           `json:"retryAt,omitempty"`
+	ScopeAssessment *ReadinessAssessment `json:"scopeAssessment,omitempty"`
+	ScopeCheckedAt  time.Time            `json:"scopeCheckedAt,omitzero"`
+	ScopeLagPolls   int                  `json:"scopeLagPolls,omitempty"`
+	MissingPoll     uint64               `json:"missingPoll,omitempty"`
+	ScopeMiss       string               `json:"scopeMiss,omitempty"`
+	SnapshotEdits   int                  `json:"snapshotEdits,omitempty"`
+	Eligibility     string               `json:"eligibility,omitempty"`
+	Message         string               `json:"message"`
+	Key             string               `json:"key"`
+	URL             string               `json:"url,omitempty"`
+	Reason          string               `json:"reason"`
+	State           string               `json:"state"`
+	Round           int                  `json:"round"`
+	OpenedAt        time.Time            `json:"openedAt"`
+	RoundAt         time.Time            `json:"roundAt"`
+	Publication     string               `json:"publication,omitempty"`
+	Scope           string               `json:"scope"`
+	Evaluated       string               `json:"evaluated,omitempty"`
+	Signal          string               `json:"signal,omitempty"`
+	Questions       []string             `json:"questions,omitempty"`
+	Marker          string               `json:"marker,omitempty"`
+	Intervention    bool                 `json:"intervention,omitempty"`
+	Removals        []string             `json:"removals,omitempty"`
 }
 
 // Legacy holds need an identifier even while readiness is disabled and the
@@ -160,6 +161,8 @@ func ReadinessReason(reason string) string {
 		return "The tracker state changed during readiness checks. Weft will verify eligibility again."
 	case "evaluation_interrupted":
 		return "Readiness evaluation was interrupted."
+	case "scope_assessment_pending":
+		return "The readiness assessment is waiting for GitHub to verify the trigger query before publication."
 	case "scope_waiting":
 		return "The issue passed readiness and is waiting for GitHub to verify the trigger query."
 	case "scope_changed":
@@ -484,6 +487,7 @@ func recordEvaluationFailure(h *Hold, reason string) {
 }
 
 func (r *Runner) finishHold(ctx context.Context, t *Trigger, call Invoker, h Hold, a ReadinessAssessment, current Issue) error {
+	h.ScopeAssessment = nil
 	h.Questions = a.Missing
 	h.RetryFailures, h.RetryAt = 0, nil
 	if a.Failure != "" {
@@ -579,15 +583,31 @@ func (r *Runner) recheckSnapshot(ctx context.Context, t *Trigger, call Invoker, 
 	return r.publishHold(ctx, t, call, h)
 }
 
+func deferScopeAssessment(h *Hold, a ReadinessAssessment) {
+	h.State, h.Reason = "scope_waiting", "scope_waiting"
+	h.RetryFailures, h.RetryAt = 0, nil
+	h.ScopeAssessment = nil
+	if a.Failure != "" || len(a.Missing) > 0 {
+		h.ScopeAssessment = &a
+		h.Reason = "scope_assessment_pending"
+	}
+}
+
 func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Issue, h Hold, replies []issueComment, scopeVerified bool) (bool, error) {
 	input := readinessInput(i, replies)
 	h.Evaluated = triggerFingerprint(input)
+	h.ScopeAssessment = nil
 	h.State, h.Reason = "evaluating", "evaluation_interrupted"
 	if err := r.saveHold(ctx, t, h); err != nil {
 		return false, err
 	}
 	if r.Assessor == nil {
-		return false, r.finishHold(ctx, t, call, h, ReadinessAssessment{Failure: "model_unavailable"}, i)
+		a := ReadinessAssessment{Failure: "model_unavailable"}
+		if scopeVerified {
+			return false, r.finishHold(ctx, t, call, h, a, i)
+		}
+		deferScopeAssessment(&h, a)
+		return false, r.saveHold(ctx, t, h)
 	}
 	if err := r.ensureCurrent(ctx, t); err != nil {
 		return false, err
@@ -610,13 +630,12 @@ func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Is
 	if i.Updated != current.Updated || issueReason(t, current) != "" || !slices.Equal(i.Labels, current.Labels) {
 		return false, r.recheckSnapshot(ctx, t, call, h, current, "eligibility_changed")
 	}
+	if !scopeVerified {
+		deferScopeAssessment(&h, a)
+		return false, r.saveHold(ctx, t, h)
+	}
 	if a.Failure != "" || len(a.Missing) > 0 {
 		return false, r.finishHold(ctx, t, call, h, a, current)
-	}
-	if !scopeVerified {
-		h.State, h.Reason = "scope_waiting", "scope_waiting"
-		h.RetryFailures, h.RetryAt = 0, nil
-		return false, r.saveHold(ctx, t, h)
 	}
 	current.EvaluatedInput = input
 	outcome, err := r.claimAndStart(ctx, t, call, current)
@@ -709,11 +728,15 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 			return false, err
 		}
 	}
-	answered := (h.State == "waiting" || (h.State == "failed" && !h.Intervention)) && slices.ContainsFunc(replies, func(reply issueComment) bool { return reply.At.After(h.RoundAt) }) &&
-		triggerFingerprint(readinessInput(i, replies)) != h.Evaluated
-	needsScopeRecheck := h.State == "scope_waiting" &&
-		(scopeVerified || triggerFingerprint(readinessInput(i, replies)) != h.Evaluated)
-	if !answered && !needsScopeRecheck && (signal == "" || signal == h.Signal) {
+	changed := triggerFingerprint(readinessInput(i, replies)) != h.Evaluated
+	newSignal := signal != "" && signal != h.Signal
+	if scopeVerified && h.State == "scope_waiting" && h.ScopeAssessment != nil && !changed && !newSignal {
+		return false, r.finishHold(ctx, t, call, h, *h.ScopeAssessment, i)
+	}
+	answered := changed && (h.State == "waiting" || (h.State == "failed" && !h.Intervention)) &&
+		slices.ContainsFunc(replies, func(reply issueComment) bool { return reply.At.After(h.RoundAt) })
+	needsScopeRecheck := h.State == "scope_waiting" && (scopeVerified || changed)
+	if !answered && !needsScopeRecheck && !newSignal {
 		return false, nil
 	}
 	if signal != "" {

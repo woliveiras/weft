@@ -207,3 +207,16 @@ func TestRetainedReadinessExpiresAndKeepsNewestEntries(t *testing.T) {
 		}
 	}
 }
+
+func TestDeferredScopeAssessmentKeepsThePublishedRoundIntact(t *testing.T) {
+	h := Hold{Round: 1, Publication: "confirmed", Marker: "first", Questions: []string{"objective"}, Evaluated: "snapshot"}
+	deferScopeAssessment(&h, ReadinessAssessment{Missing: []string{"acceptance"}})
+	if h.ScopeAssessment == nil || len(h.ScopeAssessment.Missing) != 1 || h.ScopeAssessment.Missing[0] != "acceptance" ||
+		h.Round != 1 || h.Publication != "confirmed" || h.Marker != "first" || h.Questions[0] != "objective" || h.Evaluated != "snapshot" {
+		t.Fatalf("deferred assessment changed the published question: %+v", h)
+	}
+	deferScopeAssessment(&h, ReadinessAssessment{})
+	if h.ScopeAssessment != nil || h.State != "scope_waiting" || h.Reason != "scope_waiting" {
+		t.Fatalf("ready assessment left stale questions: %+v", h)
+	}
+}

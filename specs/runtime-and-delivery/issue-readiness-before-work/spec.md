@@ -92,8 +92,11 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   current issue revision. Two polls must confirm the same issue revision is
   outside the query before release. After three lag observations, direct
   REST reads can verify replies and maintainer requeues and support
-  reevaluation. Claim still requires a verified query match and a fresh
-  verdict. Deferrals preserve the hold. A later
+  reevaluation. Questions from this fallback wait for a verified query
+  match. Weft retains the question codes and input fingerprint without
+  spending a round or writing to the tracker. A changed input requires
+  reevaluation before publication. Claim still requires a verified query
+  match and a fresh verdict. Deferrals preserve the hold. A later
   selection under the same issue and workflow keeps its round and edit
   counts after an automatic query-based release. Retain progress for
   30 days from release and keep at most the 100 most recent entries per
