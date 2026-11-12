@@ -231,7 +231,7 @@ func eligibleReplies(i Issue, owner string, replies []issueComment) []issueComme
 	seen := map[string]bool{}
 	for _, reply := range replies {
 		if reply.Actor == "" || (!strings.EqualFold(reply.Actor, i.Author) && !strings.EqualFold(reply.Actor, owner)) ||
-			strings.Contains(reply.Body, "\n\nWeft readiness reference: hold_") {
+			isReadinessComment(reply.Body) {
 			continue
 		}
 		text := strings.ToLower(strings.TrimSpace(strings.Trim(strings.TrimSpace(reply.Body), ".!")))
@@ -245,4 +245,13 @@ func eligibleReplies(i Issue, owner string, replies []issueComment) []issueComme
 		}
 	}
 	return out
+}
+
+func isReadinessComment(body string) bool {
+	canonical := canonicalComment(strings.TrimSpace(body))
+	if !strings.HasPrefix(canonical, "Weft question (") && !strings.HasPrefix(canonical, "Weft readiness failure.") {
+		return false
+	}
+	_, marker, ok := strings.Cut(strings.TrimSpace(canonical[strings.LastIndex(canonical, "\n")+1:]), readinessMarkerPrefix)
+	return ok && strings.HasPrefix(marker, "hold_") && len(marker) > len("hold_")
 }

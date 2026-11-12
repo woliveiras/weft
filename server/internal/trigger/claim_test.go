@@ -144,6 +144,13 @@ func TestJiraReadinessHoldsAndReturnsWithoutStatusTransition(t *testing.T) {
 	if len(tr.Holds) != 1 || strings.Join(fields["labels"].([]string), ",") != "bug,weft:needs-attention" || len(starter.started) != 0 {
 		t.Fatalf("Jira hold: %+v, fields %+v", tr.Holds, fields)
 	}
+	own := map[string]any{"id": "77", "created": c.t.Add(time.Minute).Format(time.RFC3339Nano), "author": actor,
+		"body": map[string]any{"type": "doc", "content": []any{map[string]any{"type": "text", "text": atl.comments["APP-1"][0]}}}}
+	atl.replies["APP-1"] = []map[string]any{own}
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.Holds) != 1 || tr.Holds[0].Round != 1 || len(atl.comments["APP-1"]) != 1 {
+		t.Fatalf("Jira counted its own flattened comment: %+v", tr.Holds)
+	}
 	atl.replies["APP-1"] = []map[string]any{{"id": "88", "created": c.t.Add(time.Minute).Format(time.RFC3339Nano), "author": actor,
 		"body": map[string]any{"type": "doc", "content": []any{map[string]any{"type": "text", "text": "expected CSV header"}}}}}
 	tr = advance(r, c, t, tr.ID)

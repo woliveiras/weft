@@ -87,3 +87,15 @@ func TestReadinessModelUsesOneBoundedToolFreeCall(t *testing.T) {
 		t.Fatalf("monetary preflight: %+v calls %d", v, calls-before)
 	}
 }
+
+func TestEligibleRepliesRejectPublishedReadinessComments(t *testing.T) {
+	issue := Issue{Author: "same-account"}
+	for _, separator := range []string{"\n", "\n\n"} {
+		body := "Weft question (round 1 of 2)." + separator + readinessMarkerPrefix + "hold_example"
+		replies := []issueComment{{ID: "1", Actor: "same-account", Body: body}, {ID: "2", Actor: "same-account", Body: "Acceptance example"}}
+		got := eligibleReplies(issue, "same-account", replies)
+		if len(got) != 1 || got[0].ID != "2" {
+			t.Fatalf("unexpected replies: %+v", got)
+		}
+	}
+}

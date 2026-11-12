@@ -68,6 +68,8 @@ func TestReadinessAsksTwiceAndRequiresVerifiedManualRequeue(t *testing.T) {
 		ghReply(2, "other", "User", "I speak for author", c.t.Add(time.Second)),
 		ghReply(3, "weft-bot", "Bot", "bot answer", c.t.Add(time.Second)),
 		ghReply(4, "author", "User", "Thanks!", c.t.Add(time.Second)),
+		ghReply(10, "author", "User", gh.comments["#1"][0], c.t.Add(time.Second)),
+		ghReply(11, "weft-bot", "User", gh.comments["#1"][0], c.t.Add(time.Second)),
 	}
 	tr = advance(r, c, t, tr.ID)
 	if len(evaluated) != 1 || len(gh.comments["#1"]) != 1 {

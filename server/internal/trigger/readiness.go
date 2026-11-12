@@ -45,6 +45,8 @@ func holdScope(t *Trigger) string {
 	}{t.Source, t.Workflow})
 }
 
+const readinessMarkerPrefix = "Weft readiness reference: "
+
 func holdMessage(h Hold) string {
 	var lines []string
 	switch h.State {
@@ -58,7 +60,7 @@ func holdMessage(h Hold) string {
 	default:
 		lines = []string{"Weft readiness failure. " + ReadinessReason(h.Reason) + " Review the trigger and the issue, then have a maintainer add weft:todo to request another assessment."}
 	}
-	return strings.Join(lines, "\n") + "\n\nWeft readiness reference: " + h.Marker
+	return strings.Join(lines, "\n") + "\n\n" + readinessMarkerPrefix + h.Marker
 }
 
 func ReadinessReason(reason string) string {
