@@ -177,7 +177,8 @@ spec-derived oracles for implementation.
 - **D-03 — Return and rounds (AC-003, AC-004).** Reevaluate after a comment
   from the human issue author or configured human owner, or a human
   maintainer's manual `weft:todo` addition. Bots do not count. Ask at most
-  twice. If still incomplete, keep `weft:needs-attention` and ask for operator
+  twice. Use the tracker API through reviewed gateway operations to verify
+  label event authorship and maintainer authority. If still incomplete, keep `weft:needs-attention` and ask for operator
   intervention in a comment. Reopening repeats readiness and consent.
 - **D-04 — Default and disable (AC-005, AC-006).** Enable readiness by
   default on every trigger with a per-trigger switch. Disabling preserves
@@ -185,11 +186,13 @@ spec-derived oracles for implementation.
 - **D-05 — Jira (AC-002, AC-003, AC-006).** Use comments and labels. Exclude
   status transitions.
 - **D-06 — Consent (AC-005).** Bind readiness policy, reply reads, comments
-  and fixed limits to current trigger consent. Changing the scope invalidates
+  and fixed limits to current trigger consent. Include the specific tracker
+  API operations and connection scope in that review. Changing the scope invalidates
   consent. Issue replies confer no consent or approval.
 - **D-07 — Hold label (AC-002, AC-003, AC-006).** Replace the selection label
   with `weft:needs-attention` to remove the issue from the queue. Keep
-  unrelated labels.
+  unrelated labels. Use specific gateway operations to add and remove labels
+  without replacing the full list.
 - **D-08 — Rubric (AC-001, AC-002).** Require a clear objective and
   verifiable acceptance. Require bounded scope when ambiguity is material.
   Use the conditions and example questions below to guide clarification.

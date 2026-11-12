@@ -22,7 +22,8 @@ Read reviewed issue references and start eligible labeled work through consent-b
 
 - New polling work uses the RUN-007 readiness policy before claim by default.
 - Each relabel operation changes only the selection or lifecycle labels it
-  owns. Keep unrelated labels.
+  owns. Use specific reviewed gateway operations to preserve unrelated
+  labels, including concurrent additions.
 - The 2026-11-12 maintainer decision supersedes the previous selection
   default, lifecycle labels and Jira transitions across all trackers.
   Prior trigger formats and labels have no prototype compatibility contract.
@@ -60,8 +61,10 @@ pending.
 ### AC-004 — Issue closure on merge
 
 For a GitHub issue, the PR created by Weft includes the GitHub closing
-reference `Closes #N` in its body so that the merge closes the issue. Derive
-the issue number from the admitted tracker identity. Auto-closing Jira
+reference in its body so that the merge closes the issue. Use `Closes #N`
+when the PR and issue share a repository, and `Closes owner/repo#N` when
+they differ. Derive the repository and issue number from the admitted
+tracker identity. Auto-closing Jira
 issues and other non-GitHub trackers on PR merge is excluded.
 
 ## Explicit exclusions
