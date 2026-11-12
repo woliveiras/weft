@@ -135,7 +135,12 @@ Reference reads use the existing `filesystem.read` gateway and its path
 constraints, rate limits and approvals. For guidance references, path grants
 match paths relative to the checkout root, including when the agent runs in a
 configured `workspace.subdir`. They are distinct from ordinary
-file reads. The loader rechecks the live checkout identity and metadata.
+file reads. The tool metric and span identify them as `guidance.reference`,
+while grants and approvals use `filesystem.read`. The
+`weft_guidance_load_duration_seconds` histogram counts and times progressive
+catalogue and body loads by stage and outcome. Their spans are
+`guidance.load.catalogue` and `guidance.load.body`. These measurements carry
+no file paths or guidance text. The loader rechecks the live checkout identity and metadata.
 A detected mismatch requires a later execution to rediscover the skill.
 Runtimes without progressive support fail before dispatch. Graphs without
 effective discovery retain legacy delivery for console skills.

@@ -141,6 +141,15 @@ The loaded event also includes `omitted`. The turn span records
 `weft_instruction_load_duration_seconds` cover resolution plus persistence;
 labels contain no skill IDs, paths or content.
 
+Progressive loads also record `weft_guidance_load_duration_seconds{stage,outcome}`
+and the corresponding `guidance.load.catalogue` and `guidance.load.body` spans.
+Catalogue outcomes are `loaded`, `workspace_unavailable` and `error`. Body
+outcomes are `loaded`, `already_applied`, `omitted` and `error`. A reference
+that reaches the tool gateway uses the metric label `tool="guidance.reference"`
+and span `tool.guidance.reference`. Audit and approval still identify the
+authorizing tool as `filesystem.read`. Activity records the specific safe
+reason for an omitted reference.
+
 ## Application review events
 
 `review.requested`, `review.session`, `review.session_failed`,

@@ -78,14 +78,18 @@ func (g *Gateway) invoke(ctx context.Context, p *Principal, name string, args js
 	if p == nil {
 		return nil, fmt.Errorf("%w: no principal", ErrDenied)
 	}
-	ctx, span := observability.Start(ctx, "tool."+name,
-		attribute.String("weft.tool", name),
+	telemetryName := name
+	if read != nil {
+		telemetryName = "guidance.reference"
+	}
+	ctx, span := observability.Start(ctx, "tool."+telemetryName,
+		attribute.String("weft.tool", telemetryName),
 		attribute.String("weft.graph", p.GraphID),
 		attribute.String("weft.node", p.NodeID),
 		attribute.Int("weft.replica", p.Replica),
 		attribute.String("weft.execution", p.ExecutionID),
 	)
-	metricName := name
+	metricName := telemetryName
 	if strings.HasPrefix(name, "mcp.") {
 		metricName = "mcp"
 	}

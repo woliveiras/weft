@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/observability"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 var ErrWorkspaceUnavailable = errors.New("guidance workspace unavailable")
@@ -83,7 +86,7 @@ func repositoryPolicy(g *domain.Graph, n *domain.Node) (string, map[string]bool,
 	}
 }
 
-func (m Manager) Prepare(ctx context.Context, g *domain.Graph, n *domain.Node, root, steeringRoot, prompt string, tasks []string) (*Snapshot, *Session, error) {
+func (m Manager) Prepare(ctx context.Context, g *domain.Graph, n *domain.Node, root, steeringRoot, prompt string, tasks []string) (_ *Snapshot, _ *Session, loadErr error) {
 	policy, blocked, enabled := repositoryPolicy(g, n)
 	if !enabled {
 		s, err := m.resolveLegacy(ctx, g, n, steeringRoot, prompt, tasks)
@@ -92,6 +95,10 @@ func (m Manager) Prepare(ctx context.Context, g *domain.Graph, n *domain.Node, r
 		}
 		return s, nil, err
 	}
+	ctx, observe := observeGuidanceLoad(ctx, "catalogue")
+	outcome := "loaded"
+	defer func() { observe(outcome, loadErr) }()
+
 	s := &Snapshot{GraphID: g.Metadata.ID, NodeID: n.ID, RepositoryPolicy: policy, Entries: []Entry{}, Budget: MaxTokens}
 	for _, name := range domain.RepositoryGuidanceSources {
 		if blocked[name] {
@@ -132,6 +139,7 @@ func (m Manager) Prepare(ctx context.Context, g *domain.Graph, n *domain.Node, r
 	var repoItems []progressiveEntry
 	repoRoot, err := openRepoRoot(root)
 	if err != nil {
+		outcome = "workspace_unavailable"
 		repoItems = append(repoItems, progressiveEntry{entry: Entry{Scope: "repository", Source: ".", Reason: "workspace_unavailable"}})
 	} else {
 		defer repoRoot.Close()
@@ -309,7 +317,13 @@ func validReference(reference string) bool {
 	return len(reference) <= 512 && reference != "SKILL.md" && safeRelative(reference)
 }
 
-func (s *Session) Load(ctx context.Context, selection, reference string) (string, error) {
+func (s *Session) Load(ctx context.Context, selection, reference string) (_ string, loadErr error) {
+	outcome := "omitted"
+	if reference == "" {
+		var observe func(string, error)
+		ctx, observe = observeGuidanceLoad(ctx, "body")
+		defer func() { observe(outcome, loadErr) }()
+	}
 	item, ok := s.selected[selection]
 	if !ok {
 		reason := "unknown_selection"
@@ -323,6 +337,7 @@ func (s *Session) Load(ctx context.Context, selection, reference string) (string
 	e.Stage, e.Record = "body", 0
 	key := selection + "\x00" + reference
 	if s.applied[key] {
+		outcome = "already_applied"
 		return "already applied", nil
 	}
 	if reference != "" {
@@ -386,7 +401,24 @@ func (s *Session) Load(ctx context.Context, selection, reference string) (string
 	}
 	s.snapshot.Budget -= cost
 	s.applied[key] = true
+	outcome = "loaded"
 	return "loaded at its assigned guidance precedence", nil
+}
+
+// Use fixed stages and outcomes in metrics and traces. Paths, selection IDs
+// and error details belong outside these load measurements.
+func observeGuidanceLoad(ctx context.Context, stage string) (context.Context, func(string, error)) {
+	ctx, span := observability.Start(ctx, "guidance.load."+stage, attribute.String("weft.guidance.stage", stage))
+	start := time.Now()
+	return ctx, func(outcome string, err error) {
+		if err != nil {
+			outcome = "error"
+			span.SetStatus(codes.Error, "guidance load failed")
+		}
+		observability.GuidanceLoadSeconds.WithLabelValues(stage, outcome).Observe(time.Since(start).Seconds())
+		span.SetAttributes(attribute.String("weft.guidance.outcome", outcome))
+		span.End()
+	}
 }
 
 func (s *Session) readRepository(c repoCandidate, reference string) (string, string) {

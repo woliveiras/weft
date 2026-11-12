@@ -208,8 +208,12 @@ func TestGuidanceReferenceReportsReadFailure(t *testing.T) {
 	aud := &captureAuditor{}
 	gw := NewGateway(Builtin(BuiltinConfig{}), nil, aud)
 	p := principal(t.TempDir(), domain.ToolGrant{Name: "filesystem.read"})
-	counter := observability.ToolInvocations.WithLabelValues("filesystem.read", "error")
-	var before, after dto.Metric
+	counter := observability.ToolInvocations.WithLabelValues("guidance.reference", "error")
+	filesystem := observability.ToolInvocations.WithLabelValues("filesystem.read", "error")
+	var before, after, fileBefore, fileAfter dto.Metric
+	if err := filesystem.Write(&fileBefore); err != nil {
+		t.Fatal(err)
+	}
 	if err := counter.Write(&before); err != nil {
 		t.Fatal(err)
 	}
@@ -226,4 +230,11 @@ func TestGuidanceReferenceReportsReadFailure(t *testing.T) {
 	if got := after.GetCounter().GetValue() - before.GetCounter().GetValue(); got != 1 {
 		t.Fatalf("error counter increased by %v", got)
 	}
+	if err := filesystem.Write(&fileAfter); err != nil {
+		t.Fatal(err)
+	}
+	if fileAfter.GetCounter().GetValue() != fileBefore.GetCounter().GetValue() {
+		t.Fatal("guidance failure counted as a regular filesystem read")
+	}
+
 }

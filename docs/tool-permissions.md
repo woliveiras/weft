@@ -129,6 +129,11 @@ Tool *failures* (non-zero exit, missing file, HTTP error) are returned to the ag
 | Traces | Span `tool.<name>` with `weft.graph/node/replica/execution`, `weft.tool.outcome` |
 | Approvals | `approval.requested/decided` with detail `{tool, args}` |
 
+A [progressive guidance reference](instructions.md) uses the
+`filesystem.read` grant, rate limit and approvals. Its path is relative to
+the checkout root. The gateway traces and measures it as
+`guidance.reference` and records failed reads as errors.
+
 ## Recipes
 
 | Role | Grants | Rationale |
