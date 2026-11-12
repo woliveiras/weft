@@ -46,11 +46,15 @@ func (g *turnGuidance) Load(ctx context.Context, skill, ref string) (string, err
 	return g.Session.Load(ctx, skill, ref)
 }
 
-// guidanceGrantPath maps the canonical checkout path into the physical
-// workdir used by ordinary filesystem grants. Resolve only the roots here.
-// The guidance reader opens the file without following symlinks.
-func guidanceGrantPath(checkout, workdir, reference string) (string, bool) {
-	if checkout == "" || workdir == "" || !filepath.IsLocal(filepath.FromSlash(reference)) {
+// guidanceGrantPath preserves workdir-relative constraints for contained
+// references. For a reference in a discovered package outside a configured
+// subdir, the canonical checkout path is the grant subject. The session
+// supplies the discovered package and opens the file without following links.
+func guidanceGrantPath(checkout, workdir, packagePath, reference string, subdir bool) (string, bool) {
+	pkg, ref := filepath.FromSlash(packagePath), filepath.FromSlash(reference)
+	if checkout == "" || workdir == "" || !filepath.IsLocal(pkg) || !filepath.IsLocal(ref) ||
+		pkg == "." || filepath.Clean(pkg) != pkg || filepath.Clean(ref) != ref ||
+		!strings.HasPrefix(ref, pkg+string(filepath.Separator)) {
 		return "", false
 	}
 	root, err := filepath.EvalSymlinks(checkout)
@@ -61,21 +65,25 @@ func guidanceGrantPath(checkout, workdir, reference string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	rel, err := filepath.Rel(workdir, filepath.Join(root, filepath.FromSlash(reference)))
-	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", false
+	rel, err := filepath.Rel(workdir, filepath.Join(root, ref))
+	if err == nil && rel != "." && filepath.IsLocal(rel) {
+		return filepath.ToSlash(rel), true
 	}
-	return filepath.ToSlash(rel), true
+	workspaceSubdir, err := filepath.Rel(root, workdir)
+	if subdir && err == nil && workspaceSubdir != "." && filepath.IsLocal(workspaceSubdir) {
+		return reference, true
+	}
+	return "", false
 }
 
-func (t *turnEnv) readGuidanceReference(ctx context.Context, checkout, path string, read func() (string, string)) (string, string, error) {
+func (t *turnEnv) readGuidanceReference(ctx context.Context, checkout, packagePath, path string, read func() (string, string)) (string, string, error) {
 	gateway, ok := t.gr.e.opt.Tools.(interface {
 		ReadGuidanceReference(context.Context, *tools.Principal, string, func() string) (*tools.Result, error)
 	})
 	if !ok {
 		return "", "permission_denied", nil
 	}
-	grantPath, contained := guidanceGrantPath(checkout, t.principal.Workdir, path)
+	grantPath, contained := guidanceGrantPath(checkout, t.principal.Workdir, packagePath, path, t.n.Workspace.Subdir != "")
 	if !contained {
 		return "", "permission_denied", nil
 	}

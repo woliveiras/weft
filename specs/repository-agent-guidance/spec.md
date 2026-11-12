@@ -233,10 +233,16 @@ acceptance criteria above and matrix use these decisions as their oracles.
   execution-bound selection opens only the chosen body. A later request can
   open one chosen textual reference in that repository package, subject to
   its policy and workspace permissions. Discovery and Activity identify files
-  from the checkout root. Reference authorization confines the target to the
-  agent's working directory and evaluates filesystem path grants relative to
-  that directory, including when `workspace.subdir` is configured. An
-  unrestricted path grant still applies only within the working directory.
+  from the checkout root. The 2026-11-12 maintainer decision supersedes the
+  working-directory-only confinement in `6bb00e0`. An agent using
+  `workspace.subdir` can read a reference outside that subdirectory only
+  within a discovered skill package and only through the audited
+  `ReadGuidanceReference` gateway. The bounded reader retains
+  `O_NOFOLLOW`, regular-file and content limits. The gateway applies the
+  read grant, rate limit and approval gates. Path constraints use the
+  workdir-relative path for a contained reference and the canonical checkout
+  path for a reference outside the workdir. Ordinary tools retain workdir
+  confinement, including under an unrestricted filesystem grant.
   No implicit activation, recursion or import occurs.
 - Identify repository scopes in the progressive prompt preamble. Frame each
   optional source so its text cannot introduce a source header, closing marker

@@ -52,16 +52,34 @@ func TestGuidanceGrantPathPreservesPhysicalWorkdir(t *testing.T) {
 	if err := os.Symlink(pkg, alias); err != nil {
 		t.Fatal(err)
 	}
-	for _, tc := range []struct{ workdir, ref, want string }{
-		{root, pkg + "/ref.md", pkg + "/ref.md"},
-		{workdir, pkg + "/ref.md", "ref.md"},
-		{alias, pkg + "/ref.md", "ref.md"},
-		{workdir, ".agents/skills/sample-sibling/ref.md", ""},
-		{root, "../ref.md", ""},
-		{"", pkg + "/ref.md", ""},
+	for _, tc := range []struct {
+		workdir, ref, want string
+		subdir             bool
+	}{
+		{root, pkg + "/ref.md", pkg + "/ref.md", false},
+		{workdir, pkg + "/ref.md", "ref.md", true},
+		{alias, pkg + "/ref.md", "ref.md", true},
+		{filepath.Dir(workdir), pkg + "/ref.md", "sample/ref.md", true},
+		{workdir, ".agents/skills/sample-sibling/ref.md", "", true},
+		{workdir, "ref.md", "", true},
+		{workdir, pkg + "/../../../ref.md", "", true},
+		{root, "../ref.md", "", false},
+		{"", pkg + "/ref.md", "", true},
+		{t.TempDir(), pkg + "/ref.md", "", true},
 	} {
-		if got, ok := guidanceGrantPath(root, tc.workdir, tc.ref); got != tc.want || ok != (tc.want != "") {
+		if got, ok := guidanceGrantPath(root, tc.workdir, pkg, tc.ref, tc.subdir); got != tc.want || ok != (tc.want != "") {
 			t.Errorf("path %q under %q: got %q, %t; want %q", tc.ref, tc.workdir, got, ok, tc.want)
 		}
+	}
+
+	sibling := filepath.Join(root, "sibling")
+	if err := os.Mkdir(sibling, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := guidanceGrantPath(root, sibling, pkg, pkg+"/ref.md", true); !ok || got != pkg+"/ref.md" {
+		t.Fatalf("expected checkout-relative grant subject, got %q, %t", got, ok)
+	}
+	if got, ok := guidanceGrantPath(root, sibling, pkg, pkg+"/ref.md", false); ok {
+		t.Fatalf("out-of-workdir reference without subdir allowed: %q", got)
 	}
 }

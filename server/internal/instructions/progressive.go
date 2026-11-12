@@ -31,7 +31,7 @@ var escapeFrameText = strings.NewReplacer(
 
 // ReferenceReader routes an already scoped reference through workspace file
 // policy. The callback opens the reference only after the gateway authorizes it.
-type ReferenceReader func(context.Context, string, func() (string, string)) (string, string, error)
+type ReferenceReader func(ctx context.Context, packagePath, path string, read func() (string, string)) (string, string, error)
 
 type progressiveEntry struct {
 	entry       Entry
@@ -375,7 +375,7 @@ func (s *Session) Load(ctx context.Context, selection, reference string) (_ stri
 			return s.omitRequest(ctx, e, "permission_denied")
 		}
 		s.references[key] = true
-		content, reason, err = s.ReadReference(ctx, e.Source, func() (string, string) {
+		content, reason, err = s.ReadReference(ctx, item.repo.pkg, e.Source, func() (string, string) {
 			return s.readRepository(*item.repo, reference)
 		})
 		if err != nil {

@@ -590,27 +590,50 @@ spec:
 	}
 }
 
-func TestRepositoryGuidanceReferenceCannotWidenSubdirectoryGrant(t *testing.T) {
-	for _, grant := range []string{"{name: filesystem.read}", `{name: filesystem.read, paths: ["**"]}`} {
-		t.Run(grant, func(t *testing.T) {
+func TestRepositoryGuidanceRootPackageException(t *testing.T) {
+	for _, tc := range []struct {
+		name, paths string
+		allowed     bool
+	}{
+		{"open grant", "", true},
+		{"glob grant", `, paths: ["**"]`, true},
+		{"package grant", `, paths: [".agents/skills/sample/**"]`, true},
+		{"unrelated grant", `, paths: ["docs/**"]`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			p := &guidanceProvider{calls: []llm.ToolCall{
 				{ID: "body", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample"}`)},
 				{ID: "ref", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample","reference":"ref.md"}`)},
+				{ID: "traverse", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample","reference":"../../../root.md"}`)},
+				{ID: "link", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample","reference":"link.md"}`)},
+				{ID: "fs-traverse", Name: "filesystem.read", Arguments: json.RawMessage(`{"path":"../root.md"}`)},
+				{ID: "fs-link", Name: "filesystem.read", Arguments: json.RawMessage(`{"path":"link.md"}`)},
+				{ID: "fs-ref", Name: "filesystem.read", Arguments: json.RawMessage(`{"path":"../.agents/skills/sample/ref.md"}`)},
 			}}
 			r := newRig(t, openStore(t, dir), memory.New(), dir, "scoped-guidance", func(o *engine.Options) {
 				o.Models.(*llm.Registry).Add(llm.ProviderConfig{Name: p.Name()}, p)
 			})
-			root := filepath.Join(dir, "ws", "scoped-guidance")
-			pkg := filepath.Join(root, ".agents", "skills", "sample")
-			if err := os.MkdirAll(pkg, 0o755); err != nil {
-				t.Fatal(err)
-			}
+			const id = "scoped-guidance"
+			const ref = ".agents/skills/sample/ref.md"
+			const payload = "BOUNDED PACKAGE REFERENCE"
+			root := filepath.Join(dir, "ws", id)
 			for name, content := range map[string]string{
-				"SKILL.md": "---\nname: sample\ndescription: Sample skill\n---\nCATALOGUED BODY",
-				"ref.md":   "OUTSIDE AGENT WORKDIR",
+				".agents/skills/sample/SKILL.md": "---\nname: sample\ndescription: Sample skill\n---\nCATALOGUED BODY",
+				ref:                              payload,
+				"root.md":                        "UNRELATED CHECKOUT FILE",
+				"src/keep.md":                    "",
 			} {
-				if err := os.WriteFile(filepath.Join(pkg, name), []byte(content), 0o644); err != nil {
+				file := filepath.Join(root, name)
+				if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(file, []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for name, target := range map[string]string{"src/link.md": "../root.md", ".agents/skills/sample/link.md": "../../../root.md"} {
+				if err := os.Symlink(target, filepath.Join(root, name)); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -622,15 +645,56 @@ spec:
       prompt: Check reference confinement
       model: {provider: guidance-fixture, name: fixture}
       workspace: {subdir: src}
-      tools: [%s]
+      tools: [{name: filesystem.read%s}]
       loop: {mode: once}
       isolation: {mode: process}
-`, grant))
-			eventually(t, 5*time.Second, "reference refusal reaches model", func() bool { return len(p.observed()) == 3 })
-			prompt := p.observed()[2]
-			if !strings.Contains(prompt, "CATALOGUED BODY") || !strings.Contains(prompt, "omitted: permission_denied") ||
-				strings.Contains(prompt, "OUTSIDE AGENT WORKDIR") {
-				t.Fatal("reference grant escaped the workdir or discovery failed")
+`, tc.paths))
+			var execution *domain.Execution
+			eventually(t, 5*time.Second, "guidance execution succeeds", func() bool {
+				rows, _ := r.store.ListExecutions(r.ctx, storage.ExecutionFilter{GraphID: id})
+				if len(rows) == 1 && rows[0].Status == domain.ExecSucceeded {
+					execution = rows[0]
+					return true
+				}
+				return false
+			})
+			requests := p.observed()
+			prompt := requests[len(p.calls)]
+			if !strings.Contains(prompt, "CATALOGUED BODY") || strings.Contains(prompt, payload) != tc.allowed ||
+				strings.Contains(prompt, "UNRELATED CHECKOUT FILE") || !strings.Contains(prompt, "omitted: invalid_reference") {
+				t.Fatal(prompt)
+			}
+			if tc.allowed && !strings.Contains(prompt, "omitted: unsafe_path") {
+				t.Fatal("package symlink was not rejected", prompt)
+			}
+			if !tc.allowed && !strings.Contains(prompt, "omitted: permission_denied") {
+				t.Fatal("restrictive grant did not refuse the package reference", prompt)
+			}
+			snapshot, err := (instructions.Manager{Store: r.store}).Snapshot(r.ctx, execution.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if found := slices.ContainsFunc(snapshot.Reads, func(e instructions.Entry) bool {
+				return e.Stage == "reference" && e.Source == ref && e.Delivery == "confirmed" &&
+					e.SHA256 == fmt.Sprintf("%x", sha256.Sum256([]byte(payload)))
+			}); found != tc.allowed {
+				t.Fatal("unexpected Activity reference", snapshot.Reads)
+			}
+			events, err := r.store.ListEvents(r.ctx, storage.EventFilter{GraphID: id, Types: []domain.EventType{domain.EvToolCompleted, domain.EvToolDenied}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if found := slices.ContainsFunc(events, func(e *domain.Event) bool {
+				return strings.Contains(string(e.Data), `"path":"`+ref+`"`) && strings.Contains(string(e.Data), `"outcome":"ok"`)
+			}); found != tc.allowed {
+				t.Fatal("unexpected successful reference audit", events)
+			}
+			for _, path := range []string{"../root.md", "link.md", "../" + ref} {
+				if !slices.ContainsFunc(events, func(e *domain.Event) bool {
+					return strings.Contains(string(e.Data), `"path":"`+path+`"`) && strings.Contains(string(e.Data), `"outcome":"denied"`)
+				}) {
+					t.Errorf("ordinary filesystem read of %s was not refused", path)
+				}
 			}
 		})
 	}

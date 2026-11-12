@@ -243,6 +243,7 @@ func run() error {
 	guidanceRoot := filepath.Join(cfg.Workspaces.Root, "repository-guidance-browser")
 	for name, content := range map[string]string{
 		"AGENTS.md":                              "Browser root instructions.",
+		"src/fixture.md":                         "Agent working directory.",
 		".agents/skills/browser-review/SKILL.md": "---\nname: browser-review\ndescription: Browser review catalogue.\n---\nBrowser repository body.\n",
 		".agents/skills/browser-review/references/checklist.md": "Browser reference body.",
 		".agents/skills/browser-guidance/SKILL.md":              "---\nname: browser-guidance\ndescription: Shadowed browser skill.\n---\nShadowed browser body.\n",

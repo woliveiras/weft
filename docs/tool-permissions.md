@@ -130,8 +130,13 @@ Tool *failures* (non-zero exit, missing file, HTTP error) are returned to the ag
 | Approvals | `approval.requested/decided` with detail `{tool, args}` |
 
 A [progressive guidance reference](instructions.md) uses the
-`filesystem.read` grant, rate limit and approvals. Grants and approvals use the path
-relative to the agent working directory. Activity uses the checkout path. The gateway traces and measures it as
+`filesystem.read` grant, rate limit and approvals. Grants and approvals use
+the workdir-relative path for references inside the working directory. For
+an agent with `workspace.subdir`, the guidance gateway can also read a
+reference in a discovered skill package outside that subdirectory and uses
+the canonical checkout path for that check. This read-only exception applies
+only to guidance references. Ordinary tools remain confined to the workdir
+even with a `**` grant. Activity uses the checkout path. The gateway traces and measures it as
 `guidance.reference` and records failed reads as errors.
 
 ## Recipes

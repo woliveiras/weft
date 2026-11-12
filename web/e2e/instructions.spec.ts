@@ -109,7 +109,7 @@ test("Activity shows historical progressive guidance to a viewer", async ({ page
       spec: {
         instructions: { skillIds: ["browser-guidance"] },
         nodes: [{
-          id: "reviewer", prompt: "Run repository-guidance-browser",
+          id: "reviewer", prompt: "Run repository-guidance-browser", workspace: { subdir: "src" },
           model: { provider: "e2e", name: "fixture" },
           isolation: { mode: "process" }, loop: { mode: "once" }, tools: ["filesystem.read"],
         }],

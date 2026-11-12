@@ -139,10 +139,13 @@ a header and closing line. Every payload line is quoted, with control line
 separators escaped, so source text cannot introduce a header, closer or task.
 Reference reads use the existing `filesystem.read` gateway and its path
 constraints, rate limits and approvals. Discovery and Activity identify the
-reference from the checkout root. Authorization confines the reference to the
-agent's working directory, including any `workspace.subdir`, and matches
-path grants relative to that directory. The tool metric and span identify them as `guidance.reference`,
-while grants and approvals use `filesystem.read`. The
+reference from the checkout root. An agent with `workspace.subdir` can read
+a reference outside its working directory from a discovered skill package
+through the guidance gateway. For those references, path grants use the
+canonical checkout path. For references inside the working directory, path
+grants use the workdir-relative path. The bounded reader accepts regular
+text files and rejects symlinks. Tool metrics and spans use
+`guidance.reference`. Grants and approvals use `filesystem.read`. The
 `weft_guidance_load_duration_seconds` histogram counts and times progressive
 catalogue and body loads by stage and outcome. Their spans are
 `guidance.load.catalogue` and `guidance.load.body`. These measurements carry

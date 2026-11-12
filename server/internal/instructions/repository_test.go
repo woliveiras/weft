@@ -160,7 +160,7 @@ func TestRepositoryActivationBudgetAndAuditRecovery(t *testing.T) {
 	if turn.selected[selection].entry.LockStatus != "unsupported_lock" {
 		t.Fatal("unsupported lock should be advisory")
 	}
-	turn.ReadReference = func(_ context.Context, _ string, read func() (string, string)) (string, string, error) {
+	turn.ReadReference = func(_ context.Context, _, _ string, read func() (string, string)) (string, string, error) {
 		content, reason := read()
 		return content, reason, nil
 	}
@@ -291,7 +291,7 @@ func TestRepositoryReferenceCannotBeSwappedToSymlinkOrFIFO(t *testing.T) {
 		func(path string) error { return os.Symlink(filepath.Join(external, "outside.md"), path) },
 		func(path string) error { return unix.Mkfifo(path, 0o600) },
 	} {
-		turn.ReadReference = func(_ context.Context, _ string, read func() (string, string)) (string, string, error) {
+		turn.ReadReference = func(_ context.Context, _, _ string, read func() (string, string)) (string, string, error) {
 			// The path changes after the request passed the execution policy
 			// and before the gateway-authorized open.
 			if err := os.Rename(target, target+".previous"); err != nil {
