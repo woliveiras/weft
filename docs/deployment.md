@@ -5,6 +5,12 @@ kinds of state: the **store** (graphs, executions, history, approvals, leases),
 the **broker** (messages in flight) and the **workspaces** (files agents
 change). Every deployment shape is a choice of where those three live.
 
+## Supported platforms
+
+Cloud deployments run on Linux. The CLI and native bundle support Linux and
+macOS. Windows is unsupported. See [standalone installation](standalone.md)
+for native setup and qualification.
+
 ## Topologies
 
 ### 1. Single node (Docker Compose)

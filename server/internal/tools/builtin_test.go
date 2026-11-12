@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -112,9 +111,6 @@ func TestFilesystemPathConstraints(t *testing.T) {
 }
 
 func TestShellExec(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("posix shell")
-	}
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "sub"), 0o755)
 	gw := NewGateway(Builtin(BuiltinConfig{}), nil, nil)
@@ -139,9 +135,6 @@ func TestShellExec(t *testing.T) {
 }
 
 func TestShellExecAllowlist(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("posix")
-	}
 	gw := NewGateway(Builtin(BuiltinConfig{}), nil, nil)
 	p := principal(t.TempDir(), domain.ToolGrant{Name: "shell.exec", Commands: []string{"echo", "ls *"}})
 	r := run(t, gw, p, "shell.exec", map[string]any{"command": "echo 'hello world'"})

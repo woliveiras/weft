@@ -17,7 +17,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -131,9 +130,6 @@ func findADC(client *http.Client) (*tokenSource, error) {
 func wellKnownFile() string {
 	if dir := os.Getenv("CLOUDSDK_CONFIG"); dir != "" {
 		return filepath.Join(dir, "application_default_credentials.json")
-	}
-	if runtime.GOOS == "windows" {
-		return filepath.Join(os.Getenv("APPDATA"), "gcloud", "application_default_credentials.json")
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "gcloud", "application_default_credentials.json")

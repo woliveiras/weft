@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
 // encodeName turns an arbitrary key into a portable file name. Lowercase
 // letters, digits, '.', '_' and '-' are kept so names stay readable;
-// everything else - including uppercase letters, because macOS and Windows
+// everything else - including uppercase letters, because macOS
 // file systems are case-insensitive by default and "Notes" must not collide
 // with "notes" - is written as %XX. A leading '.' is escaped too so encoded
 // names never look like the store's hidden temp files.
@@ -29,7 +28,8 @@ func encodeName(s string) string {
 		}
 	}
 	name := b.String()
-	if isReservedWindowsName(name) {
+	// Preserve the encoded filenames of existing stores.
+	if hasLegacyNameSuffix(name) {
 		name += "_"
 	}
 	return name
@@ -59,7 +59,7 @@ func decodeName(name string) (string, error) {
 	return b.String(), nil
 }
 
-func isReservedWindowsName(name string) bool {
+func hasLegacyNameSuffix(name string) bool {
 	base := strings.ToLower(name)
 	if i := strings.IndexByte(base, '.'); i >= 0 {
 		base = base[:i]
@@ -118,12 +118,8 @@ func removeFile(path string) error {
 }
 
 // syncDir fsyncs a directory so a rename or unlink in it survives power
-// loss. Windows cannot open directories for syncing; NTFS journals metadata
-// itself, so it is skipped there.
+// loss.
 func syncDir(dir string) error {
-	if runtime.GOOS == "windows" {
-		return nil
-	}
 	d, err := os.Open(dir)
 	if err != nil {
 		if os.IsNotExist(err) {

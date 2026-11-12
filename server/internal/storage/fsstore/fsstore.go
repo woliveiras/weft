@@ -19,7 +19,7 @@
 //	<dir>/settings/<key>.json                installation settings (revisioned)
 //
 // Names are encoded with encodeName so any key is a valid, case-safe file
-// name on Linux, macOS and Windows.
+// name on Linux and macOS.
 //
 // # Model
 //

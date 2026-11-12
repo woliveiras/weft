@@ -32,7 +32,7 @@
 // rename. Not suited to high throughput (one fsync-less file per message and
 // group, directory scans on fetch) nor to NFS variants without atomic
 // rename. Fetch polls with back-off (50ms -> 500ms) rather than using inotify,
-// which keeps it portable to Linux, macOS and Windows. Clock skew between
+// which keeps it portable between Linux and macOS. Clock skew between
 // processes sharing a directory shifts lease expiry by the skew.
 package fsq
 

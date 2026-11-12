@@ -24,14 +24,12 @@ executor. It runs as the invoking user. Process execution has that OS account's
 authority; worktrees are file organization, not security isolation. Remote MCP
 credentials and local OS credentials must never be imported implicitly.
 
-## Initial platform targets
+## Supported platforms
 
-The initial native qualification target is macOS arm64 (the current development
-host). macOS amd64 and Linux amd64/arm64 are intended build targets, each requiring
-its own smoke evidence before being advertised as validated. Windows packaging is
-outside this initial matrix: current process/workspace code uses Unix facilities,
-including nonblocking file opens and signal handling. Cross-compilation alone is
-not runtime validation.
+The native CLI and bundle support Linux and macOS. Cloud deployments support
+Linux only. Windows is unsupported. macOS arm64 is the initial native runtime
+qualification target. macOS amd64 and Linux amd64/arm64 require their own
+runtime smoke evidence. A cross-build verifies compilation only.
 
 Source builds require the Go version declared by `server/go.mod`, Node/pnpm for
 the web assets, and Git for repository operations/tests. End users of a packaged
@@ -258,7 +256,7 @@ This implementation uses session-based MCP 2025-06-18 and starts a fresh process
 for each discovery or tool call. It bounds operations to 15 seconds, discards
 child stderr and rejects malformed/oversized responses and credential echoes.
 Calls with uncertain outcomes are not automatically replayed. Unix process groups
-are terminated after each operation; Windows lifecycle support is not qualified.
+are terminated after each operation.
 A failed check remains visible and can be retried after explicit configuration
 repair. Disabled/deleted connections cannot supply tools to new calls.
 

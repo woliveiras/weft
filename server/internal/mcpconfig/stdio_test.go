@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -117,9 +116,6 @@ func TestMCPProcessFixture(t *testing.T) {
 
 func processFixture(t *testing.T, mode string) processSpec {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("native process lifecycle explicitly unsupported on Windows")
-	}
 	executable, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)

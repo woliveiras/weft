@@ -40,11 +40,14 @@ A platform claim names the exercised operating system and runtime, model, MCP, e
 
 ## Explicit exclusions
 
+- Windows is unsupported. The CLI and native bundle support Linux and macOS.
+  Cloud deployments support Linux only.
+
 - The native profile does not implicitly migrate another installation or infer sandbox isolation for host execution. Release-to-release production migration is PROD-02.
 
 ## Open decisions
 
-- LOCAL-07b remains open for real editor/user review, optional real sandbox, external accounts and additional operating systems.
+- LOCAL-07b remains open for real editor/user review, optional real sandbox, external accounts and remaining Linux and macOS qualification.
 
 ## History
 

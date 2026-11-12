@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"sort"
 	"time"
 )
@@ -41,11 +40,7 @@ func (s *ProcessSandbox) Exec(ctx context.Context, req ExecRequest) (*ExecResult
 	}
 	argv := req.Argv
 	if req.Shell != "" {
-		if runtime.GOOS == "windows" {
-			argv = []string{"cmd", "/C", req.Shell}
-		} else {
-			argv = []string{"/bin/sh", "-c", req.Shell}
-		}
+		argv = []string{"/bin/sh", "-c", req.Shell}
 	}
 	if len(argv) == 0 {
 		return nil, errors.New("exec: empty command")
@@ -117,14 +112,6 @@ func (s *ProcessSandbox) env(extra map[string]string) []string {
 		"TMPDIR":              os.TempDir(),
 		"GIT_TERMINAL_PROMPT": "0",
 		"NO_COLOR":            "1",
-	}
-	if runtime.GOOS == "windows" {
-		for _, k := range []string{"SystemRoot", "ComSpec", "PATHEXT", "TEMP", "TMP"} {
-			if v := os.Getenv(k); v != "" {
-				m[k] = v
-			}
-		}
-		m["USERPROFILE"] = s.Root
 	}
 	for k, v := range extra {
 		m[k] = v

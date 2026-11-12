@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-// dirLock on platforms without flock (Windows and others) is an exclusively
+// dirLock on platforms without flock is an exclusively
 // created lock file holding the owner's pid. Unlike flock it survives a
 // crash: after an unclean shutdown the operator must delete <dir>/LOCK (the
 // error message says so). This is the documented price of staying free of
