@@ -160,7 +160,7 @@ func add(s *Snapshot, e Entry) {
 			e.Reason = err.Error()
 		}
 	}
-	cost := len(e.Body) + len(e.Scope) + len(e.Source) + 6
+	cost := len(renderLegacyEntry(e))
 	if e.Reason == "" && cost > s.Budget {
 		e.Reason = "token_budget"
 	}
@@ -172,12 +172,20 @@ func add(s *Snapshot, e Entry) {
 	}
 	s.Entries = append(s.Entries, e)
 }
+
+func renderLegacyEntry(e Entry) string {
+	if e.Scope == "project" {
+		return renderEntry(e, e.Body)
+	}
+	return fmt.Sprintf("\n[%s %s]\n%s\n", e.Scope, e.Source, e.Body)
+}
+
 func Context(s Snapshot) string {
 	var b strings.Builder
 	b.WriteString(GuidancePreamble)
 	for _, e := range s.Entries {
 		if e.Included && e.Scope != "agent" && e.Scope != "task" {
-			fmt.Fprintf(&b, "\n[%s %s]\n%s\n", e.Scope, e.Source, e.Body)
+			b.WriteString(renderLegacyEntry(e))
 		}
 	}
 	return b.String()

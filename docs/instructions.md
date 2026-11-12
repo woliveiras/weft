@@ -61,7 +61,8 @@ Legacy composition order, from lower to higher guidance precedence:
 2. Graph skill IDs, in declared order. A node's `skillIds` may narrow this list;
    omitted/null inherits, an explicit empty array selects none. Node narrowing
    does not remove explicitly enabled installation defaults.
-3. Immediate `.weft/steering/*.md` files in bytewise filename order.
+3. Immediate `.weft/steering/*.md` files in bytewise filename order, with each
+   file quoted in its own guidance frame.
 4. The agent prompt after parameter substitution.
 5. Current operator messages, in the existing delivery order (task scope).
 
