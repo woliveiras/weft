@@ -7,6 +7,8 @@ import (
 	"fmt"
 )
 
+var errGuidanceAuditUnavailable = errors.New("guidance audit persistence unavailable")
+
 type guidanceEvent struct {
 	Read     *Entry `json:"read,omitempty"`
 	Records  []int  `json:"records,omitempty"`
@@ -23,7 +25,9 @@ func (s *Session) journal(ctx context.Context, event guidanceEvent) error {
 	}
 	key := fmt.Sprintf("%s%08d", readPrefix(s.snapshot.ExecutionID), s.sequence+1)
 	if _, err := s.manager.Store.PutSetting(ctx, key, data, 0, "runtime"); err != nil {
-		return fmt.Errorf("persist guidance outcome: %w", err)
+		// Store errors can include physical paths. The turn persists this
+		// message in execution history and also uses it in traces.
+		return errGuidanceAuditUnavailable
 	}
 	s.sequence++
 	return nil

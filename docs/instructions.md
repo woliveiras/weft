@@ -164,6 +164,9 @@ applied reads spend no additional guidance budget. This is a conservative
 context bound, while provider accounting still includes the full model
 request each time it is sent.
 
+If an on-demand audit write fails, the turn stops with a safe persistence
+error. The execution history and trace exclude the storage error details.
+
 ## Bounds and rejection
 
 - Managed bodies and repository files: 16 KiB each, UTF-8, no NUL, nonblank.

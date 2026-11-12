@@ -264,8 +264,10 @@ acceptance criteria above and matrix use these decisions as their oracles.
   snapshots readable. For new entries retain provenance and digests without
   body or reference copies.
 - Display validated workspace-relative paths and bounded descriptions as
-  inert text. Exclude absolute paths and raw error detail. Keep bodies and
-  credentials out of telemetry.
+  inert text. Exclude absolute paths and raw error detail. If an on-demand
+  journal write fails, expose a bounded persistence error in the execution
+  and trace. Fail closed before any unrecorded guidance is delivered.
+  Keep bodies and credentials out of telemetry.
 - Distinguish discovery, read, confirmed dispatch and indeterminate
   delivery, separately for catalogue entries, bodies and individual
   references. Record omissions, failures and interruptions. Persist read

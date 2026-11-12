@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -390,11 +389,14 @@ func TestRepositoryGuidanceWorktreesUseCommittedSkillAndReplicaBytes(t *testing.
 	}
 }
 
-type guidanceReadFailure struct{ storage.Store }
+type guidanceReadFailure struct {
+	storage.Store
+	privatePath string
+}
 
 func (s guidanceReadFailure) PutSetting(ctx context.Context, key string, data []byte, revision int64, actor string) (int64, error) {
 	if strings.HasPrefix(key, "instructions/reads/") && strings.Contains(string(data), `"included":true`) {
-		return 0, errors.New("test read journal unavailable")
+		return 0, &os.PathError{Op: "write", Path: s.privatePath, Err: os.ErrPermission}
 	}
 	return s.Store.PutSetting(ctx, key, data, revision, actor)
 }
@@ -404,7 +406,8 @@ func TestRepositoryGuidanceNeverDispatchesAnUnrecordedRead(t *testing.T) {
 	p := &guidanceProvider{calls: []llm.ToolCall{
 		{ID: "body", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample"}`)},
 	}}
-	r := newRig(t, guidanceReadFailure{openStore(t, dir)}, memory.New(), dir, "audit-failure", func(o *engine.Options) {
+	privatePath := filepath.Join(dir, "private", "journal")
+	r := newRig(t, guidanceReadFailure{Store: openStore(t, dir), privatePath: privatePath}, memory.New(), dir, "audit-failure", func(o *engine.Options) {
 		o.Models.(*llm.Registry).Add(llm.ProviderConfig{Name: p.Name()}, p)
 	})
 	const id = "guidance-audit-failure"
@@ -435,10 +438,24 @@ spec:
 		return false
 	})
 	observed := p.observed()
-	if x.Status != domain.ExecFailed || !strings.Contains(x.Error, "test read journal unavailable") ||
+	if x.Status != domain.ExecFailed || !strings.Contains(x.Error, "guidance audit persistence unavailable") ||
+		strings.Contains(x.Error, privatePath) || strings.Contains(x.Error, os.ErrPermission.Error()) ||
 		len(observed) != 1 || strings.Contains(observed[0], "UNRECORDED BODY") {
 		t.Fatal(x.Status, x.Error, observed)
 	}
+	eventually(t, 5*time.Second, "safe execution failure event", func() bool {
+		events, err := r.store.ListEvents(r.ctx, storage.EventFilter{GraphID: id, Types: []domain.EventType{domain.EvExecFailed}})
+		if err != nil || len(events) == 0 {
+			return false
+		}
+		for _, ev := range events {
+			if strings.Contains(string(ev.Data), privatePath) || strings.Contains(string(ev.Data), os.ErrPermission.Error()) {
+				t.Fatal("execution event exposed private journal error")
+			}
+		}
+		return strings.Contains(string(events[0].Data), "guidance audit persistence unavailable")
+	})
+
 	s, err := (instructions.Manager{Store: r.store}).Snapshot(r.ctx, x.ID)
 	if err != nil || len(s.Reads) != 1 || s.Reads[0].Delivery != "indeterminate" || s.Reads[0].SHA256 != "" {
 		t.Fatal(s, err)
