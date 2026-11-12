@@ -99,16 +99,16 @@ The [historical source map](./historical-source-map.md) records the migration of
 - [RUN-001 — Skills and Project Steering](./runtime-and-delivery/skills-and-project-steering/spec.md) — `implemented`. Compose explicitly selected managed skills and bounded project steering and preserve the execution snapshot.
 - [RUN-003 — Native Coding Runtime](./runtime-and-delivery/native-coding-runtime/spec.md) — `implemented`. Keep coding turns, tool execution and verification within Weft's native runtime and gateways.
 - [RUN-004 — Coding Evaluation and Model Benchmarks](./runtime-and-delivery/coding-evaluation-and-model-benchmarks/spec.md) — `implemented`. Measure coding workflows with independent task checks and retain the conditions and limits of each benchmark.
-- [RUN-006 — Issue References and Polling Triggers](./runtime-and-delivery/issue-references-and-polling-triggers/spec.md) — `implemented`. Read reviewed issue references and start eligible labeled work through consent-bound polling.
 
 ### In progress
 
 - [RUN-002 — Dynamic Delegation and Execution Trees](./runtime-and-delivery/dynamic-delegation-and-execution-trees/spec.md) — `in-progress`. Run bounded native children under inherited grants and preserve execution-tree control and token accounting.
 - [RUN-005 — Gateway-mediated Source Control Delivery](./runtime-and-delivery/gateway-mediated-source-control-delivery/spec.md) — `in-progress`. Push and open pull requests through the reviewed SCM gateway with task-scoped credentials and evidence.
+- [RUN-006 — Issue References and Polling Triggers](./runtime-and-delivery/issue-references-and-polling-triggers/spec.md) — `in-progress`. Start eligible labeled work through consent-bound polling and track delivery through the new label cycle.
+- [RUN-007 — Issue Readiness Before Work](./runtime-and-delivery/issue-readiness-before-work/spec.md) — `in-progress`, maintainer decisions recorded on 2026-11-12. Evaluate issues before claim, request clarification and expose held issues in Activity and trigger state.
 
 ### Planned
 
-- [RUN-007 — Issue Readiness Before Work](./runtime-and-delivery/issue-readiness-before-work/spec.md) — `planned`, pending maintainer review. Evaluate issues before claim, request clarification and expose held issues in Activity and trigger state.
 - [RUN-008 — Agent Context Usage Breakdown](./runtime-and-delivery/agent-context-usage/spec.md) — `planned`, pending maintainer review. Show how each native agent's context window is spent, by category, for every model call.
 
 ## Installation and operations

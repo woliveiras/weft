@@ -2,14 +2,14 @@
 id: RUN-006
 title: "Issue References and Polling Triggers"
 summary: "Read reviewed issue references and start eligible labeled work through consent-bound polling."
-status: implemented
+status: in-progress
 scope: ["issue references and polling triggers"]
 navigation: ["specs/README.md","specs/runtime-and-delivery/issue-references-and-polling-triggers/matrix.md"]
 documentation: ["docs/task-workflows.md","docs/atlassian-bitbucket-setup.md","docs/tool-permissions.md"]
 dependencies: ["TASK-006","TASK-007","INT-005","RUN-005"]
 authority:
-  granted: [historical documentation]
-  withheld: [implementation, deployment, production qualification]
+  granted: [specification, implementation, fixture verification, local commits]
+  withheld: [live tracker writes, push, deployment, production qualification]
 ---
 
 # Issue References and Polling Triggers
@@ -20,6 +20,13 @@ Read reviewed issue references and start eligible labeled work through consent-b
 
 - Issue content reaches the task as data through the exact configured entry-agent tool grant. Saving or reviewing the reference performs no fetch.
 
+- New polling work uses the RUN-007 readiness policy before claim by default.
+- Each relabel operation changes only the selection or lifecycle labels it
+  owns. Keep unrelated labels.
+- The 2026-11-12 maintainer decision supersedes the previous selection
+  default, lifecycle labels and Jira transitions across all trackers.
+  Prior trigger formats and labels have no prototype compatibility contract.
+
 ## Acceptance criteria
 
 ### AC-001 — Reviewed issue reference
@@ -28,7 +35,8 @@ Issue content reaches the task as data through the exact configured entry-agent 
 
 ### AC-002 — Versioned polling and eligibility
 
-Polling leases admit one eligible item per trigger, deduplicated by source, issue and workflow. Stale consent blocks execution; missed slots are coalesced. Preview and skipped reasons stay visible.
+Polling leases admit one eligible item per trigger, deduplicated by source, issue and workflow. Stale consent blocks execution; missed slots are coalesced. Preview and skipped reasons stay visible. The selection label defaults to
+`weft:todo` and can be configured per trigger.
 Create, edit and resume validate the authorization mode against the workflow's
 effective isolation and grants using TASK-006. Incompatible modes produce an
 `authorizationMode` field error. If stored consent is incompatible, the
@@ -40,10 +48,25 @@ the saved trigger and consent.
 
 ### AC-003 — Gateway write-back
 
-Claim and completion use reviewed tracker tools and report task/PR links, label and supported transition changes, or a visible failure that pauses the trigger for review.
+Claim and completion use reviewed tracker tools and report task or PR links.
+Claim replaces the selection or hold label with `weft:wip`. Failed start,
+failed work, cancellation or missing required delivery uses
+`weft:needs-attention` with a failure comment explaining the next action
+and pauses the trigger for review. Readiness uses the same label with a
+comment distinguishing a question from a failure. Successful Weft delivery
+with an open PR replaces `weft:wip` with `weft:done` while human review is
+pending.
+
+### AC-004 — Issue closure on merge
+
+For a GitHub issue, the PR created by Weft includes the GitHub closing
+reference `Closes #N` in its body so that the merge closes the issue. Derive
+the issue number from the admitted tracker identity. Auto-closing Jira
+issues and other non-GitHub trackers on PR merge is excluded.
 
 ## Explicit exclusions
 
+- Jira status transitions at any stage of the trigger lifecycle are excluded.
 - Authenticated Jira/GitHub webhooks are deferred. Live real-account qualification is PROD-14.
 
 ## Open decisions
@@ -51,6 +74,9 @@ Claim and completion use reviewed tracker tools and report task/PR links, label 
 - The local-first fixtures cover claim and completion. The documented live issue-to-PR scenario needs authorized external resources.
 
 ## History
+
+- 2026-11-12. The maintainer approved the RUN-007 readiness policy and the
+  `weft:todo`, `weft:wip`, `weft:needs-attention` and `weft:done` cycle.
 
 - 2026-10-19. FLOW-04 added explicitly reviewed issue references.
 - 2026-10-30. Phase C selected polling with existing scheduled loops and leases. TRIG-01–07 were recorded complete with fixtures by 2026-11-11.
