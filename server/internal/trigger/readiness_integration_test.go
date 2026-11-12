@@ -411,3 +411,33 @@ func TestReadinessCommentRetriesOnlyAfterReconciliation(t *testing.T) {
 		})
 	}
 }
+
+func TestFailedAssessmentsExhaustRoundsDespiteRepeatedAuthorReplies(t *testing.T) {
+	st := triggerStore(t)
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	gh.issues = []map[string]any{ghIssue(1, "Issue", "weft")}
+	r := runner(st, c, "one", gh)
+	r.Tasks = &tasks{}
+	calls := 0
+	r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+		calls++
+		return trigger.ReadinessAssessment{Failure: "timeout"}
+	})
+	tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	if calls != 1 || tr.Holds[0].Round != 1 || tr.Holds[0].Reason != "timeout" {
+		t.Fatal(tr.Holds)
+	}
+	for n := 1; n <= 5; n++ {
+		gh.replies["#1"] = append(gh.replies["#1"], ghReply(n, "author", "User", fmt.Sprintf("Acceptance example %d", n), c.t.Add(time.Second)))
+		tr = advance(r, c, t, tr.ID)
+	}
+	if calls != 2 || tr.Holds[0].Round != 2 || tr.Holds[0].Reason != "failure_round_limit" || len(gh.comments["#1"]) != 2 ||
+		!strings.Contains(gh.comments["#1"][1], "operator should review") || tr.CurrentTask != "" {
+		t.Fatalf("failed evaluations exceeded the allowance: calls %d, holds %+v, comments %v", calls, tr.Holds, gh.comments)
+	}
+}

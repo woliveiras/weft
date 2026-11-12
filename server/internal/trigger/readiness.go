@@ -61,6 +61,10 @@ func holdMessage(h Hold) string {
 			lines = append(lines, "- "+readinessQuestions[code])
 		}
 	case "operator":
+		if h.Reason == "failure_round_limit" {
+			lines = []string{"Weft readiness failure. The two readiness rounds are exhausted. An operator should review the evaluation failure and resolve the hold before a maintainer selects the issue again."}
+			break
+		}
 		lines = []string{"Weft readiness failure. Two rounds of questions did not resolve the missing requirements. An operator should review the issue. After clarifying it, a maintainer can add weft:todo to request another assessment."}
 	default:
 		lines = []string{"Weft readiness failure. " + ReadinessReason(h.Reason) + " Review the trigger and the issue, then have a maintainer add weft:todo to request another assessment."}
@@ -72,6 +76,8 @@ func ReadinessReason(reason string) string {
 	switch reason {
 	case "incomplete":
 		return "The issue is waiting for clarification."
+	case "failure_round_limit":
+		return "Readiness failed and exhausted the two-round allowance. Review the evaluator and resolve the hold before selecting the issue again."
 	case "round_limit":
 		return "The issue needs operator intervention after two question rounds."
 	case "input_limit":
@@ -236,10 +242,19 @@ func (h *Hold) prepareComment() {
 	h.RoundAt, h.CommentAttempts, h.RetryCommentAt, h.PublicationMessage = time.Time{}, 0, nil, ""
 }
 
+func recordEvaluationFailure(h *Hold, reason string) {
+	h.Round = min(h.Round+1, maxReadinessRounds)
+	h.State, h.Reason = "failed", reason
+	if h.Round == maxReadinessRounds {
+		h.State, h.Reason, h.Intervention = "operator", "failure_round_limit", true
+	}
+}
+
 func (r *Runner) finishHold(ctx context.Context, t *Trigger, call Invoker, h Hold, a ReadinessAssessment, current Issue) error {
-	h.Reason, h.State = a.Failure, "failed"
 	h.Questions = a.Missing
-	if len(a.Missing) > 0 {
+	if a.Failure != "" {
+		recordEvaluationFailure(&h, a.Failure)
+	} else if len(a.Missing) > 0 {
 		if h.Round >= maxReadinessRounds {
 			h.State, h.Reason = "operator", "round_limit"
 			if h.Intervention {
@@ -345,7 +360,7 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	if h.Publication == "label_pending" || h.Publication == "label_pending_only" || h.Publication == "comment_pending" {
 		return false, r.publishHold(ctx, t, call, h)
 	}
-	if h.Publication == "comment_failed" {
+	if h.Publication == "comment_failed" || h.Reason == "failure_round_limit" {
 		return false, nil
 	}
 	if h.State == "evaluating" {

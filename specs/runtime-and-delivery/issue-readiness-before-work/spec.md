@@ -188,6 +188,11 @@ spec-derived oracles for implementation.
   twice. Use the tracker API through reviewed gateway operations to verify
   label event authorship and maintainer authority. If still incomplete, keep `weft:needs-attention` and ask for operator
   intervention in a comment. Reopening repeats readiness and consent.
+  The maintainer clarified on 2026-11-12 that failed assessments consume
+  the same two-round allowance. When a failure exhausts it, keep
+  `weft:needs-attention`, request operator intervention and make no
+  further model calls for that hold. An explicit operator resolution is
+  required before a new selection can start a new assessment.
 - **D-04 — Default and disable (AC-005, AC-006).** Enable readiness by
   default on every trigger with a per-trigger switch. Disabling preserves
   holds until explicitly resolved. There is no legacy-trigger compatibility.

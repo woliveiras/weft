@@ -33,3 +33,16 @@ func TestRecordHoldResolutionBoundsHistoryAndFreesCapacity(t *testing.T) {
 		t.Fatalf("resolution not recorded: %+v", tr)
 	}
 }
+
+func TestEvaluationFailuresShareTheRoundAllowance(t *testing.T) {
+	for _, start := range []int{0, 1, 2} {
+		h := Hold{Round: start}
+		recordEvaluationFailure(&h, "timeout")
+		if h.Round != min(start+1, maxReadinessRounds) || h.Intervention != (start >= 1) {
+			t.Fatalf("wrong round or intervention: %+v", h)
+		}
+		if start >= 1 && h.Reason != "failure_round_limit" {
+			t.Fatal(h)
+		}
+	}
+}
