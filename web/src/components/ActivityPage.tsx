@@ -171,7 +171,7 @@ function ActivityOverview({ state, onChange, tabs }: { state: ActivityRouteState
         <section className="activity-section" aria-label="Resolved readiness holds">
           <h2>Resolved readiness holds</h2>
           <ul>{view.resolvedTriggerHolds?.map((h, index) => <li key={`${h.triggerId}:${h.key}:${h.resolvedAt}:${index}`}>
-            <strong>{h.key}</strong> · {h.triggerName} · round {h.round} · {h.reason}
+            <strong>{h.key}</strong> · {h.triggerName} · round {h.round} · {h.reason}{h.actor ? <> · {h.actor}</> : null}
           </li>)}</ul>
         </section>
       )}

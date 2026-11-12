@@ -27,9 +27,9 @@ func TestHoldReleaseReasonKeepsWaitingAndRollbackLabels(t *testing.T) {
 func TestRecordHoldResolutionBoundsHistoryAndFreesCapacity(t *testing.T) {
 	now := time.Now().UTC()
 	tr := &Trigger{Holds: []Hold{{Key: "a", Round: 2}, {Key: "b"}}, HoldResolutions: make([]HoldResolution, 20), ReadinessBlock: readinessCapacity}
-	recordHoldResolution(tr, 0, "Resolved", now)
+	recordHoldResolution(tr, 0, "Resolved", "operator", now)
 	if len(tr.Holds) != 1 || tr.Holds[0].Key != "b" || tr.ReadinessBlock != "" ||
-		len(tr.HoldResolutions) != 20 || tr.HoldResolutions[19] != (HoldResolution{Key: "a", Round: 2, Reason: "Resolved", ResolvedAt: now}) {
+		len(tr.HoldResolutions) != 20 || tr.HoldResolutions[19] != (HoldResolution{Actor: "operator", Key: "a", Round: 2, Reason: "Resolved", ResolvedAt: now}) {
 		t.Fatalf("resolution not recorded: %+v", tr)
 	}
 }

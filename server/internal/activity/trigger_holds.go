@@ -9,6 +9,7 @@ import (
 )
 
 type TriggerHold struct {
+	Actor              string     `json:"actor,omitempty"`
 	PublicationMessage string     `json:"publicationMessage,omitempty"`
 	ResolvedAt         *time.Time `json:"resolvedAt,omitempty"`
 	Eligibility        string     `json:"eligibility,omitempty"`
@@ -38,7 +39,7 @@ func (x *build) triggerHolds(ctx context.Context) (bool, *SectionError) {
 		for _, h := range t.HoldResolutions {
 			if !h.ResolvedAt.Before(x.since) {
 				resolved = append(resolved, TriggerHold{TriggerID: t.ID, TriggerName: t.Name, Workflow: t.Workflow,
-					Key: h.Key, URL: h.URL, Reason: h.Reason, Round: h.Round, State: "resolved", ResolvedAt: &h.ResolvedAt})
+					Actor: h.Actor, Key: h.Key, URL: h.URL, Reason: h.Reason, Round: h.Round, State: "resolved", ResolvedAt: &h.ResolvedAt})
 			}
 		}
 		for _, h := range t.Holds {

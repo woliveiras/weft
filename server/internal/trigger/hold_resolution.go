@@ -11,6 +11,7 @@ import (
 )
 
 type HoldResolution struct {
+	Actor      string    `json:"actor,omitempty"`
 	Scope      string    `json:"scope,omitempty"`
 	Key        string    `json:"key"`
 	URL        string    `json:"url,omitempty"`
@@ -30,10 +31,10 @@ func holdReleaseReason(t *Trigger, h Hold, i Issue) string {
 	return "The issue no longer has a selection or waiting label."
 }
 
-func recordHoldResolution(t *Trigger, index int, reason string, now time.Time) {
+func recordHoldResolution(t *Trigger, index int, reason, actor string, now time.Time) {
 	h := t.Holds[index]
 	t.Holds = slices.Delete(t.Holds, index, index+1)
-	t.HoldResolutions = append(t.HoldResolutions, HoldResolution{Scope: h.Scope, Key: h.Key, URL: h.URL, Round: h.Round, Reason: reason, ResolvedAt: now})
+	t.HoldResolutions = append(t.HoldResolutions, HoldResolution{Actor: actor, Scope: h.Scope, Key: h.Key, URL: h.URL, Round: h.Round, Reason: reason, ResolvedAt: now})
 	if len(t.HoldResolutions) > 20 {
 		t.HoldResolutions = t.HoldResolutions[len(t.HoldResolutions)-20:]
 	}
@@ -68,13 +69,23 @@ func (m Manager) ResolveHold(ctx context.Context, id, key string, opened time.Ti
 		if holdHasPendingWrite(current.Holds[index]) {
 			return fmt.Errorf("%w: finish the pending tracker label update or assignment rollback before resolving the hold", storage.ErrConflict)
 		}
-		recordHoldResolution(current, index, "An operator resolved the readiness hold.", m.now())
+		recordHoldResolution(current, index, "An operator resolved the readiness hold.", actor, m.now())
 		return nil
 	})
 	if err == nil {
-		m.audit(ctx, t, "hold_resolved", actor)
+		m.auditHoldResolution(ctx, t)
 	}
 	return t, err
+}
+
+func (m Manager) auditHoldResolution(ctx context.Context, t *Trigger) {
+	if m.Bus == nil {
+		return
+	}
+	h := t.HoldResolutions[len(t.HoldResolutions)-1]
+	m.Bus.Publish(context.WithoutCancel(ctx), domain.NewEvent(domain.EvTriggerHoldResolved, "", map[string]any{
+		"trigger": t.ID, "key": h.Key, "reason": h.Reason, "round": h.Round,
+	}).WithActor(h.Actor))
 }
 
 func (r *Runner) releaseHold(ctx context.Context, t *Trigger, h Hold, reason string) error {
@@ -84,11 +95,12 @@ func (r *Runner) releaseHold(ctx context.Context, t *Trigger, h Hold, reason str
 			current.Consent.RecordedAt != t.Consent.RecordedAt || index < 0 {
 			return errTriggerChanged
 		}
-		recordHoldResolution(current, index, reason, r.Triggers.now())
+		recordHoldResolution(current, index, reason, "system:trigger", r.Triggers.now())
 		return nil
 	})
 	if err == nil {
 		t.Holds, t.ReadinessBlock = current.Holds, current.ReadinessBlock
+		r.Triggers.auditHoldResolution(ctx, current)
 	}
 	return err
 }

@@ -78,9 +78,10 @@ const (
 	EvBranchPushed      EventType = "scm.branch_pushed"
 	EvPullRequestOpened EventType = "scm.pull_request_opened"
 	// Issue triggers.
-	EvTriggerChanged EventType = "trigger.changed"
-	EvTriggerRun     EventType = "trigger.run"
-	EvTriggerNote    EventType = "trigger.note"
+	EvTriggerHoldResolved EventType = "trigger.hold_resolved"
+	EvTriggerChanged      EventType = "trigger.changed"
+	EvTriggerRun          EventType = "trigger.run"
+	EvTriggerNote         EventType = "trigger.note"
 	// EvCheckCompleted records one declared check run (check.run) as task
 	// evidence: name, pass/fail, exit code and bounded parsed failures.
 	EvCheckCompleted EventType = "check.completed"

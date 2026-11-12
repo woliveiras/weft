@@ -483,7 +483,16 @@ func TestOperatorResolvesHoldWhileReadinessIsDisabled(t *testing.T) {
 		t.Fatal(c)
 	}
 	if !tr.ReadinessDisabled || len(tr.HoldResolutions) != 1 || len(view.ResolvedTriggerHolds) != 1 ||
+		view.ResolvedTriggerHolds[0].Actor != "operator" || view.ResolvedTriggerHolds[0].Key != h.Key ||
 		view.ResolvedTriggerHolds[0].Reason != tr.HoldResolutions[0].Reason || len(view.TriggerHolds) != 0 || tr.CurrentTask != "" {
 		t.Fatalf("resolution not visible: %+v %+v", tr, view.ResolvedTriggerHolds)
+	}
+	events, err := a.Store.ListEvents(t.Context(), storage.EventFilter{Types: []domain.EventType{domain.EvTriggerHoldResolved}})
+	if err != nil || len(events) != 1 || events[0].Actor != "operator" {
+		t.Fatalf("resolution audit: %+v %v", events, err)
+	}
+	var eventData map[string]any
+	if err := json.Unmarshal(events[0].Data, &eventData); err != nil || eventData["key"] != h.Key || eventData["trigger"] != tr.ID {
+		t.Fatalf("resolution audit payload: %s (%v)", events[0].Data, err)
 	}
 }
