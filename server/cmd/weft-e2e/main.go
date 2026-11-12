@@ -40,6 +40,9 @@ type analysisProvider struct{}
 func (analysisProvider) Name() string                                    { return "e2e" }
 func (analysisProvider) Models(context.Context) ([]llm.ModelInfo, error) { return nil, nil }
 func (analysisProvider) Chat(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
+	if r.Metadata["operation"] == "issue_readiness" {
+		return &llm.ChatResponse{Message: llm.ChatMessage{Content: `{"missing":["acceptance"]}`}}, nil
+	}
 	if strings.Contains(r.System, "Weft task request interpreter") {
 		var in struct {
 			Request          string `json:"request"`
@@ -387,7 +390,7 @@ func run() error {
 		}
 		return mcpconfig.CallWithClient(ctx, fixtureMCP.URL, token, name, args, fixtureMCP.Client())
 	}
-	a.Models.Add(llm.ProviderConfig{Name: "e2e", DefaultModel: "fixture"}, analysisProvider{})
+	a.Models.Add(llm.ProviderConfig{Name: "e2e", Type: "mock", DefaultModel: "fixture"}, analysisProvider{})
 	a.Tools.MustRegister(trackerTools()...)
 	// Browser journeys drive triggers through the API; the scheduled loop
 	// must not start tasks behind other journeys.
@@ -487,6 +490,9 @@ func run() error {
 		if _, _, err := a.Engine.SaveGraph(ctx, g, 0, "e2e-fixture"); err != nil {
 			return err
 		}
+	}
+	if err := prepareReadinessFixture(ctx, a); err != nil {
+		return err
 	}
 	if err := prepareBudgetRecovery(ctx, a, cfg.Instance); err != nil {
 		return err

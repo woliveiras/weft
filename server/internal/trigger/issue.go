@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -19,15 +20,19 @@ import (
 
 // Issue is a tracker issue normalized across sources.
 type Issue struct {
-	Source   string   `json:"source"` // github | jira
-	Key      string   `json:"key"`    // owner/repo#12 or PROJ-12
-	Title    string   `json:"title"`
-	Body     string   `json:"body,omitempty"`
-	URL      string   `json:"url,omitempty"`
-	Labels   []string `json:"labels"`
-	Open     bool     `json:"open"`
-	Assignee string   `json:"assignee,omitempty"`
-	Blocked  bool     `json:"blocked,omitempty"`
+	Source         string   `json:"source"` // github | jira
+	Key            string   `json:"key"`    // owner/repo#12 or PROJ-12
+	Title          string   `json:"title"`
+	Author         string   `json:"author,omitempty"`
+	Updated        string   `json:"updated,omitempty"`
+	OtherAssignee  bool     `json:"otherAssignee,omitempty"`
+	EvaluatedInput string   `json:"-"`
+	Body           string   `json:"body,omitempty"`
+	URL            string   `json:"url,omitempty"`
+	Labels         []string `json:"labels"`
+	Open           bool     `json:"open"`
+	Assignee       string   `json:"assignee,omitempty"`
+	Blocked        bool     `json:"blocked,omitempty"`
 }
 
 // HasLabel reports whether the issue carries label (case-insensitive).
@@ -48,12 +53,6 @@ type Source interface {
 	// Tools are the MCP tools the trigger needs (granted to its principal).
 	Tools() []string
 	Search(ctx context.Context, call Invoker, label string) ([]Issue, error)
-	// Claim assigns the issue to owner and swaps label for add.
-	Relabel(ctx context.Context, call Invoker, i Issue, remove, add, owner string) error
-	Comment(ctx context.Context, call Invoker, i Issue, body string) error
-	// Transition moves the issue to a named status; ok is false when the
-	// issue has no such transition (that is not an error).
-	Transition(ctx context.Context, call Invoker, i Issue, status string) (bool, error)
 }
 
 // SourceConfig selects a tracker.
@@ -83,7 +82,7 @@ func (c SourceConfig) Open() (Source, error) {
 	}
 	switch c.Kind {
 	case "github":
-		if !repoRe.MatchString(c.Repository) || c.Repository == "" {
+		if !repoRe.MatchString(c.Repository) || strings.HasSuffix(c.Repository, "/.") || strings.HasSuffix(c.Repository, "/..") {
 			return nil, errors.New("name the GitHub repository as owner/name")
 		}
 		return github{c: c}, nil
@@ -103,15 +102,15 @@ func decode(res *tools.Result, err error, out any) error {
 	if err != nil {
 		return err
 	}
-	if res.IsError {
-		return errors.New(strings.TrimSpace(res.Content))
+	if res == nil || res.IsError {
+		return errors.New("tracker operation failed")
 	}
 	raw := res.Data
 	if len(raw) == 0 {
 		raw = json.RawMessage(res.Content)
 	}
 	if err := json.Unmarshal(raw, out); err != nil {
-		return fmt.Errorf("unexpected tool result: %w", err)
+		return errors.New("unexpected tracker tool result")
 	}
 	return nil
 }
@@ -120,8 +119,8 @@ func result(res *tools.Result, err error) error {
 	if err != nil {
 		return err
 	}
-	if res.IsError {
-		return errors.New(strings.TrimSpace(res.Content))
+	if res == nil || res.IsError {
+		return errors.New("tracker operation failed")
 	}
 	return nil
 }
@@ -131,15 +130,35 @@ func result(res *tools.Result, err error) error {
 type github struct{ c SourceConfig }
 
 func (g github) Tools() []string {
-	return []string{tool(g.c, "search_issues"), tool(g.c, "update_issue"), tool(g.c, "add_issue_comment")}
+	return []string{tool(g.c, "search_issues")}
 }
 
-func (g github) split(i Issue) (string, string, int) {
-	repo, num, _ := strings.Cut(i.Key, "#")
-	owner, name, _ := strings.Cut(repo, "/")
-	n := 0
-	fmt.Sscanf(num, "%d", &n)
-	return owner, name, n
+type githubIssue struct {
+	Number        int                      `json:"number"`
+	Title         string                   `json:"title"`
+	Body          string                   `json:"body"`
+	HTMLURL       string                   `json:"html_url"`
+	State         string                   `json:"state"`
+	Labels        []struct{ Name string }  `json:"labels"`
+	Assignees     []struct{ Login string } `json:"assignees"`
+	User          trackerActor             `json:"user"`
+	Updated       string                   `json:"updated_at"`
+	RepositoryURL string                   `json:"repository_url"`
+	PullRequest   json.RawMessage          `json:"pull_request"`
+}
+
+func (raw githubIssue) issue(repository string) Issue {
+	i := Issue{Source: "github", Key: fmt.Sprintf("%s#%d", repository, raw.Number), Title: raw.Title, Body: raw.Body,
+		URL: raw.HTMLURL, Open: raw.State == "open", Labels: []string{}, Author: raw.User.human("github"), Updated: raw.Updated}
+	for _, l := range raw.Labels {
+		i.Labels = append(i.Labels, l.Name)
+	}
+	if len(raw.Assignees) > 0 {
+		i.Assignee = raw.Assignees[0].Login
+		i.OtherAssignee = len(raw.Assignees) > 1
+	}
+	i.Blocked = i.HasLabel("blocked")
+	return i
 }
 
 func (g github) Search(ctx context.Context, call Invoker, label string) ([]Issue, error) {
@@ -148,15 +167,7 @@ func (g github) Search(ctx context.Context, call Invoker, label string) ([]Issue
 		q += " " + g.c.Query
 	}
 	var out struct {
-		Items []struct {
-			Number    int                      `json:"number"`
-			Title     string                   `json:"title"`
-			Body      string                   `json:"body"`
-			HTMLURL   string                   `json:"html_url"`
-			State     string                   `json:"state"`
-			Labels    []struct{ Name string }  `json:"labels"`
-			Assignees []struct{ Login string } `json:"assignees"`
-		} `json:"items"`
+		Items []githubIssue `json:"items"`
 	}
 	res, err := call(ctx, tool(g.c, "search_issues"), map[string]any{"query": q, "sort": "created", "order": "asc", "perPage": 50})
 	if err := decode(res, err, &out); err != nil {
@@ -164,50 +175,77 @@ func (g github) Search(ctx context.Context, call Invoker, label string) ([]Issue
 	}
 	issues := make([]Issue, 0, len(out.Items))
 	for _, it := range out.Items {
-		i := Issue{Source: "github", Key: fmt.Sprintf("%s#%d", g.c.Repository, it.Number), Title: it.Title, Body: it.Body, URL: it.HTMLURL, Open: it.State == "open", Labels: []string{}}
-		for _, l := range it.Labels {
-			i.Labels = append(i.Labels, l.Name)
+		if it.Number <= 0 || (len(it.PullRequest) > 0 && string(it.PullRequest) != "null") ||
+			(it.RepositoryURL != "" && !strings.EqualFold(it.RepositoryURL, "https://api.github.com/repos/"+g.c.Repository)) {
+			continue
 		}
-		if len(it.Assignees) > 0 {
-			i.Assignee = it.Assignees[0].Login
-		}
-		i.Blocked = i.HasLabel("blocked")
-		issues = append(issues, i)
+		issues = append(issues, it.issue(g.c.Repository))
 	}
 	return issues, nil
 }
 
-func (g github) Relabel(ctx context.Context, call Invoker, i Issue, remove, add, owner string) error {
-	labels := []string{}
-	for _, l := range i.Labels {
-		if !strings.EqualFold(l, remove) && !strings.EqualFold(l, add) {
-			labels = append(labels, l)
-		}
-	}
-	labels = append(labels, add)
-	o, repo, n := g.split(i)
-	args := map[string]any{"owner": o, "repo": repo, "issue_number": n, "labels": labels}
-	if owner != "" {
-		args["assignees"] = []string{owner}
-	}
-	return result(call(ctx, tool(g.c, "update_issue"), args))
-}
-
-func (g github) Comment(ctx context.Context, call Invoker, i Issue, body string) error {
-	owner, repo, n := g.split(i)
-	return result(call(ctx, tool(g.c, "add_issue_comment"), map[string]any{"owner": owner, "repo": repo, "issue_number": n, "body": body}))
-}
-
-// GitHub issues have no workflow statuses.
-func (github) Transition(context.Context, Invoker, Issue, string) (bool, error) { return false, nil }
-
-// --- Jira through the Atlassian MCP server ----------------------------------
-
 type jira struct{ c SourceConfig }
 
 func (j jira) Tools() []string {
-	return []string{tool(j.c, "searchJiraIssuesUsingJql"), tool(j.c, "editJiraIssue"), tool(j.c, "addCommentToJiraIssue"),
-		tool(j.c, "getTransitionsForJiraIssue"), tool(j.c, "transitionJiraIssue")}
+	return []string{tool(j.c, "searchJiraIssuesUsingJql")}
+}
+
+type jiraIssue struct {
+	Self   string `json:"self"`
+	Key    string `json:"key"`
+	Fields struct {
+		Summary     string          `json:"summary"`
+		Description json.RawMessage `json:"description"`
+		Labels      []string        `json:"labels"`
+		Status      struct {
+			StatusCategory struct {
+				Key string `json:"key"`
+			} `json:"statusCategory"`
+		} `json:"status"`
+		Assignee trackerActor `json:"assignee"`
+		Reporter trackerActor `json:"reporter"`
+		Updated  string       `json:"updated"`
+		Project  struct {
+			ID string `json:"id"`
+		} `json:"project"`
+		IssueLinks []struct {
+			Type struct {
+				Inward string `json:"inward"`
+			} `json:"type"`
+			InwardIssue *struct {
+				Fields struct {
+					Status struct {
+						StatusCategory struct {
+							Key string `json:"key"`
+						} `json:"statusCategory"`
+					} `json:"status"`
+				} `json:"fields"`
+			} `json:"inwardIssue"`
+		} `json:"issuelinks"`
+	} `json:"fields"`
+}
+
+var jiraFields = []string{"summary", "description", "labels", "status", "assignee", "issuelinks", "reporter", "updated", "project"}
+
+func (raw jiraIssue) issue() Issue {
+	f := raw.Fields
+	i := Issue{Source: "jira", Key: raw.Key, Title: f.Summary, Body: describe(f.Description), Labels: f.Labels,
+		Open: f.Status.StatusCategory.Key == "new", Author: f.Reporter.human("jira"), Updated: f.Updated,
+		Assignee: f.Assignee.AccountID}
+	if u, err := url.Parse(raw.Self); err == nil && u.Scheme == "https" && u.User == nil && u.Port() == "" &&
+		strings.HasSuffix(u.Hostname(), ".atlassian.net") {
+		i.URL = "https://" + u.Hostname() + "/browse/" + raw.Key
+	}
+	if i.Labels == nil {
+		i.Labels = []string{}
+	}
+	i.Blocked = i.HasLabel("blocked")
+	for _, link := range f.IssueLinks {
+		if strings.EqualFold(link.Type.Inward, "is blocked by") && link.InwardIssue != nil && link.InwardIssue.Fields.Status.StatusCategory.Key != "done" {
+			i.Blocked = true
+		}
+	}
+	return i
 }
 
 func (j jira) Search(ctx context.Context, call Invoker, label string) ([]Issue, error) {
@@ -217,62 +255,18 @@ func (j jira) Search(ctx context.Context, call Invoker, label string) ([]Issue, 
 	}
 	jql += " ORDER BY created ASC"
 	var out struct {
-		Issues []struct {
-			Key    string `json:"key"`
-			Fields struct {
-				Summary     string          `json:"summary"`
-				Description json.RawMessage `json:"description"`
-				Labels      []string        `json:"labels"`
-				Status      struct {
-					Name           string `json:"name"`
-					StatusCategory struct {
-						Key string `json:"key"`
-					} `json:"statusCategory"`
-				} `json:"status"`
-				Assignee *struct {
-					AccountID string `json:"accountId"`
-				} `json:"assignee"`
-				Flagged    []json.RawMessage `json:"flagged"`
-				IssueLinks []struct {
-					Type struct {
-						Inward string `json:"inward"`
-					} `json:"type"`
-					InwardIssue *struct {
-						Fields struct {
-							Status struct {
-								StatusCategory struct {
-									Key string `json:"key"`
-								} `json:"statusCategory"`
-							} `json:"status"`
-						} `json:"fields"`
-					} `json:"inwardIssue"`
-				} `json:"issuelinks"`
-			} `json:"fields"`
-		} `json:"issues"`
+		Issues []jiraIssue `json:"issues"`
 	}
-	args := map[string]any{"cloudId": j.c.CloudID, "jql": jql, "maxResults": 50,
-		"fields": []string{"summary", "description", "labels", "status", "assignee", "issuelinks"}}
+	args := map[string]any{"cloudId": j.c.CloudID, "jql": jql, "maxResults": 50, "fields": jiraFields}
 	res, err := call(ctx, tool(j.c, "searchJiraIssuesUsingJql"), args)
 	if err := decode(res, err, &out); err != nil {
 		return nil, err
 	}
 	issues := make([]Issue, 0, len(out.Issues))
-	for _, it := range out.Issues {
-		f := it.Fields
-		i := Issue{Source: "jira", Key: it.Key, Title: f.Summary, Body: describe(f.Description), Labels: f.Labels, Open: f.Status.StatusCategory.Key == "new"}
-		if i.Labels == nil {
-			i.Labels = []string{}
+	for _, raw := range out.Issues {
+		if trackerKey.MatchString(raw.Key) {
+			issues = append(issues, raw.issue())
 		}
-		if f.Assignee != nil {
-			i.Assignee = f.Assignee.AccountID
-		}
-		for _, l := range f.IssueLinks {
-			if strings.EqualFold(l.Type.Inward, "is blocked by") && l.InwardIssue != nil && l.InwardIssue.Fields.Status.StatusCategory.Key != "done" {
-				i.Blocked = true
-			}
-		}
-		i.Blocked = i.Blocked || i.HasLabel("blocked")
-		issues = append(issues, i)
 	}
 	return issues, nil
 }
@@ -303,50 +297,12 @@ func describe(raw json.RawMessage) string {
 	return strings.Join(parts, "\n")
 }
 
-func (j jira) Relabel(ctx context.Context, call Invoker, i Issue, remove, add, owner string) error {
-	labels := []string{}
-	for _, l := range i.Labels {
-		if !strings.EqualFold(l, remove) && !strings.EqualFold(l, add) {
-			labels = append(labels, l)
-		}
-	}
-	fields := map[string]any{"labels": append(labels, add)}
-	if owner != "" {
-		fields["assignee"] = map[string]string{"accountId": owner}
-	}
-	return result(call(ctx, tool(j.c, "editJiraIssue"), map[string]any{"cloudId": j.c.CloudID, "issueIdOrKey": i.Key, "fields": fields}))
-}
-
-func (j jira) Comment(ctx context.Context, call Invoker, i Issue, body string) error {
-	return result(call(ctx, tool(j.c, "addCommentToJiraIssue"), map[string]any{"cloudId": j.c.CloudID, "issueIdOrKey": i.Key, "commentBody": body}))
-}
-
-func (j jira) Transition(ctx context.Context, call Invoker, i Issue, status string) (bool, error) {
-	var out struct {
-		Transitions []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-			To   struct {
-				Name string `json:"name"`
-			} `json:"to"`
-		} `json:"transitions"`
-	}
-	res, err := call(ctx, tool(j.c, "getTransitionsForJiraIssue"), map[string]any{"cloudId": j.c.CloudID, "issueIdOrKey": i.Key})
-	if err := decode(res, err, &out); err != nil {
-		return false, err
-	}
-	for _, t := range out.Transitions {
-		if strings.EqualFold(t.Name, status) || strings.EqualFold(t.To.Name, status) {
-			err := result(call(ctx, tool(j.c, "transitionJiraIssue"), map[string]any{"cloudId": j.c.CloudID, "issueIdOrKey": i.Key, "transition": map[string]string{"id": t.ID}}))
-			return err == nil, err
-		}
-	}
-	return false, nil
-}
-
 // Request is the task request for an issue. The issue text is quoted as
 // untrusted data; it never becomes an instruction.
 func Request(i Issue) string {
+	if i.EvaluatedInput != "" {
+		return i.EvaluatedInput
+	}
 	body := i.Body
 	if len(body) > 12000 {
 		body = body[:12000] + "\n…[truncated]"

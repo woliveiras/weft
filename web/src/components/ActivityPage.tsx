@@ -14,7 +14,7 @@ import {
 } from './activityView';
 
 /** Events that change what the page shows; each triggers a throttled refetch. */
-const LIVE_PREFIXES = ['execution.', 'replica.', 'approval.', 'graph.', 'agent.plan'];
+const LIVE_PREFIXES = ['execution.', 'replica.', 'approval.', 'graph.', 'agent.plan', 'trigger.'];
 const REFETCH_MS = 1500;
 
 function useActivity(state: ActivityRouteState) {
@@ -151,6 +151,20 @@ function ActivityOverview({ state, onChange, tabs }: { state: ActivityRouteState
           </li>)}</ol>)}
         {t?.needsYou && <p className="muted small">More items are waiting than shown here; the {view.limits.needsYou} oldest are listed. See Approvals for all of them.</p>}
       </section>}
+
+      {show('needs') && (Boolean(view.triggerHolds?.length) || view.errors.some(e => e.section === 'triggerHolds')) && (
+        <section className="activity-section" aria-label="Issues awaiting readiness">
+          <h2>Issues awaiting readiness</h2>
+          <SectionNotes view={view} sections={['triggerHolds']} />
+          <ul>{view.triggerHolds?.map(h => <li key={`${h.triggerId}:${h.key}`} className="card">
+            <strong>{h.url ? <a href={h.url}>{h.key}</a> : h.key}</strong> · {h.triggerName} · round {h.round}
+            <p>{h.reason}{h.eligibility ? ` The issue ${h.eligibility}.` : ''}{h.disabled ? ' Readiness is disabled for this trigger.' : ''}</p>
+            {h.publication === 'comment_pending' && <p>Tracker comment delivery is unconfirmed.</p>}
+            {(h.publication === 'label_pending' || h.publication === 'label_pending_only') && <p>Tracker label update is pending.</p>}
+          </li>)}</ul>
+          {view.triggerHoldsTruncated && <p>Open the trigger for its complete list of held issues.</p>}
+        </section>
+      )}
 
       {show('running') && <section className="activity-section" aria-label="Running now">
         <h2>Running now</h2>

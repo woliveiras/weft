@@ -1,6 +1,7 @@
 package trigger_test
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"testing"
@@ -26,9 +27,10 @@ func runner(st storage.Store, c *clock, instance string, tr ...*tracker) *trigge
 		gh = tr[0]
 	}
 	reg := tools.NewRegistry()
-	reg.MustRegister(gh.tools("search_issues", "update_issue", "add_issue_comment")...)
+	reg.MustRegister(gh.tools("search_issues")...)
+	reg.MustRegister(trigger.TrackerTools(gh.request)...)
 	return &trigger.Runner{Triggers: trigger.Manager{Store: st, Bus: bus, Now: c.now}, Store: st, Instance: instance,
-		Gateway: tools.NewGateway(reg, nil, bus), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+		Gateway: tools.NewGateway(reg, nil, bus), Assessor: assessFunc(ready), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 }
 
 func TestDue(t *testing.T) {
@@ -126,4 +128,13 @@ func TestRunnerPausesOnStaleConsent(t *testing.T) {
 	if len(evs) != 1 {
 		t.Fatalf("runs = %d", len(evs))
 	}
+}
+
+type assessFunc func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment
+
+func (f assessFunc) Assess(ctx context.Context, t *trigger.Trigger, input string) trigger.ReadinessAssessment {
+	return f(ctx, t, input)
+}
+func ready(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+	return trigger.ReadinessAssessment{}
 }

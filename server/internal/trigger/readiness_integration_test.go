@@ -1,0 +1,328 @@
+package trigger_test
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/woliveiras/weft/server/internal/trigger"
+)
+
+func advance(r *trigger.Runner, c *clock, t *testing.T, id string) *trigger.Trigger {
+	t.Helper()
+	c.t = c.t.Add(time.Hour)
+	r.Tick(t.Context())
+	current, err := r.Triggers.Get(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return current
+}
+
+func ghReply(id int, who, kind, body string, at time.Time) map[string]any {
+	return map[string]any{"id": id, "user": map[string]string{"login": who, "type": kind},
+		"body": body, "created_at": at}
+}
+
+func ghTodoEvent(id int, who, kind string, at time.Time) map[string]any {
+	return map[string]any{"id": id, "actor": map[string]string{"login": who, "type": kind}, "label": map[string]string{"name": trigger.LabelTodo},
+		"event": "labeled", "created_at": at}
+}
+
+func TestReadinessAsksTwiceAndRequiresVerifiedManualRequeue(t *testing.T) {
+	st := triggerStore(t)
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	gh.issues = []map[string]any{ghIssue(1, "Describe parser", "weft", "bug")}
+	r := runner(st, c, "one", gh)
+	tasks := &tasks{}
+	r.Tasks = tasks
+	var evaluated []string
+	r.Assessor = assessFunc(func(_ context.Context, _ *trigger.Trigger, input string) trigger.ReadinessAssessment {
+		evaluated = append(evaluated, input)
+		if strings.Contains(input, "FINAL ACCEPTANCE") {
+			return trigger.ReadinessAssessment{}
+		}
+		return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+	})
+	tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The first request replaces the custom selection label. The bug label
+	// stays in place and no task was admitted.
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.Holds) != 1 || tr.Holds[0].Round != 1 || tr.Holds[0].Publication != "confirmed" || len(tasks.started) != 0 || len(tr.Processed) != 0 ||
+		!strings.Contains(gh.comments["#1"][0], "Weft question") {
+		t.Fatalf("initial hold: %+v, comments %v", tr.Holds, gh.comments)
+	}
+	labels := gh.find("#1")["labels"].([]map[string]any)
+	if len(labels) != 2 || labels[0]["name"] != "bug" || labels[1]["name"] != trigger.LabelFailed {
+		t.Fatal(labels)
+	}
+	gh.replies["#1"] = []map[string]any{
+		ghReply(1, "author", "User", "old", c.t.Add(-time.Second)),
+		ghReply(2, "other", "User", "I speak for author", c.t.Add(time.Second)),
+		ghReply(3, "weft-bot", "Bot", "bot answer", c.t.Add(time.Second)),
+		ghReply(4, "author", "User", "Thanks!", c.t.Add(time.Second)),
+	}
+	tr = advance(r, c, t, tr.ID)
+	if len(evaluated) != 1 || len(gh.comments["#1"]) != 1 {
+		t.Fatal("an invalid reply triggered evaluation")
+	}
+	gh.replies["#1"] = append(gh.replies["#1"], ghReply(5, "author", "User", "author partial", c.t.Add(time.Second)))
+	tr = advance(r, c, t, tr.ID)
+	if len(evaluated) != 2 || tr.Holds[0].Round != 2 || !strings.Contains(evaluated[1], "author partial") ||
+		strings.Contains(evaluated[1], "bot answer") || strings.Contains(evaluated[1], "I speak for author") {
+		t.Fatalf("second round: %+v, %v", tr.Holds, evaluated)
+	}
+	gh.replies["#1"] = append(gh.replies["#1"], ghReply(6, "author", "User", "author partial", c.t.Add(time.Second)))
+	tr = advance(r, c, t, tr.ID)
+	if len(evaluated) != 2 {
+		t.Fatal("duplicate answer triggered evaluation")
+	}
+	gh.replies["#1"] = append(gh.replies["#1"], ghReply(7, "weft-bot", "User", "owner partial", c.t.Add(time.Second)))
+	tr = advance(r, c, t, tr.ID)
+	if len(evaluated) != 3 || !strings.Contains(evaluated[2], "owner partial") ||
+		tr.Holds[0].Reason != "round_limit" || len(gh.comments["#1"]) != 3 ||
+		!strings.Contains(gh.comments["#1"][2], "operator") {
+		t.Fatalf("round limit: %+v, comments %v", tr.Holds, gh.comments)
+	}
+	gh.find("#1")["body"] = "FINAL ACCEPTANCE"
+	gh.find("#1")["labels"] = append(gh.find("#1")["labels"].([]map[string]any), map[string]any{"name": trigger.LabelTodo})
+	gh.roles["maintainer"] = "maintain"
+	gh.labelEvents["#1"] = []map[string]any{ghTodoEvent(1, "robot", "Bot", c.t.Add(time.Second))}
+	tr = advance(r, c, t, tr.ID)
+	if len(evaluated) != 3 {
+		t.Fatal("bot label triggered evaluation")
+	}
+	gh.roles["contributor"] = "write"
+	gh.labelEvents["#1"] = append(gh.labelEvents["#1"], ghTodoEvent(2, "contributor", "User", c.t.Add(time.Second)))
+	tr = advance(r, c, t, tr.ID)
+	if len(evaluated) != 3 {
+		t.Fatal("label edit by non-maintainer triggered evaluation")
+	}
+	gh.labelEvents["#1"] = append(gh.labelEvents["#1"], ghTodoEvent(3, "maintainer", "User", c.t.Add(time.Second)))
+	tr = advance(r, c, t, tr.ID)
+	if len(evaluated) != 4 || len(tr.Holds) != 0 || len(tasks.started) != 1 ||
+		!strings.Contains(trigger.Request(tasks.started[0]), "FINAL ACCEPTANCE") || tr.CurrentTask == "" {
+		t.Fatalf("maintainer requeue: %+v, tasks %+v", tr, tasks.started)
+	}
+	labels = gh.find("#1")["labels"].([]map[string]any)
+	if len(labels) != 2 || labels[0]["name"] != "bug" || labels[1]["name"] != trigger.LabelInProgress {
+		t.Fatal(labels)
+	}
+}
+
+func TestReadinessCapacityAndIndependentAdmission(t *testing.T) {
+	for _, capacity := range []bool{false, true} {
+		t.Run(fmt.Sprint(capacity), func(t *testing.T) {
+			st := triggerStore(t)
+			c := &clock{t: time.Now().UTC()}
+			gh := newTracker("gh")
+			for n := 1; n <= 11; n++ {
+				gh.issues = append(gh.issues, ghIssue(n, fmt.Sprintf("Issue %d", n), trigger.LabelTodo))
+			}
+			r := runner(st, c, "one", gh)
+			tasks := &tasks{status: map[string]trigger.TaskStatus{}}
+			r.Tasks = tasks
+			calls := 0
+			r.Assessor = assessFunc(func(_ context.Context, _ *trigger.Trigger, input string) trigger.ReadinessAssessment {
+				calls++
+				if (!capacity && strings.Contains(input, "Issue 2")) || strings.Contains(input, "READY AFTER HOLD") {
+					return trigger.ReadinessAssessment{}
+				}
+				return trigger.ReadinessAssessment{Missing: []string{"objective"}}
+			})
+			in := input()
+			in.Label = ""
+			tr, err := r.Triggers.Create(t.Context(), in, "admin")
+			if err != nil || tr.Label != trigger.LabelTodo || tr.ReadinessDisabled {
+				t.Fatalf("default trigger: %+v, %v", tr, err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			if !capacity {
+				tr = advance(r, c, t, tr.ID)
+				if len(tr.Holds) != 1 || len(tasks.started) != 1 || tasks.started[0].Key != "acme/app#2" {
+					t.Fatalf("hold occupied active slot: %+v, tasks %+v", tr.Holds, tasks.started)
+				}
+				return
+			}
+			for range 10 {
+				tr = advance(r, c, t, tr.ID)
+			}
+			if calls != 10 || len(tr.Holds) != 10 || tr.ReadinessBlock == "" || len(tasks.started) != 0 || len(gh.comments["#11"]) != 0 {
+				t.Fatalf("capacity: calls %d, holds %d, reason %q", calls, len(tr.Holds), tr.ReadinessBlock)
+			}
+			gh.replies["#1"] = []map[string]any{ghReply(1, "author", "User", "READY AFTER HOLD", c.t.Add(time.Second))}
+			tr = advance(r, c, t, tr.ID)
+			if len(tr.Holds) != 9 || tr.ReadinessBlock != "" || tr.CurrentTask == "" || len(tasks.started) != 1 {
+				t.Fatalf("resolved hold did not release capacity: %+v", tr)
+			}
+			tasks.status[tr.CurrentTask] = trigger.TaskStatus{State: "succeeded", PullRequestURL: "https://example.test/pull/1"}
+			tr = advance(r, c, t, tr.ID)
+			tr = advance(r, c, t, tr.ID)
+			if calls != 12 || len(gh.comments["#11"]) != 1 || len(tr.Holds) != 10 {
+				t.Fatalf("new issue did not use freed capacity: calls %d, holds %d, comments %v", calls, len(tr.Holds), gh.comments)
+			}
+
+		})
+	}
+}
+
+func TestReadinessRevalidatesSnapshotAndPreservesHoldsWhenDisabled(t *testing.T) {
+	st := triggerStore(t)
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	gh.issues = []map[string]any{ghIssue(1, "Issue", "weft")}
+	r := runner(st, c, "one", gh)
+	tasks := &tasks{}
+	r.Tasks = tasks
+	evaluations := 0
+	r.Assessor = assessFunc(func(_ context.Context, _ *trigger.Trigger, _ string) trigger.ReadinessAssessment {
+		evaluations++
+		if evaluations == 1 {
+			gh.find("#1")["body"] = "edited during model call"
+			return trigger.ReadinessAssessment{}
+		}
+		return trigger.ReadinessAssessment{Missing: []string{"scope"}}
+	})
+	in := input()
+	tr, err := r.Triggers.Create(t.Context(), in, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.Holds) != 1 || tr.Holds[0].Reason != "snapshot_changed" || len(tasks.started) != 0 ||
+		slices.ContainsFunc(gh.rest, func(call string) bool { return strings.Contains(call, "/labels") }) {
+		t.Fatalf("stale verdict changed tracker or started work: %+v", tr)
+	}
+	tr = advance(r, c, t, tr.ID)
+	if evaluations != 2 || tr.Holds[0].Reason != "incomplete" {
+		t.Fatalf("edited issue not reevaluated: %+v", tr)
+	}
+	consent := tr.Consent.Scope
+	in.ReadinessDisabled = true
+	tr, err = r.Triggers.Edit(t.Context(), tr.ID, in, "admin")
+	if err != nil || tr.State != trigger.Paused || len(tr.Holds) != 1 {
+		t.Fatalf("disable: %+v %v", tr, err)
+	}
+	tr, err = r.Triggers.Resume(t.Context(), tr.ID, "admin")
+	if err != nil || tr.Consent.Scope == consent || slices.Contains(tr.Consent.Operations, "tracker.comments") {
+		t.Fatalf("disabled consent = %+v %v", tr, err)
+	}
+	gh.find("#1")["labels"] = append(gh.find("#1")["labels"].([]map[string]any), map[string]any{"name": "weft"})
+	tr = advance(r, c, t, tr.ID)
+	if evaluations != 2 || len(tr.Holds) != 1 || len(tasks.started) != 0 {
+		t.Fatalf("disable released a hold: %+v", tr)
+	}
+}
+
+func TestReadinessRecoversUnconfirmedCommentWithoutRepeatingIt(t *testing.T) {
+	st := triggerStore(t)
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	gh.issues = []map[string]any{ghIssue(1, "Issue", "weft")}
+	gh.loseCommentResponse = true
+	r := runner(st, c, "first", gh)
+	r.Tasks = &tasks{}
+	modelCalls := 0
+	r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+		modelCalls++
+		return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+	})
+	tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.Holds) != 1 || tr.Holds[0].Publication != "comment_pending" || len(gh.comments["#1"]) != 1 || tr.LastError == "" {
+		t.Fatalf("uncertain write-back not recorded: %+v", tr)
+	}
+	gh.replies["#1"] = []map[string]any{ghReply(1, "weft-service", "User", gh.comments["#1"][0], c.t)}
+	restarted := runner(st, c, "second", gh)
+	restarted.Tasks, restarted.Assessor = r.Tasks, r.Assessor
+	tr = advance(restarted, c, t, tr.ID)
+	if tr.Holds[0].Publication != "confirmed" || len(gh.comments["#1"]) != 1 || modelCalls != 1 || tr.CurrentTask != "" {
+		t.Fatalf("restart did not reconcile the existing comment: %+v", tr)
+	}
+}
+
+func TestReadinessScopeAndBudgetChangesInvalidateConsentBeforePolling(t *testing.T) {
+	for _, field := range []string{"connection", "money"} {
+		t.Run(field, func(t *testing.T) {
+			st := triggerStore(t)
+			c := &clock{t: time.Now().UTC()}
+			gh := newTracker("gh")
+			gh.issues = []map[string]any{ghIssue(1, "Issue", "weft")}
+			r := runner(st, c, "one", gh)
+			revision := int64(1)
+			r.Triggers.TrackerRevision = func(context.Context, string, string) (int64, error) { return revision, nil }
+			tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if field == "connection" {
+				revision++
+			} else {
+				r.Triggers.ReadinessMaxMicros = 1
+			}
+			tr = advance(r, c, t, tr.ID)
+			if tr.State != trigger.Paused || tr.PausedReason == "" || len(gh.calls)+len(gh.rest) != 0 || len(tr.Holds) != 0 {
+				t.Fatalf("stale consent made a tracker call: %+v", tr)
+			}
+		})
+	}
+}
+
+func TestHeldIssueRechecksEligibilityBeforeReopening(t *testing.T) {
+	for _, state := range []string{"closed", "blocked", "assigned", "processed"} {
+		t.Run(state, func(t *testing.T) {
+			st := triggerStore(t)
+			c := &clock{t: time.Now().UTC()}
+			gh := newTracker("gh")
+			gh.issues = []map[string]any{ghIssue(1, "Issue", "weft")}
+			r := runner(st, c, "one", gh)
+			tasks := &tasks{}
+			r.Tasks = tasks
+			calls := 0
+			r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+				calls++
+				if calls == 1 {
+					return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+				}
+				return trigger.ReadinessAssessment{}
+			})
+			tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			issue := gh.find("#1")
+			switch state {
+			case "closed":
+				issue["state"] = "closed"
+			case "blocked":
+				issue["labels"] = append(issue["labels"].([]map[string]any), map[string]any{"name": "blocked"})
+			case "assigned":
+				issue["assignees"] = []map[string]any{{"login": "other"}}
+			case "processed":
+				_, err := r.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
+					current.Processed = map[string]string{"github:acme/app#1@factory": "tsk_prior"}
+					return nil
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			gh.replies["#1"] = []map[string]any{ghReply(1, "author", "User", "Acceptance example", c.t.Add(time.Second))}
+			tr = advance(r, c, t, tr.ID)
+			if calls != 1 || len(tasks.started) != 0 || tr.Holds[0].Eligibility == "" {
+				t.Fatalf("ineligible issue was reevaluated or admitted: %+v", tr.Holds)
+			}
+		})
+	}
+}

@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/woliveiras/weft/server/internal/projectconfig"
 	"github.com/woliveiras/weft/server/internal/taskauth"
@@ -19,9 +21,12 @@ type triggerTasks struct {
 }
 
 func (x triggerTasks) Start(ctx context.Context, t *trigger.Trigger, i trigger.Issue) (string, error) {
-	title := i.Key + ": " + i.Title
+	title := i.Key + ": " + strings.ReplaceAll(i.Title, "\x00", "")
 	if len(title) > 200 {
 		title = title[:200]
+		for !utf8.ValidString(title) {
+			title = title[:len(title)-1]
+		}
 	}
 	in := taskconfig.Input{Title: title, Request: trigger.Request(i), Outcome: "implement", GraphID: t.Workflow,
 		GraphVersion: t.Consent.WorkflowVersion, NodeID: t.NodeID, ResultNodeID: t.ResultNodeID, SCMConnection: t.SCMConnection,
@@ -34,7 +39,11 @@ func (x triggerTasks) Start(ctx context.Context, t *trigger.Trigger, i trigger.I
 		in.ProjectID, in.BaseCommit = p.ID, p.Head
 	}
 	actor := t.Consent.Actor
-	d, err := (taskconfig.Manager{Store: x.a.Store}).Save(ctx, "", in, 0, actor)
+	githubIssueKey := ""
+	if i.Source == "github" {
+		githubIssueKey = i.Key
+	}
+	d, err := (taskconfig.Manager{Store: x.a.Store}).SaveTriggered(ctx, in, actor, githubIssueKey)
 	if err != nil {
 		return "", err
 	}

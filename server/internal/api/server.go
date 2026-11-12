@@ -54,6 +54,7 @@ import (
 var Version = "dev"
 
 type Deps struct {
+	TriggerManager    *trigger.Manager
 	RepositoryImports *repositoryimport.Manager
 	MCP               *mcpconfig.Manager
 	SCM               scm.Manager
@@ -222,6 +223,7 @@ func (s *Server) routes() {
 		{"GET /api/v1/provider-plugins", R, s.providerPlugins},
 		{"PUT /api/v1/provider-plugins/{id}", A, s.updateProviderPlugin},
 		{"GET /api/v1/provider-settings", R, s.providerSettings},
+		{"GET /api/v1/trigger-policy", R, s.triggerPolicy},
 		{"GET /api/v1/triggers", R, s.listTriggers},
 		{"POST /api/v1/triggers", A, s.createTrigger},
 		{"GET /api/v1/triggers/{trigger}", R, s.getTrigger},

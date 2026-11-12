@@ -50,7 +50,7 @@ func TestCompletionWritesBackAndTakesTheNextIssue(t *testing.T) {
 	fake.status["tsk_acme/app2"] = trigger.TaskStatus{State: "failed", Reason: "git.push rejected: missing permission"}
 	c.t = c.t.Add(time.Hour)
 	r.Tick(t.Context())
-	if got := gh.comments["#2"]; len(got) != 2 || !strings.Contains(got[1], "missing permission") {
+	if got := gh.comments["#2"]; len(got) != 2 || !strings.Contains(got[1], "Review the task") {
 		t.Fatalf("failure comment = %v", got)
 	}
 	labels = gh.find("#2")["labels"].([]map[string]any)
@@ -58,10 +58,10 @@ func TestCompletionWritesBackAndTakesTheNextIssue(t *testing.T) {
 		t.Fatalf("labels = %v", labels)
 	}
 	got, _ = r.Triggers.Get(t.Context(), tr.ID)
-	if got.State != trigger.Paused || !strings.Contains(got.PausedReason, "ended failed") || got.CurrentTask != "" {
+	if got.State != trigger.Paused || !strings.Contains(got.PausedReason, "Review delivery") || got.CurrentTask != "" {
 		t.Fatalf("after failure: %+v", got)
 	}
-	// A finished task without a pull request still reports completion.
+	// A finished task without a pull request requires operator attention.
 	fake2 := &tasks{status: map[string]trigger.TaskStatus{"tsk_acme/app3": {State: "succeeded"}}}
 	gh.issues = []map[string]any{ghIssue(3, "Third", "weft")}
 	r.Tasks = fake2
@@ -71,7 +71,7 @@ func TestCompletionWritesBackAndTakesTheNextIssue(t *testing.T) {
 	r.Tick(t.Context())
 	c.t = c.t.Add(time.Hour)
 	r.Tick(t.Context())
-	if got := gh.comments["#3"]; len(got) != 2 || !strings.Contains(got[1], "Weft finished this issue") {
+	if got := gh.comments["#3"]; len(got) != 2 || !strings.Contains(got[1], "without an open pull request") {
 		t.Fatalf("no-PR completion = %v", got)
 	}
 }

@@ -75,39 +75,82 @@ func TestGitHubClaimStartsOneTaskAndWritesBack(t *testing.T) {
 	}
 }
 
-func TestJiraClaimTransitionsAndNotesAMissingTransition(t *testing.T) {
+func TestJiraClaimAndCompletionUseLabelsWithoutTransitions(t *testing.T) {
 	st := triggerStore(t)
 	atl := newTracker("atl")
-	atl.issues = []map[string]any{jiraIssue("APP-1", "Export", "weft")}
+	atl.issues = []map[string]any{jiraIssue("APP-1", "Export", "weft", "bug")}
+	atl.transitions = []map[string]any{{"id": "31", "name": "In Progress"}}
 	reg := tools.NewRegistry()
-	reg.MustRegister(atl.tools("searchJiraIssuesUsingJql", "editJiraIssue", "addCommentToJiraIssue", "getTransitionsForJiraIssue", "transitionJiraIssue")...)
+	reg.MustRegister(atl.tools("searchJiraIssuesUsingJql", "getTransitionsForJiraIssue", "transitionJiraIssue")...)
+	reg.MustRegister(trigger.TrackerTools(atl.request)...)
 	bus := events.NewBus(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	c := &clock{t: time.Now().UTC()}
-	fake := &tasks{}
-	r := &trigger.Runner{Triggers: trigger.Manager{Store: st, Bus: bus, Now: c.now}, Store: st, Instance: "a", Gateway: tools.NewGateway(reg, nil, bus), Tasks: fake}
+	fake := &tasks{status: map[string]trigger.TaskStatus{}}
+	r := &trigger.Runner{Triggers: trigger.Manager{Store: st, Bus: bus, Now: c.now}, Store: st, Instance: "a", Gateway: tools.NewGateway(reg, nil, bus), Tasks: fake, Assessor: assessFunc(ready)}
 	in := input()
 	in.Source = trigger.SourceConfig{Kind: "jira", ConnectionID: "atl", CloudID: cloud}
 	in.Owner = "acc-1"
-	tr, _ := r.Triggers.Create(t.Context(), in, "alice")
-	// No In Progress transition offered: noted, not a failure.
+	tr, err := r.Triggers.Create(t.Context(), in, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
 	r.Tick(t.Context())
 	got, _ := r.Triggers.Get(t.Context(), tr.ID)
-	if len(fake.started) != 1 || got.LastError != "" || len(got.Notes) != 1 || !strings.Contains(got.Notes[0], "no In Progress transition") {
-		t.Fatalf("missing transition: %+v", got)
+	fields := atl.find("APP-1")["fields"].(map[string]any)
+	if len(fake.started) != 1 || got.LastError != "" || len(atl.calls) != 1 ||
+		fields["status"].(map[string]any)["name"] != "To Do" ||
+		strings.Join(fields["labels"].([]string), ",") != "bug,weft:wip" ||
+		fields["assignee"].(map[string]string)["accountId"] != "acc-1" {
+		t.Fatalf("claim = %+v, fields = %+v, tracker calls = %+v", got, fields, atl.calls)
 	}
-	notes, _ := st.ListEvents(t.Context(), storage.EventFilter{GraphID: "task-run-app-1", Types: []domain.EventType{domain.EvTriggerNote}})
-	if len(notes) != 1 {
-		t.Fatalf("task note = %+v", notes)
-	}
-	// With the transition, the issue moves.
-	atl.issues = []map[string]any{jiraIssue("APP-2", "Import", "weft")}
-	atl.transitions = []map[string]any{{"id": "31", "name": "In Progress"}}
-	_, _ = r.Triggers.Update(t.Context(), tr.ID, "test", func(t *trigger.Trigger) error { t.CurrentTask = ""; return nil })
+	fake.status[got.CurrentTask] = trigger.TaskStatus{State: "succeeded", PullRequestURL: "https://example.test/pull/9"}
 	c.t = c.t.Add(time.Hour)
 	r.Tick(t.Context())
-	status := atl.find("APP-2")["fields"].(map[string]any)["status"].(map[string]any)["name"]
-	if status != "In Progress" {
-		t.Fatalf("status = %v", status)
+	if fields["status"].(map[string]any)["name"] != "To Do" ||
+		strings.Join(fields["labels"].([]string), ",") != "bug,weft:done" || len(atl.comments["APP-1"]) != 2 ||
+		len(atl.calls) != 1 || strings.Contains(strings.Join(atl.rest, "\n"), "transition") {
+		t.Fatalf("completion = %+v, comments = %+v, calls = %+v", fields, atl.comments, atl.rest)
+	}
+}
+
+func TestJiraReadinessHoldsAndReturnsWithoutStatusTransition(t *testing.T) {
+	st := triggerStore(t)
+	atl := newTracker("atl")
+	issue := jiraIssue("APP-1", "Export", trigger.LabelTodo, "bug")
+	fields := issue["fields"].(map[string]any)
+	actor := map[string]any{"accountId": "reporter", "accountType": "atlassian", "active": true}
+	fields["reporter"] = actor
+	atl.issues = []map[string]any{issue}
+	reg := tools.NewRegistry()
+	reg.MustRegister(atl.tools("searchJiraIssuesUsingJql")...)
+	reg.MustRegister(trigger.TrackerTools(atl.request)...)
+	c := &clock{t: time.Now().UTC()}
+	starter := &tasks{}
+	r := &trigger.Runner{Triggers: trigger.Manager{Store: st, Now: c.now}, Store: st, Instance: "jira", Gateway: tools.NewGateway(reg, nil, nil), Tasks: starter,
+		Assessor: assessFunc(func(_ context.Context, _ *trigger.Trigger, input string) trigger.ReadinessAssessment {
+			if strings.Contains(input, "expected CSV header") {
+				return trigger.ReadinessAssessment{}
+			}
+			return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+		})}
+	in := input()
+	in.Source = trigger.SourceConfig{Kind: "jira", ConnectionID: "atl", CloudID: cloud}
+	in.Label, in.Owner = "", ""
+	tr, err := r.Triggers.Create(t.Context(), in, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.Holds) != 1 || strings.Join(fields["labels"].([]string), ",") != "bug,weft:needs-attention" || len(starter.started) != 0 {
+		t.Fatalf("Jira hold: %+v, fields %+v", tr.Holds, fields)
+	}
+	atl.replies["APP-1"] = []map[string]any{{"id": "88", "created": c.t.Add(time.Minute).Format(time.RFC3339Nano), "author": actor,
+		"body": map[string]any{"type": "doc", "content": []any{map[string]any{"type": "text", "text": "expected CSV header"}}}}}
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.Holds) != 0 || len(starter.started) != 1 || !strings.Contains(trigger.Request(starter.started[0]), "expected CSV header") ||
+		strings.Join(fields["labels"].([]string), ",") != "bug,weft:wip" ||
+		fields["status"].(map[string]any)["name"] != "To Do" || strings.Contains(strings.Join(atl.rest, "\n"), "transition") {
+		t.Fatalf("Jira reply: %+v, fields %+v, calls %+v", tr, fields, atl.rest)
 	}
 }
 

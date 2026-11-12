@@ -12,6 +12,9 @@ import (
 // viewers; every change needs an administrator.
 
 func (s *Server) triggers() trigger.Manager {
+	if s.TriggerManager != nil {
+		return *s.TriggerManager
+	}
 	return trigger.Manager{Store: s.Store, Bus: s.Bus, Tools: s.Tools}
 }
 
@@ -23,6 +26,15 @@ func decodeTrigger(r *http.Request) (trigger.Input, error) {
 		return in, badRequest("invalid trigger body: %s", err.Error())
 	}
 	return in, nil
+}
+
+func (s *Server) triggerPolicy(w http.ResponseWriter, r *http.Request) error {
+	policy, err := s.triggers().ReadinessPolicy(r.Context())
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 200, policy)
+	return nil
 }
 
 func (s *Server) listTriggers(w http.ResponseWriter, r *http.Request) error {

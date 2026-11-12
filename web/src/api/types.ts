@@ -508,7 +508,18 @@ export interface TriggerIssue {
   labels: string[];
 }
 
+export interface TriggerReadinessLimits {
+  inputBytes: number;
+  outputTokens: number;
+  seconds: number;
+  moneyMicros: number;
+  currency: string;
+  maxRounds: number;
+  maxHolds: number;
+}
+
 export interface TriggerInput {
+  readinessDisabled?: boolean;
   name: string;
   workflow: string;
   nodeId: string;
@@ -530,6 +541,8 @@ export interface Trigger extends TriggerInput {
   consent: { actor: string; workflowVersion: number; authorizationMode: string; recordedAt: string };
   lastRunAt?: string;
   nextRunAt?: string;
+  readinessBlock?: string;
+  holds?: { key: string; url?: string; message: string; reason: string; round: number; eligibility?: string; publication?: string }[];
   currentTask?: string;
   currentIssue?: TriggerIssue;
   skipped?: { key: string; title?: string; reason: string }[];

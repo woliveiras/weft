@@ -5,6 +5,14 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
+
+	"github.com/woliveiras/weft/server/internal/app"
+	"github.com/woliveiras/weft/server/internal/mcpconfig"
+	"github.com/woliveiras/weft/server/internal/trigger"
 
 	"github.com/woliveiras/weft/server/internal/tools"
 )
@@ -23,8 +31,44 @@ func (t trackerTool) Invoke(context.Context, *tools.Invocation) (*tools.Result, 
 
 func trackerTools() []tools.Tool {
 	return []tools.Tool{
-		trackerTool{"search_issues", `{"items":[{"number":11,"title":"Add CSV export","state":"open","html_url":"https://github.example/acme/app/issues/11","labels":[{"name":"weft"}],"assignees":[]},{"number":12,"title":"Waits on design","state":"open","labels":[{"name":"weft"},{"name":"blocked"}],"assignees":[]}]}`},
-		trackerTool{"update_issue", `{}`},
-		trackerTool{"add_issue_comment", `{}`},
+		trackerTool{"search_issues", `{"items":[{"number":11,"title":"Add CSV export","state":"open","html_url":"https://github.example/acme/app/issues/11","labels":[{"name":"weft:todo"}],"assignees":[]},{"number":12,"title":"Waits on design","state":"open","labels":[{"name":"weft:todo"},{"name":"blocked"}],"assignees":[]}]}`},
 	}
+}
+
+type issueFixtureTransport struct{}
+
+func (issueFixtureTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	const issue = `{"number":11,"title":"Add CSV export","body":"Add CSV export.","state":"open","labels":[{"name":"weft:todo"}],"user":{"login":"reporter","type":"User"}}`
+	if r.URL.Host != "api.github.com" || !strings.HasPrefix(r.URL.Path, "/repos/acme/app/issues/11") {
+		return nil, errors.New("unexpected fixture tracker request")
+	}
+	body := "{}"
+	if r.Method == "GET" && r.URL.Path == "/repos/acme/app/issues/11" {
+		body = issue
+	}
+	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
+}
+
+func prepareReadinessFixture(ctx context.Context, a *app.App) error {
+	_, err := a.MCP.Put(ctx, mcpconfig.Input{ID: "e2e-tracker", Name: "Tracker fixture", Service: "github",
+		Endpoint: "https://api.githubcopilot.com/mcp/", Enabled: true, Credential: &mcpconfig.Credential{Value: "e2e-tracker-placeholder-credential"}}, 0, "e2e-fixture")
+	if err != nil {
+		return err
+	}
+	a.TrackerAPI.Client = &http.Client{Transport: issueFixtureTransport{}}
+	tr, err := a.Triggers.Triggers.Create(ctx, trigger.Input{Name: "Held readiness fixture", Workflow: "git-inspect", NodeID: "worker",
+		Source: trigger.SourceConfig{Kind: "github", ConnectionID: "e2e-tracker", Repository: "acme/app"}}, "e2e-fixture")
+	if err != nil {
+		return err
+	}
+	a.Triggers.Tick(ctx)
+	tr, err = a.Triggers.Triggers.Get(ctx, tr.ID)
+	if err != nil {
+		return err
+	}
+	if len(tr.Holds) != 1 || tr.Holds[0].Round != 1 || tr.Holds[0].Publication != "confirmed" {
+		return errors.New("readiness fixture was not held with a confirmed question")
+	}
+	_, err = a.Triggers.Triggers.Pause(ctx, tr.ID, "Fixture waiting for clarification.", "e2e-fixture")
+	return err
 }

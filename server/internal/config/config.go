@@ -5,6 +5,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -20,6 +21,8 @@ import (
 )
 
 type Config struct {
+	// ReadinessMaxMicros is the fixed per-assessment monetary ceiling.
+	ReadinessMaxMicros int64 `yaml:"readinessMaxMicros"`
 	// NativeProfile is set only by the native launcher, never by YAML or environment.
 	NativeProfile bool          `yaml:"-" json:"-"`
 	Preview       Preview       `yaml:"preview"`
@@ -354,6 +357,9 @@ func splitList(s string) []string {
 }
 
 func (c *Config) Validate() error {
+	if c.ReadinessMaxMicros < 0 {
+		return errors.New("readinessMaxMicros must be nonnegative")
+	}
 	if c.Preview.Addr != "" {
 		addr := c.Preview.Addr
 		if c.Preview.ContainerLocal {

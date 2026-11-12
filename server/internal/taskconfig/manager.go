@@ -42,9 +42,10 @@ type Input struct {
 	SCMConnection string `json:"scmConnection,omitempty"`
 }
 type Draft struct {
-	Submitted     bool        `json:"submitted,omitempty"`
-	Resolution    *Resolution `json:"resolution,omitempty"`
-	ObservedState string      `json:"observedState,omitempty"`
+	TriggerGitHubIssue string      `json:"triggerGitHubIssue,omitempty"`
+	Submitted          bool        `json:"submitted,omitempty"`
+	Resolution         *Resolution `json:"resolution,omitempty"`
+	ObservedState      string      `json:"observedState,omitempty"`
 	Input
 	ExecutionGraphID string    `json:"executionGraphId,omitempty"`
 	LaunchError      string    `json:"launchError,omitempty"`
@@ -156,6 +157,18 @@ func (m Manager) List(ctx context.Context, after string, limit int) (Page, error
 	return page, nil
 }
 func (m Manager) Save(ctx context.Context, id string, in Input, revision int64, actor string) (*Draft, error) {
+	return m.save(ctx, id, in, revision, actor, "")
+}
+
+// SaveTriggered records the trusted tracker identity separately from editable task text.
+func (m Manager) SaveTriggered(ctx context.Context, in Input, actor, githubIssueKey string) (*Draft, error) {
+	if githubIssueKey != "" && !githubIssue.MatchString(githubIssueKey) {
+		return nil, fmt.Errorf("%w: invalid trigger issue identity", ErrInvalid)
+	}
+	return m.save(ctx, "", in, 0, actor, githubIssueKey)
+}
+
+func (m Manager) save(ctx context.Context, id string, in Input, revision int64, actor, githubIssueKey string) (*Draft, error) {
 	if err := Validate(in); err != nil {
 		return nil, err
 	}
@@ -173,7 +186,7 @@ func (m Manager) Save(ctx context.Context, id string, in Input, revision int64, 
 		return nil, fmt.Errorf("%w: select an enabled agent in the workflow", ErrInvalid)
 	}
 	now := time.Now().UTC()
-	d := &Draft{Input: in, ID: id, Status: "draft", CreatedBy: actor, UpdatedBy: actor, CreatedAt: now, UpdatedAt: now}
+	d := &Draft{Input: in, ID: id, TriggerGitHubIssue: githubIssueKey, Status: "draft", CreatedBy: actor, UpdatedBy: actor, CreatedAt: now, UpdatedAt: now}
 	if id == "" {
 		if revision != 0 {
 			return nil, storage.ErrConflict
@@ -191,6 +204,7 @@ func (m Manager) Save(ctx context.Context, id string, in Input, revision int64, 
 			return nil, fmt.Errorf("%w: select a registered project for the repository URL or remove the URL from the request", ErrInvalid)
 		}
 		d.Submitted = old.Submitted
+		d.TriggerGitHubIssue = old.TriggerGitHubIssue
 		d.CreatedAt = old.CreatedAt
 		d.CreatedBy = old.CreatedBy
 	}

@@ -145,11 +145,13 @@ type Builder struct {
 
 // View is the response of GET /api/v1/activity.
 type View struct {
-	Window      string    `json:"window"`
-	Since       time.Time `json:"since"`
-	GeneratedAt time.Time `json:"generatedAt"`
-	Currency    string    `json:"currency,omitempty"`
-	Counters    Counters  `json:"counters"`
+	TriggerHolds          []TriggerHold `json:"triggerHolds,omitempty"`
+	TriggerHoldsTruncated bool          `json:"triggerHoldsTruncated,omitempty"`
+	Window                string        `json:"window"`
+	Since                 time.Time     `json:"since"`
+	GeneratedAt           time.Time     `json:"generatedAt"`
+	Currency              string        `json:"currency,omitempty"`
+	Counters              Counters      `json:"counters"`
 	// Each list is null when its section failed (see Errors).
 	NeedsYou  []NeedItem     `json:"needsYou"`
 	Running   []RunningGroup `json:"running"`
@@ -302,6 +304,7 @@ func (b Builder) Build(ctx context.Context, q Query, v Viewer) (*View, error) {
 	}
 	x.section(ctx, "cost", x.cost)
 	x.section(ctx, "needs_you", x.needsYou)
+	x.section(ctx, "triggerHolds", x.triggerHolds)
 	x.section(ctx, "running", x.running)
 	x.section(ctx, "history", x.history)
 	if err := ctx.Err(); err != nil {

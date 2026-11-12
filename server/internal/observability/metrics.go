@@ -24,6 +24,8 @@ var (
 	ActivitySections          = promauto.NewCounterVec(prometheus.CounterOpts{Namespace: ns, Name: "activity_sections_total", Help: "Activity view sections built, by bounded section (needs_you, reviews, running, history, cost, health_executions, health_cost) and outcome (ok, truncated, forbidden, unavailable, failed)."}, []string{"section", "outcome"})
 	ActivitySeconds           = promauto.NewHistogram(prometheus.HistogramOpts{Namespace: ns, Name: "activity_build_duration_seconds", Help: "Latency of building one Activity view response."})
 	ActivityHealthSeconds     = promauto.NewHistogram(prometheus.HistogramOpts{Namespace: ns, Name: "activity_health_build_duration_seconds", Help: "Latency of building one Activity health response."})
+	TriggerReadiness          = promauto.NewCounterVec(prometheus.CounterOpts{Namespace: ns, Name: "trigger_readiness_total", Help: "Issue readiness assessments by bounded outcome."}, []string{"outcome"})
+	TriggerReadinessSeconds   = promauto.NewHistogram(prometheus.HistogramOpts{Namespace: ns, Name: "trigger_readiness_duration_seconds", Help: "Issue readiness assessment latency."})
 	TriggerRuns               = promauto.NewCounterVec(prometheus.CounterOpts{Namespace: ns, Name: "trigger_runs_total", Help: "Issue trigger runs by bounded outcome."}, []string{"outcome"})
 	TriggerSeconds            = promauto.NewHistogram(prometheus.HistogramOpts{Namespace: ns, Name: "trigger_run_duration_seconds", Help: "Issue trigger run latency."})
 	BudgetOperations          = promauto.NewCounterVec(prometheus.CounterOpts{Namespace: ns, Name: "cost_budget_operations_total", Help: "Monetary budget ledger operations by scope, operation and outcome."}, []string{"scope", "operation", "outcome"})

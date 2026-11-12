@@ -54,7 +54,7 @@ func TestGitHubSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := src.Tools(); len(got) != 3 || got[0] != "mcp.gh.search_issues" {
+	if got := src.Tools(); len(got) != 1 || got[0] != "mcp.gh.search_issues" {
 		t.Fatalf("tools = %v", got)
 	}
 	issues, err := src.Search(ctx, direct(tr), "weft")
@@ -68,27 +68,7 @@ func TestGitHubSource(t *testing.T) {
 	if q := tr.args[0]["query"].(string); q != `repo:acme/app is:issue is:open label:"weft" milestone:v1` {
 		t.Fatalf("query = %q", q)
 	}
-	if err := src.Relabel(ctx, direct(tr), i, "weft", "weft:in-progress", "bot"); err != nil {
-		t.Fatal(err)
-	}
-	args := tr.args[1]
-	if args["owner"] != "acme" || args["repo"] != "app" || args["issue_number"].(float64) != 7 {
-		t.Fatalf("update args = %v", args)
-	}
-	labels := args["labels"].([]any)
-	if len(labels) != 2 || labels[0] != "bug" || labels[1] != "weft:in-progress" || args["assignees"].([]any)[0] != "bot" {
-		t.Fatalf("labels %v", args)
-	}
-	if err := src.Comment(ctx, direct(tr), i, "Started"); err != nil || tr.comments["#7"][0] != "Started" {
-		t.Fatalf("comment: %v %v", err, tr.comments)
-	}
-	if moved, err := src.Transition(ctx, direct(tr), i, "In Progress"); moved || err != nil {
-		t.Fatalf("GitHub has no transitions: %v %v", moved, err)
-	}
-	tr.fail["add_issue_comment"] = true
-	if err := src.Comment(ctx, direct(tr), i, "x"); err == nil || !strings.Contains(err.Error(), "403") {
-		t.Fatalf("tool failure: %v", err)
-	}
+
 }
 
 func TestJiraSource(t *testing.T) {
@@ -112,19 +92,7 @@ func TestJiraSource(t *testing.T) {
 	if i.Key != "APP-1" || i.Body != "Details of Add export" || !i.Open || i.Blocked || !issues[1].Blocked {
 		t.Fatalf("issues = %+v", issues)
 	}
-	if err := src.Relabel(ctx, direct(tr), i, "weft", "weft:in-progress", "acc-1"); err != nil {
-		t.Fatal(err)
-	}
-	f := tr.args[1]["fields"].(map[string]any)
-	if f["labels"].([]any)[0] != "weft:in-progress" || f["assignee"].(map[string]any)["accountId"] != "acc-1" {
-		t.Fatalf("edit = %v", f)
-	}
-	if moved, err := src.Transition(ctx, direct(tr), i, "In Progress"); !moved || err != nil {
-		t.Fatalf("transition: %v %v", moved, err)
-	}
-	if moved, err := src.Transition(ctx, direct(tr), i, "In Review"); moved || err != nil {
-		t.Fatalf("missing transition is not an error: %v %v", moved, err)
-	}
+
 }
 
 func TestRequestQuotesIssueContentAsData(t *testing.T) {

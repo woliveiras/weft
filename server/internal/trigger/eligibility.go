@@ -2,8 +2,10 @@ package trigger
 
 import (
 	"context"
+	"errors"
 	"strings"
 
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/tools"
 )
 
@@ -15,12 +17,20 @@ func DedupKey(t *Trigger, i Issue) string {
 
 // Reason says why an issue cannot start a task now, or "" when it can.
 func Reason(t *Trigger, i Issue) string {
-	switch {
-	case !i.HasLabel(t.Label):
+	if !i.HasLabel(t.Label) {
 		return "does not have the label " + t.Label
+	}
+	if t.holdIndex(i.Key) >= 0 {
+		return "has a readiness hold"
+	}
+	return issueReason(t, i)
+}
+
+func issueReason(t *Trigger, i Issue) string {
+	switch {
 	case !i.Open:
 		return "is not open (To Do)"
-	case i.Assignee != "" && !strings.EqualFold(i.Assignee, t.Owner):
+	case i.OtherAssignee || (i.Assignee != "" && !strings.EqualFold(i.Assignee, t.Owner)):
 		return "is assigned to someone else"
 	case i.Blocked:
 		return "is blocked"
@@ -41,24 +51,41 @@ type Matches struct {
 
 // Principal is the identity a trigger's tracker calls run as: only the
 // source's tools are granted.
-func Principal(t *Trigger, s Source) *tools.Principal {
-	return &tools.Principal{GraphID: "trigger-" + t.ID, NodeID: "trigger", ExecutionID: t.ID, Grants: Grants(s)}
+func Principal(t *Trigger) *tools.Principal {
+	grants := make([]domain.ToolGrant, 0, len(t.Consent.Operations))
+	for _, name := range t.Consent.Operations {
+		grants = append(grants, domain.ToolGrant{Name: name})
+	}
+	return &tools.Principal{GraphID: "trigger-" + t.ID, NodeID: "trigger", ExecutionID: t.ID, Grants: grants}
 }
 
 // Match searches the source and sorts issues into next, waiting and
 // skipped, in the source's order (oldest first).
 func (r *Runner) Match(ctx context.Context, t *Trigger) (Matches, Source, Invoker, error) {
+	problem, err := r.Triggers.ConsentProblem(ctx, t)
+	if err != nil {
+		return Matches{}, nil, nil, err
+	}
+	if problem != "" {
+		return Matches{}, nil, nil, errors.New(problem)
+	}
 	src, err := t.Source.Open()
 	if err != nil {
 		return Matches{}, nil, nil, err
 	}
-	call := GatewayInvoker(r.Gateway, Principal(t, src))
+	call := GatewayInvoker(r.Gateway, Principal(t))
+	m, err := match(ctx, t, src, call)
+	return m, src, call, err
+}
+
+func match(ctx context.Context, t *Trigger, src Source, call Invoker) (Matches, error) {
 	issues, err := src.Search(ctx, call, t.Label)
 	if err != nil {
-		return Matches{}, nil, nil, err
+		return Matches{}, err
 	}
 	m := Matches{Waiting: []Issue{}, Skipped: []Skip{}, Busy: t.CurrentTask}
 	for _, i := range issues {
+		i.Body, i.Author = "", ""
 		if reason := Reason(t, i); reason != "" {
 			m.Skipped = append(m.Skipped, Skip{Key: i.Key, Title: i.Title, Reason: reason})
 			continue
@@ -70,5 +97,5 @@ func (r *Runner) Match(ctx context.Context, t *Trigger) (Matches, Source, Invoke
 		}
 		m.Waiting = append(m.Waiting, i)
 	}
-	return m, src, call, nil
+	return m, nil
 }

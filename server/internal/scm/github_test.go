@@ -12,6 +12,7 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/scm"
+	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"github.com/woliveiras/weft/server/internal/tools"
 )
 
@@ -57,7 +58,7 @@ func newGitHub(t *testing.T) *githubFixture {
 			_ = json.NewDecoder(r.Body).Decode(&in)
 			n := len(f.pulls) + 1
 			p := map[string]any{"number": n, "html_url": "https://github.example/acme/app/pull/" + string(rune('0'+n)), "state": "open",
-				"head": map[string]any{"ref": in["head"]}, "base": map[string]any{"ref": in["base"]}, "title": in["title"]}
+				"head": map[string]any{"ref": in["head"]}, "base": map[string]any{"ref": in["base"]}, "title": in["title"], "body": in["body"]}
 			f.pulls = append(f.pulls, p)
 			if f.duplicate {
 				f.duplicate = false
@@ -169,6 +170,51 @@ func TestGitHubPushAndPullRequestThroughTheGateway(t *testing.T) {
 	res, _ = gw.Invoke(ctx, principal(work, grants...), "git.push", json.RawMessage(`{"connection":"gh"}`))
 	if !res.IsError || !strings.Contains(res.Content, "cannot push") {
 		t.Fatalf("read-only: %+v", res)
+	}
+}
+
+func TestTriggeredPullRequestBodyUsesAdmittedIssueIdentity(t *testing.T) {
+	for _, tc := range []struct{ issue, closing string }{
+		{"acme/app#7", "Closes #7"},
+		{"acme/issues#7", "Closes acme/issues#7"},
+		{"", ""},
+	} {
+		t.Run(tc.closing, func(t *testing.T) {
+			gh := newGitHub(t)
+			m, st := manager(t)
+			if _, err := m.Save(ctx, scm.Input{Name: "gh", Kind: "github", Repository: "acme/app", APIURL: gh.URL, Token: ptr(token)}, "admin", false); err != nil {
+				t.Fatal(err)
+			}
+			g := &domain.Graph{Metadata: domain.GraphMetadata{ID: "workflow", Name: "Workflow"}, Spec: domain.GraphSpec{Nodes: []domain.Node{{ID: "worker"}}}}
+			if _, err := st.SaveGraph(ctx, g, 0); err != nil {
+				t.Fatal(err)
+			}
+			tasks := taskconfig.Manager{Store: st}
+			draft, err := tasks.SaveTriggered(ctx, taskconfig.Input{Title: "Fix", Request: "User text mentions #999", Outcome: "implement", GraphID: "workflow", GraphVersion: 1, NodeID: "worker"}, "admin", tc.issue)
+			if err != nil {
+				t.Fatal(err)
+			}
+			draft.ExecutionGraphID = domain.TaskRunGraphPrefix + strings.TrimPrefix(draft.ID, "tsk_")
+			if _, err := tasks.Transition(ctx, draft, "running", "admin"); err != nil {
+				t.Fatal(err)
+			}
+			reg := tools.NewRegistry()
+			reg.MustRegister(scm.Tools(m)...)
+			gw := tools.NewGateway(reg, &approver{approve: true}, nil)
+			p := principal("", domain.ToolGrant{Name: "scm.pull_request.create", Repositories: []string{"gh"}})
+			p.GraphID = draft.ExecutionGraphID
+			out, err := gw.Invoke(ctx, p, "scm.pull_request.create", json.RawMessage(`{"connection":"gh","branch":"weft/fix","title":"Fix","body":"Verified change."}`))
+			if err != nil || out.IsError || len(gh.pulls) != 1 {
+				t.Fatalf("open triggered PR: %+v %v", out, err)
+			}
+			want := "Verified change."
+			if tc.closing != "" {
+				want += "\n\n" + tc.closing
+			}
+			if got := gh.pulls[0]["body"]; got != want {
+				t.Fatalf("body %q, want %q", got, want)
+			}
+		})
 	}
 }
 

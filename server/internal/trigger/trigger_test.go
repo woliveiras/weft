@@ -2,6 +2,7 @@ package trigger_test
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/woliveiras/weft/server/internal/domain"
@@ -149,7 +150,7 @@ func TestEditRejectsMissingWorkflowOrAgent(t *testing.T) {
 				t.Fatalf("expected field error for %s, got %v", field, err)
 			}
 			saved, err := m.Get(ctx, original.ID)
-			if err != nil || saved.Name != original.Name || saved.Consent != original.Consent ||
+			if err != nil || saved.Name != original.Name || !reflect.DeepEqual(saved.Consent, original.Consent) ||
 				saved.State != original.State || !saved.UpdatedAt.Equal(original.UpdatedAt) {
 				t.Fatalf("failed edit changed persisted trigger: %+v, %v", saved, err)
 			}

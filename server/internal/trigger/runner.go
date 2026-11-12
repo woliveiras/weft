@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,6 +26,7 @@ type Runner struct {
 	Instance string
 	Gateway  *tools.Gateway
 	Tasks    Tasks
+	Assessor Assessor
 	// BaseURL links issues back to their task ("<base>/#/tasks/<id>").
 	BaseURL string
 	Log     *slog.Logger
@@ -93,7 +95,9 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 		return // changed or ran elsewhere meanwhile
 	}
 	started := time.Now()
-	outcome, err := r.step(ctx, t)
+	pollCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	outcome, err := r.step(pollCtx, t)
+	cancel()
 	if err != nil {
 		outcome = "error"
 		r.log().Warn("trigger run failed", "trigger", id, "err", err)
@@ -131,26 +135,97 @@ func (r *Runner) step(ctx context.Context, t *Trigger) (string, error) {
 		_, err := r.Triggers.Pause(ctx, t.ID, problem, "system:trigger")
 		return "consent_stale", err
 	}
+	if t.Claiming != "" {
+		_, err := r.Triggers.Pause(ctx, t.ID, "The claim for "+t.Claiming+" was interrupted. Review the tracker and any task before resuming.", "system:trigger")
+		return "claim_interrupted", err
+	}
 	if t.CurrentTask != "" {
 		return r.followTask(ctx, t)
 	}
-	m, src, call, err := r.Match(ctx, t)
+	src, err := t.Source.Open()
 	if err != nil {
 		return "", err
 	}
-	if _, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(t *Trigger) error {
-		t.Skipped = m.Skipped
+	call := r.checkedInvoker(t)
+	var heldErr error
+	if !t.ReadinessDisabled {
+		for _, hold := range slices.Clone(t.Holds) {
+			started, err := r.checkHeld(ctx, t, src, call, hold)
+			if started || errors.Is(err, errTriggerChanged) {
+				return "readiness_return", err
+			}
+			if err != nil {
+				heldErr = errors.New("one or more held issues could not be checked or updated")
+			}
+		}
+		if len(t.Holds) >= maxReadinessHolds {
+			return "readiness_capacity", heldErr
+		}
+	}
+	m, err := match(ctx, t, src, call)
+	if err != nil {
+		return "", err
+	}
+	if _, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
+		current.Skipped = m.Skipped
 		return nil
 	}); err != nil {
 		return "", err
 	}
 	if m.Next == nil {
-		return "idle", nil
+		return "idle", heldErr
 	}
 	if r.Tasks == nil {
 		return "", errors.New("no task starter is configured")
 	}
-	return r.claimAndStart(ctx, t, src, call, *m.Next)
+	i, err := trackerRead[Issue](ctx, call, trackerGet, trackerArgs{Key: m.Next.Key})
+	if err != nil {
+		return "", err
+	}
+	if Reason(t, i) != "" {
+		return "eligibility_changed", heldErr
+	}
+	if t.ReadinessDisabled {
+		return r.claimAndStart(ctx, t, call, i)
+	}
+	h := Hold{Key: i.Key, URL: i.URL, Scope: holdScope(t), OpenedAt: r.Triggers.now()}
+	started, err := r.assessIssue(ctx, t, call, i, h, nil)
+	if started {
+		return "readiness_admitted", err
+	}
+	return "readiness_held", errors.Join(err, heldErr)
+}
+
+var errTriggerChanged = errors.New("trigger changed during polling")
+
+func (r *Runner) ensureCurrent(ctx context.Context, t *Trigger) error {
+	current, err := r.Triggers.Get(ctx, t.ID)
+	if err != nil {
+		return err
+	}
+	if current.State != Active || current.Consent.Scope != t.Consent.Scope || current.Consent.RecordedAt != t.Consent.RecordedAt {
+		return errTriggerChanged
+	}
+	problem, err := r.Triggers.ConsentProblem(ctx, current)
+	if err != nil {
+		return err
+	}
+	if problem != "" {
+		return errors.New(problem)
+	}
+	return nil
+}
+
+func (r *Runner) checkedInvoker(t *Trigger) Invoker {
+	call := GatewayInvoker(r.Gateway, Principal(t))
+	return func(ctx context.Context, name string, args any) (*tools.Result, error) {
+		if err := r.ensureCurrent(ctx, t); err != nil {
+			return nil, err
+		}
+		ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+		return call(context.WithValue(ctx, trackerScopeKey{}, t), name, args)
+	}
 }
 
 // TaskURL links a task in the console.
@@ -158,68 +233,131 @@ func (r *Runner) TaskURL(taskID string) string {
 	return strings.TrimRight(r.BaseURL, "/") + "/#/tasks/" + taskID
 }
 
-// claimAndStart takes the issue (assign it to the owner and swap the
-// trigger label for weft:in-progress), starts its task, says so on the
-// issue with a link, and moves a Jira issue to In Progress when it can. A
-// missing transition is noted, not a failure. If the task cannot start, the
-// issue is marked failed and the trigger pauses.
-func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, src Source, call Invoker, i Issue) (string, error) {
-	if err := src.Relabel(ctx, call, i, t.Label, LabelInProgress, t.Owner); err != nil {
-		return "", fmt.Errorf("claim %s: %w", i.Key, err)
+// claimAndStart takes one eligible issue and starts its task under current
+// trigger consent. Tracker writes use only the related selection and state labels.
+func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i Issue) (string, error) {
+	if r.Tasks == nil {
+		return "", errors.New("no task starter is configured")
 	}
-	i.Labels = append(i.Labels, LabelInProgress)
-	key := DedupKey(t, i)
-	taskID, startErr := r.Tasks.Start(ctx, t, i)
-	if startErr != nil {
-		reason := "Weft could not start a task for this issue: " + startErr.Error()
-		err := errors.Join(src.Relabel(ctx, call, i, LabelInProgress, LabelFailed, ""), src.Comment(ctx, call, i, reason))
-		_, perr := r.Triggers.Update(ctx, t.ID, "system:trigger", func(t *Trigger) error {
-			if t.Processed == nil {
-				t.Processed = map[string]string{}
-			}
-			t.Processed[key] = "failed"
-			t.State, t.PausedReason = Paused, fmt.Sprintf("The task for %s could not start: %s", i.Key, startErr)
+	admission := "trigger-admissions/" + triggerFingerprint(struct {
+		Source, Cloud, Issue, Workflow string
+	}{i.Source, t.Source.CloudID, strings.ToLower(i.Key), t.Workflow})
+	owner := r.Instance + "/" + t.ID
+	ok, err := r.Store.AcquireLease(ctx, admission, owner, 3*time.Minute)
+	if err != nil || !ok {
+		return "claim_busy", err
+	}
+	defer func() {
+		if err := r.Store.ReleaseLease(context.WithoutCancel(ctx), admission, owner); err != nil {
+			r.log().WarnContext(ctx, "trigger admission lease release failed", "trigger", t.ID)
+		}
+	}()
+	if _, err := r.Store.GetSetting(ctx, admission); err == nil {
+		_, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
+			finishClaim(current, DedupKey(t, i), i.Key, "prior admission")
 			return nil
 		})
-		return "start_failed", errors.Join(err, perr)
+		return "already_admitted", err
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		return "", err
 	}
-	if _, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(t *Trigger) error {
-		if t.Processed == nil {
-			t.Processed = map[string]string{}
+	// Write the admission intent before modifying tracker state. A crash
+	// or ambiguous write requires reconciliation, never a second start.
+	if _, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
+		if current.State != Active || current.Consent.Scope != t.Consent.Scope || current.Consent.RecordedAt != t.Consent.RecordedAt || current.Claiming != "" {
+			return errTriggerChanged
 		}
-		t.Processed[key], t.CurrentTask, t.CurrentIssue = taskID, taskID, &i
+		current.Claiming, current.ClaimAdmission = i.Key, admission
 		return nil
 	}); err != nil {
 		return "", err
 	}
-	comment := fmt.Sprintf("Weft started working on this issue: %s", r.TaskURL(taskID))
-	if err := src.Comment(ctx, call, i, comment); err != nil {
-		r.note(ctx, t.ID, taskID, fmt.Sprintf("The start comment could not be posted on %s: %s", i.Key, err))
+	holdIndex := t.holdIndex(i.Key)
+	remove := selectionRemovals(t, i, holdIndex >= 0 && t.Holds[holdIndex].Signal != "")
+	if i.HasLabel(LabelFailed) && holdIndex >= 0 {
+		remove = append(remove, LabelFailed)
 	}
-	moved, err := src.Transition(ctx, call, i, "In Progress")
-	switch {
-	case err != nil:
-		r.note(ctx, t.ID, taskID, fmt.Sprintf("%s could not be moved to In Progress: %s", i.Key, err))
-	case !moved && i.Source == "jira":
-		r.note(ctx, t.ID, taskID, fmt.Sprintf("%s has no In Progress transition; its status was left unchanged.", i.Key))
+	if err := relabel(ctx, call, i.Key, remove, LabelInProgress, t.Owner); err != nil {
+		return "", errors.New("issue claim could not be confirmed")
+	}
+	if err := r.ensureCurrent(ctx, t); err != nil {
+		return "", err
+	}
+	if i.EvaluatedInput != "" {
+		h := t.Holds[holdIndex]
+		current, err := trackerRead[Issue](ctx, call, trackerGet, trackerArgs{Key: i.Key})
+		var replies []issueComment
+		if err == nil {
+			replies, err = r.currentReplies(ctx, t, call, h, current)
+		}
+		if err != nil || issueReason(t, current) != "" || readinessInput(current, replies) != i.EvaluatedInput {
+			h.State, h.Reason, h.Marker, h.Publication = "recheck", "snapshot_changed", domain.NewID("hold"), "label_pending"
+			h.Removals = []string{LabelInProgress}
+			if err := r.saveHold(ctx, t, h); err != nil {
+				return "readiness_changed", err
+			}
+			if _, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
+				current.Claiming, current.ClaimAdmission = "", ""
+				return nil
+			}); err != nil {
+				return "readiness_changed", err
+			}
+			return "readiness_changed", r.publishHold(ctx, t, call, h)
+		}
+	}
+	if err := r.ensureCurrent(ctx, t); err != nil {
+		return "", err
+	}
+	if _, err := r.Store.PutSetting(ctx, admission, []byte(t.ID), 0, "system:trigger"); err != nil {
+		return "", err
+	}
+	key := DedupKey(t, i)
+	taskID, startErr := r.Tasks.Start(ctx, t, i)
+	if startErr != nil {
+		reason := "Weft failure. Weft could not start a task for this issue. Review the task and trigger, then resume the trigger."
+		writeErr := errors.Join(relabel(ctx, call, i.Key, []string{LabelInProgress}, LabelFailed, ""), comment(ctx, call, i.Key, reason))
+		_, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(t *Trigger) error {
+			finishClaim(t, key, i.Key, "failed")
+			t.State, t.PausedReason = Paused, "Weft could not start a task for "+i.Key+". Review the task and trigger before resuming."
+			return nil
+		})
+		return "start_failed", errors.Join(writeErr, err)
+	}
+	if _, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
+		finishClaim(current, key, i.Key, taskID)
+		current.CurrentTask = taskID
+		current.CurrentIssue = &Issue{Source: i.Source, Key: i.Key, URL: i.URL}
+		current.CurrentSource = t.Source
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	if err := comment(ctx, call, i.Key, fmt.Sprintf("Weft started working on this issue: %s", r.TaskURL(taskID))); err != nil {
+		if _, saveErr := r.Triggers.Update(ctx, t.ID, "system:trigger", func(t *Trigger) error {
+			t.Notes = append(t.Notes, "The start comment could not be confirmed for "+i.Key+".")
+			if len(t.Notes) > 20 {
+				t.Notes = t.Notes[len(t.Notes)-20:]
+			}
+			return nil
+		}); saveErr != nil {
+			return "started", saveErr
+		}
 	}
 	return "started", nil
 }
 
-// note records something a person should know on the task (as an event on
-// its run) and on the trigger, without failing the run.
-func (r *Runner) note(ctx context.Context, triggerID, taskID, text string) {
-	if r.Triggers.Bus != nil {
-		r.Triggers.Bus.Publish(context.WithoutCancel(ctx), domain.NewEvent(domain.EvTriggerNote, domain.TaskRunGraphPrefix+strings.TrimPrefix(taskID, "tsk_"),
-			map[string]any{"trigger": triggerID, "task": taskID, "message": text}).WithActor("system:trigger"))
+func finishClaim(t *Trigger, key, issue, result string) {
+	t.Claiming, t.ClaimAdmission = "", ""
+	if t.Processed == nil {
+		t.Processed = map[string]string{}
 	}
-	_, _ = r.Triggers.Update(ctx, triggerID, "system:trigger", func(t *Trigger) error {
-		t.Notes = append(t.Notes, text)
-		if len(t.Notes) > 20 {
-			t.Notes = t.Notes[len(t.Notes)-20:]
-		}
-		return nil
-	})
+	t.Processed[key] = result
+	if idx := t.holdIndex(issue); idx >= 0 {
+		t.Holds = slices.Delete(t.Holds, idx, idx+1)
+	}
+	if len(t.Holds) < maxReadinessHolds {
+		t.ReadinessBlock = ""
+	}
 }
 
 // Tasks creates and observes the tasks a trigger starts.
@@ -245,51 +383,42 @@ type TaskStatus struct {
 // stop a comment with the reason, the weft:failed label, and the trigger
 // pauses so a person can look before more issues are taken.
 func (r *Runner) followTask(ctx context.Context, t *Trigger) (string, error) {
-	if r.Tasks == nil {
-		return "", errors.New("no task starter is configured")
+	if r.Tasks == nil || t.CurrentIssue == nil {
+		return "", errors.New("active trigger task state is unavailable")
+	}
+	if t.CurrentSource != t.Source {
+		_, err := r.Triggers.Pause(ctx, t.ID, "Restore the original tracker scope to write back the current task.", "system:trigger")
+		return "writeback_scope_changed", err
 	}
 	st, err := r.Tasks.Status(ctx, t.CurrentTask)
 	if err != nil {
-		return "", fmt.Errorf("task %s: %w", t.CurrentTask, err)
+		return "", errors.New("trigger task status is unavailable")
 	}
-	if st.State == "running" || t.CurrentIssue == nil {
-		return "waiting", nil
+	if st.State == "running" {
+		return "busy", nil
 	}
-	src, err := t.Source.Open()
-	if err != nil {
-		return "", err
-	}
-	call := GatewayInvoker(r.Gateway, Principal(t, src))
+	call := r.checkedInvoker(t)
 	i := *t.CurrentIssue
 	link := r.TaskURL(t.CurrentTask)
-	var outcome string
-	var writeErr error
+	add, outcome := LabelFailed, "task_failed"
+	message := "Weft failure. The task ended " + st.State + ". Review the task and resume the trigger when it is ready for more issues.\n\nTask: " + link
 	if st.State == "succeeded" {
-		outcome = "completed"
-		msg := "Weft finished this issue: " + link
 		if st.PullRequestURL != "" {
-			msg = fmt.Sprintf("Weft opened a pull request for this issue: %s\n\nTask: %s", st.PullRequestURL, link)
+			add, outcome = LabelReview, "completed"
+			message = fmt.Sprintf("Weft opened a pull request for this issue: %s\n\nTask: %s", st.PullRequestURL, link)
+		} else {
+			message = "Weft delivery failure. The task finished without an open pull request. Review delivery and resume the trigger.\n\nTask: " + link
 		}
-		writeErr = errors.Join(src.Comment(ctx, call, i, msg), src.Relabel(ctx, call, i, LabelInProgress, LabelReview, ""))
-		if moved, terr := src.Transition(ctx, call, i, "In Review"); terr != nil {
-			r.note(ctx, t.ID, t.CurrentTask, fmt.Sprintf("%s could not be moved to In Review: %s", i.Key, terr))
-		} else if !moved && i.Source == "jira" {
-			r.note(ctx, t.ID, t.CurrentTask, fmt.Sprintf("%s has no In Review transition; its status was left unchanged.", i.Key))
-		}
-	} else {
-		outcome = "task_failed"
-		reason := st.Reason
-		if reason == "" {
-			reason = "the task " + st.State
-		}
-		writeErr = errors.Join(src.Comment(ctx, call, i, fmt.Sprintf("Weft stopped working on this issue: %s\n\nTask: %s", reason, link)),
-			src.Relabel(ctx, call, i, LabelInProgress, LabelFailed, ""))
 	}
-	finished, ended := t.CurrentTask, st.State
-	_, err = r.Triggers.Update(ctx, t.ID, "system:trigger", func(t *Trigger) error {
-		t.CurrentTask, t.CurrentIssue = "", nil
-		if ended != "succeeded" {
-			t.State, t.PausedReason = Paused, fmt.Sprintf("The task %s for %s ended %s. Review it and resume the trigger to take more issues.", finished, i.Key, ended)
+	writeErr := errors.Join(relabel(ctx, call, i.Key, []string{LabelInProgress}, add, ""), comment(ctx, call, i.Key, message))
+	_, err = r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
+		current.CurrentTask, current.CurrentIssue, current.CurrentSource = "", nil, SourceConfig{}
+		if add == LabelFailed || writeErr != nil {
+			current.State = Paused
+			current.PausedReason = "Review delivery for " + i.Key + " and resume the trigger."
+			if writeErr != nil {
+				current.PausedReason = "Tracker write-back for " + i.Key + " could not be confirmed. Review the tracker before resuming."
+			}
 		}
 		return nil
 	})

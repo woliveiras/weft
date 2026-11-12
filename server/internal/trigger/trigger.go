@@ -2,10 +2,13 @@ package trigger
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -13,6 +16,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/events"
 	"github.com/woliveiras/weft/server/internal/graph"
+	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskauth"
 	"github.com/woliveiras/weft/server/internal/tools"
@@ -30,14 +34,22 @@ const (
 
 // Labels written back to issues.
 const (
-	LabelInProgress = "weft:in-progress"
-	LabelReview     = "weft:review"
-	LabelFailed     = "weft:failed"
+	LabelTodo       = "weft:todo"
+	LabelInProgress = "weft:wip"
+	LabelReview     = "weft:done"
+	LabelFailed     = "weft:needs-attention"
 )
 
 // Consent is what the person who created or resumed the trigger agreed to
 // let it start without them. Runs happen only while it still matches.
 type Consent struct {
+	ReadinessModelScope string          `json:"readinessModelScope,omitempty"`
+	Scope               string          `json:"scope"`
+	TrackerRevision     int64           `json:"trackerRevision"`
+	Operations          []string        `json:"operations"`
+	ReadinessLimits     ReadinessLimits `json:"readinessLimits"`
+	ReadinessModel      domain.ModelRef `json:"readinessModel,omitempty"`
+
 	Actor           string        `json:"actor"`
 	WorkflowVersion int           `json:"workflowVersion"`
 	ProjectID       string        `json:"projectId,omitempty"`
@@ -56,6 +68,10 @@ type Skip struct {
 
 // Trigger starts a workflow's tasks from labelled issues.
 type Trigger struct {
+	ReadinessDisabled bool   `json:"readinessDisabled"`
+	Holds             []Hold `json:"holds,omitempty"`
+	ReadinessBlock    string `json:"readinessBlock,omitempty"`
+
 	ID              string        `json:"id"`
 	Name            string        `json:"name"`
 	Workflow        string        `json:"workflow"`
@@ -74,14 +90,17 @@ type Trigger struct {
 	State        string `json:"state"`
 	PausedReason string `json:"pausedReason,omitempty"`
 
-	LastRunAt    *time.Time        `json:"lastRunAt,omitempty"`
-	NextRunAt    *time.Time        `json:"nextRunAt,omitempty"`
-	CurrentTask  string            `json:"currentTask,omitempty"`
-	CurrentIssue *Issue            `json:"currentIssue,omitempty"`
-	Processed    map[string]string `json:"processed,omitempty"` // issue key → task id
-	Skipped      []Skip            `json:"skipped,omitempty"`
-	Notes        []string          `json:"notes,omitempty"`
-	LastError    string            `json:"lastError,omitempty"`
+	LastRunAt      *time.Time        `json:"lastRunAt,omitempty"`
+	NextRunAt      *time.Time        `json:"nextRunAt,omitempty"`
+	CurrentTask    string            `json:"currentTask,omitempty"`
+	Claiming       string            `json:"claiming,omitempty"`
+	ClaimAdmission string            `json:"claimAdmission,omitempty"`
+	CurrentSource  SourceConfig      `json:"currentSource,omitzero"`
+	CurrentIssue   *Issue            `json:"currentIssue,omitempty"`
+	Processed      map[string]string `json:"processed,omitempty"` // issue key → task id
+	Skipped        []Skip            `json:"skipped,omitempty"`
+	Notes          []string          `json:"notes,omitempty"`
+	LastError      string            `json:"lastError,omitempty"`
 
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -90,6 +109,8 @@ type Trigger struct {
 
 // Input creates or updates a trigger.
 type Input struct {
+	ReadinessDisabled bool `json:"readinessDisabled"`
+
 	Name            string        `json:"name"`
 	Workflow        string        `json:"workflow"`
 	NodeID          string        `json:"nodeId"`
@@ -144,7 +165,10 @@ func validate(in *Input) error {
 	if _, err := in.Source.Open(); err != nil {
 		fe.add("source", "%s", err.Error())
 	}
-	if !ValidLabel(in.Label) || strings.HasPrefix(strings.ToLower(in.Label), "weft:") {
+	if in.Label == "" {
+		in.Label = LabelTodo
+	}
+	if !ValidLabel(in.Label) || (strings.HasPrefix(strings.ToLower(in.Label), "weft:") && in.Label != LabelTodo) {
 		fe.add("label", "use 1-50 letters, digits, spaces or _.:/- (not a weft: status label)")
 	}
 	if len(in.Owner) > 128 || strings.ContainsAny(in.Owner, " \r\n\"") {
@@ -175,6 +199,10 @@ func validate(in *Input) error {
 
 // Manager stores triggers.
 type Manager struct {
+	TrackerRevision    func(context.Context, string, string) (int64, error)
+	ReadinessMaxMicros int64
+	Models             *llm.Registry
+
 	Store storage.Store
 	Bus   *events.Bus // optional
 	Now   func() time.Time
@@ -291,8 +319,12 @@ func (m Manager) consent(ctx context.Context, in Input, actor string) (Consent, 
 		fe.add("authorizationMode", "%s", problem)
 		return Consent{}, fe
 	}
-	return Consent{Actor: actor, WorkflowVersion: g.Metadata.Version, ProjectID: in.ProjectID, ExecutionMode: in.ExecutionMode,
-		Authorization: in.Authorization, PolicyVersion: taskauth.PolicyVersion, RecordedAt: m.now()}, nil
+	c, err := m.reviewedScope(ctx, in, g)
+	if err != nil {
+		return Consent{}, err
+	}
+	c.Actor, c.RecordedAt = actor, m.now()
+	return c, nil
 }
 
 // Create stores a new active trigger with the creator's consent.
@@ -319,6 +351,7 @@ func (m Manager) Create(ctx context.Context, in Input, actor string) (*Trigger, 
 }
 
 func apply(t *Trigger, in Input) {
+	t.ReadinessDisabled = in.ReadinessDisabled
 	t.Name, t.Workflow, t.NodeID, t.ResultNodeID, t.Source, t.Label, t.Owner = in.Name, in.Workflow, in.NodeID, in.ResultNodeID, in.Source, in.Label, in.Owner
 	t.IntervalMinutes, t.SCMConnection, t.ProjectID, t.ExecutionMode, t.Authorization = in.IntervalMinutes, in.SCMConnection, in.ProjectID, in.ExecutionMode, in.Authorization
 }
@@ -331,11 +364,11 @@ func (m Manager) Edit(ctx context.Context, id string, in Input, actor string) (*
 		return nil, err
 	}
 	t, err := m.Update(ctx, id, actor, func(t *Trigger) error {
-		if _, err := m.consent(ctx, in, actor); err != nil {
+		reviewed, err := m.consent(ctx, in, actor)
+		if err != nil {
 			return err
 		}
-		covered := t.Workflow != in.Workflow || t.NodeID != in.NodeID || t.ResultNodeID != in.ResultNodeID || t.ProjectID != in.ProjectID ||
-			t.ExecutionMode != in.ExecutionMode || t.Authorization != in.Authorization || t.Source != in.Source || t.SCMConnection != in.SCMConnection
+		covered := t.Consent.Scope != reviewed.Scope
 		apply(t, in)
 		if covered && t.State == Active {
 			t.State, t.PausedReason = Paused, "The trigger changed what was consented to. Review it and resume to record new consent."
@@ -367,8 +400,21 @@ func (m Manager) Pause(ctx context.Context, id, reason, actor string) (*Trigger,
 // makes it active. A task still running from before is kept.
 func (m Manager) Resume(ctx context.Context, id, actor string) (*Trigger, error) {
 	t, err := m.Update(ctx, id, actor, func(t *Trigger) error {
-		in := Input{Name: t.Name, Workflow: t.Workflow, NodeID: t.NodeID, ResultNodeID: t.ResultNodeID, Source: t.Source, Label: t.Label,
-			Owner: t.Owner, IntervalMinutes: t.IntervalMinutes, SCMConnection: t.SCMConnection, ProjectID: t.ProjectID, ExecutionMode: t.ExecutionMode, Authorization: t.Authorization}
+		if t.Claiming != "" {
+			if _, err := m.Store.GetSetting(ctx, t.ClaimAdmission); err == nil {
+				return fmt.Errorf("%w: verify the interrupted admission for %s before using a replacement trigger", storage.ErrConflict, t.Claiming)
+			} else if !errors.Is(err, storage.ErrNotFound) {
+				return err
+			}
+			// The admission intent was never written, so no task launch
+			// was attempted. Resume only after this explicit review.
+			if i := t.holdIndex(t.Claiming); i >= 0 {
+				t.Holds[i].State, t.Holds[i].Reason = "recheck", "evaluation_interrupted"
+				t.Holds[i].Message = ReadinessReason(t.Holds[i].Reason)
+			}
+			t.Claiming, t.ClaimAdmission = "", ""
+		}
+		in := triggerInput(t)
 		c, err := m.consent(ctx, in, actor)
 		if err != nil {
 			return err
@@ -412,11 +458,77 @@ func (m Manager) ConsentProblem(ctx context.Context, t *Trigger) (string, error)
 	case t.Consent.ProjectID != t.ProjectID || t.Consent.ExecutionMode != t.ExecutionMode || t.Consent.Authorization != t.Authorization:
 		return "The trigger changed what was consented to. Review it and resume to record new consent.", nil
 	}
-	return m.authorizationProblem(t.Authorization, g), nil
+	if problem := m.authorizationProblem(t.Authorization, g); problem != "" {
+		return problem, nil
+	}
+	scope, err := m.reviewedScope(ctx, triggerInput(t), g)
+	if err != nil || t.Consent.Scope == "" || t.Consent.Scope != scope.Scope ||
+		t.Consent.TrackerRevision != scope.TrackerRevision || t.Consent.ReadinessLimits != scope.ReadinessLimits ||
+		t.Consent.ReadinessModel != scope.ReadinessModel || t.Consent.ReadinessModelScope != scope.ReadinessModelScope || !slices.Equal(t.Consent.Operations, scope.Operations) {
+		return "The tracker connection or readiness scope changed. Review the trigger and resume to record new consent.", nil
+	}
+	return "", nil
 }
 
 func (m Manager) audit(ctx context.Context, t *Trigger, action, actor string) {
 	if m.Bus != nil && t != nil {
 		m.Bus.Publish(context.WithoutCancel(ctx), domain.NewEvent(domain.EvTriggerChanged, "", map[string]any{"trigger": t.ID, "action": action, "state": t.State, "workflow": t.Workflow}).WithActor(actor))
 	}
+}
+
+func triggerInput(t *Trigger) Input {
+	return Input{Name: t.Name, Workflow: t.Workflow, NodeID: t.NodeID, ResultNodeID: t.ResultNodeID,
+		Source: t.Source, Label: t.Label, Owner: t.Owner, IntervalMinutes: t.IntervalMinutes, SCMConnection: t.SCMConnection,
+		ProjectID: t.ProjectID, ExecutionMode: t.ExecutionMode, Authorization: t.Authorization, ReadinessDisabled: t.ReadinessDisabled}
+}
+
+func (m Manager) reviewedScope(ctx context.Context, in Input, g *domain.Graph) (Consent, error) {
+	source, err := in.Source.Open()
+	if err != nil {
+		return Consent{}, err
+	}
+	c := Consent{WorkflowVersion: g.Metadata.Version, ProjectID: in.ProjectID, ExecutionMode: in.ExecutionMode,
+		Authorization: in.Authorization, PolicyVersion: taskauth.PolicyVersion}
+	c.Operations = append(source.Tools(), trackerGet, trackerLabels, trackerComment)
+	if m.TrackerRevision != nil {
+		c.TrackerRevision, err = m.TrackerRevision(ctx, in.Source.ConnectionID, in.Source.Kind)
+		if err != nil {
+			fe := &FieldError{}
+			fe.add("source.connectionId", "%s", err)
+			return Consent{}, fe
+		}
+	}
+	if !in.ReadinessDisabled {
+		node := g.Node(in.NodeID)
+		if node == nil {
+			return Consent{}, errors.New("entry agent is missing")
+		}
+		c.Operations = append(c.Operations, trackerComments, trackerRequeue)
+		c.ReadinessLimits, err = m.ReadinessPolicy(ctx)
+		if err != nil {
+			return Consent{}, err
+		}
+		c.ReadinessModel = resolvedReadinessModel(node, m.Models)
+		if m.Models != nil {
+			for _, provider := range m.Models.List() {
+				if provider.Name == c.ReadinessModel.Provider {
+					c.ReadinessModelScope = triggerFingerprint(provider)
+					break
+				}
+			}
+		}
+	}
+	in.Name, in.IntervalMinutes = "", 0
+	c.Scope = triggerFingerprint(struct {
+		Policy  int
+		Input   Input
+		Consent Consent
+	}{1, in, c})
+	return c, nil
+}
+
+func triggerFingerprint(v any) string {
+	raw, _ := json.Marshal(v)
+	digest := sha256.Sum256(raw)
+	return hex.EncodeToString(digest[:])
 }

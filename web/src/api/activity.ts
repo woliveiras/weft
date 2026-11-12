@@ -76,6 +76,8 @@ export interface ActivitySectionError {
 }
 
 export interface ActivityView {
+  triggerHolds?: { triggerId: string; triggerName: string; workflow: string; key: string; url?: string; reason: string; round: number; eligibility?: string; publication?: string; disabled?: boolean }[];
+  triggerHoldsTruncated?: boolean;
   window: string;
   since: string;
   generatedAt: string;

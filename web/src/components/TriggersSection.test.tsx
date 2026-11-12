@@ -63,7 +63,7 @@ describe('TriggersSection', () => {
     await user.click(within(form).getByRole('button', { name: 'Save trigger' }));
     await waitFor(() => expect(api.find('POST', '/api/v1/triggers')).toHaveLength(2));
     expect(api.find('POST', '/api/v1/triggers')[1].body).toEqual({
-      name: 'Ready', workflow: 'factory', nodeId: 'planner', resultNodeId: 'integrator', label: 'weft', intervalMinutes: 15, authorizationMode: 'ask',
+      name: 'Ready', workflow: 'factory', nodeId: 'planner', resultNodeId: 'integrator', label: 'weft:todo', intervalMinutes: 15, authorizationMode: 'ask',
       source: { kind: 'github', connectionId: 'gh-mcp', repository: 'acme/app' }, scmConnection: 'gh',
     });
   });

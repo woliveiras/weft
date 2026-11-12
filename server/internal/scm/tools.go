@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/storage"
+	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"github.com/woliveiras/weft/server/internal/tools"
 )
 
@@ -165,11 +167,37 @@ func (t pullRequestTool) Invoke(ctx context.Context, inv *tools.Invocation) (*to
 			return nil, err
 		}
 	}
+	if c.Kind == "github" && strings.HasPrefix(inv.Principal.GraphID, domain.TaskRunGraphPrefix) {
+		taskID := "tsk_" + strings.TrimPrefix(inv.Principal.GraphID, domain.TaskRunGraphPrefix)
+		draft, err := (taskconfig.Manager{Store: t.m.Store}).Get(ctx, taskID)
+		if err != nil && !errors.Is(err, storage.ErrNotFound) {
+			return &tools.Result{Content: "the admitted issue identity could not be verified", IsError: true}, nil
+		}
+		if err == nil && draft.ExecutionGraphID == inv.Principal.GraphID && draft.TriggerGitHubIssue != "" {
+			args.Body = appendClosingIssue(args.Body, c.Repository, draft.TriggerGitHubIssue)
+			if len(args.Body) > MaxBody {
+				return &tools.Result{Content: "shorten the pull request body to leave room for the trigger issue reference", IsError: true}, nil
+			}
+		}
+	}
 	pr, err := p.CreatePullRequest(ctx, PullRequestInput{Title: args.Title, Body: args.Body, Head: head, Base: base})
 	if err != nil {
 		return &tools.Result{Content: "the pull request could not be opened: " + redact(err, token), IsError: true}, nil
 	}
 	return t.result(ctx, inv, c, pr), nil
+}
+
+func appendClosingIssue(body, repository, issue string) string {
+	issueRepository, number, _ := strings.Cut(issue, "#")
+	reference := issue
+	if strings.EqualFold(repository, issueRepository) {
+		reference = "#" + number
+	}
+	line := "Closes " + reference
+	if strings.TrimSpace(body) == "" {
+		return line
+	}
+	return strings.TrimSpace(body) + "\n\n" + line
 }
 
 func (t pullRequestTool) result(ctx context.Context, inv *tools.Invocation, c Connection, pr *PullRequest) *tools.Result {
