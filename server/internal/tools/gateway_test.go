@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	dto "github.com/prometheus/client_model/go"
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/observability"
 )
 
 type fakeApprover struct {
@@ -193,11 +195,35 @@ func TestGuidanceReferenceChecksCheckoutRelativeGrant(t *testing.T) {
 	const ref = ".agents/skills/sample/ref.md"
 	p := principal(t.TempDir()+"/src", domain.ToolGrant{Name: "filesystem.read", Paths: []string{ref}})
 	called := false
-	read := func() { called = true }
+	read := func() string { called = true; return "" }
 	if _, err := gw.ReadGuidanceReference(t.Context(), p, "src/"+ref, read); !errors.Is(err, ErrDenied) || called {
 		t.Fatalf("subdirectory path should be denied before opening, got %v", err)
 	}
 	if res, err := gw.ReadGuidanceReference(t.Context(), p, ref, read); err != nil || res.IsError || !called {
 		t.Fatalf("checkout path should be allowed, got %+v, %v", res, err)
+	}
+}
+
+func TestGuidanceReferenceReportsReadFailure(t *testing.T) {
+	aud := &captureAuditor{}
+	gw := NewGateway(Builtin(BuiltinConfig{}), nil, aud)
+	p := principal(t.TempDir(), domain.ToolGrant{Name: "filesystem.read"})
+	counter := observability.ToolInvocations.WithLabelValues("filesystem.read", "error")
+	var before, after dto.Metric
+	if err := counter.Write(&before); err != nil {
+		t.Fatal(err)
+	}
+	result, err := gw.ReadGuidanceReference(t.Context(), p, "ref.md", func() string { return "missing" })
+	if err != nil || !result.IsError {
+		t.Fatalf("expected a failed result, got %+v, %v", result, err)
+	}
+	if len(aud.evs) != 2 || aud.evs[1].Type != domain.EvToolCompleted || !strings.Contains(string(aud.evs[1].Data), `"outcome":"error"`) {
+		t.Fatalf("expected an error completion, got %+v", aud.evs)
+	}
+	if err := counter.Write(&after); err != nil {
+		t.Fatal(err)
+	}
+	if got := after.GetCounter().GetValue() - before.GetCounter().GetValue(); got != 1 {
+		t.Fatalf("error counter increased by %v", got)
 	}
 }

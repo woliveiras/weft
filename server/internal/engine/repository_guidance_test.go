@@ -431,6 +431,7 @@ func TestRepositoryGuidanceUsesCheckoutRootForAgentSubdirectory(t *testing.T) {
 	p := &guidanceProvider{calls: []llm.ToolCall{
 		{ID: "body", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample"}`)},
 		{ID: "allowed", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample","reference":"allowed.md"}`)},
+		{ID: "missing", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample","reference":"missing.md"}`)},
 		{ID: "denied", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample","reference":"denied.md"}`)},
 	}}
 	r := newRig(t, openStore(t, dir), memory.New(), dir, "subdirectory-guidance", func(o *engine.Options) {
@@ -465,7 +466,7 @@ spec:
       model: {provider: guidance-fixture, name: fixture}
       workspace: {subdir: src}
       tools:
-        - {name: filesystem.read, paths: [".agents/skills/sample/allowed.md"]}
+        - {name: filesystem.read, paths: [".agents/skills/sample/allowed.md", ".agents/skills/sample/missing.md"]}
       loop: {mode: once}
       isolation: {mode: process}
 `)
@@ -473,7 +474,18 @@ spec:
 	prompt := p.observed()[len(p.calls)]
 	if !strings.Contains(prompt, "CHECKOUT ROOT") || strings.Contains(prompt, "NESTED MARKER") ||
 		!strings.Contains(prompt, "CHECKOUT REFERENCE") || strings.Contains(prompt, "DENIED REFERENCE") ||
-		!strings.Contains(prompt, "permission_denied") {
+		!strings.Contains(prompt, "permission_denied") || !strings.Contains(prompt, "omitted: missing") {
 		t.Fatal(prompt)
+	}
+	events, err := r.store.ListEvents(r.ctx, storage.EventFilter{
+		GraphID: "guidance-subdirectory", Types: []domain.EventType{domain.EvToolCompleted},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(events, func(ev *domain.Event) bool {
+		return strings.Contains(string(ev.Data), "missing.md") && strings.Contains(string(ev.Data), `"outcome":"error"`)
+	}) {
+		t.Fatalf("missing failed read in tool audit: %+v", events)
 	}
 }

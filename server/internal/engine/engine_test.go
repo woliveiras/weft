@@ -91,7 +91,7 @@ func (g gwAdapter) Invoke(ctx context.Context, p *tools.Principal, name string, 
 	return g.gw.Invoke(ctx, p, name, args)
 }
 func (g gwAdapter) Schemas(p *tools.Principal) []llm.ToolSchema { return g.reg.Schemas(p) }
-func (g gwAdapter) ReadGuidanceReference(ctx context.Context, p *tools.Principal, path string, read func()) (*tools.Result, error) {
+func (g gwAdapter) ReadGuidanceReference(ctx context.Context, p *tools.Principal, path string, read func() string) (*tools.Result, error) {
 	return g.gw.ReadGuidanceReference(ctx, p, path, read)
 }
 func (g gwAdapter) NeedsApproval(p *tools.Principal, name string) bool {

@@ -66,7 +66,7 @@ func (g *Gateway) Invoke(ctx context.Context, p *Principal, name string, args js
 
 // ReadGuidanceReference runs a package-scoped, bounded reader behind the
 // existing filesystem.read grants, path constraints, rate and approval gates.
-func (g *Gateway) ReadGuidanceReference(ctx context.Context, p *Principal, path string, read func()) (*Result, error) {
+func (g *Gateway) ReadGuidanceReference(ctx context.Context, p *Principal, path string, read func() string) (*Result, error) {
 	args, err := json.Marshal(map[string]string{"path": path})
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (g *Gateway) ReadGuidanceReference(ctx context.Context, p *Principal, path 
 	return g.invoke(ctx, p, "filesystem.read", args, path, read)
 }
 
-func (g *Gateway) invoke(ctx context.Context, p *Principal, name string, args json.RawMessage, referencePath string, read func()) (res *Result, err error) {
+func (g *Gateway) invoke(ctx context.Context, p *Principal, name string, args json.RawMessage, referencePath string, read func() string) (res *Result, err error) {
 	if p == nil {
 		return nil, fmt.Errorf("%w: no principal", ErrDenied)
 	}
@@ -228,8 +228,10 @@ func (g *Gateway) invoke(ctx context.Context, p *Principal, name string, args js
 	}
 	var terr error
 	if read != nil {
-		read()
-		res = &Result{Content: "guidance reference read attempted"}
+		res = &Result{Content: "guidance reference read"}
+		if read() != "" {
+			res = &Result{Content: "guidance reference could not be read", IsError: true}
+		}
 	} else {
 		res, terr = g.safeInvoke(ctx, t, inv)
 	}

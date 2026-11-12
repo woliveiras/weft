@@ -30,7 +30,7 @@ func (g *turnGuidance) Load(ctx context.Context, skill, ref string) (string, err
 
 func (t *turnEnv) readGuidanceReference(ctx context.Context, path string, read func() (string, string)) (string, string, error) {
 	gateway, ok := t.gr.e.opt.Tools.(interface {
-		ReadGuidanceReference(context.Context, *tools.Principal, string, func()) (*tools.Result, error)
+		ReadGuidanceReference(context.Context, *tools.Principal, string, func() string) (*tools.Result, error)
 	})
 	if !ok {
 		return "", "permission_denied", nil
@@ -42,8 +42,9 @@ func (t *turnEnv) readGuidanceReference(ctx context.Context, path string, read f
 	// Session supplies the validated checkout-relative path. Ordinary tools
 	// still resolve their paths from the principal's working directory.
 	var content, reason string
-	result, err := gateway.ReadGuidanceReference(ctx, t.principal, path, func() {
+	result, err := gateway.ReadGuidanceReference(ctx, t.principal, path, func() string {
 		content, reason = read()
+		return reason
 	})
 	switch {
 	case errors.Is(err, tools.ErrDenied), errors.Is(err, tools.ErrUnknownTool):
@@ -54,7 +55,7 @@ func (t *turnEnv) readGuidanceReference(ctx context.Context, path string, read f
 		return "", "rate_limited", nil
 	case err != nil:
 		return "", "", err
-	case result.IsError:
+	case result.IsError && reason == "":
 		return "", "unreadable", nil
 	default:
 		return content, reason, nil
