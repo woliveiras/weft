@@ -215,7 +215,7 @@ func (r *Runner) step(ctx context.Context, t *Trigger) (string, error) {
 			return "readiness_held", r.publishHold(ctx, t, call, h)
 		}
 	}
-	started, err := r.assessIssue(ctx, t, call, i, h, nil)
+	started, err := r.assessIssue(ctx, t, call, i, h, nil, true)
 	if started {
 		return "readiness_admitted", err
 	}

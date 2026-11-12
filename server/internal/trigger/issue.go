@@ -225,7 +225,7 @@ func (g github) MatchesHeld(ctx context.Context, call Invoker, issue Issue, _ st
 	}
 	for _, found := range issues {
 		if found.Key == issue.Key {
-			if issue.Updated == "" || found.Updated != issue.Updated {
+			if !sameGitHubRevision(issue.Updated, found.Updated) {
 				return false, errHeldScopeIndexLag
 			}
 			return true, nil
@@ -244,11 +244,20 @@ func (g github) MatchesHeld(ctx context.Context, call Invoker, issue Issue, _ st
 		return false, err
 	}
 	for _, found := range indexed {
-		if found.Key == issue.Key && issue.Updated != "" && found.Updated == issue.Updated {
+		if found.Key == issue.Key && sameGitHubRevision(issue.Updated, found.Updated) {
 			return false, nil
 		}
 	}
 	return false, errHeldScopeIndexLag
+}
+
+func sameGitHubRevision(rest, search string) bool {
+	direct, err := time.Parse(time.RFC3339Nano, rest)
+	if err != nil {
+		return false
+	}
+	indexed, err := time.Parse(time.RFC3339Nano, search)
+	return err == nil && direct.Equal(indexed)
 }
 
 type githubSearchReply struct {

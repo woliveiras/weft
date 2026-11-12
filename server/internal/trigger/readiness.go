@@ -34,6 +34,7 @@ type Hold struct {
 	RetryFailures  int        `json:"retryFailures,omitempty"`
 	RetryAt        *time.Time `json:"retryAt,omitempty"`
 	ScopeCheckedAt time.Time  `json:"scopeCheckedAt,omitzero"`
+	ScopeLagPolls  int        `json:"scopeLagPolls,omitempty"`
 	ScopeMiss      string     `json:"scopeMiss,omitempty"`
 	SnapshotEdits  int        `json:"snapshotEdits,omitempty"`
 	Eligibility    string     `json:"eligibility,omitempty"`
@@ -150,6 +151,8 @@ func ReadinessReason(reason string) string {
 		return "The tracker state changed during readiness checks. Weft will verify eligibility again."
 	case "evaluation_interrupted":
 		return "Readiness evaluation was interrupted."
+	case "scope_waiting":
+		return "The issue passed readiness and is waiting for GitHub to verify the trigger query."
 	case "scope_changed":
 		return "This hold belongs to a different tracker or workflow scope."
 	default:
@@ -544,7 +547,7 @@ func (r *Runner) recheckSnapshot(ctx context.Context, t *Trigger, call Invoker, 
 	return r.publishHold(ctx, t, call, h)
 }
 
-func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Issue, h Hold, replies []issueComment) (bool, error) {
+func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Issue, h Hold, replies []issueComment, scopeVerified bool) (bool, error) {
 	input := readinessInput(i, replies)
 	h.Evaluated = triggerFingerprint(input)
 	h.State, h.Reason = "evaluating", "evaluation_interrupted"
@@ -578,6 +581,11 @@ func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Is
 	}
 	if a.Failure != "" || len(a.Missing) > 0 {
 		return false, r.finishHold(ctx, t, call, h, a, current)
+	}
+	if !scopeVerified {
+		h.State, h.Reason = "scope_waiting", "scope_waiting"
+		h.RetryFailures, h.RetryAt = 0, nil
+		return false, r.saveHold(ctx, t, h)
 	}
 	current.EvaluatedInput = input
 	outcome, err := r.claimAndStart(ctx, t, call, current)
@@ -616,10 +624,10 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	if h.Publication == "label_applied" || h.Publication == "comment_pending" {
 		return false, r.publishHold(ctx, t, call, h)
 	}
+	scopeVerified := true
 	if t.Source.Query != "" {
-		var inScope bool
-		h, inScope, err = r.verifyHeldScope(ctx, t, src, call, h, i)
-		if err != nil || !inScope {
+		h, scopeVerified, err = r.verifyHeldScope(ctx, t, src, call, h, i)
+		if err != nil || (!scopeVerified && h.Eligibility != githubScopeRESTFallback) {
 			return false, err
 		}
 	}
@@ -641,7 +649,7 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	}
 	if h.State == "recheck" {
 		if i.HasLabel(t.Label) || (h.Publication == "confirmed" && i.HasLabel(LabelFailed)) || (h.Signal != "" && i.HasLabel(LabelTodo)) {
-			return r.assessIssue(ctx, t, call, i, h, replies)
+			return r.assessIssue(ctx, t, call, i, h, replies, scopeVerified)
 		}
 		return false, nil
 	}
@@ -657,18 +665,23 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	}
 	answered := (h.State == "waiting" || (h.State == "failed" && !h.Intervention)) && slices.ContainsFunc(replies, func(reply issueComment) bool { return reply.At.After(h.RoundAt) }) &&
 		triggerFingerprint(readinessInput(i, replies)) != h.Evaluated
-	if !answered && (signal == "" || signal == h.Signal) {
+	needsScopeRecheck := h.State == "scope_waiting" &&
+		(scopeVerified || triggerFingerprint(readinessInput(i, replies)) != h.Evaluated)
+	if !answered && !needsScopeRecheck && (signal == "" || signal == h.Signal) {
 		return false, nil
 	}
 	if signal != "" {
 		h.Signal = signal
 	}
-	return r.assessIssue(ctx, t, call, i, h, replies)
+	return r.assessIssue(ctx, t, call, i, h, replies, scopeVerified)
 }
 
 func requiresOperator(h Hold) bool {
 	return h.State == "retry_failed" || h.Reason == "failure_round_limit" || h.Reason == "history_limit" || h.Reason == "snapshot_round_limit"
 }
+
+const maxGitHubIndexLagPolls = 3
+const githubScopeRESTFallback = "is using direct GitHub reads to process responses while search catches up. Claim waits for query verification"
 
 func (r *Runner) verifyHeldScope(ctx context.Context, t *Trigger, src Source, call Invoker, h Hold, i Issue) (Hold, bool, error) {
 	var matches bool
@@ -684,7 +697,11 @@ func (r *Runner) verifyHeldScope(ctx context.Context, t *Trigger, src Source, ca
 	case errors.Is(err, errSearchBudgetDeferred):
 		h.Eligibility = "could not be verified because the GitHub polling search budget was reached"
 	case errors.Is(err, errHeldScopeIndexLag):
+		h.ScopeLagPolls = min(h.ScopeLagPolls+1, maxGitHubIndexLagPolls)
 		h.Eligibility = "could not be verified because GitHub search has not indexed the current issue revision"
+		if h.ScopeLagPolls >= maxGitHubIndexLagPolls {
+			h.Eligibility = githubScopeRESTFallback
+		}
 		h.ScopeMiss = ""
 	case errors.Is(err, errHeldScopeUnverified):
 		h.Eligibility = "could not be verified against the trigger query within the tracker search limit"
@@ -707,9 +724,12 @@ func (r *Runner) verifyHeldScope(ctx context.Context, t *Trigger, src Source, ca
 		h.Eligibility = "was absent from the trigger query and is awaiting confirmation in another poll"
 	}
 	if isGitHub && !errors.Is(err, errSearchBudgetDeferred) {
+		if !errors.Is(err, errHeldScopeIndexLag) {
+			h.ScopeLagPolls = 0
+		}
 		h.ScopeCheckedAt = r.Triggers.now()
 	}
-	if h.Eligibility != previous.Eligibility || h.ScopeMiss != previous.ScopeMiss || h.ScopeCheckedAt != previous.ScopeCheckedAt {
+	if h.Eligibility != previous.Eligibility || h.ScopeMiss != previous.ScopeMiss || h.ScopeLagPolls != previous.ScopeLagPolls || h.ScopeCheckedAt != previous.ScopeCheckedAt {
 		if err := r.saveHold(ctx, t, h); err != nil {
 			return h, false, err
 		}

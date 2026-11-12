@@ -1098,3 +1098,61 @@ func TestClaimAfterScopeEditCleansWaitingLabelBeyondResolutionHistory(t *testing
 		t.Fatalf("claim depended on resolution history: %+v, labels %v", tr, labels)
 	}
 }
+
+func TestGitHubIndexLagProcessesVerifiedReturnSignalsWithoutClaiming(t *testing.T) {
+	for _, requeue := range []bool{false, true} {
+		t.Run(fmt.Sprintf("requeue=%v", requeue), func(t *testing.T) {
+			c := &clock{t: time.Now().UTC()}
+			gh := newTracker("gh")
+			gh.pageSearch = true
+			row := ghIssue(1, "Issue", "weft")
+			gh.issues = []map[string]any{row}
+			r := runner(triggerStore(t), c, "one", gh)
+			starter := &tasks{}
+			r.Tasks = starter
+			assessments := 0
+			r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+				assessments++
+				if assessments == 1 {
+					return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+				}
+				return trigger.ReadinessAssessment{}
+			})
+			in := input()
+			in.Source.Query = "milestone:release"
+			tr, err := r.Triggers.Create(t.Context(), in, "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			gh.unindexed[1] = true
+			if requeue {
+				gh.roles["maintainer"] = "maintain"
+				gh.labelEvents["#1"] = []map[string]any{ghTodoEvent(7, "maintainer", "User", c.t.Add(time.Second))}
+				row["labels"] = append(row["labels"].([]map[string]any), map[string]any{"name": trigger.LabelTodo})
+			} else {
+				gh.replies["#1"] = append(gh.replies["#1"], ghReply(9, "author", "User", "The CSV output uses the header Account.", c.t.Add(time.Second)))
+			}
+			for range 2 {
+				tr = advance(r, c, t, tr.ID)
+			}
+			if assessments != 1 {
+				t.Fatal("fallback ran before three lag observations")
+			}
+			tr = advance(r, c, t, tr.ID)
+			if assessments != 2 || len(tr.Holds) != 1 || tr.Holds[0].State != "scope_waiting" ||
+				!strings.Contains(tr.Holds[0].Eligibility, "direct GitHub reads") || len(starter.started) != 0 {
+				t.Fatalf("fallback did not safely process the signal: %+v", tr.Holds)
+			}
+			tr = advance(r, c, t, tr.ID)
+			if assessments != 2 || len(starter.started) != 0 {
+				t.Fatal("unchanged REST verdict was evaluated again or admitted without query evidence")
+			}
+			delete(gh.unindexed, 1)
+			tr = advance(r, c, t, tr.ID)
+			if assessments != 3 || len(starter.started) != 1 || len(tr.Holds) != 0 {
+				t.Fatalf("fresh verified query did not admit: %+v", tr)
+			}
+		})
+	}
+}

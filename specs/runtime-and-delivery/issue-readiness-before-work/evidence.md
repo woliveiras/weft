@@ -155,3 +155,15 @@ Web verification used the lockfile versions recovered from the local pnpm
 cache and the installed Chromium. The Playwright web server ran the same
 `tsc --noEmit` and `vite build` steps as the package script. The tests
 used fixture accounts and trackers.
+
+## Live tracker rehearsal checklist
+
+- With separately authorized GitHub credentials, confirm that the
+  `search_issues` MCP operation accepts the second-precision
+  `created:<RFC3339>` qualifier and returns the expected issue from the
+  configured repository.
+- Compare `updated_at` from search and the REST issue read for the same
+  revision. Observe both during an issue edit, check that different
+  representations of the same instant compare equal, and verify the
+  transition from visible index lag to REST signal processing and then
+  to query-confirmed admission.
