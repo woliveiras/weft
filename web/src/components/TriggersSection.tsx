@@ -135,10 +135,14 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
             {Boolean(t.holds?.length) && <ul aria-label="Held issues">
               {t.holds?.map(h => {
                 const warning = holdResolutionWarning(h);
+                const retryAt = [h.retryAt, h.retryLabelAt, h.retryCommentAt]
+                  .filter((at): at is string => Boolean(at))
+                  .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
                 return <li key={h.key}>
                   {h.url ? <a href={h.url}>{h.key}</a> : h.key} · round {h.round} · {h.message || h.reason} · edits {h.snapshotEdits ?? 0} of 3
                   {h.eligibility && ` The issue ${h.eligibility}.`}
                   {h.publicationMessage && ` ${h.publicationMessage}`}
+                  {retryAt && <> · Retry after <time dateTime={retryAt}>{fmtDateTime(retryAt)}</time></>}
                   {h.publication === 'comment_pending' && ' Tracker comment delivery is unconfirmed.'}
                   {(h.publication === 'label_pending' || h.publication === 'label_pending_only') && ' Tracker label update is pending.'}
                   {canPreview && <Btn small disabled={resolving !== undefined} onClick={() => void resolve(t.id, h.key, h.generation, warning)}>{warning ? 'Force resolve hold' : 'Resolve hold'}</Btn>}

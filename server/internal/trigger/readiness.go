@@ -865,8 +865,12 @@ func trackerRetryDeadline(now time.Time, err error) time.Time {
 	if !errors.As(err, &failure) || !failure.RateLimited {
 		return time.Time{}
 	}
-	next := now.Add(max(time.Minute, failure.RetryDelay))
+	latest := now.Add(time.Hour)
+	next := now.Add(min(time.Hour, max(time.Minute, failure.RetryDelay)))
 	if failure.RetryDeadline != nil && failure.RetryDeadline.After(next) {
+		if failure.RetryDeadline.After(latest) {
+			return latest
+		}
 		return *failure.RetryDeadline
 	}
 	return next

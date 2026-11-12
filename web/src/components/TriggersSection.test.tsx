@@ -99,6 +99,23 @@ describe('TriggersSection', () => {
     }
   });
 
+  it('shows the latest pending retry deadline on the hold', async () => {
+    const deadline = '2026-11-12T11:00:00Z';
+    fakeApi({
+      'GET /api/v1/triggers': () => [{
+        ...paused, holds: [{
+          generation: 'gen-1', key: 'APP-7', reason: 'claim_recheck_unavailable', round: 1,
+          retryAt: '2026-11-12T10:30:00Z', retryLabelAt: deadline,
+        }],
+      }],
+      'GET /api/v1/scm/connections': () => [],
+    });
+    render(<TriggersSection graph={graph} role="viewer" />);
+    const holds = await screen.findByRole('list', { name: 'Held issues' });
+    expect(holds.textContent).toContain('Retry after');
+    expect(holds.querySelector('time')?.getAttribute('datetime')).toBe(deadline);
+  });
+
   it('keeps viewers read-only', async () => {
     fakeApi({ 'GET /api/v1/triggers': () => [paused], 'GET /api/v1/scm/connections': () => [] });
     render(<TriggersSection graph={graph} role="viewer" />);

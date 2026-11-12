@@ -133,7 +133,9 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   one-, two- and four-minute minimum delays. They preserve both readiness
   counters and do not spend comment POST attempts. Exhaustion is visible
   and requires operator review. [GitHub rate-limit responses](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#exceeding-the-rate-limit) extend these
-  backoffs through the applicable Retry-After or primary reset deadline.
+  backoffs through the applicable Retry-After or primary reset deadline,
+  capped at one hour from the failed attempt. Trigger details show the
+  pending retry deadline.
   A 401 ends retries only when a same-connection identity read also
   returns 401.
 

@@ -102,7 +102,7 @@ func (a *TrackerAPI) Call(ctx context.Context, connection, kind string, revision
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		failure := trackerAPIError{status: res.StatusCode}
 		if kind == "github" && (res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusTooManyRequests) {
-			failure = githubRateLimit(res)
+			failure = githubRateLimit(res, time.Now())
 		}
 		return nil, res.StatusCode, failure
 	}
@@ -129,7 +129,7 @@ func (e trackerAPIError) TrackerRateLimit() (bool, time.Duration, time.Time) {
 	return e.limited, e.delay, e.deadline
 }
 
-func githubRateLimit(res *http.Response) trackerAPIError {
+func githubRateLimit(res *http.Response, now time.Time) trackerAPIError {
 	failure := trackerAPIError{status: res.StatusCode}
 	retry := strings.TrimSpace(res.Header.Get("Retry-After"))
 	remaining := strings.TrimSpace(res.Header.Get("X-RateLimit-Remaining"))
@@ -146,20 +146,26 @@ func githubRateLimit(res *http.Response) trackerAPIError {
 	if !failure.limited {
 		return failure
 	}
-	if seconds, err := strconv.ParseInt(retry, 10, 32); err == nil && seconds >= 0 {
-		failure.delay = time.Duration(seconds) * time.Second
+	const maxDelay = time.Hour
+	latest := now.Add(maxDelay)
+	if seconds, err := strconv.ParseUint(retry, 10, 64); err == nil || errors.Is(err, strconv.ErrRange) {
+		failure.delay = time.Duration(min(seconds, uint64(maxDelay/time.Second))) * time.Second
 	} else if deadline, err := http.ParseTime(retry); err == nil {
 		failure.deadline = deadline
 	}
 	// A secondary limit may have a nonzero primary allowance and an
 	// unrelated primary reset. Only the exhausted primary bucket applies.
 	if remaining == "0" {
-		if epoch, err := strconv.ParseInt(res.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil && epoch > 0 {
-			reset := time.Unix(epoch, 0).UTC()
+		epoch, err := strconv.ParseUint(strings.TrimSpace(res.Header.Get("X-RateLimit-Reset")), 10, 64)
+		if (err == nil || errors.Is(err, strconv.ErrRange)) && epoch > 0 {
+			reset := time.Unix(int64(min(epoch, uint64(latest.Unix()))), 0).UTC()
 			if reset.After(failure.deadline) {
 				failure.deadline = reset
 			}
 		}
+	}
+	if failure.deadline.After(latest) {
+		failure.deadline = latest
 	}
 	return failure
 }

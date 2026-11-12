@@ -112,11 +112,28 @@ func TestGitHubRateLimitMetadata(t *testing.T) {
 			headers.Set("X-RateLimit-Reset", strconv.FormatInt(reset.Unix(), 10))
 			headers.Set("Retry-After", tc.retry)
 			raw, _ := json.Marshal(map[string]string{"message": tc.message})
-			err := githubRateLimit(&http.Response{StatusCode: 403, Header: headers, Body: io.NopCloser(bytes.NewReader(raw))})
+			err := githubRateLimit(&http.Response{StatusCode: 403, Header: headers, Body: io.NopCloser(bytes.NewReader(raw))}, reset.Add(-30*time.Minute))
 			limited, delay, deadline := err.TrackerRateLimit()
 			if limited != tc.limited || delay != tc.delay || !deadline.Equal(tc.deadline) || err.Error() != "tracker API returned HTTP 403" {
 				t.Fatalf("rate limit metadata: %+v", err)
 			}
 		})
+	}
+}
+
+func TestGitHubRateLimitCapsOversizedRetryHeaders(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	for _, retry := range []string{"999999999999999999999999", now.Add(24 * time.Hour).Format(http.TimeFormat)} {
+		headers := make(http.Header)
+		headers.Set("Retry-After", retry)
+		headers.Set("X-RateLimit-Remaining", "0")
+		headers.Set("X-RateLimit-Reset", "999999999999999999999999")
+		failure := githubRateLimit(&http.Response{StatusCode: 403, Header: headers}, now)
+		if !failure.limited || failure.delay > time.Hour || !failure.deadline.Equal(now.Add(time.Hour)) {
+			t.Fatalf("oversized retry metadata: %+v", failure)
+		}
+		if retry[0] == '9' && failure.delay != time.Hour {
+			t.Fatalf("overflowing retry delay fell through: %+v", failure)
+		}
 	}
 }

@@ -556,7 +556,7 @@ func TestOperatorResolvesHoldWhileReadinessIsDisabled(t *testing.T) {
 }
 
 func TestGitHubReadinessHonorsRateLimitDeadlines(t *testing.T) {
-	for _, operation := range []string{"labels", "identity", "claim recheck"} {
+	for _, operation := range []string{"labels", "identity", "identity oversized", "claim recheck"} {
 		t.Run(operation, func(t *testing.T) {
 			srv, a := setupTriggerApp(t, nil)
 			now := time.Now().UTC().Truncate(time.Second)
@@ -585,7 +585,7 @@ func TestGitHubReadinessHonorsRateLimitDeadlines(t *testing.T) {
 					posts++
 				}
 				if (operation == "labels" && req.Method == "POST" && strings.HasSuffix(path, "/labels")) ||
-					(operation == "identity" && path == "/user") ||
+					(strings.HasPrefix(operation, "identity") && path == "/user") ||
 					(operation == "claim recheck" && req.Method == "GET" && strings.HasSuffix(path, "/issues/7") && issueReads >= 3) {
 					limited++
 					status = 403
@@ -596,6 +596,9 @@ func TestGitHubReadinessHonorsRateLimitDeadlines(t *testing.T) {
 					} else {
 						headers.Set("X-RateLimit-Remaining", "42")
 						headers.Set("Retry-After", "2700")
+						if operation == "identity oversized" {
+							headers.Set("Retry-After", "999999999999999999999999999999")
+						}
 						body = `{"message":"You have exceeded a secondary rate limit. Please wait before you try again.","documentation_url":"https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api"}`
 					}
 				}
@@ -606,6 +609,9 @@ func TestGitHubReadinessHonorsRateLimitDeadlines(t *testing.T) {
 				t.Fatal(c)
 			}
 			want := start.Add(45 * time.Minute)
+			if operation == "identity oversized" {
+				want = start.Add(time.Hour)
+			}
 			for i := range 2 {
 				now = start.Add(time.Duration(i) * 16 * time.Minute)
 				a.Triggers.Tick(t.Context())
@@ -616,7 +622,7 @@ func TestGitHubReadinessHonorsRateLimitDeadlines(t *testing.T) {
 				h := current.Holds[0]
 				var next *time.Time
 				switch operation {
-				case "identity":
+				case "identity", "identity oversized":
 					next = h.RetryCommentAt
 				case "labels":
 					next = h.RetryLabelAt

@@ -226,3 +226,12 @@ func TestMissingHoldDispositionRequiresConsecutiveVerifiedPolls(t *testing.T) {
 		})
 	}
 }
+
+func TestReadinessRetryCapsTheGatewayDeadline(t *testing.T) {
+	now := time.Now().UTC()
+	far := now.Add(24 * time.Hour)
+	failure := trackerHTTPFailure{Status: 403, RateLimited: true, RetryDelay: 24 * time.Hour, RetryDeadline: &far}
+	if got := trackerRetryDeadline(now, failure); !got.Equal(now.Add(time.Hour)) {
+		t.Fatalf("retry beyond cap: %v", got)
+	}
+}
