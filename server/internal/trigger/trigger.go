@@ -229,6 +229,7 @@ func (m Manager) read(ctx context.Context, id string) (*Trigger, int64, error) {
 	if err := json.Unmarshal(st.Value, &t); err != nil {
 		return nil, 0, errors.New("trigger: a stored trigger is corrupt")
 	}
+	t.fillHoldGenerations()
 	return &t, st.Revision, nil
 }
 
@@ -251,6 +252,7 @@ func (m Manager) List(ctx context.Context, workflow string) ([]*Trigger, error) 
 			continue
 		}
 		if workflow == "" || t.Workflow == workflow {
+			t.fillHoldGenerations()
 			out = append(out, &t)
 		}
 	}

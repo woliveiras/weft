@@ -70,11 +70,11 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
       setError(errorMessage(e));
     }
   };
-  const resolve = async (id: string, key: string, openedAt: string) => {
+  const resolve = async (id: string, key: string, generation: string) => {
     setError(undefined);
     setResolving(`${id}:${key}`);
     try {
-      await api.resolveTriggerHold(id, key, openedAt);
+      await api.resolveTriggerHold(id, key, generation);
       await list.reload();
     } catch (e) {
       setError(errorMessage(e));
@@ -128,7 +128,7 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
                 {h.publicationMessage && ` ${h.publicationMessage}`}
                 {h.publication === 'comment_pending' && ' Tracker comment delivery is unconfirmed.'}
                 {(h.publication === 'label_pending' || h.publication === 'label_pending_only') && ' Tracker label update is pending.'}
-                {canPreview && <Btn small disabled={resolving !== undefined} onClick={() => void resolve(t.id, h.key, h.openedAt)}>Resolve hold</Btn>}
+                {canPreview && <Btn small disabled={resolving !== undefined} onClick={() => void resolve(t.id, h.key, h.generation)}>Resolve hold</Btn>}
               </li>)}
             </ul>}
             {Boolean(t.holdResolutions?.length) && <details>

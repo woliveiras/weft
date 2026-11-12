@@ -2,12 +2,14 @@ package trigger_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/trigger"
 )
 
@@ -521,7 +523,7 @@ func TestHistoryLimitBecomesAResolvableHoldWithoutRepeatedScans(t *testing.T) {
 			if reads() != 10 || assessments != 1 || len(gh.comments["#1"]) != 1 {
 				t.Fatal("terminal scan repeated or duplicated publication")
 			}
-			resolved, err := r.Triggers.ResolveHold(t.Context(), tr.ID, tr.Holds[0].Key, tr.Holds[0].OpenedAt, "operator")
+			resolved, err := r.Triggers.ResolveHold(t.Context(), tr.ID, tr.Holds[0].Key, tr.Holds[0].Generation, "operator")
 			if err != nil || len(resolved.Holds) != 0 || len(resolved.HoldResolutions) != 1 {
 				t.Fatalf("resolve: %+v %v", resolved, err)
 			}
@@ -598,7 +600,7 @@ func TestResolveLeavesWaitingLabelUntilReselectedAndClaimed(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls := len(gh.rest)
-	if _, err := r.Triggers.ResolveHold(t.Context(), tr.ID, h.Key, h.OpenedAt, "operator"); err != nil {
+	if _, err := r.Triggers.ResolveHold(t.Context(), tr.ID, h.Key, h.Generation, "operator"); err != nil {
 		t.Fatal(err)
 	}
 	if len(gh.rest) != calls {
@@ -647,6 +649,7 @@ func TestRepeatedSnapshotChangesStopReadinessAndPublishOnlyIntervention(t *testi
 			if len(gh.comments["#1"]) != 0 || tr.Holds[0].Round != 1 {
 				t.Fatalf("first invalidation: %+v", tr.Holds)
 			}
+			first := tr.Holds[0]
 			// Ensure the second assignment also changes the evaluated body.
 			if duringClaim {
 				row["body"] = "Edited before the second assessment."
@@ -657,6 +660,12 @@ func TestRepeatedSnapshotChangesStopReadinessAndPublishOnlyIntervention(t *testi
 			if calls != 2 || len(starter.started) != 0 || len(gh.comments["#1"]) != 1 ||
 				tr.Holds[0].Reason != "snapshot_round_limit" || len(row["assignees"].([]map[string]any)) != 0 {
 				t.Fatalf("stale snapshots were not bounded: %d calls, holds %+v, comments %+v", calls, tr.Holds, gh.comments)
+			}
+			if tr.Holds[0].Generation == first.Generation || !tr.Holds[0].OpenedAt.Equal(first.OpenedAt) {
+				t.Fatalf("the second round did not rotate the same hold: %+v -> %+v", first, tr.Holds[0])
+			}
+			if _, err := r.Triggers.ResolveHold(t.Context(), tr.ID, first.Key, first.Generation, "operator"); !errors.Is(err, storage.ErrConflict) {
+				t.Fatalf("stale operator action returned %v", err)
 			}
 		})
 	}

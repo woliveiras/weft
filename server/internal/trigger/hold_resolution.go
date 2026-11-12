@@ -46,9 +46,9 @@ func holdHasPendingWrite(h Hold) bool {
 }
 
 // ResolveHold serializes operator resolution with polling, including tracker
-// write-back. The opening timestamp prevents a stale console action from
-// resolving a later hold for the same issue.
-func (m Manager) ResolveHold(ctx context.Context, id, key string, opened time.Time, actor string) (*Trigger, error) {
+// write-back. The generation prevents a stale console action from resolving
+// a later round or a replacement hold for the same issue.
+func (m Manager) ResolveHold(ctx context.Context, id, key, generation, actor string) (*Trigger, error) {
 	leaseKey, holder := "trigger/"+id, domain.NewID("resolve")
 	ok, err := m.Store.AcquireLease(ctx, leaseKey, holder, time.Minute)
 	if err != nil {
@@ -63,7 +63,7 @@ func (m Manager) ResolveHold(ctx context.Context, id, key string, opened time.Ti
 		if index < 0 {
 			return fmt.Errorf("%w: readiness hold", storage.ErrNotFound)
 		}
-		if !current.Holds[index].OpenedAt.Equal(opened) || current.Claiming == key {
+		if generation == "" || current.Holds[index].Generation != generation || current.Claiming == key {
 			return fmt.Errorf("%w: the hold changed or has an interrupted claim", storage.ErrConflict)
 		}
 		if holdHasPendingWrite(current.Holds[index]) {

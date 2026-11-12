@@ -88,3 +88,33 @@ func TestPublishedCommentRequiresVerifiedAuthorAndKnownID(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestHoldGenerationChangesWithRoundOrMarker(t *testing.T) {
+	initial := Hold{Round: 1, Marker: "first"}
+	initial.Generation = nextHoldGeneration(Hold{}, initial)
+	retry := initial
+	retry.CommentAttempts++
+	if nextHoldGeneration(initial, retry) != initial.Generation {
+		t.Fatal("publication retry changed the hold generation")
+	}
+	nextRound := initial
+	nextRound.Round++
+	intervention := initial
+	intervention.Marker = "intervention"
+	for _, h := range []Hold{nextRound, intervention} {
+		if token := nextHoldGeneration(initial, h); token == "" || token == initial.Generation {
+			t.Fatal("the previous generation remained valid")
+		}
+	}
+}
+
+func TestLegacyHoldHasStableGenerationWhileDisabled(t *testing.T) {
+	old := &Trigger{ID: "legacy", ReadinessDisabled: true, Holds: []Hold{{Key: "acme/app#7"}}}
+	otherRead := *old
+	otherRead.Holds = []Hold{old.Holds[0]}
+	old.fillHoldGenerations()
+	otherRead.fillHoldGenerations()
+	if token := old.Holds[0].Generation; token == "" || token != otherRead.Holds[0].Generation {
+		t.Fatal("independent reads returned different generations for the legacy hold")
+	}
+}

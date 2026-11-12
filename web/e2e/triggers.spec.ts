@@ -67,5 +67,6 @@ test('an operator resolves a hold and Activity records why', async ({ page }) =>
   await trigger.getByText('Resolved readiness holds', { exact: true }).click();
   await expect(trigger).toContainText('An operator resolved the readiness hold.');
   await page.goto('/#/activity');
-  await expect(page.getByRole('region', { name: 'Resolved readiness holds' })).toContainText('acme/app#11');
+  const resolution = page.getByRole('region', { name: 'Resolved readiness holds' }).getByRole('listitem').filter({ hasText: 'acme/app#11' });
+  await expect(resolution).toContainText('e2e-operator');
 });

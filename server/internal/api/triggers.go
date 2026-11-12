@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/woliveiras/weft/server/internal/trigger"
 )
@@ -92,13 +91,13 @@ func (s *Server) deleteTrigger(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Server) resolveTriggerHold(w http.ResponseWriter, r *http.Request) error {
 	var input struct {
-		Key      string    `json:"key"`
-		OpenedAt time.Time `json:"openedAt"`
+		Key        string `json:"key"`
+		Generation string `json:"generation"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.Key == "" || len(input.Key) > 160 || input.OpenedAt.IsZero() {
-		return badRequest("an issue key and hold opening timestamp are required")
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.Key == "" || len(input.Key) > 160 || input.Generation == "" || len(input.Generation) > 160 {
+		return badRequest("an issue key and hold generation are required")
 	}
-	t, err := s.triggers().ResolveHold(r.Context(), r.PathValue("trigger"), input.Key, input.OpenedAt, identityFrom(r.Context()).Name)
+	t, err := s.triggers().ResolveHold(r.Context(), r.PathValue("trigger"), input.Key, input.Generation, identityFrom(r.Context()).Name)
 	if err != nil {
 		return err
 	}

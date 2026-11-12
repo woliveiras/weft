@@ -17,6 +17,7 @@ import (
 const readinessCapacity = "The trigger has 10 held issues. Resolve a hold before it evaluates new issues."
 
 type Hold struct {
+	Generation         string     `json:"generation"`
 	CommentID          string     `json:"commentId,omitempty"`
 	CommentAuthor      string     `json:"commentAuthor,omitempty"`
 	UndoOwner          string     `json:"undoOwner,omitempty"`
@@ -41,6 +42,24 @@ type Hold struct {
 	Marker       string    `json:"marker,omitempty"`
 	Intervention bool      `json:"intervention,omitempty"`
 	Removals     []string  `json:"removals,omitempty"`
+}
+
+// Legacy holds need an identifier even while readiness is disabled and the
+// runner cannot update them. Once stored, generations rotate with the round.
+func (t *Trigger) fillHoldGenerations() {
+	for i := range t.Holds {
+		h := &t.Holds[i]
+		if h.Generation == "" {
+			h.Generation = triggerFingerprint([]any{t.ID, h.Key, h.OpenedAt, h.Round, h.Marker})
+		}
+	}
+}
+
+func nextHoldGeneration(previous, current Hold) string {
+	if previous.Generation == "" || previous.Round != current.Round || previous.Marker != current.Marker {
+		return domain.NewID("holdgen")
+	}
+	return previous.Generation
 }
 
 func (t *Trigger) holdIndex(key string) int {
@@ -129,11 +148,13 @@ func (r *Runner) saveHold(ctx context.Context, t *Trigger, h Hold) error {
 		}
 		idx := current.holdIndex(h.Key)
 		if idx >= 0 {
+			h.Generation = nextHoldGeneration(current.Holds[idx], h)
 			current.Holds[idx] = h
 		} else {
 			if len(current.Holds) >= maxReadinessHolds {
 				return storage.ErrConflict
 			}
+			h.Generation = nextHoldGeneration(Hold{}, h)
 			current.Holds = append(current.Holds, h)
 		}
 		if len(current.Holds) >= maxReadinessHolds {

@@ -436,7 +436,7 @@ func TestOperatorResolvesHoldWhileReadinessIsDisabled(t *testing.T) {
 		t.Fatal(c)
 	}
 	opened := time.Now().UTC()
-	h := trigger.Hold{Key: "acme/app#7", OpenedAt: opened, Round: 1}
+	h := trigger.Hold{Key: "acme/app#7", OpenedAt: opened, Round: 2, Generation: "round-two"}
 	_, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
 		current.Holds = []trigger.Hold{h}
 		return nil
@@ -449,7 +449,7 @@ func TestOperatorResolvesHoldWhileReadinessIsDisabled(t *testing.T) {
 	if c := call(t, srv, "POST", path, viewerTok, "application/json", string(raw), nil); c != 403 {
 		t.Fatal(c)
 	}
-	stale, _ := json.Marshal(trigger.Hold{Key: h.Key, OpenedAt: opened.Add(-time.Hour)})
+	stale, _ := json.Marshal(trigger.Hold{Key: h.Key, OpenedAt: opened, Generation: "round-one"})
 	if c := call(t, srv, "POST", path, operatorTok, "application/json", string(stale), nil); c != 409 {
 		t.Fatal(c)
 	}
