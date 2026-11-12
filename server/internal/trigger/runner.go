@@ -293,10 +293,12 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 			replies, err = r.currentReplies(ctx, t, call, h, current)
 		}
 		if err != nil || issueReason(t, current) != "" || readinessInput(current, replies) != i.EvaluatedInput {
-			h.State, h.Reason = "recheck", "snapshot_changed"
-			h.prepareComment()
+			recordSnapshotInvalidation(&h)
+			h.Publication = "label_pending_only"
 			if errors.Is(err, errTrackerHistoryLimit) {
-				h.State, h.Reason, h.Publication = "operator", "history_limit", "label_pending_only"
+				h.State, h.Reason = "operator", "history_limit"
+			} else if h.State == "operator" {
+				h.prepareComment()
 			}
 			h.Removals = []string{LabelInProgress}
 			if i.Assignee == "" {

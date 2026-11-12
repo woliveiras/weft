@@ -63,6 +63,10 @@ func holdMessage(h Hold) string {
 			lines = append(lines, "- "+readinessQuestions[code])
 		}
 	case "operator":
+		if h.Reason == "snapshot_round_limit" {
+			lines = []string{"Weft readiness failure. Repeated issue changes exhausted the readiness allowance. An operator should review the current issue and resolve the hold before it is selected again."}
+			break
+		}
 		if h.Reason == "failure_round_limit" {
 			lines = []string{"Weft readiness failure. The two readiness rounds are exhausted. An operator should review the evaluation failure and resolve the hold before a maintainer selects the issue again."}
 			break
@@ -102,6 +106,8 @@ func ReadinessReason(reason string) string {
 		return "The reviewed readiness model is unavailable."
 	case "tracker_unavailable":
 		return "The tracker could not verify the current issue or its responses."
+	case "snapshot_round_limit":
+		return "The issue changed repeatedly and exhausted the readiness allowance. Review the current issue and resolve the hold before selecting it again."
 	case "snapshot_changed":
 		return "The issue changed during readiness evaluation."
 	case "evaluation_interrupted":
@@ -316,11 +322,32 @@ func (r *Runner) holdForHistoryLimit(ctx context.Context, t *Trigger, h Hold) er
 }
 
 func (r *Runner) currentReplies(ctx context.Context, t *Trigger, call Invoker, h Hold, i Issue) ([]issueComment, error) {
-	if h.Round == 0 && h.RoundAt.IsZero() {
+	if h.RoundAt.IsZero() {
 		return nil, nil
 	}
 	replies, err := trackerRead[[]issueComment](ctx, call, trackerComments, trackerArgs{Key: i.Key, Since: h.OpenedAt})
 	return eligibleReplies(i, t.Owner, replies), err
+}
+
+func recordSnapshotInvalidation(h *Hold) {
+	h.Round = min(h.Round+1, maxReadinessRounds)
+	h.State, h.Reason = "recheck", "snapshot_changed"
+	if h.Round >= maxReadinessRounds {
+		h.State, h.Reason, h.Intervention = "operator", "snapshot_round_limit", true
+	}
+}
+
+func (r *Runner) recheckSnapshot(ctx context.Context, t *Trigger, call Invoker, h Hold, current Issue) error {
+	recordSnapshotInvalidation(&h)
+	if h.State != "operator" {
+		return r.saveHold(ctx, t, h)
+	}
+	h.prepareComment()
+	h.Removals = selectionRemovals(t, current, h.Signal != "")
+	if err := r.saveHold(ctx, t, h); err != nil {
+		return err
+	}
+	return r.publishHold(ctx, t, call, h)
 }
 
 func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Issue, h Hold, replies []issueComment) (bool, error) {
@@ -353,14 +380,12 @@ func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Is
 	}
 	if i.Updated != current.Updated || readinessInput(current, latest) != input || issueReason(t, current) != "" ||
 		!slices.Equal(i.Labels, current.Labels) {
-		h.State, h.Reason = "recheck", "snapshot_changed"
-		return false, r.saveHold(ctx, t, h)
+		return false, r.recheckSnapshot(ctx, t, call, h, current)
 	}
 	current.EvaluatedInput = input
 	outcome, err := r.claimAndStart(ctx, t, call, current)
 	if outcome == "claim_busy" {
-		h.State, h.Reason = "recheck", "snapshot_changed"
-		return false, errors.Join(err, r.saveHold(ctx, t, h))
+		return false, errors.Join(err, r.recheckSnapshot(ctx, t, call, h, current))
 	}
 	return true, err
 }
@@ -405,7 +430,7 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	if h.Publication == "label_pending" || h.Publication == "label_pending_only" || h.Publication == "comment_pending" {
 		return false, r.publishHold(ctx, t, call, h)
 	}
-	if h.Publication == "comment_failed" || (h.Reason == "failure_round_limit" || h.Reason == "history_limit") {
+	if h.Publication == "comment_failed" || (h.Reason == "failure_round_limit" || h.Reason == "history_limit" || h.Reason == "snapshot_round_limit") {
 		return false, nil
 	}
 	if h.State == "evaluating" {

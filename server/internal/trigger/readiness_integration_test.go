@@ -610,3 +610,47 @@ func TestResolveLeavesWaitingLabelUntilReselectedAndClaimed(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestRepeatedSnapshotChangesStopReadinessAndPublishOnlyIntervention(t *testing.T) {
+	for _, duringClaim := range []bool{false, true} {
+		t.Run(fmt.Sprint(duringClaim), func(t *testing.T) {
+			st := triggerStore(t)
+			c := &clock{t: time.Now().UTC()}
+			gh := newTracker("gh")
+			row := ghIssue(1, "Issue", "weft")
+			row["assignees"] = []map[string]any{}
+			gh.issues = []map[string]any{row}
+			gh.editOnAssignment = duringClaim
+			r := runner(st, c, "one", gh)
+			starter := &tasks{}
+			r.Tasks = starter
+			calls := 0
+			r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+				calls++
+				if !duringClaim {
+					row["body"] = fmt.Sprint(calls)
+				}
+				return trigger.ReadinessAssessment{}
+			})
+			tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			if len(gh.comments["#1"]) != 0 || tr.Holds[0].Round != 1 {
+				t.Fatalf("first invalidation: %+v", tr.Holds)
+			}
+			// Ensure the second assignment also changes the evaluated body.
+			if duringClaim {
+				row["body"] = "Edited before the second assessment."
+			}
+			for range 4 {
+				tr = advance(r, c, t, tr.ID)
+			}
+			if calls != 2 || len(starter.started) != 0 || len(gh.comments["#1"]) != 1 ||
+				tr.Holds[0].Reason != "snapshot_round_limit" || len(row["assignees"].([]map[string]any)) != 0 {
+				t.Fatalf("stale snapshots were not bounded: %d calls, holds %+v, comments %+v", calls, tr.Holds, gh.comments)
+			}
+		})
+	}
+}
