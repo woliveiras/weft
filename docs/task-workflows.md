@@ -333,6 +333,16 @@ to have the Administer Jira global permission when checking other users.
 [GitHub connector](mcp-integrations.md#github) ·
 [Jira permissions API](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-permissions/#api-rest-api-3-permissions-check-post)
 
+When a held Jira issue returns 404 or 410, Weft uses the same connection to
+read its project. A 403 or 404 from that project read stops the rest of the
+poll, including discovery and admission. Polls remain blocked while the
+project is inaccessible. Restore project access or explicitly resolve the
+affected hold to continue. The connection needs Browse Projects permission.
+Atlassian lists `read:jira-work` as the classic API scope. When using
+granular scopes, include `read:project:jira` and the other scopes listed
+for the endpoint.
+[Atlassian Get project](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-projects/#api-rest-api-3-project-projectidorkey-get)
+
 Readiness uses the entry agent's configured model in a separate tool-free
 call. It checks the issue and eligible replies for a clear objective,
 verifiable acceptance and scope where materially ambiguous. The installation

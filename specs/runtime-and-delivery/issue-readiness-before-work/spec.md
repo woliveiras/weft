@@ -87,8 +87,15 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   immediately after the same repository check succeeds. For Jira, the
   same connection must be able to read the issue's project before an
   issue 404 or 410 can count. Both Jira responses require the same
-  consecutive-poll confirmation and minimum spacing. A temporarily unavailable access check defers only
-  the affected hold through the applicable rate-limit deadline, subject
+  consecutive-poll confirmation and minimum spacing. If the Jira project
+  returns 403 or 404, the trigger stops the rest of the poll, including
+  discovery and admission, until an operator restores project access or
+  resolves the affected hold. The project read requires Browse Projects
+  permission. Atlassian lists `read:jira-work` as the classic scope and
+  `read:project:jira` among the required granular scopes.
+  [Atlassian Get project](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-projects/#api-rest-api-3-project-projectidorkey-get)
+  A temporarily unavailable access check defers only the affected hold
+  through the applicable rate-limit deadline, subject
   to the one-hour cap. Five unverified checks exhaust automatic retries
   for the affected hold and expose connection guidance in trigger state.
   A successful issue or access read resets the count. The hold remains
