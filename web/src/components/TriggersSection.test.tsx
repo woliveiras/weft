@@ -99,21 +99,32 @@ describe('TriggersSection', () => {
     }
   });
 
-  it('shows the latest pending retry deadline on the hold', async () => {
-    const deadline = '2026-11-12T11:00:00Z';
-    fakeApi({
-      'GET /api/v1/triggers': () => [{
-        ...paused, holds: [{
-          generation: 'gen-1', key: 'APP-7', reason: 'claim_recheck_unavailable', round: 1,
-          retryAt: '2026-11-12T10:30:00Z', retryLabelAt: deadline,
+  it('formats the latest future retry and omits expired deadlines', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-12T10:45:00Z'));
+    try {
+      const deadline = '2026-11-12T11:00:00Z';
+      fakeApi({
+        'GET /api/v1/triggers': () => [{
+          ...paused, holds: [{
+            generation: 'gen-1', key: 'APP-7', reason: 'claim_recheck_unavailable', round: 1,
+            retryAt: '2026-11-12T10:30:00Z', retryLabelAt: '2026-11-12T10:50:00Z', retryAccessAt: deadline,
+          }, {
+            generation: 'gen-2', key: 'APP-8', reason: 'tracker_unavailable', round: 1,
+            retryAt: '2026-11-12T10:30:00Z', retryCommentAt: '2026-11-12T10:45:00Z',
+          }],
         }],
-      }],
-      'GET /api/v1/scm/connections': () => [],
-    });
-    render(<TriggersSection graph={graph} role="viewer" />);
-    const holds = await screen.findByRole('list', { name: 'Held issues' });
-    expect(holds.textContent).toContain('Retry after');
-    expect(holds.querySelector('time')?.getAttribute('datetime')).toBe(deadline);
+        'GET /api/v1/scm/connections': () => [],
+      });
+      render(<TriggersSection graph={graph} role="viewer" />);
+      const holds = await screen.findByRole('list', { name: 'Held issues' });
+      const [pending, expired] = within(holds).getAllByRole('listitem');
+      expect(pending.textContent).toContain(`Retry after ${new Date(deadline).toLocaleString()}`);
+      expect(pending.querySelector('time')?.getAttribute('datetime')).toBe(deadline);
+      expect(expired.textContent).not.toContain('Retry after');
+      expect(expired.querySelector('time')).toBeNull();
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it('keeps viewers read-only', async () => {

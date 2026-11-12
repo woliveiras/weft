@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/app"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
@@ -77,6 +78,14 @@ func prepareReadinessFixture(ctx context.Context, a *app.App) error {
 	if _, err := a.Triggers.Triggers.Pause(ctx, tr.ID, "Fixture waiting for clarification.", "e2e-fixture"); err != nil {
 		return err
 	}
+	now := time.Now().UTC()
+	expired, retry := now.Add(-time.Hour), now.Add(time.Hour)
+	if _, err := a.Triggers.Triggers.Update(ctx, tr.ID, "e2e-fixture", func(t *trigger.Trigger) error {
+		t.Holds[0].RetryAt = &expired
+		return nil
+	}); err != nil {
+		return err
+	}
 	pending, err := a.Triggers.Triggers.Create(ctx, trigger.Input{Name: "Unpublished readiness fixture", Workflow: "git-inspect", NodeID: "worker",
 		Source: tr.Source}, "e2e-fixture")
 	if err != nil {
@@ -89,6 +98,7 @@ func prepareReadinessFixture(ctx context.Context, a *app.App) error {
 		hold := tr.Holds[0]
 		hold.Key, hold.URL, hold.Generation, hold.CommentID = "acme/app#13", "", "", ""
 		hold.Publication, hold.SnapshotEdits = "label_applied", 2
+		hold.RetryAccessAt = &retry
 		t.Holds = []trigger.Hold{hold}
 		return nil
 	})

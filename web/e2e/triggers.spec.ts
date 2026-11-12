@@ -54,6 +54,7 @@ test('shows the same held issue and round in the trigger and Activity', async ({
   await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
   const trigger = page.getByRole('article', { name: 'Trigger Held readiness fixture' });
   await expect(trigger.getByRole('list', { name: 'Held issues' })).toContainText('acme/app#11 · round 1 · The issue is waiting for clarification.');
+  await expect(trigger.getByRole('list', { name: 'Held issues' })).not.toContainText('Retry after');
   await expect(trigger.getByRole('button', { name: 'Resolve hold' })).toHaveCount(0);
 });
 
@@ -69,6 +70,22 @@ test('an operator resolves a hold and Activity records why', async ({ page }) =>
   await page.goto('/#/activity');
   const resolution = page.getByRole('region', { name: 'Resolved readiness holds' }).getByRole('listitem').filter({ hasText: 'acme/app#11' });
   await expect(resolution).toContainText('e2e-operator');
+});
+
+test('shows the pending access retry in local time', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-viewer-token'));
+  await page.goto('/#/g/git-inspect/canvas');
+  const results = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/v1/triggers' && response.request().method() === 'GET');
+  await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
+  const response = await results;
+  expect(response.ok()).toBeTruthy();
+  const triggers: { name: string; holds?: { retryAccessAt?: string }[] }[] = await response.json();
+  const deadline = triggers.find((trigger) => trigger.name === 'Unpublished readiness fixture')?.holds?.[0]?.retryAccessAt;
+  expect(deadline).toBeDefined();
+  const formatted = await page.evaluate((iso) => new Date(iso).toLocaleString(), deadline!);
+  const card = page.getByRole('article', { name: 'Trigger Unpublished readiness fixture' });
+  await expect(card.getByRole('list', { name: 'Held issues' })).toContainText(`Retry after ${formatted}`);
 });
 
 test('forced resolution requires confirmation and records the unpublished comment', async ({ page }) => {

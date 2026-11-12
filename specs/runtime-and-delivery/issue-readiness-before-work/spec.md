@@ -147,7 +147,8 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   and requires operator review. [GitHub rate-limit responses](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#exceeding-the-rate-limit) extend these
   backoffs through the applicable Retry-After or primary reset deadline,
   capped at one hour from the failed attempt. Trigger details show the
-  pending retry deadline.
+  latest future retry deadline in local time, including an access-check
+  retry. Expired deadlines are omitted.
   A 401 ends retries only when a same-connection identity read also
   returns 401.
 

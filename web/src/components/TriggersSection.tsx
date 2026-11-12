@@ -37,6 +37,7 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
   const admin = role === 'admin';
   const canPreview = admin || role === 'operator';
   const nodes = graph.spec.nodes.filter((n) => !n.disabled);
+  const now = Date.now();
   const set = (patch: Partial<TriggerInput>) => setDraft((d) => ({ ...(d ?? emptyInput(graph)), ...patch }));
   const setSource = (patch: Partial<TriggerInput['source']>) => setDraft((d) => {
     const cur = d ?? emptyInput(graph);
@@ -135,8 +136,8 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
             {Boolean(t.holds?.length) && <ul aria-label="Held issues">
               {t.holds?.map(h => {
                 const warning = holdResolutionWarning(h);
-                const retryAt = [h.retryAt, h.retryLabelAt, h.retryCommentAt]
-                  .filter((at): at is string => Boolean(at))
+                const retryAt = [h.retryAt, h.retryLabelAt, h.retryCommentAt, h.retryAccessAt]
+                  .filter((at): at is string => Boolean(at && Date.parse(at) > now))
                   .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
                 return <li key={h.key}>
                   {h.url ? <a href={h.url}>{h.key}</a> : h.key} · round {h.round} · {h.message || h.reason} · edits {h.snapshotEdits ?? 0} of 3

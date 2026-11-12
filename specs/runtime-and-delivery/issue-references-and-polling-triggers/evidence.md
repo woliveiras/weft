@@ -171,3 +171,29 @@ reopening, without waiting its configured interval.
 Go used cached Docker images with pulls disabled. Web checks used the
 installed tools and Chromium. Playwright built the web bundle and a
 disposable Darwin backend. Tracker verification used fixtures.
+
+## Independent review of 29b552d through 65f0d60
+
+Fixture verification on 2026-11-12.
+
+`TestTemporaryRepositoryProbeFailureDefersOnlyAffectedHold` verified
+that a rate limit or transport error on the repository read deferred
+the affected hold while a second hold advanced and a newly selected
+issue was discovered. `TestMissingIssueConfirmationSpacingSurvivesRestartAndResetsOnSuccess`
+verified that early polls simulating budget-driven rescheduling did not shorten the
+configured interval required to confirm issue absence.
+
+| Command | Result |
+| --- | --- |
+| `go test -count=1 ./internal/trigger ./internal/api ./internal/activity` | All three packages passed. |
+| `go test -count=1 -p 1 ./...` | The full Go suite passed. |
+| `./scripts/go.sh vet ./...` and `gofmt -l .` in `server/` | Vet passed. Gofmt listed no files. |
+| `GOOS=linux CGO_ENABLED=0 go build ./...` and `GOOS=darwin CGO_ENABLED=0 go build ./...` | Both arm64 builds passed. |
+| `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed the disposable browser fixture tests. |
+| `./node_modules/.bin/vitest run` in `web/` | 447 tests passed in 88 files. |
+| `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/tsc --project tsconfig.e2e.json` in `web/` | Both type checks passed. |
+| `./node_modules/.bin/playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` in `web/` | Five trigger and three Activity scenarios passed. |
+
+Go used cached Docker images with pulls disabled. Web verification used
+installed tools and Chromium. Playwright built the web bundle and a
+disposable Darwin backend. All tracker operations used fixtures.
