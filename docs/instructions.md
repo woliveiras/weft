@@ -127,6 +127,9 @@ selection IDs. The native runtime can request a skill with
 `guidance.load {"skill":"console:example"}`. A later request can add a
 package-relative textual reference to an already activated repository skill.
 Only the chosen content is added, in the original skill's precedence slot.
+The prompt preamble identifies checkout sources. Each source is framed with
+a header and closing line. Every payload line is quoted, with control line
+separators escaped, so source text cannot introduce a header, closer or task.
 Reference reads use the existing `filesystem.read` gateway and its path
 constraints, rate limits and approvals. They are distinct from ordinary
 file reads. The loader rechecks the live checkout identity and metadata.

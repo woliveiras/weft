@@ -223,6 +223,9 @@ acceptance criteria above and matrix use these decisions as their oracles.
   open one chosen textual reference in that repository package, subject to
   its policy and workspace permissions. No implicit activation, recursion or
   import occurs.
+- Identify repository scopes in the progressive prompt preamble. Frame each
+  optional source so its text cannot introduce a source header, closing marker
+  or task outside its frame. Stage digests identify the payload before framing.
 - Cap each body, root instruction or reference at 16 KiB, package metadata
   at 2 KiB, enumeration at 128 candidates per source family, the catalogue
   at 128 items per execution and reference reads at 16 distinct references
