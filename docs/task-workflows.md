@@ -355,7 +355,9 @@ Enabled triggers also release holds when current tracker evidence shows the
 issue is ineligible or out of scope. The resolution reason appears in both
 Activity and the trigger. Activity and the trigger show the reason, round and any pending
 tracker update. Other issues can advance while one is held. At ten holds,
-new evaluations stop until a hold resolves.
+new evaluations stop until a hold resolves. If comment or label history
+exceeds the bounded scan, Activity and the trigger show that operator
+review is needed. Resolve the hold after reviewing the issue.
 
 - `weft:todo` selects issues by default. Each trigger can use a custom selection label.
 - `weft:wip` means Weft claimed the issue.

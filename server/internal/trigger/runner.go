@@ -293,6 +293,9 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 		if err != nil || issueReason(t, current) != "" || readinessInput(current, replies) != i.EvaluatedInput {
 			h.State, h.Reason = "recheck", "snapshot_changed"
 			h.prepareComment()
+			if errors.Is(err, errTrackerHistoryLimit) {
+				h.State, h.Reason, h.Publication = "operator", "history_limit", "label_pending_only"
+			}
 			h.Removals = []string{LabelInProgress}
 			if i.Assignee == "" {
 				h.UndoOwner = t.Owner

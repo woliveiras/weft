@@ -145,3 +145,21 @@ func TestJiraRollbackClearsOnlyTheReviewedAssignment(t *testing.T) {
 		}
 	}
 }
+
+func TestJiraCommentScanAdvancesByReturnedRows(t *testing.T) {
+	calls := 0
+	req := func(_, path string, _ any) (json.RawMessage, int, error) {
+		want := "startAt=0"
+		if calls > 0 {
+			want = "startAt=1"
+		}
+		if !strings.Contains(path, want) {
+			t.Fatalf("expected %s in %s", want, path)
+		}
+		calls++
+		return json.RawMessage(`{"total":2,"comments":[{"id":"1","created":"2026-11-12T10:00:00Z","body":"reply"}]}`), 200, nil
+	}
+	if replies, err := readComments(req, "jira", "/issue/APP-1", time.Time{}); err != nil || calls != 2 || len(replies) != 2 {
+		t.Fatalf("short pages skipped rows: %d %v", calls, err)
+	}
+}

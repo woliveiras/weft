@@ -1,6 +1,7 @@
 package trigger
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -81,6 +82,8 @@ func ReadinessReason(reason string) string {
 		return "Readiness failed and exhausted the two-round allowance. Review the evaluator and resolve the hold before selecting the issue again."
 	case "round_limit":
 		return "The issue needs operator intervention after two question rounds."
+	case "history_limit":
+		return "The tracker comment or label history exceeded the readiness scan limit. Review the issue and resolve the hold before selecting it again."
 	case "input_limit":
 		return "The issue and replies exceed the 16 KiB evaluation limit."
 	case "output_limit":
@@ -139,6 +142,10 @@ func (r *Runner) saveHold(ctx context.Context, t *Trigger, h Hold) error {
 func trackerRead[T any](ctx context.Context, call Invoker, name string, args trackerArgs) (T, error) {
 	var out T
 	res, err := call(ctx, name, args)
+	if err == nil && res != nil && res.IsError && (name == trackerComments || name == trackerRequeue) &&
+		bytes.Equal(res.Data, trackerHistoryLimitResult) {
+		return out, errTrackerHistoryLimit
+	}
 	err = decode(res, err, &out)
 	return out, err
 }
@@ -214,7 +221,14 @@ func (r *Runner) publishHold(ctx context.Context, t *Trigger, call Invoker, h Ho
 		if h.RetryCommentAt != nil && r.Triggers.now().Before(*h.RetryCommentAt) {
 			return nil
 		}
-		comments, err := trackerRead[[]issueComment](ctx, call, trackerComments, trackerArgs{Key: h.Key, Since: h.RoundAt.Add(-time.Second)})
+		// The tracker clock can lag the runner. Do not exclude a published
+		// comment from reconciliation based on its timestamp.
+		comments, err := trackerRead[[]issueComment](ctx, call, trackerComments, trackerArgs{Key: h.Key})
+		if errors.Is(err, errTrackerHistoryLimit) {
+			h.Publication, h.RetryCommentAt = "comment_failed", nil
+			h.PublicationMessage = "The tracker history could not confirm comment delivery."
+			return r.holdForHistoryLimit(ctx, t, h)
+		}
 		if err != nil {
 			return errors.New("readiness comment delivery is unconfirmed")
 		}
@@ -292,6 +306,15 @@ func selectionRemovals(t *Trigger, i Issue, requeued bool) []string {
 	return remove
 }
 
+func (r *Runner) holdForHistoryLimit(ctx context.Context, t *Trigger, h Hold) error {
+	h.State, h.Reason = "operator", "history_limit"
+	if err := r.saveHold(ctx, t, h); err != nil {
+		return err
+	}
+	r.log().InfoContext(ctx, "issue readiness requires operator review", "trigger", t.ID, "reason", h.Reason, "round", h.Round)
+	return nil
+}
+
 func (r *Runner) currentReplies(ctx context.Context, t *Trigger, call Invoker, h Hold, i Issue) ([]issueComment, error) {
 	if h.Round == 0 && h.RoundAt.IsZero() {
 		return nil, nil
@@ -322,6 +345,9 @@ func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Is
 		return false, r.finishHold(ctx, t, call, h, ReadinessAssessment{Failure: "tracker_unavailable"}, i)
 	}
 	latest, err := r.currentReplies(ctx, t, call, h, current)
+	if errors.Is(err, errTrackerHistoryLimit) {
+		return false, r.holdForHistoryLimit(ctx, t, h)
+	}
 	if err != nil {
 		return false, r.finishHold(ctx, t, call, h, ReadinessAssessment{Failure: "tracker_unavailable"}, current)
 	}
@@ -347,7 +373,7 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	if err != nil {
 		return false, err
 	}
-	if h.Publication == "label_pending" && h.UndoOwner != "" {
+	if (h.Publication == "label_pending" || h.Publication == "label_pending_only") && h.UndoOwner != "" {
 		return false, r.publishHold(ctx, t, call, h)
 	}
 	if reason := holdReleaseReason(t, h, i); reason != "" {
@@ -365,13 +391,16 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	if h.Publication == "label_pending" || h.Publication == "label_pending_only" || h.Publication == "comment_pending" {
 		return false, r.publishHold(ctx, t, call, h)
 	}
-	if h.Publication == "comment_failed" || h.Reason == "failure_round_limit" {
+	if h.Publication == "comment_failed" || (h.Reason == "failure_round_limit" || h.Reason == "history_limit") {
 		return false, nil
 	}
 	if h.State == "evaluating" {
 		return false, r.finishHold(ctx, t, call, h, ReadinessAssessment{Failure: "evaluation_interrupted"}, i)
 	}
 	replies, err := r.currentReplies(ctx, t, call, h, i)
+	if errors.Is(err, errTrackerHistoryLimit) {
+		return false, r.holdForHistoryLimit(ctx, t, h)
+	}
 	if err != nil {
 		return false, err
 	}
@@ -384,6 +413,9 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	signal := ""
 	if i.HasLabel(LabelTodo) {
 		signal, err = trackerRead[string](ctx, call, trackerRequeue, trackerArgs{Key: h.Key, Since: h.RoundAt})
+		if errors.Is(err, errTrackerHistoryLimit) {
+			return false, r.holdForHistoryLimit(ctx, t, h)
+		}
 		if err != nil {
 			return false, err
 		}

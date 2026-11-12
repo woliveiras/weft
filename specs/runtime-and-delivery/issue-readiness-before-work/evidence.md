@@ -63,3 +63,28 @@ currency per evaluation.
 | `GOOS=linux go build ./...` and `GOOS=darwin go build ./...` | Both arm64 builds passed with the cached Go image. |
 | `pnpm -C web test`, `pnpm -C web exec tsc --noEmit` and `pnpm -C web exec tsc --project tsconfig.e2e.json` | 444 Vitest tests and both type checks passed. The earlier run exposed a test fixture that still expected the old selection default. The test now asserts `weft:todo`. |
 | `pnpm -C web exec playwright test e2e/activity.spec.ts e2e/triggers.spec.ts` and `pnpm -C web exec playwright test --config playwright.activity.config.ts` | All eight Chromium scenarios passed, including the same held issue in Activity and trigger state and the consent review showing the installation limits. |
+
+
+## Operational rehearsal follow-up on 2026-11-12
+
+| Review item | Fixture evidence |
+| --- | --- |
+| 1. Hold release | `TestClosedHoldsReleaseFullCapacity` releases ten closed issues and evaluates the next candidate. Eligibility fixtures cover closed, reassigned, blocked, unlabeled and previously admitted issues. The API and Chromium journeys verify operator resolution and Activity history. Viewer resolution is denied, and disabled readiness preserves the hold until the operator resolves it. |
+| 2. Own replies | `TestEligibleRepliesRejectPublishedReadinessComments` and the persisted GitHub and Jira journeys cover Markdown and flattened ADF returned under an otherwise eligible author or owner identity. |
+| 3. Publication recovery | Tracker fixtures cover permanent 403, 503 followed by a successful retry and a lost response. The lost response test uses a tracker timestamp earlier than the runner's clock. Each resend requires a complete bounded read without the original marker. Failed or over-limit reconciliation leaves the hold visible for review. |
+| 4. Failed assessment allowance | Unit accounting and `TestFailedAssessmentsExhaustRoundsDespiteRepeatedAuthorReplies` confirm that the second failure consumes the remaining round, requests intervention and stops evaluation for that hold. |
+| 5. Assignment rollback | The stale-snapshot fixture edits the issue during assignment. Weft restores the prior assignment state and replaces `weft:wip` with the waiting label. A Jira unit check retains a different current assignee. |
+| 6. Hostile tracker text | `TestHostileIssueAndReplyCannotDispatchToolsOrChangeConsent` passes hostile body and reply data through the production evaluator, runner and gateway. The malicious verdict dispatches no requested tool or out-of-scope write and leaves consent unchanged. |
+| 7. Guidance grant | `TestSubdirGrantMatchesCanonicalRootReference` and the engine integration cover ordinary workdir-relative reads, canonical package-reference matching and refusal of unrelated root reads under `.agents/**`. |
+| 8. Tracker history limit | Unit and runner/gateway fixtures cover bounded comment and label history reads, including pending publication. The limit becomes an operator-resolvable reason, and subsequent polling does not repeat the scan. |
+
+
+| Verification command | Result |
+| --- | --- |
+| `./scripts/go.sh test ./... -count=1` | The offline Docker build stopped at `apk add --no-cache git git-daemon`. The tests below used the cached Git-enabled image without downloading anything. |
+| `go test ./... -count=1` and `go test -count=1 ./internal/trigger ./internal/api ./internal/activity ./internal/engine` | Full and affected-package suites passed in the cached `weft-review-go:git-http-backend` image with `--pull=never`. |
+| `go test -tags e2e -count=1 ./cmd/weft-e2e` | Passed in the same image. |
+| `./scripts/go.sh vet ./...` and `docker run --pull=never --rm -v "$PWD:/repo" -w /repo/server golang:1.26-alpine gofmt -l internal` | Vet passed and gofmt reported no files. |
+| `GOOS=linux go build ./...` and `GOOS=darwin go build ./...` | Both arm64 builds passed. |
+| `pnpm -C web test`, `pnpm -C web exec tsc --noEmit` and `pnpm -C web exec tsc --project tsconfig.e2e.json` | All 444 Vitest tests and both type checks passed. |
+| `pnpm -C web exec playwright test e2e/activity.spec.ts e2e/triggers.spec.ts` and `pnpm -C web exec playwright test --config playwright.activity.config.ts` | Six Activity and trigger scenarios plus three work Activity scenarios passed. |

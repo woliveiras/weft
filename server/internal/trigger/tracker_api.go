@@ -157,6 +157,9 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 			return &tools.Result{IsError: true, Content: failure.Error(), Data: data}, nil
 		}
 	}
+	if errors.Is(err, errTrackerHistoryLimit) {
+		return &tools.Result{IsError: true, Content: errTrackerHistoryLimit.Error(), Data: trackerHistoryLimitResult}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -321,9 +324,11 @@ func jiraTime(s string) time.Time {
 const trackerPage = 100
 
 var errTrackerHistoryLimit = errors.New("tracker history exceeds the bounded scan")
+var trackerHistoryLimitResult = json.RawMessage(`{"code":"tracker_history_limit"}`)
 
 func readComments(req apiRequest, kind, path string, since time.Time) ([]issueComment, error) {
 	var out []issueComment
+	offset := 0
 	for page := range 10 {
 		if kind == "github" {
 			query := fmt.Sprintf("/comments?per_page=%d&page=%d", trackerPage, page+1)
@@ -344,7 +349,7 @@ func readComments(req apiRequest, kind, path string, since time.Time) ([]issueCo
 			}
 			continue
 		}
-		query := fmt.Sprintf("/comment?orderBy=-created&startAt=%d&maxResults=%d", page*trackerPage, trackerPage)
+		query := fmt.Sprintf("/comment?orderBy=-created&startAt=%d&maxResults=%d", offset, trackerPage)
 		result, err := readJSON[struct {
 			Comments []jiraCommentRecord `json:"comments"`
 			Total    int                 `json:"total"`
@@ -361,8 +366,12 @@ func readComments(req apiRequest, kind, path string, since time.Time) ([]issueCo
 				out = append(out, issueComment{row.ID, row.Author.human(kind), describe(row.Body), at})
 			}
 		}
-		if page*trackerPage+len(result.Comments) >= result.Total {
+		offset += len(result.Comments)
+		if offset >= result.Total {
 			return out, nil
+		}
+		if len(result.Comments) == 0 {
+			return nil, errors.New("tracker comment page did not cover its reported history")
 		}
 	}
 	return nil, errTrackerHistoryLimit
@@ -502,6 +511,9 @@ func jiraLabelEvent(req apiRequest, path string, since time.Time) (labelEvent, e
 		rows, err := readJSON[history](req, http.MethodGet, fmt.Sprintf("%s/changelog?startAt=%d&maxResults=%d", path, start, offset-start), nil)
 		if err != nil {
 			return labelEvent{}, err
+		}
+		if len(rows.Values) != offset-start {
+			return labelEvent{}, errTrackerHistoryLimit
 		}
 		for _, row := range slices.Backward(rows.Values) {
 			at := jiraTime(row.Created)

@@ -244,7 +244,7 @@ func TestReadinessRecoversUnconfirmedCommentWithoutRepeatingIt(t *testing.T) {
 	if len(tr.Holds) != 1 || tr.Holds[0].Publication != "comment_pending" || len(gh.comments["#1"]) != 1 || tr.LastError == "" {
 		t.Fatalf("uncertain write-back not recorded: %+v", tr)
 	}
-	gh.replies["#1"] = []map[string]any{ghReply(1, "weft-service", "User", gh.comments["#1"][0], c.t)}
+	gh.replies["#1"] = []map[string]any{ghReply(1, "weft-service", "User", gh.comments["#1"][0], c.t.Add(-2*time.Minute))}
 	restarted := runner(st, c, "second", gh)
 	restarted.Tasks, restarted.Assessor = r.Tasks, r.Assessor
 	tr = advance(restarted, c, t, tr.ID)
@@ -467,6 +467,56 @@ func TestChangedSnapshotRollsBackClaimAndNewAssignment(t *testing.T) {
 			if (len(assignees) == 1) != preassigned || len(labels) != 2 || labels[0]["name"] != "bug" ||
 				labels[1]["name"] != trigger.LabelFailed || len(starter.started) != 0 || len(tr.Holds) != 1 || tr.Holds[0].Reason != "snapshot_changed" {
 				t.Fatalf("claim not restored: issue %+v, holds %+v", row, tr.Holds)
+			}
+		})
+	}
+}
+
+func TestHistoryLimitBecomesAResolvableHoldWithoutRepeatedScans(t *testing.T) {
+	for _, kind := range []string{"comments", "events", "reconciliation"} {
+		t.Run(kind, func(t *testing.T) {
+			st := triggerStore(t)
+			c := &clock{t: time.Now().UTC()}
+			gh := newTracker("gh")
+			gh.issues = []map[string]any{ghIssue(1, "Issue", "weft")}
+			gh.loseCommentResponse = kind == "reconciliation"
+			r := runner(st, c, "one", gh)
+			r.Tasks = &tasks{}
+			assessments := 0
+			r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+				assessments++
+				return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+			})
+			tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			scan := "comments"
+			for n := range 100 {
+				if kind == "events" {
+					scan = "events"
+					gh.labelEvents["#1"] = append(gh.labelEvents["#1"], ghTodoEvent(n+1, "author", "User", c.t.Add(time.Second)))
+				} else {
+					gh.replies["#1"] = append(gh.replies["#1"], ghReply(n+1, "author", "User", "example", c.t.Add(time.Second)))
+				}
+			}
+			if kind == "events" {
+				i := gh.issues[0]
+				i["labels"] = append(i["labels"].([]map[string]any), map[string]any{"name": trigger.LabelTodo})
+			}
+			tr = advance(r, c, t, tr.ID)
+			reads := func() int { return strings.Count(strings.Join(gh.rest, "\n"), "GET /repos/acme/app/issues/1/"+scan) }
+			if tr.LastError != "" || tr.Holds[0].Reason != "history_limit" || !strings.Contains(tr.Holds[0].Message, "resolve the hold") || reads() != 10 {
+				t.Fatalf("history overflow was not held: %+v, reads %d", tr, reads())
+			}
+			tr = advance(r, c, t, tr.ID)
+			if reads() != 10 || assessments != 1 || len(gh.comments["#1"]) != 1 {
+				t.Fatal("terminal scan repeated or duplicated publication")
+			}
+			resolved, err := r.Triggers.ResolveHold(t.Context(), tr.ID, tr.Holds[0].Key, tr.Holds[0].OpenedAt, "operator")
+			if err != nil || len(resolved.Holds) != 0 || len(resolved.HoldResolutions) != 1 {
+				t.Fatalf("resolve: %+v %v", resolved, err)
 			}
 		})
 	}

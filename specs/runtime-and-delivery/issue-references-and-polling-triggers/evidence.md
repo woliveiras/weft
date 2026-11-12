@@ -35,3 +35,24 @@ GitHub closure references for cross-repository delivery.
 
 See the [B2 command results](../issue-readiness-before-work/evidence.md#b2-fixture-verification-on-2026-11-12).
 Live qualification remains with PROD-14.
+
+
+## Operational rehearsal follow-up on 2026-11-12
+
+The follow-up verifies that released holds free trigger capacity, an Operator
+can resolve a hold without changing reviewed consent, and stale claims undo
+new assignments and restore the waiting label. The GitHub and Jira fixtures
+exercise comment replay and bounded history. The
+[RUN-007 review matrix evidence](../issue-readiness-before-work/evidence.md#operational-rehearsal-follow-up-on-2026-11-12)
+records the individual cases. Live account qualification remains in PROD-14.
+
+
+| Verification command | Result |
+| --- | --- |
+| `./scripts/go.sh test ./... -count=1` | The offline Docker build stopped at `apk add --no-cache git git-daemon`. The tests below used the cached Git-enabled image without downloading anything. |
+| `go test ./... -count=1` and `go test -count=1 ./internal/trigger ./internal/api ./internal/activity ./internal/engine` | Full and affected-package suites passed in the cached `weft-review-go:git-http-backend` image with `--pull=never`. |
+| `go test -tags e2e -count=1 ./cmd/weft-e2e` | Passed in the same image. |
+| `./scripts/go.sh vet ./...` and `docker run --pull=never --rm -v "$PWD:/repo" -w /repo/server golang:1.26-alpine gofmt -l internal` | Vet passed and gofmt reported no files. |
+| `GOOS=linux go build ./...` and `GOOS=darwin go build ./...` | Both arm64 builds passed. |
+| `pnpm -C web test`, `pnpm -C web exec tsc --noEmit` and `pnpm -C web exec tsc --project tsconfig.e2e.json` | All 444 Vitest tests and both type checks passed. |
+| `pnpm -C web exec playwright test e2e/activity.spec.ts e2e/triggers.spec.ts` and `pnpm -C web exec playwright test --config playwright.activity.config.ts` | Six Activity and trigger scenarios plus three work Activity scenarios passed. |
