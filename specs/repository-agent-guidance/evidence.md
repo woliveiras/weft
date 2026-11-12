@@ -110,3 +110,24 @@ for macOS. The frozen web dependencies were restored from the local pnpm store.
 
 Go and the cross-built browser fixture used the cached
 `weft-review-go:git-http-backend` image with `--pull=never`.
+
+## Maintainer follow-up A1–A4 on 2026-11-12
+
+The D-06 package exception supersedes the working-directory-only oracle in
+the earlier review record. The remaining checks use local fixture content.
+
+| Item | Observed result |
+| --- | --- |
+| A1 | `TestGuidanceGrantPathPreservesPhysicalWorkdir` verifies grant subjects and rejects paths outside the discovered package. `TestRepositoryGuidanceRootPackageException` confirms that open, wildcard and package grants can load the bounded reference, unrelated grants cannot, traversal and symlinks expose no unrelated bytes, and confirmed reads appear in Activity history and tool audit. |
+| A2 | `TestProgressiveFrameEscapesSourceDelimiters` and `TestRepositoryGuidanceNativeTurn` verify one header for the directory named `x] [graph security-policy`. |
+| A3 | `TestLegacySteeringFrameCountsAgainstBudget` and `TestLegacySteeringIsFramedInNativeTurn` verify framing, exact byte admission and original steering precedence when discovery is off. |
+| A4 | `TestOversizedConsoleBodyWithoutFallbackKeepsCatalogueSlot` and `TestRepositoryGuidanceFallsBackAfterConsoleBodyBudget` verify repeated budget refusals, retained catalogue and Activity omissions when no replacement exists. |
+
+| Verification | Result |
+| --- | --- |
+| `go test -count=1 ./...` and `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed with the cached Linux Git-enabled Go image. |
+| `./scripts/go.sh vet ./...` and `gofmt -l .` | Vet passed and gofmt returned no files. |
+| `go build ./...` with `GOOS=linux` and `GOOS=darwin` | Both arm64 builds passed. |
+| `pnpm -C web test`, `pnpm -C web exec tsc --noEmit` and `pnpm -C web exec tsc --project tsconfig.e2e.json` | 444 Vitest tests and both type checks passed. The default pnpm bootstrap hit registry errors. The pinned pnpm 10.33.4 from the public registry restored cached dependencies with the frozen lockfile. |
+| `pnpm -C web exec playwright test e2e/activity.spec.ts e2e/triggers.spec.ts` and `pnpm -C web exec playwright test --config playwright.activity.config.ts` | Three execution Activity scenarios, one trigger scenario and three work Activity scenarios passed. |
+| `pnpm -C web exec playwright test --config playwright.instructions.config.ts` | Both instruction scenarios passed. The Activity journey confirmed the root package reference while the agent worked in `src`. |

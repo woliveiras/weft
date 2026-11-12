@@ -741,6 +741,8 @@ spec:
 func TestRepositoryGuidanceFallsBackAfterConsoleBodyBudget(t *testing.T) {
 	dir := t.TempDir()
 	p := &guidanceProvider{calls: []llm.ToolCall{
+		{ID: "standalone", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"console:standalone"}`)},
+		{ID: "standalone-again", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"console:standalone"}`)},
 		{ID: "console", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"console:sample"}`)},
 		{ID: "repository", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample"}`)},
 	}}
@@ -750,6 +752,10 @@ func TestRepositoryGuidanceFallsBackAfterConsoleBodyBudget(t *testing.T) {
 	const id = "guidance-fallback"
 	m := instructions.Manager{Store: r.store}
 	if _, err := m.Save(r.ctx, instructions.Input{ID: "sample", Title: "Sample", Body: strings.Repeat("x", instructions.MaxTokens), Enabled: true}, 0, "test", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Save(r.ctx, instructions.Input{ID: "standalone", Title: "Standalone", Description: "STANDALONE CATALOGUE",
+		Body: "STANDALONE BODY" + strings.Repeat("x", instructions.MaxTokens-len("STANDALONE BODY")), Enabled: true}, 0, "test", false); err != nil {
 		t.Fatal(err)
 	}
 	const source = ".agents/skills/sample/SKILL.md"
@@ -762,7 +768,7 @@ func TestRepositoryGuidanceFallsBackAfterConsoleBodyBudget(t *testing.T) {
 	}
 	r.deploy(`metadata: {name: guidance-fallback}
 spec:
-  instructions: {repositoryGuidance: {}, skillIds: [sample]}
+  instructions: {repositoryGuidance: {}, skillIds: [standalone, sample]}
   nodes:
     - id: reader
       prompt: Request a sample skill
@@ -780,10 +786,16 @@ spec:
 		return false
 	})
 	requests := p.observed()
-	if execution.Status != domain.ExecSucceeded || len(requests) != 3 ||
-		strings.Contains(requests[0], "FALLBACK CATALOGUE") || !strings.Contains(requests[1], "FALLBACK CATALOGUE") ||
-		strings.Contains(requests[1], "FALLBACK BODY") || !strings.Contains(requests[2], "FALLBACK BODY") {
+	if execution.Status != domain.ExecSucceeded || len(requests) != 5 ||
+		strings.Contains(requests[0], "FALLBACK CATALOGUE") || !strings.Contains(requests[3], "FALLBACK CATALOGUE") ||
+		strings.Contains(requests[3], "FALLBACK BODY") || !strings.Contains(requests[4], "FALLBACK BODY") {
 		t.Fatal("fallback did not become available progressively", execution.Status, execution.Error)
+	}
+	for _, request := range requests {
+		if !strings.Contains(request, "STANDALONE CATALOGUE") || strings.Contains(request, "STANDALONE BODY") ||
+			strings.Contains(request, "omitted: unknown_selection") {
+			t.Fatal("unmatched console skill lost its catalogue slot")
+		}
 	}
 	snap, err := m.Snapshot(r.ctx, execution.ID)
 	if err != nil {
@@ -795,6 +807,15 @@ spec:
 		return e.Source == "sample" && e.Stage == "body" && e.Reason == "token_budget"
 	}) {
 		t.Fatal("initial shadowing or body refusal was not preserved in Activity")
+	}
+	omissions := 0
+	for _, entry := range snap.Reads {
+		if entry.Source == "standalone" && entry.Stage == "body" && entry.Reason == "token_budget" && !entry.Included {
+			omissions++
+		}
+	}
+	if omissions != 2 {
+		t.Fatalf("expected two body budget omissions for the retained catalogue, got %d", omissions)
 	}
 	for _, stage := range []string{"catalogue", "body"} {
 		if !slices.ContainsFunc(snap.Reads, func(e instructions.Entry) bool {

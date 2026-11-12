@@ -91,6 +91,30 @@ func TestConsoleBodyBudgetOffersRepositoryFallback(t *testing.T) {
 	}
 }
 
+func TestOversizedConsoleBodyWithoutFallbackKeepsCatalogueSlot(t *testing.T) {
+	ctx := t.Context()
+	m := manager(t)
+	if _, err := m.Save(ctx, Input{ID: "standalone", Title: "Standalone", Body: strings.Repeat("x", MaxTokens), Enabled: true}, 0, "test", false); err != nil {
+		t.Fatal(err)
+	}
+	g := &domain.Graph{Spec: domain.GraphSpec{Instructions: domain.InstructionRefs{
+		RepositoryGuidance: &domain.RepositoryGuidancePolicy{}, SkillIDs: []string{"standalone"},
+	}}}
+	root := t.TempDir()
+	snap, session, err := m.Prepare(ctx, g, &domain.Node{ID: "worker"}, root, root, "task", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap.ExecutionID = "standalone-budget"
+	before, budget := session.Prompt(), snap.Budget
+	for range 2 {
+		status, err := session.Load(ctx, "console:standalone", "")
+		if err != nil || status != "omitted: token_budget" || snap.Budget != budget || session.Prompt() != before {
+			t.Fatalf("oversized body displaced its catalogue: %q, %v", status, err)
+		}
+	}
+}
+
 func TestSelectedGlobalSkillUsesGraphBudgetPriority(t *testing.T) {
 	m := manager(t)
 	for _, id := range []string{"a-default", "z-selected"} {
