@@ -54,6 +54,8 @@ test('shows the same held issue and round in the trigger and Activity', async ({
   await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
   const trigger = page.getByRole('article', { name: 'Trigger Held readiness fixture' });
   await expect(trigger.getByRole('list', { name: 'Held issues' })).toContainText('acme/app#11 · round 1 · The issue is waiting for clarification.');
+  await expect(trigger.getByRole('listitem').filter({ hasText: 'acme/app#11' }))
+    .toContainText('The GitHub repository access check could not be verified after 5 attempts.');
   await expect(trigger.getByRole('list', { name: 'Held issues' })).not.toContainText('Retry after');
   await expect(trigger.getByRole('button', { name: 'Resolve hold' })).toHaveCount(0);
 });

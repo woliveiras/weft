@@ -98,8 +98,8 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   through the applicable rate-limit deadline, subject to the one-hour
   cap. Rate-limited checks show the reason and retry deadline without
   using an attempt. Five other unverified checks exhaust automatic
-  retries for the affected hold and expose connection guidance in trigger
-  state.
+  retries for the affected hold. Trigger state identifies every affected
+  issue and the console shows the guidance on its hold.
   A successful issue or access read resets the count. The hold remains
   available for explicit resolution or renewed consent and resumption.
   Other holds and ordinary discovery continue.

@@ -82,6 +82,7 @@ func prepareReadinessFixture(ctx context.Context, a *app.App) error {
 	expired, retry := now.Add(-time.Hour), now.Add(time.Hour)
 	if _, err := a.Triggers.Triggers.Update(ctx, tr.ID, "e2e-fixture", func(t *trigger.Trigger) error {
 		t.Holds[0].RetryAt = &expired
+		t.Holds[0].AccessError = "The GitHub repository access check could not be verified after 5 attempts."
 		return nil
 	}); err != nil {
 		return err

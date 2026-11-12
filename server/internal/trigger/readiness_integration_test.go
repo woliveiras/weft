@@ -1796,3 +1796,39 @@ func TestRepeatedRateLimitedRepositoryProbesKeepTheHoldRetryable(t *testing.T) {
 		t.Fatalf("a successful probe after five rate limits did not resume confirmation: %+v", tr)
 	}
 }
+
+func TestTriggerStateReportsEveryHoldWithUnverifiedAccess(t *testing.T) {
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	gh.pageSearch = true
+	gh.issues = []map[string]any{ghIssue(1, "First", "weft"), ghIssue(2, "Second", "weft")}
+	r := runner(triggerStore(t), c, "one", gh)
+	r.Tasks = &tasks{}
+	r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+		return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+	})
+	tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		tr = advance(r, c, t, tr.ID)
+	}
+	if len(tr.Holds) != 2 {
+		t.Fatalf("fixture did not hold both issues: %+v", tr)
+	}
+	gh.status["GET /repos/acme/app/issues/1"] = 404
+	gh.status["GET /repos/acme/app/issues/2"] = 404
+	gh.status["GET /repos/acme/app"] = 503
+	for range 5 {
+		tr = advance(r, c, t, tr.ID)
+	}
+	if len(tr.Holds) != 2 {
+		t.Fatalf("access failures released an issue: %+v", tr)
+	}
+	for _, hold := range tr.Holds {
+		if !strings.Contains(hold.AccessError, "HTTP 503") || !strings.Contains(tr.LastError, hold.Key+": "+hold.AccessError) {
+			t.Fatalf("the error for %s was missing from trigger state: %+v", hold.Key, tr)
+		}
+	}
+}

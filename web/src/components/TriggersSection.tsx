@@ -160,6 +160,7 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
                 return <li key={h.key}>
                   {h.url ? <a href={h.url}>{h.key}</a> : h.key} · round {h.round} · {h.message || h.reason} · edits {h.snapshotEdits ?? 0} of 3
                   {h.eligibility && ` The issue ${h.eligibility}.`}
+                  {h.accessError && ` ${h.accessError}`}
                   {h.publicationMessage && ` ${h.publicationMessage}`}
                   {retryAt && <> · Retry after <time dateTime={retryAt}>{fmtDateTime(retryAt)}</time></>}
                   {h.publication === 'comment_pending' && ' Tracker comment delivery is unconfirmed.'}

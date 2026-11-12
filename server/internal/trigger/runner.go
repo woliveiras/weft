@@ -130,7 +130,7 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 		t.LastRunAt, t.NextRunAt = &now, &next
 		t.PollSequence++
 		t.pruneRetainedReadiness(now)
-		t.LastError = ""
+		t.LastError = triggerRunError(err, t.Holds)
 		if search.attempted {
 			t.SearchDeferredReason = ""
 			if !search.reopensAt.IsZero() {
@@ -139,12 +139,6 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 			if search.turn != 0 {
 				t.SearchTurn = search.turn
 			}
-		}
-		if err != nil {
-			t.LastError = err.Error()
-		}
-		if i := slices.IndexFunc(t.Holds, func(h Hold) bool { return h.AccessError != "" }); i >= 0 {
-			t.LastError = strings.TrimSpace(t.LastError + " " + t.Holds[i].AccessError)
 		}
 		return nil
 	}); uerr != nil {
@@ -157,6 +151,19 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 		}
 		r.Triggers.Bus.Publish(context.WithoutCancel(ctx), domain.NewEvent(domain.EvTriggerRun, "", data).WithActor("system:trigger"))
 	}
+}
+
+func triggerRunError(err error, holds []Hold) string {
+	var messages []string
+	if err != nil {
+		messages = append(messages, err.Error())
+	}
+	for _, hold := range holds {
+		if hold.AccessError != "" {
+			messages = append(messages, fmt.Sprintf("%s: %s", hold.Key, hold.AccessError))
+		}
+	}
+	return strings.Join(messages, " ")
 }
 
 // step does one run of a trigger and returns a bounded outcome label.

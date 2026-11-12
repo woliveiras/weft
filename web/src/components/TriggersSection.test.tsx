@@ -121,6 +121,25 @@ describe('TriggersSection', () => {
     expect(api.find('POST', path)).toHaveLength(1);
   });
 
+  it('shows each access error on its own hold', async () => {
+    fakeApi({
+      'GET /api/v1/triggers': () => [{
+        ...paused, holds: [
+          { generation: 'gen-1', key: 'APP-7', reason: 'incomplete', round: 1, accessError: 'The project rejected the connection.' },
+          { generation: 'gen-2', key: 'APP-8', reason: 'incomplete', round: 1, accessError: 'The project API is unavailable.' },
+        ],
+      }],
+      'GET /api/v1/scm/connections': () => [],
+    });
+    render(<TriggersSection graph={graph} role="viewer" />);
+    const holds = await screen.findByRole('list', { name: 'Held issues' });
+    const [first, second] = within(holds).getAllByRole('listitem');
+    expect(first.textContent).toContain('APP-7');
+    expect(first.textContent).toContain('The project rejected the connection.');
+    expect(second.textContent).toContain('APP-8');
+    expect(second.textContent).toContain('The project API is unavailable.');
+  });
+
   it('formats the latest future retry and omits expired deadlines', async () => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-12T10:45:00Z'));
     try {
