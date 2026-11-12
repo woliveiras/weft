@@ -246,11 +246,13 @@ spec-derived oracles for implementation.
 | Clear objective | The affected behavior or area and the desired outcome are identifiable. A defect describes the observed and expected outcomes. | What should happen after the user saves the form, and what happens today? |
 | Verifiable acceptance | At least one observable condition distinguishes success from failure. A reproducible example, expected result, or check is sufficient. | Which input should we use to verify the fix, and what result should it produce? |
 | Bounded scope | The requested change identifies its target and resolves material ambiguity about which behavior or surfaces may change. Explicit exclusions are needed only where they settle such an ambiguity. | Should the change apply to imports as well as entries created in the console? |
-- **D-10 — Content edits during readiness (AC-001, AC-003, AC-005).**
+- **D-10 — Snapshot changes during readiness (AC-001, AC-003, AC-005).**
   The maintainer decided on 2026-11-12 that a confirmed change to the
   evaluated issue content or eligible replies during evaluation or claim
-  uses a separate allowance of three edits per issue. These invalidations
-  preserve both question rounds. At the third edit, keep
+  uses a separate allowance of three edits per issue. Eligibility changes
+  during evaluation also count toward the edit limit. These invalidations
+  preserve both question rounds. Automatic release for ineligibility
+  preserves the edit count for a later selection by the same workflow. At the third edit, keep
   `weft:needs-attention`, request operator intervention once and stop
   assessing the hold until an operator resolves it.
 

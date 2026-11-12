@@ -64,12 +64,12 @@ func TestHoldHasPendingTrackerWrite(t *testing.T) {
 func TestSnapshotInvalidationPreservesClarificationRounds(t *testing.T) {
 	h := Hold{Round: 1}
 	for edits := 1; edits < maxSnapshotEdits; edits++ {
-		recordSnapshotInvalidation(&h)
+		recordSnapshotInvalidation(&h, "snapshot_changed")
 		if h.Round != 1 || h.SnapshotEdits != edits || h.State != "recheck" || h.Intervention {
 			t.Fatal(h)
 		}
 	}
-	recordSnapshotInvalidation(&h)
+	recordSnapshotInvalidation(&h, "snapshot_changed")
 	if h.Round != 1 || h.SnapshotEdits != maxSnapshotEdits || h.State != "operator" || h.Reason != "snapshot_round_limit" || !h.Intervention {
 		t.Fatal(h)
 	}
@@ -167,5 +167,18 @@ func TestClaimRemovesWeftWaitingLabelWithoutResolutionHistory(t *testing.T) {
 		if got := strings.Join(claimRemovals(tr, i, tc.requeued), ","); got != tc.want {
 			t.Fatalf("wanted %s, got %s", tc.want, got)
 		}
+	}
+}
+
+func TestEligibilityChangesShareTheEditCounter(t *testing.T) {
+	h := Hold{Round: 1, SnapshotEdits: 1}
+	recordSnapshotInvalidation(&h, "eligibility_changed")
+	if h.SnapshotEdits != 2 || h.Round != 1 || h.State != "recheck" || h.Intervention {
+		t.Fatal(h)
+	}
+	recordSnapshotInvalidation(&h, "eligibility_changed")
+	if h.SnapshotEdits != 3 || h.Round != 1 || h.Reason != "eligibility_edit_limit" || !requiresOperator(h) ||
+		strings.Contains(holdMessage(h), "changed repeatedly") {
+		t.Fatal(h)
 	}
 }

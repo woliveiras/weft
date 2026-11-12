@@ -1228,3 +1228,35 @@ func TestSharedGitHubBudgetRotatesAcrossFourTriggers(t *testing.T) {
 		t.Fatalf("the same triggers kept getting deferred: %v", deferred)
 	}
 }
+
+func TestReadinessBoundsEligibilityChangesDuringEvaluation(t *testing.T) {
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	row := ghIssue(1, "Issue", "weft")
+	gh.issues = []map[string]any{row}
+	r := runner(triggerStore(t), c, "one", gh)
+	starter := &tasks{}
+	r.Tasks = starter
+	evaluations := 0
+	r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+		evaluations++
+		row["labels"] = []map[string]any{{"name": "weft"}, {"name": fmt.Sprintf("scope-%d", evaluations)}}
+		return trigger.ReadinessAssessment{}
+	})
+	tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 5 {
+		tr = advance(r, c, t, tr.ID)
+	}
+	if len(tr.Holds) != 1 || tr.Holds[0].Reason != "eligibility_edit_limit" || tr.Holds[0].SnapshotEdits != 3 ||
+		tr.Holds[0].Round != 0 || evaluations != 3 || len(starter.started) != 0 || len(gh.comments["#1"]) != 1 ||
+		!strings.Contains(gh.comments["#1"][0], "eligibility change") {
+		t.Fatalf("eligibility invalidations were not bounded: %+v, assessments=%d, comments=%v", tr.Holds, evaluations, gh.comments)
+	}
+	labels := row["labels"].([]map[string]any)
+	if !slices.ContainsFunc(labels, func(label map[string]any) bool { return label["name"] == trigger.LabelFailed }) {
+		t.Fatalf("missing intervention label: %v", labels)
+	}
+}

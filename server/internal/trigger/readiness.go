@@ -100,6 +100,10 @@ func holdMessage(h Hold) string {
 			lines = []string{"Weft readiness failure. The issue changed repeatedly during readiness checks and reached the three-edit limit. An operator should review the current issue and resolve the hold before it is selected again."}
 			break
 		}
+		if h.Reason == "eligibility_edit_limit" {
+			lines = []string{"Weft readiness failure. An eligibility change reached the three-edit limit for readiness checks. An operator should review eligibility and resolve the hold before the issue is selected again."}
+			break
+		}
 		if h.Reason == "failure_round_limit" {
 			lines = []string{"Weft readiness failure. The two readiness rounds are exhausted. An operator should review the evaluation failure and resolve the hold before a maintainer selects the issue again."}
 			break
@@ -141,6 +145,8 @@ func ReadinessReason(reason string) string {
 		return "The tracker could not verify the current issue or its responses."
 	case "snapshot_round_limit":
 		return "The issue changed repeatedly during readiness checks and reached the three-edit limit. Review the current issue and resolve the hold before selecting it again."
+	case "eligibility_edit_limit":
+		return "An eligibility change reached the three-edit limit for readiness checks. Review eligibility and resolve the hold."
 	case "snapshot_changed":
 		return "The issue changed during readiness evaluation."
 	case "claim_busy":
@@ -525,18 +531,21 @@ func (r *Runner) currentReplies(ctx context.Context, t *Trigger, call Invoker, h
 	return eligibleReplies(i, t.Owner, replies), err
 }
 
-func recordSnapshotInvalidation(h *Hold) {
+func recordSnapshotInvalidation(h *Hold, reason string) {
 	h.RetryFailures, h.RetryAt = 0, nil
 	h.SnapshotEdits = min(h.SnapshotEdits+1, maxSnapshotEdits)
-	h.State, h.Reason = "recheck", "snapshot_changed"
+	h.State, h.Reason = "recheck", reason
 	if h.SnapshotEdits >= maxSnapshotEdits {
 		h.State, h.Reason, h.Intervention = "operator", "snapshot_round_limit", true
+		if reason == "eligibility_changed" {
+			h.Reason = "eligibility_edit_limit"
+		}
 	}
 }
 
-func (r *Runner) recheckSnapshot(ctx context.Context, t *Trigger, call Invoker, h Hold, current Issue) error {
-	recordSnapshotInvalidation(&h)
-	if h.State != "operator" {
+func (r *Runner) recheckSnapshot(ctx context.Context, t *Trigger, call Invoker, h Hold, current Issue, reason string) error {
+	recordSnapshotInvalidation(&h, reason)
+	if h.State != "operator" || holdReleaseReason(t, h, current) != "" {
 		return r.saveHold(ctx, t, h)
 	}
 	h.prepareComment()
@@ -573,11 +582,10 @@ func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Is
 		return false, r.retryReadiness(ctx, t, h, "tracker_unavailable", err)
 	}
 	if readinessInput(current, latest) != input {
-		return false, r.recheckSnapshot(ctx, t, call, h, current)
+		return false, r.recheckSnapshot(ctx, t, call, h, current, "snapshot_changed")
 	}
 	if i.Updated != current.Updated || issueReason(t, current) != "" || !slices.Equal(i.Labels, current.Labels) {
-		h.State, h.Reason = "recheck", "eligibility_changed"
-		return false, r.saveHold(ctx, t, h)
+		return false, r.recheckSnapshot(ctx, t, call, h, current, "eligibility_changed")
 	}
 	if a.Failure != "" || len(a.Missing) > 0 {
 		return false, r.finishHold(ctx, t, call, h, a, current)
@@ -619,7 +627,7 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 		return false, err
 	}
 	if reason := holdReleaseReason(t, h, i); reason != "" {
-		return false, r.releaseHold(ctx, t, h, reason, false)
+		return false, r.releaseHold(ctx, t, h, reason, h.SnapshotEdits > 0)
 	}
 	if h.Publication == "label_applied" || h.Publication == "comment_pending" {
 		return false, r.publishHold(ctx, t, call, h)
@@ -677,7 +685,7 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 }
 
 func requiresOperator(h Hold) bool {
-	return h.State == "retry_failed" || h.Reason == "failure_round_limit" || h.Reason == "history_limit" || h.Reason == "snapshot_round_limit"
+	return h.State == "retry_failed" || h.Reason == "failure_round_limit" || h.Reason == "history_limit" || h.Reason == "snapshot_round_limit" || h.Reason == "eligibility_edit_limit"
 }
 
 const maxGitHubIndexLagPolls = 3

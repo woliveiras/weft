@@ -131,8 +131,8 @@ func (r *Runner) releaseHold(ctx context.Context, t *Trigger, h Hold, reason str
 	return err
 }
 
-// ReadinessProgress preserves the allowances when a GitHub issue leaves a
-// trigger query and is later selected again for the same workflow.
+// ReadinessProgress preserves the allowances when an automatically released
+// issue is later selected again for the same workflow.
 type ReadinessProgress struct {
 	Round         int    `json:"round"`
 	SnapshotEdits int    `json:"snapshotEdits,omitempty"`

@@ -339,7 +339,7 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 		if err != nil || issueReason(t, current) != "" || edited {
 			h.State, h.Reason = "recheck", "eligibility_changed"
 			if edited {
-				recordSnapshotInvalidation(&h)
+				recordSnapshotInvalidation(&h, "snapshot_changed")
 			}
 			h.Publication = "label_pending_only"
 			if errors.Is(err, errTrackerHistoryLimit) {
