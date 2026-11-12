@@ -14,6 +14,7 @@ import (
 
 // tracker is an in-memory GitHub or Jira project behind MCP tool names.
 type tracker struct {
+	pageSearch          bool
 	editOnAssignment    bool
 	transientComments   int
 	loseCommentResponse bool
@@ -85,6 +86,12 @@ func (t *tracker) handle(name string, raw json.RawMessage) *tools.Result {
 	}
 	switch name {
 	case "search_issues":
+		if t.pageSearch {
+			page := int(args["page"].(float64))
+			size := int(args["perPage"].(float64))
+			start := min((page-1)*size, len(t.issues))
+			return ok(map[string]any{"items": t.issues[start:min(start+size, len(t.issues))], "total_count": len(t.issues)})
+		}
 		return ok(map[string]any{"items": t.issues})
 	case "searchJiraIssuesUsingJql":
 		return ok(map[string]any{"issues": t.issues})

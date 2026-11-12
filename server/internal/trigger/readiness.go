@@ -381,8 +381,22 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	}
 	if t.Source.Query != "" {
 		inScope, err := searchHeldScope(ctx, src, call, i, t.Label)
+		if errors.Is(err, errHeldScopeUnverified) {
+			const reason = "could not be verified against the trigger query within the tracker search limit"
+			if h.Eligibility == reason {
+				return false, nil
+			}
+			h.Eligibility = reason
+			return false, r.saveHold(ctx, t, h)
+		}
 		if err != nil {
 			return false, err
+		}
+		if h.Eligibility != "" {
+			h.Eligibility = ""
+			if err := r.saveHold(ctx, t, h); err != nil {
+				return false, err
+			}
 		}
 		if !inScope && !(h.Publication == "label_pending" && i.HasLabel(LabelInProgress)) {
 			return false, r.releaseHold(ctx, t, h, "The issue no longer matches the trigger query.")
@@ -437,17 +451,17 @@ func searchHeldScope(ctx context.Context, src Source, call Invoker, i Issue, sel
 		if !i.HasLabel(label) {
 			continue
 		}
-		issues, err := src.Search(ctx, call, label)
-		if err != nil {
-			return false, err
+		matches, err := src.MatchesHeld(ctx, call, i, label)
+		if errors.Is(err, errHeldScopeUnverified) {
+			uncertain = true
+			continue
 		}
-		if slices.ContainsFunc(issues, func(found Issue) bool { return found.Key == i.Key }) {
-			return true, nil
+		if err != nil || matches {
+			return matches, err
 		}
-		uncertain = uncertain || len(issues) >= trackerSearchLimit
 	}
 	if uncertain {
-		return false, errors.New("the bounded tracker search could not verify the held issue scope")
+		return false, errHeldScopeUnverified
 	}
 	return false, nil
 }

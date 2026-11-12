@@ -124,3 +124,18 @@ func TestSourcesRunThroughTheGatewayWithExactGrants(t *testing.T) {
 		t.Fatal("search without grants")
 	}
 }
+
+func TestHeldGitHubScopeDoesNotTreatBoundedScanAsExclusion(t *testing.T) {
+	tr := newTracker("gh")
+	tr.pageSearch = true
+	for n := 1; n <= 251; n++ {
+		tr.issues = append(tr.issues, ghIssue(n, "Older", "weft"))
+	}
+	src, err := (trigger.SourceConfig{Kind: "github", ConnectionID: "gh", Repository: "acme/app"}).Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found, err := src.MatchesHeld(t.Context(), direct(tr), trigger.Issue{Key: "acme/app#251"}, "weft"); found || err == nil || len(tr.calls) != 5 {
+		t.Fatalf("bounded search disposition: found=%v calls=%d error=%v", found, len(tr.calls), err)
+	}
+}

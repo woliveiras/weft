@@ -11,6 +11,7 @@ import (
 )
 
 type HoldResolution struct {
+	Scope      string    `json:"scope,omitempty"`
 	Key        string    `json:"key"`
 	URL        string    `json:"url,omitempty"`
 	Reason     string    `json:"reason"`
@@ -32,7 +33,7 @@ func holdReleaseReason(t *Trigger, h Hold, i Issue) string {
 func recordHoldResolution(t *Trigger, index int, reason string, now time.Time) {
 	h := t.Holds[index]
 	t.Holds = slices.Delete(t.Holds, index, index+1)
-	t.HoldResolutions = append(t.HoldResolutions, HoldResolution{Key: h.Key, URL: h.URL, Round: h.Round, Reason: reason, ResolvedAt: now})
+	t.HoldResolutions = append(t.HoldResolutions, HoldResolution{Scope: h.Scope, Key: h.Key, URL: h.URL, Round: h.Round, Reason: reason, ResolvedAt: now})
 	if len(t.HoldResolutions) > 20 {
 		t.HoldResolutions = t.HoldResolutions[len(t.HoldResolutions)-20:]
 	}

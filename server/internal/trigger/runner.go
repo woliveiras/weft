@@ -274,7 +274,9 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 	}
 	holdIndex := t.holdIndex(i.Key)
 	remove := selectionRemovals(t, i, holdIndex >= 0 && t.Holds[holdIndex].Signal != "")
-	if i.HasLabel(LabelFailed) && holdIndex >= 0 {
+	if i.HasLabel(LabelFailed) && (holdIndex >= 0 || slices.ContainsFunc(t.HoldResolutions, func(h HoldResolution) bool {
+		return h.Key == i.Key && h.Scope == holdScope(t)
+	})) {
 		remove = append(remove, LabelFailed)
 	}
 	if err := relabel(ctx, call, i.Key, remove, LabelInProgress, t.Owner); err != nil {

@@ -53,6 +53,7 @@ type Source interface {
 	// Tools are the MCP tools the trigger needs (granted to its principal).
 	Tools() []string
 	Search(ctx context.Context, call Invoker, label string) ([]Issue, error)
+	MatchesHeld(ctx context.Context, call Invoker, issue Issue, label string) (bool, error)
 }
 
 // SourceConfig selects a tracker.
@@ -164,16 +165,46 @@ func (raw githubIssue) issue(repository string) Issue {
 const trackerSearchLimit = 50
 
 func (g github) Search(ctx context.Context, call Invoker, label string) ([]Issue, error) {
+	issues, _, err := g.searchPage(ctx, call, label, 1)
+	return issues, err
+}
+
+var errHeldScopeUnverified = errors.New("held issue scope could not be verified within the tracker search bound")
+
+func (g github) MatchesHeld(ctx context.Context, call Invoker, issue Issue, label string) (bool, error) {
+	for page := 1; page <= 5; page++ {
+		issues, more, err := g.searchPage(ctx, call, label, page)
+		if err != nil {
+			return false, err
+		}
+		for _, found := range issues {
+			if found.Key == issue.Key {
+				return true, nil
+			}
+		}
+		if !more {
+			return false, nil
+		}
+	}
+	return false, errHeldScopeUnverified
+}
+
+func (g github) searchPage(ctx context.Context, call Invoker, label string, page int) ([]Issue, bool, error) {
 	q := fmt.Sprintf(`repo:%s is:issue is:open label:"%s"`, g.c.Repository, label)
 	if g.c.Query != "" {
 		q += " " + g.c.Query
 	}
 	var out struct {
-		Items []githubIssue `json:"items"`
+		Items      []githubIssue `json:"items"`
+		Incomplete bool          `json:"incomplete_results"`
+		Total      *int          `json:"total_count"`
 	}
-	res, err := call(ctx, tool(g.c, "search_issues"), map[string]any{"query": q, "sort": "created", "order": "asc", "perPage": trackerSearchLimit})
+	res, err := call(ctx, tool(g.c, "search_issues"), map[string]any{"query": q, "sort": "created", "order": "asc", "perPage": trackerSearchLimit, "page": page})
 	if err := decode(res, err, &out); err != nil {
-		return nil, err
+		return nil, false, err
+	}
+	if out.Incomplete {
+		return nil, false, errHeldScopeUnverified
 	}
 	issues := make([]Issue, 0, len(out.Items))
 	for _, it := range out.Items {
@@ -183,7 +214,11 @@ func (g github) Search(ctx context.Context, call Invoker, label string) ([]Issue
 		}
 		issues = append(issues, it.issue(g.c.Repository))
 	}
-	return issues, nil
+	more := len(out.Items) >= trackerSearchLimit
+	if out.Total != nil {
+		more = (page-1)*trackerSearchLimit+len(out.Items) < *out.Total
+	}
+	return issues, more, nil
 }
 
 type jira struct{ c SourceConfig }
@@ -251,18 +286,45 @@ func (raw jiraIssue) issue() Issue {
 }
 
 func (j jira) Search(ctx context.Context, call Invoker, label string) ([]Issue, error) {
+	return j.search(ctx, call, label, "")
+}
+
+func (j jira) MatchesHeld(ctx context.Context, call Invoker, issue Issue, label string) (bool, error) {
+	if !trackerKey.MatchString(issue.Key) {
+		return false, errHeldScopeUnverified
+	}
+	issues, err := j.search(ctx, call, label, issue.Key)
+	if err != nil {
+		return false, err
+	}
+	for _, found := range issues {
+		if found.Key == issue.Key {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (j jira) search(ctx context.Context, call Invoker, label, key string) ([]Issue, error) {
 	jql := fmt.Sprintf(`labels = "%s" AND statusCategory = "To Do"`, label)
 	if j.c.Query != "" {
 		jql = "(" + j.c.Query + ") AND " + jql
 	}
+	if key != "" {
+		jql += fmt.Sprintf(` AND key = "%s"`, key)
+	}
 	jql += " ORDER BY created ASC"
 	var out struct {
 		Issues []jiraIssue `json:"issues"`
+		Next   string      `json:"nextPageToken"`
 	}
 	args := map[string]any{"cloudId": j.c.CloudID, "jql": jql, "maxResults": trackerSearchLimit, "fields": jiraFields}
 	res, err := call(ctx, tool(j.c, "searchJiraIssuesUsingJql"), args)
 	if err := decode(res, err, &out); err != nil {
 		return nil, err
+	}
+	if key != "" && len(out.Issues) == 0 && out.Next != "" {
+		return nil, errHeldScopeUnverified
 	}
 	issues := make([]Issue, 0, len(out.Issues))
 	for _, raw := range out.Issues {

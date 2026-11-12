@@ -521,3 +521,92 @@ func TestHistoryLimitBecomesAResolvableHoldWithoutRepeatedScans(t *testing.T) {
 		})
 	}
 }
+
+func TestHeldIssueReturnsBeyondFirstQueryPage(t *testing.T) {
+	st := triggerStore(t)
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	gh.pageSearch = true
+	gh.issues = []map[string]any{ghIssue(60, "Target", "weft", "bug")}
+	r := runner(st, c, "one", gh)
+	starter := &tasks{}
+	r.Tasks = starter
+	r.Assessor = assessFunc(func(_ context.Context, _ *trigger.Trigger, input string) trigger.ReadinessAssessment {
+		if strings.Contains(input, "expected output") {
+			return trigger.ReadinessAssessment{}
+		}
+		return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+	})
+	in := input()
+	in.Source.Query = "milestone:release"
+	tr, err := r.Triggers.Create(t.Context(), in, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.Holds) != 1 {
+		t.Fatal(tr)
+	}
+	target := gh.issues[0]
+	gh.issues = nil
+	for n := 1; n < 60; n++ {
+		gh.issues = append(gh.issues, ghIssue(n, "Older", trigger.LabelFailed))
+	}
+	gh.issues = append(gh.issues, target)
+	gh.replies["#60"] = []map[string]any{ghReply(1, "author", "User", "expected output", c.t.Add(time.Second))}
+	tr = advance(r, c, t, tr.ID)
+	if len(starter.started) != 1 || starter.started[0].Key != "acme/app#60" || len(tr.Holds) != 0 ||
+		!slices.ContainsFunc(gh.args, func(a map[string]any) bool { return a["page"] == float64(2) }) {
+		t.Fatalf("held issue was not found beyond the first page: %+v", tr)
+	}
+	if got := target["labels"].([]map[string]any); len(got) != 2 || got[0]["name"] != "bug" || got[1]["name"] != trigger.LabelInProgress {
+		t.Fatalf("claim did not preserve unrelated labels: %v", got)
+	}
+}
+
+func TestResolveLeavesWaitingLabelUntilReselectedAndClaimed(t *testing.T) {
+	st := triggerStore(t)
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	row := ghIssue(1, "Issue", "weft", "bug")
+	gh.issues = []map[string]any{row}
+	r := runner(st, c, "one", gh)
+	starter := &tasks{}
+	r.Tasks = starter
+	r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+		return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+	})
+	in := input()
+	tr, err := r.Triggers.Create(t.Context(), in, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	h := tr.Holds[0]
+	in.ReadinessDisabled = true
+	if _, err := r.Triggers.Edit(t.Context(), tr.ID, in, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Triggers.Resume(t.Context(), tr.ID, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	calls := len(gh.rest)
+	if _, err := r.Triggers.ResolveHold(t.Context(), tr.ID, h.Key, h.OpenedAt, "operator"); err != nil {
+		t.Fatal(err)
+	}
+	if len(gh.rest) != calls {
+		t.Fatal("manual resolution wrote to the tracker")
+	}
+	tr = advance(r, c, t, tr.ID)
+	if tr.CurrentTask != "" {
+		t.Fatal("resolution started an unselected issue")
+	}
+	row["labels"] = append(row["labels"].([]map[string]any), map[string]any{"name": "weft"})
+	tr = advance(r, c, t, tr.ID)
+	if tr.CurrentTask == "" {
+		t.Fatal("reselected issue did not start")
+	}
+	if got := row["labels"].([]map[string]any); len(got) != 2 || got[0]["name"] != "bug" || got[1]["name"] != trigger.LabelInProgress {
+		t.Fatal(got)
+	}
+}
