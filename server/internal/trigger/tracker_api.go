@@ -226,6 +226,7 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 			failure.AccessStatus = code
 			if probe := trackerFailure(code, probeErr); probe.RateLimited {
 				failure.AccessStatus = 0
+				failure.RateLimited, failure.RetryDelay, failure.RetryDeadline = true, probe.RetryDelay, probe.RetryDeadline
 			}
 		}
 		data, _ := json.Marshal(failure)

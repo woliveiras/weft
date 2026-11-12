@@ -284,3 +284,20 @@ func TestJiraIssueAccessReadsOnlyTheIssueProject(t *testing.T) {
 		}
 	}
 }
+
+func TestIssueAccessRetryUsesRateLimitDeadlineOrTransportBackoff(t *testing.T) {
+	now := time.Now().UTC()
+	reset := now.Add(45 * time.Minute)
+	for _, tc := range []struct {
+		failure trackerHTTPFailure
+		want    time.Time
+	}{
+		{trackerHTTPFailure{Status: 404}, now.Add(time.Minute)},
+		{trackerHTTPFailure{Status: 404, RateLimited: true, RetryDelay: 2 * time.Minute}, now.Add(2 * time.Minute)},
+		{trackerHTTPFailure{Status: 404, RateLimited: true, RetryDeadline: &reset}, reset},
+	} {
+		if got := issueAccessRetryAt(now, tc.failure); !got.Equal(tc.want) {
+			t.Fatalf("got %v, want %v", got, tc.want)
+		}
+	}
+}

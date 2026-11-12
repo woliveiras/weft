@@ -1530,3 +1530,77 @@ func TestJiraMissingHoldRequiresProjectAccess(t *testing.T) {
 		})
 	}
 }
+
+type repoRateLimit struct{ reset time.Time }
+
+func (e repoRateLimit) Error() string { return "fixture repository rate limit" }
+
+func (e repoRateLimit) TrackerRateLimit() (bool, time.Duration, time.Time) {
+	return true, 0, e.reset
+}
+
+func TestTemporaryRepositoryProbeFailureDefersOnlyAffectedHold(t *testing.T) {
+	for _, rateLimited := range []bool{false, true} {
+		t.Run(fmt.Sprintf("rate_limited=%t", rateLimited), func(t *testing.T) {
+			c := &clock{t: time.Now().UTC()}
+			gh := newTracker("gh")
+			gh.pageSearch = true
+			gh.issues = []map[string]any{ghIssue(1, "Missing", "weft"), ghIssue(2, "Waiting", "weft")}
+			r := runner(triggerStore(t), c, "one", gh)
+			r.Tasks = &tasks{}
+			r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+				return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+			})
+			tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for range 2 {
+				tr = advance(r, c, t, tr.ID)
+			}
+			if len(tr.Holds) != 2 {
+				t.Fatalf("fixture did not hold both issues: %+v", tr)
+			}
+			const issueRead = "GET /repos/acme/app/issues/1"
+			const probe = "GET /repos/acme/app"
+			gh.status[issueRead] = 404
+			gh.responseErrors[probe] = errors.New("fixture transport interrupted")
+			pollAt := c.t.Add(time.Hour)
+			want := pollAt.Add(time.Minute)
+			if rateLimited {
+				want = pollAt.Add(45 * time.Minute)
+				gh.status[probe], gh.responseErrors[probe] = 403, repoRateLimit{reset: want}
+			}
+			gh.replies["#2"] = append(gh.replies["#2"], ghReply(7, "author", "User", "The report uses CSV as input.", c.t.Add(time.Second)))
+			gh.issues = append(gh.issues, ghIssue(3, "New", "weft"))
+			tr = advance(r, c, t, tr.ID)
+			if len(tr.Holds) != 3 || len(tr.HoldResolutions) != 0 || tr.LastError != "" ||
+				tr.Holds[0].RetryAccessAt == nil || !tr.Holds[0].RetryAccessAt.Equal(want) ||
+				tr.Holds[1].Round != 2 || tr.Holds[2].Round != 1 {
+				t.Fatalf("temporary repository probe interrupted other work or lost backoff: %+v", tr)
+			}
+			c.t = want.Add(-time.Second)
+			if _, err := r.Triggers.Update(t.Context(), tr.ID, "fixture", func(t *trigger.Trigger) error {
+				t.NextRunAt = nil
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			r.Tick(t.Context())
+			probes := func() int {
+				return slices.Index(gh.rest, probe)
+			}
+			firstProbe := probes()
+			if firstProbe < 0 || slices.Contains(gh.rest[firstProbe+1:], probe) || slices.Contains(gh.rest[firstProbe+1:], issueRead) {
+				t.Fatalf("affected hold was checked before its deadline: %v", gh.rest)
+			}
+			delete(gh.status, probe)
+			delete(gh.responseErrors, probe)
+			tr = advance(r, c, t, tr.ID)
+			if !slices.Contains(gh.rest[firstProbe+1:], probe) || len(tr.Holds) != 3 || tr.Holds[0].RetryAccessAt != nil ||
+				!strings.Contains(tr.Holds[0].Eligibility, "awaiting confirmation") {
+				t.Fatalf("recovery failed or counted the failed probe: %+v, calls %v", tr, gh.rest)
+			}
+		})
+	}
+}

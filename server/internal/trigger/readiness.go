@@ -34,6 +34,7 @@ type Hold struct {
 	RetryCommentAt     *time.Time `json:"retryCommentAt,omitempty"`
 
 	RetryFailures   int                  `json:"retryFailures,omitempty"`
+	RetryAccessAt   *time.Time           `json:"retryAccessAt,omitempty"`
 	RetryAt         *time.Time           `json:"retryAt,omitempty"`
 	ScopeAssessment *ReadinessAssessment `json:"scopeAssessment,omitempty"`
 	ScopeCheckedAt  time.Time            `json:"scopeCheckedAt,omitzero"`
@@ -658,7 +659,8 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	if holdHasPendingWrite(h) {
 		return false, r.publishHold(ctx, t, call, h)
 	}
-	if h.RetryAt != nil && r.Triggers.now().Before(*h.RetryAt) {
+	now := r.Triggers.now()
+	if (h.RetryAt != nil && now.Before(*h.RetryAt)) || (h.RetryAccessAt != nil && now.Before(*h.RetryAccessAt)) {
 		return false, nil
 	}
 	i, err := trackerRead[Issue](ctx, call, trackerGet, trackerArgs{Key: h.Key, VerifyMissing: true})
@@ -674,8 +676,8 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 		}
 		return false, err
 	}
-	if h.MissingPoll != 0 || h.Eligibility == issueMissingForOperator || h.Eligibility == issueMissingAwaitingPoll {
-		h.MissingPoll, h.Eligibility = 0, ""
+	if h.MissingPoll != 0 || h.RetryAccessAt != nil || h.Eligibility == issueMissingForOperator || h.Eligibility == issueMissingAwaitingPoll {
+		h.MissingPoll, h.RetryAccessAt, h.Eligibility = 0, nil, ""
 		if err := r.saveHold(ctx, t, h); err != nil {
 			return false, err
 		}
@@ -789,12 +791,20 @@ func (r *Runner) checkMissingHold(ctx context.Context, t *Trigger, h Hold, err e
 		return err
 	}
 	release, reason, err := missingHoldDisposition(t, h, failure)
+	if errors.Is(err, errHeldIssueAccessUnverified) {
+		now := r.Triggers.now()
+		next := issueAccessRetryAt(now, failure)
+		h.MissingPoll, h.RetryAccessAt = 0, &next
+		h.Eligibility = "could not be checked because repository or project access verification is temporarily unavailable"
+		return r.saveHold(ctx, t, h)
+	}
 	if err != nil {
 		return err
 	}
 	if release {
 		return r.releaseHold(ctx, t, h, reason, true)
 	}
+	h.RetryAccessAt = nil
 	if reason == issueMissingAwaitingPoll {
 		h.MissingPoll = t.PollSequence + 1
 	} else {
@@ -805,6 +815,13 @@ func (r *Runner) checkMissingHold(ctx context.Context, t *Trigger, h Hold, err e
 	}
 	h.Eligibility = reason
 	return r.saveHold(ctx, t, h)
+}
+
+func issueAccessRetryAt(now time.Time, failure trackerHTTPFailure) time.Time {
+	if retry := trackerRetryDeadline(now, failure); !retry.IsZero() {
+		return retry
+	}
+	return now.Add(time.Minute)
 }
 
 func requiresOperator(h Hold) bool {

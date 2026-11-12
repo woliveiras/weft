@@ -83,7 +83,10 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   Issues is visible and preserves holds. A GitHub 410 confirms deletion
   immediately after the same repository check succeeds. For Jira, the
   same connection must be able to read the issue's project before an
-  issue 404 can count. Holds requiring operator
+  issue 404 can count. A temporarily unavailable access check defers only
+  the affected hold through the applicable rate-limit deadline, subject
+  to the one-hour cap. Other holds and ordinary discovery continue.
+  Holds requiring operator
   intervention report a missing issue and remain held. Automatic release
   for a missing issue retains its round and edit counts.
   GitHub scope checks restrict the reviewed query by the issue's exact
