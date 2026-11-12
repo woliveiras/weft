@@ -61,6 +61,11 @@ func (e trackerHTTPFailure) definitive() bool {
 	return e.Status >= 400 && e.Status < 500 && e.Status != http.StatusRequestTimeout && e.Status != http.StatusTooManyRequests
 }
 
+func trackerIssueMissing(err error) bool {
+	var failure trackerHTTPFailure
+	return errors.As(err, &failure) && failure.Status == http.StatusNotFound
+}
+
 func (e trackerHTTPFailure) guidance() string {
 	switch e.Status {
 	case http.StatusUnauthorized:

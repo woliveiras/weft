@@ -187,3 +187,14 @@ func TestTracker401RequiresIdentityConfirmation(t *testing.T) {
 		}
 	}
 }
+
+func TestOnlyAnExplicitTracker404MeansIssueMissing(t *testing.T) {
+	for _, err := range []error{nil, errors.New("HTTP 404"), trackerHTTPFailure{Status: 403}, trackerHTTPFailure{Status: 503}} {
+		if trackerIssueMissing(err) {
+			t.Fatalf("incorrectly classified %v", err)
+		}
+	}
+	if !trackerIssueMissing(errors.Join(errors.New("fixture context"), trackerHTTPFailure{Status: 404})) {
+		t.Fatal("wrapped tracker 404 was lost")
+	}
+}

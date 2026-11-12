@@ -615,7 +615,7 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	if holdHasPendingWrite(h) {
 		return false, r.publishHold(ctx, t, call, h)
 	}
-	if h.Publication == "label_failed" || h.State == "retry_failed" ||
+	if h.Publication == "label_failed" ||
 		(h.RetryAt != nil && r.Triggers.now().Before(*h.RetryAt)) {
 		return false, nil
 	}
@@ -624,7 +624,16 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 		if h.State == "recheck" && h.RetryFailures > 0 {
 			return false, r.retryReadiness(ctx, t, h, "tracker_unavailable", err)
 		}
+		if h.Publication != "comment_pending" && h.RetryCommentAt == nil && trackerIssueMissing(err) {
+			return false, r.releaseHold(ctx, t, h, "The tracker could not find the issue (HTTP 404).", false)
+		}
+		if h.State == "retry_failed" {
+			return false, nil
+		}
 		return false, err
+	}
+	if h.State == "retry_failed" {
+		return false, nil
 	}
 	if reason := holdReleaseReason(t, h, i); reason != "" {
 		return false, r.releaseHold(ctx, t, h, reason, h.SnapshotEdits > 0)

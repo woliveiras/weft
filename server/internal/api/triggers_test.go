@@ -369,6 +369,7 @@ func TestReadinessHoldVisibleInActivityWithoutTaskOrPayload(t *testing.T) {
 	}
 	issue := strings.Replace(apiFixtureIssue, "Acceptance: one example with expected output.", "PRIVATE ISSUE PAYLOAD", 1)
 	searches := 0
+	deleted := false
 	a.Tools.MustRegister(fixtureTool{name: "mcp.gh.search_issues", calls: &searches, content: `{"items":[` + issue + `]}`})
 	a.TrackerAPI.Client = &http.Client{Transport: trackerTransport(func(req *http.Request) (*http.Response, error) {
 		body := "{}"
@@ -376,6 +377,9 @@ func TestReadinessHoldVisibleInActivityWithoutTaskOrPayload(t *testing.T) {
 		case req.URL.Path == "/user":
 			body = `{"id":700}`
 		case req.Method == "GET":
+			if deleted {
+				return &http.Response{StatusCode: 404, Body: io.NopCloser(strings.NewReader(`{"message":"Not Found"}`))}, nil
+			}
 			body = issue
 		case strings.HasSuffix(req.URL.Path, "/comments"):
 			body = `{"id":1,"user":{"id":700}}`
@@ -423,6 +427,29 @@ func TestReadinessHoldVisibleInActivityWithoutTaskOrPayload(t *testing.T) {
 		if c := call(t, srv, "GET", path, "", "", "", nil); c != 401 {
 			t.Fatalf("anonymous access %s: %d", path, c)
 		}
+	}
+
+	deleted = true
+	if _, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
+		current.NextRunAt = nil
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	a.Triggers.Tick(t.Context())
+	view = activity.View{}
+	if c := call(t, srv, "GET", "/api/v1/activity", viewerTok, "", "", &view); c != 200 ||
+		len(view.TriggerHolds) != 0 || len(view.ResolvedTriggerHolds) != 1 {
+		t.Fatalf("missing issue stayed in Activity: %d %+v", c, view)
+	}
+	resolution := view.ResolvedTriggerHolds[0]
+	if resolution.Key != h.Key || resolution.Actor != "system:trigger" || !strings.Contains(resolution.Reason, "could not find the issue") {
+		t.Fatalf("missing issue resolution: %+v", resolution)
+	}
+	events, err := a.Store.ListEvents(t.Context(), storage.EventFilter{Types: []domain.EventType{domain.EvTriggerHoldResolved}})
+	if err != nil || len(events) != 1 || events[0].Actor != "system:trigger" ||
+		!strings.Contains(string(events[0].Data), "could not find the issue") {
+		t.Fatalf("missing issue audit: %+v, %v", events, err)
 	}
 }
 
