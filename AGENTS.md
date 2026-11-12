@@ -31,11 +31,18 @@ documentation if instructions conflict.
 
 ## Specifications
 
-Specification-Driven Development is used only when a change needs it. Follow
-the `sdd-specification` skill in `.agents/skills/` for the format; do not copy
+Specification-Driven Development is used only when a change needs it. The
+`sdd-specification` skill in `.agents/skills/` defines the format; do not copy
 or edit the skill. Use `specs/` as the sole home for planning and historical
 intent. Start with the [specification index](specs/README.md). There is no
 separate work-in-progress planning directory.
+
+Invoke the `sdd-specification` skill only to create a new specification, add or
+change an acceptance criterion's intent, or run a formal reconciliation the user
+asked for. For a small refinement of an existing specification (a new edge case
+under an existing criterion, a recorded maintainer decision, a matrix row for a
+new test), edit `spec.md`/`matrix.md` directly following their existing format;
+do not load the skill, and keep evidence updates to the affected rows.
 
 Write or update a specification when a change:
 
