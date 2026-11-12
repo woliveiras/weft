@@ -3,6 +3,7 @@ package mcpconfig
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -112,7 +113,7 @@ func TestGitHubRateLimitMetadata(t *testing.T) {
 			headers.Set("X-RateLimit-Reset", strconv.FormatInt(reset.Unix(), 10))
 			headers.Set("Retry-After", tc.retry)
 			raw, _ := json.Marshal(map[string]string{"message": tc.message})
-			err := githubRateLimit(&http.Response{StatusCode: 403, Header: headers, Body: io.NopCloser(bytes.NewReader(raw))}, reset.Add(-30*time.Minute))
+			err := trackerRateLimit(&http.Response{StatusCode: 403, Header: headers, Body: io.NopCloser(bytes.NewReader(raw))}, reset.Add(-30*time.Minute))
 			limited, delay, deadline := err.TrackerRateLimit()
 			if limited != tc.limited || delay != tc.delay || !deadline.Equal(tc.deadline) || err.Error() != "tracker API returned HTTP 403" {
 				t.Fatalf("rate limit metadata: %+v", err)
@@ -128,12 +129,42 @@ func TestGitHubRateLimitCapsOversizedRetryHeaders(t *testing.T) {
 		headers.Set("Retry-After", retry)
 		headers.Set("X-RateLimit-Remaining", "0")
 		headers.Set("X-RateLimit-Reset", "999999999999999999999999")
-		failure := githubRateLimit(&http.Response{StatusCode: 403, Header: headers}, now)
+		failure := trackerRateLimit(&http.Response{StatusCode: 403, Header: headers}, now)
 		if !failure.limited || failure.delay > time.Hour || !failure.deadline.Equal(now.Add(time.Hour)) {
 			t.Fatalf("oversized retry metadata: %+v", failure)
 		}
 		if retry[0] == '9' && failure.delay != time.Hour {
 			t.Fatalf("overflowing retry delay fell through: %+v", failure)
 		}
+	}
+}
+
+func TestJiraTrackerAPIPreservesRetryAfterOn429(t *testing.T) {
+	st, err := fsstore.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	box, err := secrets.NewBox(bytes.Repeat([]byte{1}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := New(st, box, nil)
+	view, err := manager.Put(t.Context(), basicInput(), 0, "fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const path = "/ex/jira/11111111-2222-3333-4444-555555555555/rest/api/3/project/APP"
+	api := &TrackerAPI{Connections: manager, Client: &http.Client{Transport: trackerFixtureTransport(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host != "api.atlassian.com" || r.URL.Path != path {
+			t.Fatalf("unexpected project request %s", r.URL)
+		}
+		return &http.Response{StatusCode: http.StatusTooManyRequests,
+			Header: http.Header{"Retry-After": []string{"120"}}, Body: io.NopCloser(strings.NewReader("{}"))}, nil
+	})}}
+	_, status, err := api.Call(t.Context(), view.ID, "jira", view.Revision, http.MethodGet, path, nil)
+	var failure trackerAPIError
+	if status != http.StatusTooManyRequests || !errors.As(err, &failure) || !failure.limited || failure.delay != 2*time.Minute {
+		t.Fatalf("lost the Jira rate limit: HTTP %d, %+v", status, failure)
 	}
 }

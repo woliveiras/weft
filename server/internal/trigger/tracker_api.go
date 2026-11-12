@@ -87,13 +87,13 @@ func (e trackerHTTPFailure) guidance() string {
 // The transport exposes sanitized rate-limit metadata without passing
 // response headers or bodies across the gateway.
 func trackerFailure(status int, err error) trackerHTTPFailure {
-	failure := trackerHTTPFailure{Status: status}
+	failure := trackerHTTPFailure{Status: status, RateLimited: status == http.StatusTooManyRequests}
 	var rate interface {
 		TrackerRateLimit() (bool, time.Duration, time.Time)
 	}
 	if errors.As(err, &rate) {
 		limited, delay, deadline := rate.TrackerRateLimit()
-		failure.RateLimited, failure.RetryDelay = limited, delay
+		failure.RateLimited, failure.RetryDelay = failure.RateLimited || limited, delay
 		if !deadline.IsZero() {
 			failure.RetryDeadline = &deadline
 		}
@@ -225,7 +225,6 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 			}
 			failure.AccessStatus = code
 			if probe := trackerFailure(code, probeErr); probe.RateLimited {
-				failure.AccessStatus = 0
 				failure.RateLimited, failure.RetryDelay, failure.RetryDeadline = true, probe.RetryDelay, probe.RetryDeadline
 			}
 		}

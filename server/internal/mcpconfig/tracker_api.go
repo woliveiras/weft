@@ -101,8 +101,8 @@ func (a *TrackerAPI) Call(ctx context.Context, connection, kind string, revision
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		failure := trackerAPIError{status: res.StatusCode}
-		if kind == "github" && (res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusTooManyRequests) {
-			failure = githubRateLimit(res, time.Now())
+		if res.StatusCode == http.StatusTooManyRequests || (kind == "github" && res.StatusCode == http.StatusForbidden) {
+			failure = trackerRateLimit(res, time.Now())
 		}
 		return nil, res.StatusCode, failure
 	}
@@ -129,7 +129,7 @@ func (e trackerAPIError) TrackerRateLimit() (bool, time.Duration, time.Time) {
 	return e.limited, e.delay, e.deadline
 }
 
-func githubRateLimit(res *http.Response, now time.Time) trackerAPIError {
+func trackerRateLimit(res *http.Response, now time.Time) trackerAPIError {
 	failure := trackerAPIError{status: res.StatusCode}
 	retry := strings.TrimSpace(res.Header.Get("Retry-After"))
 	remaining := strings.TrimSpace(res.Header.Get("X-RateLimit-Remaining"))

@@ -771,6 +771,9 @@ func hasConsecutiveMissingObservation(t *Trigger, h Hold) bool {
 
 func missingHoldDisposition(t *Trigger, h Hold, failure trackerHTTPFailure, now time.Time) (release bool, reason string, err error) {
 	if t.Source.Kind == "github" || t.Source.Kind == "jira" {
+		if failure.RateLimited {
+			return false, "", errHeldIssueAccessUnverified
+		}
 		if failure.IssuesDisabled {
 			return false, "", errHeldIssuesDisabled
 		}
@@ -837,6 +840,12 @@ const maxIssueAccessFailures = 5
 
 func recordIssueAccessFailure(h *Hold, source string, now time.Time, failure trackerHTTPFailure) {
 	h.MissingPoll, h.MissingSince = 0, time.Time{}
+	if failure.RateLimited {
+		next := issueAccessRetryAt(now, failure)
+		h.RetryAccessAt = &next
+		h.Eligibility = "could not be checked because the tracker rate-limited access verification"
+		return
+	}
 	h.AccessFailures = min(h.AccessFailures+1, maxIssueAccessFailures)
 	if h.AccessFailures < maxIssueAccessFailures {
 		next := issueAccessRetryAt(now, failure)

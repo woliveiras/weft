@@ -1757,3 +1757,42 @@ func TestPersistentIssueAccessFailuresStayVisibleUntilReviewed(t *testing.T) {
 		})
 	}
 }
+
+func TestRepeatedRateLimitedRepositoryProbesKeepTheHoldRetryable(t *testing.T) {
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	gh.pageSearch = true
+	gh.issues = []map[string]any{ghIssue(1, "Waiting", "weft")}
+	r := runner(triggerStore(t), c, "one", gh)
+	r.Tasks = &tasks{}
+	r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+		return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+	})
+	tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	const issueRead = "GET /repos/acme/app/issues/1"
+	const probe = "GET /repos/acme/app"
+	gh.status[issueRead], gh.status[probe] = 404, 403
+	for n := 1; n <= 5; n++ {
+		reset := c.t.Add(time.Hour + 45*time.Minute)
+		gh.responseErrors[probe] = repoRateLimit{reset: reset}
+		tr = advance(r, c, t, tr.ID)
+		if len(tr.Holds) != 1 || tr.LastError != "" || len(tr.HoldResolutions) != 0 {
+			t.Fatalf("rate limit failed the trigger or released the hold: %+v", tr)
+		}
+		h := tr.Holds[0]
+		if h.AccessFailures != 0 || h.AccessError != "" || h.RetryAccessAt == nil ||
+			!h.RetryAccessAt.Equal(reset) || !strings.Contains(h.Eligibility, "rate-limited") {
+			t.Fatalf("probe %d changed the retry budget or lost its deadline: %+v", n, h)
+		}
+	}
+	delete(gh.responseErrors, probe)
+	delete(gh.status, probe)
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.Holds) != 1 || tr.Holds[0].RetryAccessAt != nil || !strings.Contains(tr.Holds[0].Eligibility, "awaiting confirmation") {
+		t.Fatalf("a successful probe after five rate limits did not resume confirmation: %+v", tr)
+	}
+}

@@ -340,3 +340,21 @@ func TestIssueAccessFailuresExhaustRetriesAndExplainRecovery(t *testing.T) {
 		}
 	}
 }
+
+func TestRateLimitedAccessChecksPreserveTheFailureBudget(t *testing.T) {
+	now := time.Now().UTC()
+	reset := now.Add(45 * time.Minute)
+	h := Hold{Round: 1, AccessFailures: 4, MissingPoll: 7, MissingSince: now}
+	failure := trackerHTTPFailure{Status: 404, AccessStatus: 403, RateLimited: true, RetryDeadline: &reset}
+	tr := &Trigger{Source: SourceConfig{Kind: "github"}}
+	if release, _, err := missingHoldDisposition(tr, h, failure, now); release || !errors.Is(err, errHeldIssueAccessUnverified) {
+		t.Fatalf("rate-limited 403 was treated as an access denial: release=%v, err=%v", release, err)
+	}
+	for range 5 {
+		recordIssueAccessFailure(&h, tr.Source.Kind, now, failure)
+		if h.AccessFailures != 4 || h.AccessError != "" || h.RetryAccessAt == nil || !h.RetryAccessAt.Equal(reset) ||
+			!strings.Contains(h.Eligibility, "rate-limited") || h.MissingPoll != 0 || !h.MissingSince.IsZero() || h.Round != 1 {
+			t.Fatalf("rate-limited probe spent a failure, lost the deadline or changed progress: %+v", h)
+		}
+	}
+}
