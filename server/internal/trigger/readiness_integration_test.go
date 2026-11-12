@@ -361,3 +361,53 @@ func TestClosedHoldsReleaseFullCapacity(t *testing.T) {
 		t.Fatalf("closed holds stranded the queue: %+v", tr)
 	}
 }
+
+func TestReadinessCommentRetriesOnlyAfterReconciliation(t *testing.T) {
+	for _, status := range []int{403, 503} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			st := triggerStore(t)
+			c := &clock{t: time.Now().UTC()}
+			gh := newTracker("gh")
+			gh.issues = []map[string]any{ghIssue(1, "Issue", "weft")}
+			const post = "POST /repos/acme/app/issues/1/comments"
+			if status == 403 {
+				gh.fail[post] = true
+			} else {
+				gh.transientComments = 1
+			}
+			r := runner(st, c, "one", gh)
+			r.Tasks = &tasks{}
+			r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+				return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+			})
+			tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			h := tr.Holds[0]
+			if h.CommentAttempts != 1 || len(gh.comments["#1"]) != 0 {
+				t.Fatal(h)
+			}
+			if status == 403 {
+				if h.Publication != "comment_failed" || !strings.Contains(h.PublicationMessage, "permission to write issue comments") {
+					t.Fatal(h)
+				}
+				tr = advance(r, c, t, tr.ID)
+				if tr.Holds[0].CommentAttempts != 1 || strings.Count(strings.Join(gh.rest, "\n"), post) != 1 {
+					t.Fatal(gh.rest)
+				}
+				return
+			}
+			if h.Publication != "comment_pending" || h.RetryCommentAt == nil || !h.RetryCommentAt.After(c.t) {
+				t.Fatal(h)
+			}
+			tr = advance(r, c, t, tr.ID)
+			log := strings.Join(gh.rest, "\n")
+			if tr.Holds[0].Publication != "confirmed" || tr.Holds[0].CommentAttempts != 2 || len(gh.comments["#1"]) != 1 ||
+				!strings.Contains(log, "GET /repos/acme/app/issues/1/comments\n"+post) {
+				t.Fatalf("retry was not reconciled: %+v %v", tr.Holds, gh.rest)
+			}
+		})
+	}
+}

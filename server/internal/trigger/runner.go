@@ -291,7 +291,8 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 			replies, err = r.currentReplies(ctx, t, call, h, current)
 		}
 		if err != nil || issueReason(t, current) != "" || readinessInput(current, replies) != i.EvaluatedInput {
-			h.State, h.Reason, h.Marker, h.Publication = "recheck", "snapshot_changed", domain.NewID("hold"), "label_pending"
+			h.State, h.Reason = "recheck", "snapshot_changed"
+			h.prepareComment()
 			h.Removals = []string{LabelInProgress}
 			if err := r.saveHold(ctx, t, h); err != nil {
 				return "readiness_changed", err

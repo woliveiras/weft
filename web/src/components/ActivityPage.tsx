@@ -159,6 +159,7 @@ function ActivityOverview({ state, onChange, tabs }: { state: ActivityRouteState
           <ul>{view.triggerHolds?.map(h => <li key={`${h.triggerId}:${h.key}`} className="card">
             <strong>{h.url ? <a href={h.url}>{h.key}</a> : h.key}</strong> · {h.triggerName} · round {h.round}
             <p>{h.reason}{h.eligibility ? ` The issue ${h.eligibility}.` : ''}{h.disabled ? ' Readiness is disabled for this trigger.' : ''}</p>
+            {h.publicationMessage && <p>{h.publicationMessage}</p>}
             {h.publication === 'comment_pending' && <p>Tracker comment delivery is unconfirmed.</p>}
             {(h.publication === 'label_pending' || h.publication === 'label_pending_only') && <p>Tracker label update is pending.</p>}
           </li>)}</ul>

@@ -125,6 +125,7 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
               {t.holds?.map(h => <li key={h.key}>
                 {h.url ? <a href={h.url}>{h.key}</a> : h.key} · round {h.round} · {h.message || h.reason}
                 {h.eligibility && ` The issue ${h.eligibility}.`}
+                {h.publicationMessage && ` ${h.publicationMessage}`}
                 {h.publication === 'comment_pending' && ' Tracker comment delivery is unconfirmed.'}
                 {(h.publication === 'label_pending' || h.publication === 'label_pending_only') && ' Tracker label update is pending.'}
                 {canPreview && <Btn small disabled={resolving !== undefined} onClick={() => void resolve(t.id, h.key, h.openedAt)}>Resolve hold</Btn>}

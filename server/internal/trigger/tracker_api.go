@@ -40,6 +40,33 @@ type trackerArgs struct {
 	Since  time.Time `json:"since,omitempty"`
 }
 
+type trackerCommentFailure struct {
+	Status int `json:"status"`
+}
+
+func (e trackerCommentFailure) Error() string {
+	return fmt.Sprintf("tracker comment returned HTTP %d", e.Status)
+}
+
+func (e trackerCommentFailure) definitive() bool {
+	return e.Status >= 400 && e.Status < 500 && e.Status != http.StatusRequestTimeout && e.Status != http.StatusTooManyRequests
+}
+
+func (e trackerCommentFailure) guidance() string {
+	switch e.Status {
+	case http.StatusUnauthorized:
+		return "The tracker rejected the credential. Check the connection and review trigger consent again."
+	case http.StatusForbidden:
+		return "The tracker refused the comment. Verify that the connection credential has permission to write issue comments."
+	case http.StatusNotFound:
+		return "The tracker could not find the issue. Check the trigger scope and the credential's issue access."
+	case http.StatusUnprocessableEntity:
+		return "The tracker rejected the comment. Review issue restrictions and the trigger connection."
+	default:
+		return "The tracker rejected the comment. Review the trigger connection and resolve the hold."
+	}
+}
+
 type trackerTool struct {
 	name string
 	call TrackerCall
@@ -121,7 +148,13 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 			commentPath = path + "/comment"
 			body = map[string]any{"body": jiraComment(a.Body)}
 		}
-		_, _, err = request(http.MethodPost, commentPath, body)
+		var status int
+		_, status, err = request(http.MethodPost, commentPath, body)
+		if err != nil && status >= 400 && status <= 599 {
+			failure := trackerCommentFailure{Status: status}
+			data, _ := json.Marshal(failure)
+			return &tools.Result{IsError: true, Content: failure.Error(), Data: data}, nil
+		}
 	}
 	if err != nil {
 		return nil, err

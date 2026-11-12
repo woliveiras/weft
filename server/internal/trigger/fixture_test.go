@@ -14,6 +14,7 @@ import (
 
 // tracker is an in-memory GitHub or Jira project behind MCP tool names.
 type tracker struct {
+	transientComments   int
 	loseCommentResponse bool
 	rest                []string
 	replies             map[string][]map[string]any
@@ -198,6 +199,10 @@ func (t *tracker) request(_ context.Context, connection, kind string, _ int64, m
 		}
 	}
 	if method == "POST" && (segment == "comments" || segment == "comment") {
+		if t.transientComments > 0 {
+			t.transientComments--
+			return nil, 503, fmt.Errorf("tracker temporarily unavailable")
+		}
 		if kind == "github" {
 			t.comments[key] = append(t.comments[key], body.(map[string]string)["body"])
 		} else {

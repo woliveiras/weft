@@ -92,7 +92,10 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   the issue unadmitted. Retry only within the reviewed bounds. Reconcile
   confirmed comment and state changes before retrying. If delivery is
   uncertain, surface it for reconciliation and keep the issue held until the
-  publication outcome is resolved.
+  publication outcome is resolved. Retry a transient comment failure only
+  after the backoff window and a complete tracker read showing no matching
+  publication marker. Cap attempts and expose permanent failures with a
+  correction or explicit hold resolution action.
 
 ## Acceptance criteria
 

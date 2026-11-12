@@ -2,6 +2,7 @@ package trigger
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -15,6 +16,10 @@ import (
 const readinessCapacity = "The trigger has 10 held issues. Resolve a hold before it evaluates new issues."
 
 type Hold struct {
+	PublicationMessage string     `json:"publicationMessage,omitempty"`
+	CommentAttempts    int        `json:"commentAttempts,omitempty"`
+	RetryCommentAt     *time.Time `json:"retryCommentAt,omitempty"`
+
 	Eligibility  string    `json:"eligibility,omitempty"`
 	Message      string    `json:"message"`
 	Key          string    `json:"key"`
@@ -140,11 +145,53 @@ func relabel(ctx context.Context, call Invoker, key string, remove []string, add
 }
 
 func comment(ctx context.Context, call Invoker, key, body string) error {
-	return trackerWrite(ctx, call, trackerComment, trackerArgs{Key: key, Body: body})
+	res, err := call(ctx, trackerComment, trackerArgs{Key: key, Body: body})
+	if err == nil && res != nil && res.IsError {
+		var failure trackerCommentFailure
+		if json.Unmarshal(res.Data, &failure) == nil && failure.Status >= 400 && failure.Status <= 599 {
+			return failure
+		}
+	}
+	return result(res, err)
 }
 
-// Publish in two recorded steps. A comment whose response was lost can be
-// confirmed by its unique marker. It is never automatically posted twice.
+const maxCommentAttempts = 3
+
+func (r *Runner) postHoldComment(ctx context.Context, t *Trigger, call Invoker, h Hold) error {
+	h.CommentAttempts++
+	now := r.Triggers.now()
+	if h.RoundAt.IsZero() {
+		h.RoundAt = now
+	}
+	next := now.Add(time.Minute << (h.CommentAttempts - 1))
+	h.Publication, h.RetryCommentAt = "comment_pending", &next
+	if err := r.saveHold(ctx, t, h); err != nil {
+		return err
+	}
+	err := comment(ctx, call, h.Key, holdMessage(h))
+	if err == nil {
+		h.RoundAt = now
+		return r.confirmHoldComment(ctx, t, h)
+	}
+	var failure trackerCommentFailure
+	if errors.As(err, &failure) && failure.definitive() {
+		return r.failHoldComment(ctx, t, h, failure.guidance())
+	}
+	return errors.New("readiness comment delivery is unconfirmed")
+}
+
+func (r *Runner) confirmHoldComment(ctx context.Context, t *Trigger, h Hold) error {
+	h.Publication, h.PublicationMessage, h.RetryCommentAt = "confirmed", "", nil
+	return r.saveHold(ctx, t, h)
+}
+
+func (r *Runner) failHoldComment(ctx context.Context, t *Trigger, h Hold, message string) error {
+	h.Publication, h.PublicationMessage, h.RetryCommentAt = "comment_failed", message, nil
+	return r.saveHold(ctx, t, h)
+}
+
+// Every retry is preceded by a successful scan for the original marker. The
+// trigger lease serializes the scan and POST with all other pollers.
 func (r *Runner) publishHold(ctx context.Context, t *Trigger, call Invoker, h Hold) error {
 	switch h.Publication {
 	case "label_pending", "label_pending_only":
@@ -152,27 +199,29 @@ func (r *Runner) publishHold(ctx context.Context, t *Trigger, call Invoker, h Ho
 			return errors.New("readiness label write did not complete")
 		}
 		if h.Publication == "label_pending_only" {
-			h.Publication = "confirmed"
-			return r.saveHold(ctx, t, h)
+			return r.confirmHoldComment(ctx, t, h)
 		}
-		h.Publication = "comment_pending"
-		h.RoundAt = r.Triggers.now()
-		if err := r.saveHold(ctx, t, h); err != nil {
-			return err
-		}
-		if err := comment(ctx, call, h.Key, holdMessage(h)); err != nil {
-			return errors.New("readiness comment delivery is unconfirmed")
-		}
+		return r.postHoldComment(ctx, t, call, h)
 	case "comment_pending":
+		if h.RetryCommentAt != nil && r.Triggers.now().Before(*h.RetryCommentAt) {
+			return nil
+		}
 		comments, err := trackerRead[[]issueComment](ctx, call, trackerComments, trackerArgs{Key: h.Key, Since: h.RoundAt.Add(-time.Second)})
-		if err != nil || !slices.ContainsFunc(comments, func(row issueComment) bool { return canonicalComment(row.Body) == canonicalComment(holdMessage(h)) }) {
+		if err != nil {
 			return errors.New("readiness comment delivery is unconfirmed")
 		}
+		expected := canonicalComment(holdMessage(h))
+		if i := slices.IndexFunc(comments, func(row issueComment) bool { return canonicalComment(row.Body) == expected }); i >= 0 {
+			h.RoundAt = comments[i].At
+			return r.confirmHoldComment(ctx, t, h)
+		}
+		if h.CommentAttempts >= maxCommentAttempts {
+			return r.failHoldComment(ctx, t, h, "The tracker comment could not be confirmed after three attempts. Check the issue and connection, then resolve the hold.")
+		}
+		return r.postHoldComment(ctx, t, call, h)
 	default:
 		return nil
 	}
-	h.Publication = "confirmed"
-	return r.saveHold(ctx, t, h)
 }
 
 // Jira ADF flattening can omit empty paragraphs. Preserve line boundaries
@@ -180,6 +229,11 @@ func (r *Runner) publishHold(ctx context.Context, t *Trigger, call Invoker, h Ho
 func canonicalComment(body string) string {
 	lines := strings.Split(body, "\n")
 	return strings.Join(slices.DeleteFunc(lines, func(line string) bool { return strings.TrimSpace(line) == "" }), "\n")
+}
+
+func (h *Hold) prepareComment() {
+	h.Marker, h.Publication = domain.NewID("hold"), "label_pending"
+	h.RoundAt, h.CommentAttempts, h.RetryCommentAt, h.PublicationMessage = time.Time{}, 0, nil, ""
 }
 
 func (r *Runner) finishHold(ctx context.Context, t *Trigger, call Invoker, h Hold, a ReadinessAssessment, current Issue) error {
@@ -202,7 +256,7 @@ func (r *Runner) finishHold(ctx context.Context, t *Trigger, call Invoker, h Hol
 			h.Round++
 		}
 	}
-	h.Marker, h.Publication = domain.NewID("hold"), "label_pending"
+	h.prepareComment()
 	h.Removals = selectionRemovals(t, current, h.Signal != "")
 	if err := r.saveHold(ctx, t, h); err != nil {
 		return err
@@ -290,6 +344,9 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	}
 	if h.Publication == "label_pending" || h.Publication == "label_pending_only" || h.Publication == "comment_pending" {
 		return false, r.publishHold(ctx, t, call, h)
+	}
+	if h.Publication == "comment_failed" {
+		return false, nil
 	}
 	if h.State == "evaluating" {
 		return false, r.finishHold(ctx, t, call, h, ReadinessAssessment{Failure: "evaluation_interrupted"}, i)
