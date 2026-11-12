@@ -60,7 +60,21 @@ func (g *Gateway) now() time.Time {
 // ErrRejected, ErrRateLimited (wrapped) - and for invalid arguments that
 // are not a JSON object. A tool that fails while executing produces a
 // Result with IsError set, so the model can read the failure and recover.
-func (g *Gateway) Invoke(ctx context.Context, p *Principal, name string, args json.RawMessage) (res *Result, err error) {
+func (g *Gateway) Invoke(ctx context.Context, p *Principal, name string, args json.RawMessage) (*Result, error) {
+	return g.invoke(ctx, p, name, args, "", nil)
+}
+
+// ReadGuidanceReference runs a package-scoped, bounded reader behind the
+// existing filesystem.read grants, path constraints, rate and approval gates.
+func (g *Gateway) ReadGuidanceReference(ctx context.Context, p *Principal, path string, read func()) (*Result, error) {
+	args, err := json.Marshal(map[string]string{"path": path})
+	if err != nil {
+		return nil, err
+	}
+	return g.invoke(ctx, p, "filesystem.read", args, path, read)
+}
+
+func (g *Gateway) invoke(ctx context.Context, p *Principal, name string, args json.RawMessage, referencePath string, read func()) (res *Result, err error) {
 	if p == nil {
 		return nil, fmt.Errorf("%w: no principal", ErrDenied)
 	}
@@ -113,6 +127,13 @@ func (g *Gateway) Invoke(ctx context.Context, p *Principal, name string, args js
 		outcome = "denied"
 		g.audit(ctx, p, domain.EvToolDenied, name, shown, outcome, 0, aerr)
 		return nil, aerr
+	}
+	if read != nil {
+		if err := CheckPath(grant, referencePath); err != nil {
+			outcome = "denied"
+			g.audit(ctx, p, domain.EvToolDenied, name, shown, outcome, 0, err)
+			return nil, err
+		}
 	}
 	if p.WorkspaceReadOnly && (workspaceMutation(t) || t.Capability() == "git.read") {
 		outcome = "denied"
@@ -205,7 +226,13 @@ func (g *Gateway) Invoke(ctx context.Context, p *Principal, name string, args js
 			g.auditWorkspace(context.WithoutCancel(ctx), p, name, before, snapshotWorkspace(context.WithoutCancel(ctx), p.Workdir))
 		}()
 	}
-	res, terr := g.safeInvoke(ctx, t, inv)
+	var terr error
+	if read != nil {
+		read()
+		res = &Result{Content: "guidance reference read attempted"}
+	} else {
+		res, terr = g.safeInvoke(ctx, t, inv)
+	}
 	if terr != nil {
 		if errors.Is(terr, ErrDenied) || errors.Is(terr, ErrRateLimited) {
 			// Constraint violation detected inside the tool (paths, commands, hosts).

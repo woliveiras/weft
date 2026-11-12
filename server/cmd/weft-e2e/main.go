@@ -64,6 +64,20 @@ func (analysisProvider) Chat(_ context.Context, r *llm.ChatRequest) (*llm.ChatRe
 		return &llm.ChatResponse{Message: llm.ChatMessage{Content: raw}}, nil
 	}
 
+	if len(r.Messages) > 0 && strings.Contains(r.Messages[0].Content, "repository-guidance-browser") {
+		context := r.Messages[0].Content
+		switch {
+		case !strings.Contains(context, "Browser repository body."):
+			return guidanceFixtureCall("repository:browser-review", ""), nil
+		case !strings.Contains(context, "Browser reference body."):
+			return guidanceFixtureCall("repository:browser-review", "references/checklist.md"), nil
+		case !strings.Contains(context, "Browser console body."):
+			return guidanceFixtureCall("console:browser-guidance", ""), nil
+		default:
+			return &llm.ChatResponse{Message: llm.ChatMessage{Content: "Guidance exercised."}}, nil
+		}
+	}
+
 	for _, message := range r.Messages {
 		if match := regexp.MustCompile(`Task issue source: read using (mcp\.[a-z0-9_-]+\.[A-Za-z_]+) with arguments (\{[^\n]+\})\.`).FindStringSubmatch(message.Content); match != nil {
 			for _, result := range r.Messages {
@@ -165,6 +179,13 @@ func (analysisProvider) Chat(_ context.Context, r *llm.ChatRequest) (*llm.ChatRe
 	}
 	return &llm.ChatResponse{Message: llm.ChatMessage{Content: `{"environment":{"image":"alpine:3.22","network":{"setup":"none","run":"none"}},"rationale":"E2E minimal shell, no dependency setup required.","tools":["sh"]}`}}, nil
 }
+func guidanceFixtureCall(skill, reference string) *llm.ChatResponse {
+	args, _ := json.Marshal(map[string]string{"skill": skill, "reference": reference})
+	return &llm.ChatResponse{Message: llm.ChatMessage{ToolCalls: []llm.ToolCall{
+		{ID: skill + reference, Name: "guidance.load", Arguments: args},
+	}}}
+}
+
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
@@ -219,6 +240,21 @@ func run() error {
 	cfg.Storage = config.Storage{Type: "sqlite", Dir: filepath.Join(root, "store")}
 	cfg.Queue = config.Queue{Type: "memory"}
 	cfg.Workspaces.Root = filepath.Join(root, "ws")
+	guidanceRoot := filepath.Join(cfg.Workspaces.Root, "repository-guidance-browser")
+	for name, content := range map[string]string{
+		"AGENTS.md":                              "Browser root instructions.",
+		".agents/skills/browser-review/SKILL.md": "---\nname: browser-review\ndescription: Browser review catalogue.\n---\nBrowser repository body.\n",
+		".agents/skills/browser-review/references/checklist.md": "Browser reference body.",
+		".agents/skills/browser-guidance/SKILL.md":              "---\nname: browser-guidance\ndescription: Shadowed browser skill.\n---\nShadowed browser body.\n",
+	} {
+		target := filepath.Join(guidanceRoot, name)
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, []byte(content), 0o644); err != nil {
+			return err
+		}
+	}
 	cfg.Secrets = config.Secrets{KeyFile: filepath.Join(root, "fixture.key"), GenerateKeyFile: true}
 	cfg.Auth.Tokens = []config.Token{{Name: "e2e-admin", Role: config.RoleAdmin, Token: "e2e-admin-token"}, {Name: "e2e-viewer", Role: config.RoleViewer, Token: "e2e-viewer-token"}}
 	cfg.Isolation.Docker.Bin = bin

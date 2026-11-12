@@ -1,6 +1,7 @@
+import { InstructionManifest } from './InstructionManifest';
 import { ExecutionTreeView } from './ExecutionTreeView';
 import { useEffect, useState } from 'react';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 import type { Execution } from '../api/types';
 import { useAsync } from '../hooks/useData';
 import { Badge, Btn, ErrorBox, JsonView, fmtDateTime } from './common';
@@ -47,10 +48,28 @@ function RunDetail({graphId,executionId,section,role}:{graphId:string;executionI
    {section==='result'&&<><article className="card"><h2>Result summary</h2><p className="muted">Agent-generated summary. Inspect tool outcomes below to verify it.</p>{execution.summary?<p className="run-summary">{execution.summary}</p>:<p>No result summary recorded.</p>}<ErrorBox error={execution.error}/><p>{execution.toolCalls} tool attempts recorded · {execution.usage?.inputTokens??0} input / {execution.usage?.outputTokens??0} output tokens</p><details><summary>About tool counts</summary><p>The recorded total counts attempts, including failures. Historical native runs may have counted gateway calls twice; records are preserved. The observed history below is a bounded window and may omit attempts.</p></details><p><a href={`#/g/${encodeURIComponent(graphId)}/files`}>Inspect graph workspace</a></p><p className="muted">Workspace files reflect the current graph workspace, not a snapshot attributed to this run.</p></article><RunEvents execution={execution} toolsOnly summaryOnly/><RunApprovals key={executionId} execution={execution} role={role}/></>}
    {(section==='timeline'||section==='tools')&&<RunEvents key={`${executionId}/${section}`} execution={execution} toolsOnly={section==='tools'}/>}
    {section==='tree'&&<ExecutionTreeView key={executionId} graphId={graphId} executionId={executionId} role={role}/>}
+   {section==='guidance'&&<RunGuidance executionId={executionId}/>}
    {section==='messages'&&<RunMessages key={executionId} execution={execution}/>}
    {section==='diagnostics'&&<article className="card"><h2>Diagnostics</h2><dl className="kv"><dt>Execution</dt><dd>{execution.id}</dd><dt>Run group</dt><dd>{execution.runId}</dd><dt>Agent</dt><dd>{execution.nodeId}</dd><dt>Replica</dt><dd>{execution.replica}</dd><dt>Iteration</dt><dd>{execution.iteration}</dd><dt>Completed</dt><dd>{execution.completedAt?fmtDateTime(execution.completedAt):'Not recorded'}</dd><dt>Trace</dt><dd>{execution.traceId||'Not recorded'}</dd><dt>Signal</dt><dd>{execution.signal||'Not recorded'}</dd></dl><a href={`#/g/${encodeURIComponent(graphId)}/agent?agent=${encodeURIComponent(execution.nodeId)}&section=general`}>View current agent configuration</a><p className="muted">Current configuration may differ from the version used by this execution.</p></article>}
   </>}
  </section>;
+}
+function RunGuidance({executionId}: {executionId: string}) {
+ const guidance = useRunData(async () => {
+  try {
+   return await api.executionInstructions(executionId);
+  } catch (error) {
+   if (error instanceof ApiError && error.status === 404) return null;
+   throw error;
+  }
+ });
+ return <article className="card" aria-label="Execution guidance">
+  <h2>Execution guidance</h2>
+  {guidance.loading && guidance.data === undefined && <p role="status">Loading guidance…</p>}
+  {guidance.error && <ErrorBox error={guidance.error}/>}
+  {guidance.data === null && <p>Guidance history is unavailable for this execution.</p>}
+  {guidance.data && <InstructionManifest snapshot={guidance.data}/>}
+ </article>;
 }
 function RunApprovals({execution,role}:{execution:Execution;role?:string}) {
  const approvals=useRunData(()=>api.approvals({graph:execution.graphId}));

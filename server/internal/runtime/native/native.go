@@ -46,6 +46,8 @@ var (
 
 func New() *Runtime { return &Runtime{MaxRounds: 40} }
 
+func (*Runtime) SupportsProgressiveGuidance() bool { return true }
+
 func (r *Runtime) Kind() domain.RuntimeKind { return domain.RuntimeNative }
 
 func (r *Runtime) Prepare(context.Context, runtime.ReplicaContext) error { return nil }
@@ -92,11 +94,21 @@ var platformTools = []llm.ToolSchema{
 func (r *Runtime) Turn(ctx context.Context, in *runtime.TurnInput, env runtime.TurnEnv) (*runtime.TurnResult, error) {
 	res := &runtime.TurnResult{}
 	toolset := append(append([]llm.ToolSchema(nil), in.Tools...), platformTools...)
+	if in.Guidance != nil {
+		toolset = append(toolset, llm.ToolSchema{
+			Name:        "guidance.load",
+			Description: "Activate a catalogued skill by its selection ID, or load one relative text reference after activating its body. Guidance stays in its assigned position in the task.",
+			Parameters:  json.RawMessage(`{"type":"object","additionalProperties":false,"properties":{"skill":{"type":"string"},"reference":{"type":"string"}},"required":["skill"]}`),
+		})
+	}
 	small := in.ModelGuidance == llm.GuidanceSmall
 	if small {
 		toolset = CompactSchemas(toolset)
 	}
 	conv := &conversation{task: llm.ChatMessage{Role: llm.RoleUser, Content: in.Prompt}}
+	if in.Guidance != nil {
+		conv.originalTask = &in.Prompt
+	}
 	cm := newContextManager(ctx, env, in.System, toolset)
 	var lastText string
 	rounds := r.MaxRounds
@@ -109,12 +121,25 @@ func (r *Runtime) Turn(ctx context.Context, in *runtime.TurnInput, env runtime.T
 	calls, corrections := 0, 0
 	finished := false
 	for round := 0; round < rounds && !finished; round++ {
+		if in.Guidance != nil {
+			conv.task.Content = in.Guidance.Prompt()
+		}
 		if err := cm.fit(ctx, conv); err != nil {
 			return nil, err
+		}
+		if in.Guidance != nil {
+			if err := in.Guidance.Dispatch(ctx); err != nil {
+				return nil, err
+			}
 		}
 		resp, err := chatLive(ctx, env, &llm.ChatRequest{System: in.System, Messages: conv.messages(), Tools: toolset})
 		if err != nil {
 			return nil, fmt.Errorf("model call: %w", err)
+		}
+		if in.Guidance != nil {
+			if err := in.Guidance.Confirm(ctx); err != nil {
+				return nil, err
+			}
 		}
 		// TurnEnv.Chat accounts for gateway model usage, including delegated children.
 		msg := resp.Message
@@ -161,7 +186,21 @@ func (r *Runtime) Turn(ctx context.Context, in *runtime.TurnInput, env runtime.T
 				conv.add(llm.ChatMessage{Role: llm.RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "not run: call one tool per reply and wait for its result"})
 				continue
 			}
-			out, done := r.call(ctx, env, res, call)
+			var out string
+			var done bool
+			if in.Guidance != nil && call.Name == "guidance.load" {
+				var args struct{ Skill, Reference string }
+				if json.Unmarshal(call.Arguments, &args) != nil {
+					args.Skill, args.Reference = "", ""
+				}
+				var err error
+				out, err = in.Guidance.Load(ctx, args.Skill, args.Reference)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				out, done = r.call(ctx, env, res, call)
+			}
 			calls++
 			conv.add(llm.ChatMessage{Role: llm.RoleTool, ToolCallID: call.ID, Name: call.Name, Content: cm.capResult(call.Name, out)})
 			finished = finished || done

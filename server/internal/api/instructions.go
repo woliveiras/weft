@@ -155,6 +155,9 @@ func (s *Server) inspectInstructions(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return err
 	}
+	if v.RepositoryPolicy == "" {
+		v.RepositoryPolicy = "graph_off"
+	}
 	writeJSON(w, 200, v)
 	return nil
 }

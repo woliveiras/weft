@@ -37,7 +37,21 @@ type ReplicaContext struct {
 
 // TurnInput is everything an agent knows at the start of a turn. It is also
 // the request body of the external Runtime Protocol (POST /v1/turn).
+// ProgressiveGuidance is an execution-local context selector for supporting
+// runtimes. It is never serialized or accessible via the external callback.
+type ProgressiveGuidance interface {
+	Prompt() string
+	Load(context.Context, string, string) (string, error)
+	Dispatch(context.Context) error
+	Confirm(context.Context) error
+}
+
+type ProgressiveRuntime interface {
+	SupportsProgressiveGuidance() bool
+}
+
 type TurnInput struct {
+	Guidance     ProgressiveGuidance         `json:"-"`
 	Instructions *domain.InstructionSnapshot `json:"instructions,omitempty"`
 
 	ExecutionID string `json:"executionId"`

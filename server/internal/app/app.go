@@ -379,6 +379,9 @@ func (t toolGateway) Schemas(p *tools.Principal) []llm.ToolSchema {
 	return out
 }
 
+func (t toolGateway) ReadGuidanceReference(ctx context.Context, p *tools.Principal, path string, read func()) (*tools.Result, error) {
+	return t.gw.ReadGuidanceReference(ctx, p, path, read)
+}
 func (t toolGateway) NeedsApproval(p *tools.Principal, name string) bool {
 	tool, ok := t.reg.Get(name)
 	if !ok {

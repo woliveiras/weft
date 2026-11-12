@@ -638,6 +638,20 @@ artificial model response; no shared Docker daemon or external provider is used.
 
 See [Skills and steering](instructions.md) for registry CRUD, mandatory revision headers, graph/agent associations and inspection endpoints.
 
+Graph instructions and node definitions accept `repositoryGuidance`. The
+graph must opt in. A node can add family blocks or disable its inherited
+policy. Writes use existing graph administration and version checks.
+
+`GET /api/v1/graphs/{id}/instructions?node=...&replica=...` previews effective
+saved policy and discovery. `GET /api/v1/executions/{eid}/instructions`
+returns the historical manifest to authenticated installation Viewers.
+Progressive snapshots expose `repositoryPolicy`, `blockedSources`, and
+ordered `entries` with stages, delivery outcomes and omissions. `reads`
+contains linked body and reference outcomes with their original order,
+source, console revision or repository digest. New entries exclude body
+copies. A missing snapshot returns 404. The console links this manifest
+from Activity through the execution's **Guidance** section.
+
 ## Durable application reviews
 
 These routes require an operator/admin and the review's optional reviewer allowlist.

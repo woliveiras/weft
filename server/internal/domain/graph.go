@@ -38,10 +38,20 @@ type GraphMetadata struct {
 	Extensions Extensions `json:"-" yaml:"-"`
 }
 
+// RepositoryGuidancePolicy is opt-in when present on the graph. A node
+// policy may disable discovery or add source blocks to the graph policy.
+type RepositoryGuidancePolicy struct {
+	Disabled       bool     `json:"disabled,omitempty" yaml:"disabled,omitempty"`
+	BlockedSources []string `json:"blockedSources,omitempty" yaml:"blockedSources,omitempty"`
+}
+
+var RepositoryGuidanceSources = []string{"agents", "claude", "github"}
+
 type InstructionRefs struct {
-	SkillIDs             []string `json:"skillIds,omitempty" yaml:"skillIds,omitempty"`
-	ProjectSteering      bool     `json:"projectSteering,omitempty" yaml:"projectSteering,omitempty"`
-	InstallationDefaults bool     `json:"installationDefaults,omitempty" yaml:"installationDefaults,omitempty"`
+	RepositoryGuidance   *RepositoryGuidancePolicy `json:"repositoryGuidance,omitempty" yaml:"repositoryGuidance,omitempty"`
+	SkillIDs             []string                  `json:"skillIds,omitempty" yaml:"skillIds,omitempty"`
+	ProjectSteering      bool                      `json:"projectSteering,omitempty" yaml:"projectSteering,omitempty"`
+	InstallationDefaults bool                      `json:"installationDefaults,omitempty" yaml:"installationDefaults,omitempty"`
 }
 
 type GraphSpec struct {
@@ -153,7 +163,8 @@ type NodeDefaults struct {
 
 // Node is an agent placed in the graph.
 type Node struct {
-	SkillIDs SkillSelection `json:"skillIds" yaml:"skillIds"`
+	RepositoryGuidance *RepositoryGuidancePolicy `json:"repositoryGuidance,omitempty" yaml:"repositoryGuidance,omitempty"`
+	SkillIDs           SkillSelection            `json:"skillIds" yaml:"skillIds"`
 
 	ID          string        `json:"id" yaml:"id"`
 	Name        string        `json:"name,omitempty" yaml:"name,omitempty"`

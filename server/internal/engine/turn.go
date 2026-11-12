@@ -225,7 +225,25 @@ func (r *replica) turn(loopCtx context.Context, n *domain.Node, dels []queue.Del
 	in := r.buildInput(turnCtx, gr, n, x, inputs, ops, pendingStop, env.principal)
 	instructionStart := time.Now()
 	manager := instructions.Manager{Store: e.store}
-	snapshot, instructionErr := manager.Resolve(turnCtx, gr.g, n, in.Workdir, in.Prompt, in.OperatorMessages)
+	rt := e.opt.Runtimes[n.Runtime.Kind]
+	checkout := in.Workdir
+	var rootErr error
+	if n.Workspace.Mode != domain.WorkspaceWorktree && n.Workspace.Subdir != "" {
+		checkout, rootErr = e.opt.Workspaces.GraphDir(gr.g)
+	}
+	snapshot, guidance, instructionErr := manager.Prepare(turnCtx, gr.g, n, checkout, in.Workdir, in.Prompt, in.OperatorMessages)
+	instructionErr = errors.Join(instructionErr, rootErr)
+	if guidance != nil {
+		if progressive, ok := rt.(runtime.ProgressiveRuntime); !ok || !progressive.SupportsProgressiveGuidance() {
+			instructionErr = instructions.ErrIncompatibleRuntime
+			for i := range snapshot.Entries {
+				entry := &snapshot.Entries[i]
+				if entry.Included {
+					entry.Included, entry.Delivery, entry.Reason = false, "", "incompatible_runtime"
+				}
+			}
+		}
+	}
 	if snapshot != nil {
 		snapshot.ExecutionID = x.ID
 		instructionErr = errors.Join(instructionErr, manager.SaveSnapshot(turnCtx, snapshot))
@@ -255,7 +273,12 @@ func (r *replica) turn(loopCtx context.Context, n *domain.Node, dels []queue.Del
 	}
 	span.SetAttributes(attribute.Int("weft.instructions.omitted", omitted), attribute.Int("weft.instructions.entries", len(snapshot.Entries)))
 	in.Instructions = snapshot
-	if instructions.Enabled(gr.g) {
+	if guidance != nil {
+		guidance.ReadReference = func(ctx context.Context, path string, read func() (string, string)) (string, string, error) {
+			return env.readGuidanceReference(ctx, checkout, path, read)
+		}
+		in.Guidance = &turnGuidance{Session: guidance, env: env}
+	} else if instructions.Enabled(gr.g) {
 		in.Prompt = instructions.Context(*snapshot) + "\n" + in.Prompt
 	}
 	e.bus.Publish(turnCtx, domain.NewEvent("execution.instructions.loaded", gid, map[string]any{"entries": len(snapshot.Entries), "remaining_budget": snapshot.Budget, "omitted": omitted}).WithNode(n.ID, r.index).WithExecution(x.ID).WithTrace(x.TraceID))
@@ -263,8 +286,12 @@ func (r *replica) turn(loopCtx context.Context, n *domain.Node, dels []queue.Del
 		in.Callback = &runtime.Callback{URL: strings.TrimRight(e.opt.CallbackURL, "/") + "/internal/v1/executions/" + x.ID, Token: token}
 	}
 
-	rt := e.opt.Runtimes[n.Runtime.Kind]
 	res, err := rt.Turn(turnCtx, in, env)
+	if guidance != nil {
+		auditCtx, cancel := context.WithTimeout(context.WithoutCancel(turnCtx), 2*time.Second)
+		err = errors.Join(err, guidance.Finish(auditCtx))
+		cancel()
+	}
 	// End callback admission before persisting or publishing a terminal outcome.
 	// Deferred cleanup remains necessary for earlier exits, but is too late here.
 	e.execs.unregister(x.ID)
@@ -617,16 +644,8 @@ func (t *turnEnv) InvokeTool(ctx context.Context, name string, args json.RawMess
 	if controlErr != nil {
 		return nil, controlErr
 	}
-	t.mu.Lock()
-	if t.yielded {
-		t.mu.Unlock()
-		return nil, fmt.Errorf("turn yielded to human review")
-	}
-	t.calls++
-	calls := t.calls
-	t.mu.Unlock()
-	if t.n.Limits.MaxToolCalls > 0 && calls > t.n.Limits.MaxToolCalls {
-		return nil, fmt.Errorf("tool call budget of %d per turn exhausted", t.n.Limits.MaxToolCalls)
+	if err := t.countTool(); err != nil {
+		return nil, err
 	}
 	if t.gr.e.opt.Tools == nil {
 		return nil, tools.ErrUnknownTool
@@ -648,6 +667,21 @@ func (t *turnEnv) InvokeTool(ctx context.Context, name string, args json.RawMess
 		}
 	}
 	return result, err
+}
+
+func (t *turnEnv) countTool() error {
+	t.mu.Lock()
+	if t.yielded {
+		t.mu.Unlock()
+		return fmt.Errorf("turn yielded to human review")
+	}
+	t.calls++
+	calls := t.calls
+	t.mu.Unlock()
+	if t.n.Limits.MaxToolCalls > 0 && calls > t.n.Limits.MaxToolCalls {
+		return fmt.Errorf("tool call budget of %d per turn exhausted", t.n.Limits.MaxToolCalls)
+	}
+	return nil
 }
 
 // Chat implements runtime.TurnEnv.

@@ -1,7 +1,7 @@
 import type { Execution, WeftEvent } from '../api/types';
-export const runSections = ['result', 'tree', 'timeline', 'tools', 'messages', 'diagnostics'] as const;
+export const runSections = ['result', 'tree', 'timeline', 'tools', 'messages', 'guidance', 'diagnostics'] as const;
 export type RunSection = typeof runSections[number];
-export const runSectionTitles: Record<RunSection,string> = {result:'Result',tree:'Execution tree',timeline:'Timeline',tools:'Tool calls',messages:'Messages',diagnostics:'Diagnostics'};
+export const runSectionTitles: Record<RunSection,string> = {result:'Result',tree:'Execution tree',timeline:'Timeline',tools:'Tool calls',messages:'Messages',guidance:'Guidance',diagnostics:'Diagnostics'};
 export function runSection(value?:string|null):RunSection { return runSections.includes(value as RunSection) ? value as RunSection : 'result'; }
 export function runLink(graph:string,id?:string,section:RunSection='result') {
  return `#/g/${encodeURIComponent(graph)}/runs${id ? `?execution=${encodeURIComponent(id)}&section=${section}` : ''}`;

@@ -27,9 +27,16 @@ tool shapes for the local models we run first.
 | Code navigation | `tools/builtin_code.go` | `code.outline` (symbols of one file), `code.map` (token-bounded repository map, `builtin_code_map.go`), `BuildCodeMapFor` for prompts |
 | Git and shell | `tools/builtin_git.go`, `builtin_shell.go` | Git read/write, `shell.exec` in the node's sandbox under command grants |
 | Delegation | `engine/delegation*.go` | Bounded child agents with their own grants and token ledger |
-| Guidance | `instructions` | Opt-in skills and project steering per execution |
+| Guidance | `instructions` | Console skills, legacy project steering and opt-in repository discovery per execution |
 | Models | `llm`, plugins | Any enabled plugin, context window per provider, conformance suite, cost and budgets |
 | Evidence | tasks, workspace observations | Diff/Git inspection, file-change observations, SCM hand-off |
+
+With repository guidance enabled, the native runtime offers the
+execution-local `guidance.load` selector. Initial context includes the
+catalogue, and subsequent model rounds place activated bodies and references
+at the original source precedence. The selector cannot change grants or
+authorizations. The Activity-linked run records preparation and dispatch
+outcomes. See [Skills and steering](instructions.md#repository-guidance).
 
 ## Gaps and the plan
 
@@ -724,7 +731,7 @@ streaming for Anthropic.
 - Every tool still goes through the tool gateway with explicit grants;
   `check.run` is a shell call under the node's command grants, not a new
   privilege.
-- Repository guidance stays opt-in (skills and project steering); nothing
+- Repository discovery and project steering each require opt-in; nothing
   reads `AGENTS.md` automatically.
 - Compaction summaries are model output: they are kept as conversation, never
   as instructions with more authority than the task.

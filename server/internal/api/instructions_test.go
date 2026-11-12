@@ -172,3 +172,71 @@ func TestBuiltinSkillsAPIIsReadOnly(t *testing.T) {
 		t.Fatal("a built-in skill changed")
 	}
 }
+
+func TestRepositoryGuidanceGraphPolicyAndIncompatibleRuntime(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	const document = `{"metadata":{"id":"repository-policy","name":"Repository policy"},"spec":{
+		"instructions":{"repositoryGuidance":{"blockedSources":["agents"]}},
+		"nodes":[
+			{"id":"worker","prompt":"Task","runtime":{"kind":"echo"},"loop":{"mode":"once"},"repositoryGuidance":{"blockedSources":["github"]}},
+			{"id":"disabled","prompt":"Task","runtime":{"kind":"echo"},"loop":{"mode":"once"},"repositoryGuidance":{"disabled":true}}
+		]
+	}}`
+	const graphURL = "/api/v1/graphs/repository-policy"
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", document, nil); c != 201 {
+		t.Fatal(c)
+	}
+	for _, token := range []string{operatorTok, viewerTok} {
+		if c, _, _ := rawCall(t, "PUT", srv.URL+graphURL, token, document, map[string]string{"If-Match": "1"}); c != 403 {
+			t.Fatal("non-admin updated discovery policy", c)
+		}
+	}
+	if c, _, _ := rawCall(t, "PUT", srv.URL+graphURL, adminTok, document, map[string]string{"If-Match": "999"}); c != 409 {
+		t.Fatal("stale graph write was not rejected", c)
+	}
+	var saved instructions.Snapshot
+	if c := call(t, srv, "GET", graphURL+"/instructions?node=worker", viewerTok, "", "", &saved); c != 200 ||
+		saved.RepositoryPolicy != "agent_restricted" || strings.Join(saved.BlockedSources, ",") != "agents,github" {
+		t.Fatal("wrong effective policy", c, saved)
+	}
+	var disabled instructions.Snapshot
+	if c := call(t, srv, "GET", graphURL+"/instructions?node=disabled", viewerTok, "", "", &disabled); c != 200 ||
+		disabled.RepositoryPolicy != "agent_disabled" {
+		t.Fatal("agent disable not visible", c, disabled)
+	}
+	if c := call(t, srv, "POST", graphURL+"/start", operatorTok, "", "", nil); c != 200 && c != 202 {
+		t.Fatal(c)
+	}
+	var failed *domain.Execution
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && failed == nil {
+		rows, err := a.Store.ListExecutions(t.Context(), storage.ExecutionFilter{GraphID: "repository-policy"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, row := range rows {
+			if row.NodeID == "worker" && row.Status.Terminal() {
+				failed = row
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if failed == nil || failed.Status != domain.ExecFailed || !strings.Contains(failed.Error, instructions.ErrIncompatibleRuntime.Error()) {
+		t.Fatal("incompatible runtime should fail before dispatch", failed)
+	}
+	auditURL := "/api/v1/executions/" + failed.ID + "/instructions"
+	if c := call(t, srv, "GET", auditURL, "", "", "", nil); c != 401 {
+		t.Fatal("anonymous read of the manifest", c)
+	}
+	var historical instructions.Snapshot
+	if c := call(t, srv, "GET", auditURL, viewerTok, "", "", &historical); c != 200 {
+		t.Fatal("viewer could not inspect the historical run", c)
+	}
+	for _, e := range historical.Entries {
+		if e.Scope == "agent" && e.Reason == "incompatible_runtime" && !e.Included {
+			return
+		}
+	}
+	t.Fatal("missing explicit incompatible outcome", historical)
+}

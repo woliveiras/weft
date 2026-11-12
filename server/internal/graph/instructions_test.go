@@ -51,3 +51,30 @@ func TestInstructionReferences(t *testing.T) {
 		})
 	}
 }
+
+func TestRepositoryGuidanceValidatesSourceFamilies(t *testing.T) {
+	for _, test := range []struct {
+		sources []string
+		valid   bool
+	}{
+		{nil, true},
+		{[]string{"agents", "github"}, true},
+		{[]string{"claude", "claude"}, false},
+		{[]string{"other"}, false},
+	} {
+		policy := &domain.RepositoryGuidancePolicy{BlockedSources: test.sources}
+		for _, node := range []bool{false, true} {
+			g := &domain.Graph{Spec: domain.GraphSpec{Nodes: []domain.Node{{ID: "worker"}}}}
+			if node {
+				g.Spec.Nodes[0].RepositoryGuidance = policy
+			} else {
+				g.Spec.Instructions.RepositoryGuidance = policy
+			}
+			report := &Report{}
+			validateInstructions(g, report)
+			if (len(report.Errors) == 0) != test.valid {
+				t.Errorf("sources %v (node %t) gave %+v", test.sources, node, report)
+			}
+		}
+	}
+}

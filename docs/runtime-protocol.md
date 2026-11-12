@@ -195,6 +195,14 @@ last replica stops.
 
 `TurnInput.instructions` is an optional immutable manifest (see [schema](../schemas/instructions.schema.json)). It is untrusted data, never permissions. The Python SDK retains it in `TurnInput.instructions`. Opted-in guidance precedes the original node prompt; operator/task text is preserved. Graphs without opt-in retain their original prompt and operator messages. See [composition, budgets and failure behavior](instructions.md).
 
+Progressive repository guidance requires a supporting runtime. The native
+runtime handles execution-bound skill selection and adds activated guidance
+at its assigned precedence. Its in-process selector is absent from the HTTP
+protocol and callback API. An enabled graph using an incompatible runtime
+fails before dispatch with an explicit compatibility outcome. Existing
+external and Python turns keep the legacy instruction contract when
+repository guidance is disabled.
+
 ### Yielding for durable human review
 
 `ToolResult.yield` is an optional boolean. When true, the runtime must finish its

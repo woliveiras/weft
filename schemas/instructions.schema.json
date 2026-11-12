@@ -22,16 +22,29 @@
       }
     },
     "Skill": {"allOf":[{"$ref":"#/$defs/Version"},{"type":"object","required":["history"],"properties":{"history":{"type":"array","items":{"$ref":"#/$defs/Version"}}}}]},
+    "Entry": {
+      "type":"object", "required":["scope","source","included"],
+      "properties":{
+        "scope":{"enum":["installation","graph","project","agent","task","repository","repository-skill","guidance"]},
+        "source":{"type":"string"}, "revision":{"type":"integer"}, "sha256":{"type":"string"},
+        "body":{"type":"string", "description":"Legacy snapshot content."},
+        "included":{"type":"boolean"}, "reason":{"type":"string"},
+        "order":{"type":"integer","minimum":1}, "record":{"type":"integer","minimum":1},
+        "stage":{"enum":["catalogue","instruction","prompt","message","body","reference"]},
+        "delivery":{"enum":["prepared","indeterminate","confirmed","interrupted"]},
+        "selection":{"type":"string"}, "description":{"type":"string"}, "canonical":{"type":"string"},
+        "declaredVersion":{"type":"string"}, "lockStatus":{"type":"string"}
+      }
+    },
     "Snapshot": {
       "type":"object", "required":["graphId","nodeId","entries","budget"],
       "properties": {
         "graphId":{"type":"string"},"nodeId":{"type":"string"},"executionId":{"type":"string"},
-        "budget":{"type":"integer","minimum":0,"description":"Remaining conservative instruction budget; not a provider token count."},
-        "entries":{"type":"array","items":{"type":"object","required":["scope","source","included"],"properties":{
-          "scope":{"enum":["installation","graph","project","agent","task"]},"source":{"type":"string"},
-          "revision":{"type":"integer"},"sha256":{"type":"string"},"body":{"type":"string"},
-          "included":{"type":"boolean"},"reason":{"type":"string"}
-        }}}
+        "budget":{"type":"integer","minimum":0,"description":"Remaining conservative guidance budget in UTF-8 bytes."},
+        "repositoryPolicy":{"enum":["graph_off","agent_disabled","agent_restricted","inherited"]},
+        "blockedSources":{"type":"array","items":{"enum":["agents","claude","github"]}},
+        "entries":{"type":"array","items":{"$ref":"#/$defs/Entry"}},
+        "reads":{"type":"array","items":{"$ref":"#/$defs/Entry"}}
       }
     }
   }

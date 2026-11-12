@@ -54,7 +54,7 @@ workspace. It does not authorize additional paths. The inspection API supports
 `node` and `replica`; the console previews replica zero. Execution snapshots
 always reflect the actual replica directory, including worktree contents.
 
-Composition order, from lower to higher guidance precedence:
+Legacy composition order, from lower to higher guidance precedence:
 
 1. Installation defaults (`global: true`), in ID order, only when
    `installationDefaults: true`.
@@ -74,6 +74,76 @@ Omitting `spec.instructions` preserves the original prompt and operator
 messages byte-for-byte, including legacy size behavior. A new
 `installationDefaults` opt-in makes the existing contract's “no application
 skills when omitted” compatible with installation-wide defaults.
+
+## Repository guidance
+
+In **Skills & steering**, an administrator can enable **Discover repository
+instructions and skills** for a saved graph. It starts disabled for new and
+existing graphs. A node can inherit the graph policy, disable discovery for
+itself, or add source blocks. The graph policy is the upper bound. This
+setting is independent of **Authorize project steering**.
+
+```yaml
+spec:
+  instructions:
+    repositoryGuidance:
+      blockedSources: [github]
+    projectSteering: true
+  nodes:
+    - id: writer
+      repositoryGuidance:
+        blockedSources: [claude]
+```
+
+An empty `repositoryGuidance: {}` on the graph opts in to all supported
+families. Setting `disabled: true` disables discovery. Omission on the node
+inherits the graph policy. Families are `agents`, `claude` and `github`.
+
+Discovery uses the selected clone or replica worktree root, even when the
+agent works in a configured subdirectory. It selects the first present,
+unblocked instruction in the order `AGENTS.md`, `CLAUDE.md`,
+`.claude/CLAUDE.md`, and `.github/copilot-instructions.md`. An invalid
+selected file is recorded as an omission. Discovery lists immediate
+`SKILL.md` packages under `.agents/skills`, `.claude/skills` and
+`.github/skills`. It has no recursive discovery, imports, executable hooks
+or remote fetches.
+
+Relative package-directory aliases are allowed between supported skill roots
+in the same checkout. Both the alias and canonical source must be allowed,
+and a canonical package is catalogued once. Files, references and legacy
+steering still reject symlinks. Console skill IDs selected for the execution
+shadow valid repository names. Distinct repository packages sharing a name
+prefer `.agents`, `.claude`, then `.github`, with canonical relative
+paths in bytewise order to break ties. A v2 `skills-lock.json`
+`skills.<name>.computedHash` is an advisory version declaration. Observed
+SHA-256 digests describe the bytes Weft used.
+
+In enabled executions, the order from lowest to highest is repository
+skills, the selected repository instruction, installation defaults,
+graph/agent console skills, legacy `.weft/steering`, the agent prompt, and
+operator messages. The initial model request has skill names, descriptions and
+selection IDs. The native runtime can request a skill with
+`guidance.load {"skill":"repository:example"}` or
+`guidance.load {"skill":"console:example"}`. A later request can add a
+package-relative textual reference to an already activated repository skill.
+Only the chosen content is added, in the original skill's precedence slot.
+Reference reads use the existing `filesystem.read` gateway and its path
+constraints, rate limits and approvals. They are distinct from ordinary
+file reads. The loader rechecks the live checkout identity and metadata.
+A detected mismatch requires a later execution to rediscover the skill.
+Runtimes without progressive support fail before dispatch. Graphs without
+effective discovery retain legacy delivery for console skills.
+
+Each body, root instruction or reference is limited to 16 KiB and package
+metadata to 2 KiB. Discovery accepts at most 128 candidates per family and
+128 catalogued skills per execution. An over-limit family is omitted as a
+whole. Each execution can request up to 16 distinct package references. The shared
+8,192-byte guidance budget reserves the mandatory prompt and operator
+messages first, then admits whole optional entries from higher to lower
+precedence. Activations spend the balance including framing. Retries of
+applied reads spend no additional guidance budget. This is a conservative
+context bound, while provider accounting still includes the full model
+request each time it is sent.
 
 ## Bounds and rejection
 
@@ -102,11 +172,11 @@ skills when omitted” compatible with installation-wide defaults.
   settings or failed storage reads/writes fail execution, never masquerade as
   an empty successful load.
 - Missing directories, unreadable entries, invalid text, unsupported extensions,
-  symlinks and special files produce explicit omission reasons. No ancestor,
-  home-directory, `AGENTS.md` or recursive search occurs. Directory/file
-  symlinks encountered during inspection are rejected. Reads use `os.Root`
-  containment even across path replacement races and nonblocking opens prevent
-  FIFO substitution from hanging a turn. Hard links are ordinary workspace
+  symlinks and special files produce explicit omission reasons in legacy
+  steering. Steering searches only its immediate directory. Directory/file
+  symlinks encountered there are rejected. Reads open each component
+  relative to a pinned directory without following symlinks. Nonblocking
+  opens prevent FIFO substitution from hanging a turn. Hard links are ordinary workspace
   files; deployments must prevent untrusted creation of cross-boundary hard
   links at the filesystem/sandbox layer.
 
@@ -132,8 +202,9 @@ revision, actor and deletion state, never the body.
 Before runtime invocation the engine creates
 `instructions/executions/{executionId}` exactly once (CAS revision zero).
 The immutable snapshot contains graph/node/execution IDs and entries with
-scope, source, revision (managed skills), SHA-256, included body or omission
-reason. Oversized repository content is not hashed from a truncated prefix.
+scope, source, revision for managed skills, SHA-256 and any omission reason.
+Legacy snapshots also store included bodies. Oversized repository content is
+not hashed from a truncated prefix.
 Execution IDs link the snapshot to graph version, run, replica and trace in the
 existing execution record. No storage adapter/schema migration was necessary.
 
@@ -141,8 +212,17 @@ existing execution record. No storage adapter/schema migration was necessary.
 configuration; it is not historical evidence. `GET
 /api/v1/executions/{eid}/instructions` returns the immutable snapshot. Legacy
 executions or turns that failed before context preparation return 404, rather
-than inventing a snapshot. The console offers both views, including accepted
-repository content, hashes, skill revisions and omission reasons.
+than inventing a snapshot. The console offers both views. From **Activity**, open an execution and
+choose **Guidance** to see the historical order, catalogue, actual reads
+and omissions. The existing installation-wide Viewer role applies. For
+progressive runs the snapshot and immutable read outcomes record validated
+relative paths, console revisions, catalogue and file SHA-256 digests,
+bounded descriptions, and delivery state. Prepared, confirmed, interrupted
+and indeterminate states distinguish reading from dispatch. The record
+persists for the lifetime of the execution. New entries omit body and
+reference copies. Legacy snapshots remain readable with their original
+contents. Failed audit persistence prevents unrecorded guidance from
+reaching the model.
 
 Runtime Protocol v1 carries optional `instructions` as inert manifest data;
 `prompt` contains composed optional guidance followed by the original agent
@@ -157,7 +237,7 @@ failures. Content is not logged by the new instruction loader.
 
 Use local Go (`make test GO="go -C server"`) or the documented container
 wrapper. Targeted packages are `internal/instructions`, `internal/graph`,
-`internal/api`, `internal/engine`; Python tests include an HTTP runtime round
+`internal/api`, `internal/engine` and `internal/runtime/native`; Python tests include an HTTP runtime round
 trip. `SkillsView.test.tsx` tests administration, conflict retention, roles and
 inspection. The Chromium journey is included in `make test-e2e`, using the disposable
 controller and synthetic tools without the shared Docker daemon. To run only

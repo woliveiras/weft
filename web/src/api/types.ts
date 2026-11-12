@@ -178,6 +178,7 @@ export interface IsolationSpec {
 
 export interface GraphNode {
   skillIds?: string[] | null;
+  repositoryGuidance?: import("./instructions").RepositoryGuidancePolicy;
   id: string;
   name?: string;
   description?: string;

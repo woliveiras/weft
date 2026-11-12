@@ -52,10 +52,18 @@
         "timeoutSec": {"type": "integer", "minimum": 0, "maximum": 1800, "description": "0 = 600."}
       }
     },
+    "RepositoryGuidance": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "disabled": {"type":"boolean"},
+        "blockedSources": {"type":"array", "maxItems":3, "uniqueItems":true, "items":{"enum":["agents","claude","github"]}}
+      }
+    },
     "Instructions": {
       "type": "object", "additionalProperties": false,
       "properties": {
         "skillIds": {"type":"array", "maxItems":128, "uniqueItems":true, "items":{"$ref":"#/$defs/DNSLabel"}},
+        "repositoryGuidance": {"$ref":"#/$defs/RepositoryGuidance", "description":"Present and not disabled opts in. Absent disables discovery."},
         "projectSteering": {"type":"boolean", "description":"Authorize .weft/steering/*.md from this graph/replica workspace."},
         "installationDefaults": {"type":"boolean", "description":"Opt into installation default skills. False by default."}
       }
@@ -210,6 +218,7 @@
       "patternProperties": {"^x-.+": {"description": "Extension: stored and returned verbatim, never interpreted."}},
       "anyOf": [{"required": ["id"]}, {"required": ["name"]}],
       "properties": {
+        "repositoryGuidance": {"$ref":"#/$defs/RepositoryGuidance", "description":"Inherits the graph and can only disable or add source blocks."},
         "skillIds": {"type":["array","null"], "uniqueItems":true, "items":{"$ref":"#/$defs/DNSLabel"}, "description":"Null/absent inherits graph skillIds; [] selects none; otherwise a subset of graph skillIds."},
         "id": {"$ref": "#/$defs/DNSLabel"},
         "name": {"type": "string"},

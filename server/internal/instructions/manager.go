@@ -199,5 +199,10 @@ func (m Manager) Snapshot(ctx context.Context, id string) (*Snapshot, error) {
 	if err = json.Unmarshal(rec.Value, &s); err != nil {
 		return nil, errors.New("invalid instruction snapshot")
 	}
+	if s.RepositoryPolicy == "inherited" || s.RepositoryPolicy == "agent_restricted" {
+		if err := m.readOutcomes(ctx, &s); err != nil {
+			return nil, err
+		}
+	}
 	return &s, nil
 }

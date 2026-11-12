@@ -97,8 +97,9 @@ func clamp(v, lo, hi int) int {
 // conversation is a turn's message history split so the pinned parts can
 // never be lost: the task, an optional compaction summary and the rounds.
 type conversation struct {
-	task    llm.ChatMessage
-	summary string
+	task         llm.ChatMessage
+	originalTask *string
+	summary      string
 	// plan is the latest plan.update result when compaction removed it.
 	plan string
 	// history holds rounds: an assistant message and its tool results.
@@ -318,9 +319,13 @@ func (m *contextManager) compact(ctx context.Context, c *conversation, before in
 	keep := starts[len(starts)-1]
 	region := c.history[:keep]
 	transcript := renderTranscript(c.summary, region, m.b.limit*4/2)
+	task := c.task.Content
+	if c.originalTask != nil {
+		task = *c.originalTask
+	}
 	req := &llm.ChatRequest{
 		System:    compactionSystem,
-		Messages:  []llm.ChatMessage{{Role: llm.RoleUser, Content: "Task:\n" + truncate(c.task.Content, 4000) + "\n\nWork so far:\n" + transcript}},
+		Messages:  []llm.ChatMessage{{Role: llm.RoleUser, Content: "Task:\n" + truncate(task, 4000) + "\n\nWork so far:\n" + transcript}},
 		MaxTokens: compactionAnswerTokens,
 		Metadata:  map[string]string{"purpose": "context_compaction"},
 	}

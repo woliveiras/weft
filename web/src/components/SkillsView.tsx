@@ -5,6 +5,8 @@ import type {
   SkillInput,
   InstructionSnapshot,
 } from "../api/instructions";
+import { repositorySources, type RepositoryGuidancePolicy, type RepositorySource } from "../api/instructions";
+import { InstructionManifest } from "./InstructionManifest";
 import type { Graph } from "../api/types";
 import { useAsync } from "../hooks/useData";
 import { Btn, ContextHelp, ErrorBox, PageHeading } from "./common";
@@ -69,6 +71,7 @@ export function SkillsView({
     setSnapshot(undefined);
   }
   const refs = graph?.spec.instructions ?? {};
+  const repositoryEnabled = !!refs.repositoryGuidance && !refs.repositoryGuidance.disabled;
   const available = skills.data ?? [];
   return (
     <div className="page skills-page">
@@ -266,10 +269,31 @@ export function SkillsView({
                 Authorize project steering from this graph workspace
               </label>
               <p>
-                Workspace: {graph.spec.workspace?.path || graph.metadata.id};
-                only .weft/steering/*.md. No ancestor or home-directory
-                search.
+                Project steering reads .weft/steering/*.md from {graph.spec.workspace?.path || graph.metadata.id}.
+
               </p>
+              <fieldset>
+                <legend>Repository guidance</legend>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={repositoryEnabled}
+                    onChange={(e) => updateGraph({
+                      ...graph,
+                      spec: { ...graph.spec, instructions: { ...refs, repositoryGuidance: { ...refs.repositoryGuidance, disabled: !e.target.checked } } },
+                    })}
+                  />
+                  Discover repository instructions and skills
+                </label>
+                <SourceBlocks
+                  disabled={!repositoryEnabled}
+                  policy={refs.repositoryGuidance}
+                  onChange={(policy) => updateGraph({
+                    ...graph,
+                    spec: { ...graph.spec, instructions: { ...refs, repositoryGuidance: policy } },
+                  })}
+                />
+              </fieldset>
               {available.map((s) => (
                 <label key={s.id}>
                   <input
@@ -323,6 +347,31 @@ export function SkillsView({
                     />
                     Inherit graph skills
                   </label>
+                  <fieldset disabled={!repositoryEnabled}>
+                    <legend>Repository guidance for {n.name || n.id}</legend>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={!!n.repositoryGuidance?.disabled}
+                        onChange={(e) => updateGraph({
+                          ...graph,
+                          spec: { ...graph.spec, nodes: graph.spec.nodes.map((v) => v.id === n.id
+                            ? { ...v, repositoryGuidance: { ...v.repositoryGuidance, disabled: e.target.checked } } : v) },
+                        })}
+                      />
+                      Disable inherited repository guidance
+                    </label>
+                    <SourceBlocks
+                      disabled={!!n.repositoryGuidance?.disabled}
+                      policy={n.repositoryGuidance}
+                      inherited={refs.repositoryGuidance?.blockedSources}
+                      onChange={(policy) => updateGraph({
+                        ...graph,
+                        spec: { ...graph.spec, nodes: graph.spec.nodes.map((v) => v.id === n.id
+                          ? { ...v, repositoryGuidance: policy } : v) },
+                      })}
+                    />
+                  </fieldset>
                   {n.skillIds != null &&
                     (refs.skillIds ?? []).map((id) => (
                       <label key={id}>
@@ -433,32 +482,30 @@ export function SkillsView({
     </div>
   );
 }
-export function InstructionManifest({
-  snapshot,
-}: {
-  snapshot: InstructionSnapshot;
+function SourceBlocks({ policy, inherited, disabled, onChange }: {
+  policy?: RepositoryGuidancePolicy;
+  inherited?: RepositorySource[];
+  disabled: boolean;
+  onChange: (policy: RepositoryGuidancePolicy) => void;
 }) {
-  return (
-    <section aria-label="Instruction manifest">
-      <h3>
-        {snapshot.executionId
-          ? `Execution ${snapshot.executionId}`
-          : "Current saved configuration (not an execution)"}
-      </h3>
-      <p>Remaining conservative token budget: {snapshot.budget}</p>
-      {snapshot.entries.map((e, i) => (
-        <article key={i}>
-          <h4>
-            {e.scope} · {e.source}
-          </h4>
-          <p>
-            {e.included ? "Included" : `Omitted: ${e.reason}`}{" "}
-            {e.revision ? `· v${e.revision}` : ""}
-          </p>
-          {e.sha256 && <code>{e.sha256}</code>}
-          {e.body && <pre style={{ whiteSpace: "pre-wrap" }}>{e.body}</pre>}
-        </article>
-      ))}
-    </section>
-  );
+  return repositorySources.map((source) => {
+    const blockedByGraph = inherited?.includes(source) ?? false;
+    const blocked = policy?.blockedSources?.includes(source) ?? false;
+    return (
+      <label key={source}>
+        <input
+          type="checkbox"
+          disabled={disabled || blockedByGraph}
+          checked={blocked || blockedByGraph}
+          onChange={(e) => onChange({
+            ...policy,
+            blockedSources: e.target.checked
+              ? [...(policy?.blockedSources ?? []), source]
+              : policy?.blockedSources?.filter((value) => value !== source),
+          })}
+        />
+        Block {source} sources{blockedByGraph ? " (inherited)" : ""}
+      </label>
+    );
+  });
 }

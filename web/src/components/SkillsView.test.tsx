@@ -7,7 +7,8 @@ import {
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { fakeApi, apiError } from "../test/fakeApi";
-import { InstructionManifest, SkillsView } from "./SkillsView";
+import { SkillsView } from "./SkillsView";
+import { InstructionManifest } from "./InstructionManifest";
 import type { Skill } from "../api/instructions";
 const skill: Skill = {
   id: "review",
