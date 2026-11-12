@@ -204,6 +204,9 @@ func (t *tracker) request(_ context.Context, connection, kind string, _ int64, m
 	if method == "GET" && u.Path == "/repos/acme/app" {
 		return rawFixture(map[string]bool{"has_issues": !t.githubIssuesDisabled})
 	}
+	if method == "GET" && kind == "jira" && len(parts) == 8 && parts[6] == "project" {
+		return rawFixture(map[string]string{"key": parts[7]})
+	}
 	if u.Path == "/user" {
 		return rawFixture(map[string]any{"id": 700, "login": "weft-service"})
 	}

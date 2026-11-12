@@ -211,7 +211,7 @@ func TestMissingHoldDispositionRequiresConsecutiveVerifiedPolls(t *testing.T) {
 	}{
 		{"missing repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 404}, false, "", errHeldRepositoryAccess},
 		{"refused repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 403}, false, "", errHeldRepositoryAccess},
-		{"failed probe", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 503}, false, "", errHeldRepositoryUnverified},
+		{"failed probe", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 503}, false, "", errHeldIssueAccessUnverified},
 		{"miss after gap", Hold{MissingPoll: 4}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil},
 		{"second miss", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, true, "two consecutive polls", nil},
 		{"deleted", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 200}, true, "HTTP 410", nil},
@@ -257,6 +257,30 @@ func TestGitHubIssueAccessRequiresAnExplicitIssuesSetting(t *testing.T) {
 		}, "acme/app")
 		if code != tc.wantStatus || disabled != tc.disabled || (err != nil) != (tc.wantStatus == 0) {
 			t.Fatalf("probe for %s: %d, %t, %v", tc.body, code, disabled, err)
+		}
+	}
+}
+
+func TestJiraIssueAccessReadsOnlyTheIssueProject(t *testing.T) {
+	const cloudID = "11111111-2222-3333-4444-555555555555"
+	for _, tc := range []struct {
+		key, body  string
+		wantStatus int
+	}{
+		{"APP_1-5", `{"key":"APP_1"}`, 200},
+		{"APP_1-5", `{"key":"OTHER"}`, 0},
+		{"../APP-5", `{"key":"APP"}`, 0},
+	} {
+		calls := 0
+		code, err := jiraIssueAccess(func(method, path string, body any) (json.RawMessage, int, error) {
+			calls++
+			if method != http.MethodGet || path != "/ex/jira/"+cloudID+"/rest/api/3/project/APP_1" || body != nil {
+				t.Fatalf("probe escaped the held issue project: %s %s", method, path)
+			}
+			return json.RawMessage(tc.body), 200, nil
+		}, cloudID, tc.key)
+		if code != tc.wantStatus || (err != nil) != (code == 0) || (strings.HasPrefix(tc.key, "..") && calls != 0) {
+			t.Fatalf("project probe for %q: %d, %v, calls %d", tc.key, code, err, calls)
 		}
 	}
 }

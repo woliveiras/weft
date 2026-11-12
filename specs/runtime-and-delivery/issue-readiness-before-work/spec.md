@@ -81,7 +81,9 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   access to the configured repository through the same tracker connection
   and confirmation that Issues are enabled. An access denial or disabled
   Issues is visible and preserves holds. A GitHub 410 confirms deletion
-  immediately after the same repository check succeeds. Holds requiring operator
+  immediately after the same repository check succeeds. For Jira, the
+  same connection must be able to read the issue's project before an
+  issue 404 can count. Holds requiring operator
   intervention report a missing issue and remain held. Automatic release
   for a missing issue retains its round and edit counts.
   GitHub scope checks restrict the reviewed query by the issue's exact
@@ -246,8 +248,12 @@ spec-derived oracles for implementation.
 - **D-04 — Default and disable (AC-005, AC-006).** Enable readiness by
   default on every trigger with a per-trigger switch. Disabling preserves
   holds until explicitly resolved. There is no legacy-trigger compatibility.
-- **D-05 — Jira (AC-002, AC-003, AC-006).** Use comments and labels. Exclude
-  status transitions.
+- **D-05 — Jira (AC-002, AC-003, AC-004, AC-006).** Use comments and labels.
+  Exclude status transitions. On 2026-11-12, the maintainer extended the
+  GitHub missing-issue access rule to Jira. Before counting a Jira issue
+  404, verify access to the issue's project with the same reviewed
+  connection. A project 404 or 403 reports an access failure and
+  preserves the hold.
 - **D-06 — Consent (AC-005).** Bind readiness policy, reply reads, comments
   and fixed limits to current trigger consent. Include the specific tracker
   API operations and connection scope in that review. Changing the scope invalidates

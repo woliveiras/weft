@@ -747,22 +747,26 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 
 var errHeldRepositoryAccess = errors.New("The tracker connection could not access the configured GitHub repository. Review its permissions.")
 var errHeldIssuesDisabled = errors.New("Issues are disabled in the configured GitHub repository. Held issues remain pending.")
-var errHeldRepositoryUnverified = errors.New("The tracker could not verify access to the configured GitHub repository. Held issues remain pending.")
+var errHeldProjectAccess = errors.New("The tracker connection could not access the held issue's Jira project. Review its permissions.")
+var errHeldIssueAccessUnverified = errors.New("The tracker could not verify access to the repository or project. Held issues remain pending.")
 
 const issueMissingForOperator = "could not be found. Review the tracker and resolve the hold"
 const issueMissingAwaitingPoll = "could not be found and is awaiting confirmation in the next poll"
 
 func missingHoldDisposition(t *Trigger, h Hold, failure trackerHTTPFailure) (release bool, reason string, err error) {
-	if t.Source.Kind == "github" {
+	if t.Source.Kind == "github" || (t.Source.Kind == "jira" && failure.Status == http.StatusNotFound) {
 		if failure.IssuesDisabled {
 			return false, "", errHeldIssuesDisabled
 		}
 		switch failure.AccessStatus {
 		case http.StatusNotFound, http.StatusForbidden:
+			if t.Source.Kind == "jira" {
+				return false, "", errHeldProjectAccess
+			}
 			return false, "", errHeldRepositoryAccess
 		default:
 			if failure.AccessStatus < 200 || failure.AccessStatus >= 300 {
-				return false, "", errHeldRepositoryUnverified
+				return false, "", errHeldIssueAccessUnverified
 			}
 		}
 	}

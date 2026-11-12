@@ -214,10 +214,16 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 				failure.RateLimited, failure.RetryDelay, failure.RetryDeadline = true, probe.RetryDelay, probe.RetryDeadline
 			}
 		}
-		if t.name == trackerGet && a.VerifyMissing && scope.Source.Kind == "github" &&
-			(failure.Status == http.StatusNotFound || failure.Status == http.StatusGone) {
-			code, disabled, probeErr := githubIssueAccess(request, scope.Source.Repository)
-			failure.AccessStatus, failure.IssuesDisabled = code, disabled
+		if t.name == trackerGet && a.VerifyMissing &&
+			(failure.Status == http.StatusNotFound || (scope.Source.Kind == "github" && failure.Status == http.StatusGone)) {
+			var code int
+			var probeErr error
+			if scope.Source.Kind == "github" {
+				code, failure.IssuesDisabled, probeErr = githubIssueAccess(request, scope.Source.Repository)
+			} else {
+				code, probeErr = jiraIssueAccess(request, scope.Source.CloudID, a.Key)
+			}
+			failure.AccessStatus = code
 			if probe := trackerFailure(code, probeErr); probe.RateLimited {
 				failure.AccessStatus = 0
 			}
@@ -255,6 +261,27 @@ func githubIssueAccess(request apiRequest, repository string) (int, bool, error)
 		return 0, false, errors.New("GitHub repository Issues setting could not be verified")
 	}
 	return code, !*repo.HasIssues, nil
+}
+
+func jiraIssueAccess(request apiRequest, cloudID, issueKey string) (int, error) {
+	if !trackerKey.MatchString(issueKey) {
+		return 0, tools.ErrDenied
+	}
+	project, _, _ := strings.Cut(issueKey, "-")
+	raw, code, err := request(http.MethodGet, "/ex/jira/"+cloudID+"/rest/api/3/project/"+project, nil)
+	if err != nil {
+		if code >= 400 {
+			return code, err
+		}
+		return 0, err
+	}
+	var row struct {
+		Key string `json:"key"`
+	}
+	if err := json.Unmarshal(raw, &row); err != nil || !strings.EqualFold(row.Key, project) {
+		return 0, errors.New("Jira issue project could not be verified")
+	}
+	return code, nil
 }
 
 func jiraComment(text string) any {
