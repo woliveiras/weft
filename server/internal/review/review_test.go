@@ -12,6 +12,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/storage/fsstore"
+	"github.com/woliveiras/weft/server/internal/workspace"
 )
 
 func TestRequestValidation(t *testing.T) {
@@ -67,6 +68,24 @@ func TestCandidate(t *testing.T) {
 	}
 	if _, e = Fingerprint(ctx, source); e == nil {
 		t.Fatal("escaping symlink accepted")
+	}
+}
+
+func TestFingerprintDetectsNewReplicaScratch(t *testing.T) {
+	source := t.TempDir()
+	candidate, err := Candidate(t.Context(), source, filepath.Join(t.TempDir(), "snapshot"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(workspace.Scratch(source, "sink", 0), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	current, err := Fingerprint(t.Context(), source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if candidate == current {
+		t.Fatal("creating replica scratch did not change the candidate")
 	}
 }
 

@@ -21,14 +21,20 @@ import (
 
 type reviewRuntime struct {
 	*echo.Runtime
-	calls atomic.Int32
+	calls   atomic.Int32
+	failure chan error
 }
 
-func (r *reviewRuntime) Turn(ctx context.Context, in *runtime.TurnInput, env runtime.TurnEnv) (*runtime.TurnResult, error) {
+func (r *reviewRuntime) Turn(ctx context.Context, in *runtime.TurnInput, env runtime.TurnEnv) (_ *runtime.TurnResult, err error) {
 	if in.NodeID != "worker" {
 		return r.Runtime.Turn(ctx, in, env)
 	}
 	if r.calls.Add(1) == 1 {
+		defer func() {
+			if err != nil {
+				r.failure <- err
+			}
+		}()
 		result, e := env.InvokeTool(ctx, "review.request", json.RawMessage(`{"title":"Review code","instructions":"Inspect the candidate"}`))
 		if e != nil {
 			return nil, e
@@ -55,7 +61,7 @@ func testReviewDecision(t *testing.T, decision string) {
 	dir := t.TempDir()
 	store := openStore(t, dir)
 	m := review.New(review.Options{Store: store, Root: filepath.Join(dir, "reviews"), Instance: "reviews"})
-	rt := &reviewRuntime{Runtime: echo.New()}
+	rt := &reviewRuntime{Runtime: echo.New(), failure: make(chan error, 1)}
 	rig := newRig(t, store, memory.New(), dir, "review-engine", func(opt *engine.Options) {
 		opt.Reviews = m
 		reg := tools.Builtin(tools.BuiltinConfig{})
@@ -84,9 +90,23 @@ spec:
     - {id: input, to: [worker]}
     - {id: output, from: worker, to: [sink]}
 `)
+	// Both replicas create scratch directories in the shared checkout during
+	// setup. Finish setup before review.request fingerprints that checkout.
+	eventually(t, 5*time.Second, "worker and sink initialized", func() bool {
+		replicas, err := store.ListReplicaStatus(rig.ctx, "review")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(replicas) == 2 && replicas[0].State == domain.ReplicaIdle && replicas[1].State == domain.ReplicaIdle
+	})
 	rig.inject("review", "input", "job", map[string]string{"task": "update"})
 	var pending *review.Record
 	eventually(t, 5*time.Second, "durable gate", func() bool {
+		select {
+		case err := <-rt.failure:
+			t.Fatalf("first worker turn failed before the durable gate: %v", err)
+		default:
+		}
 		rs, e := m.List(rig.ctx)
 		if e == nil && len(rs) == 1 {
 			pending = rs[0]

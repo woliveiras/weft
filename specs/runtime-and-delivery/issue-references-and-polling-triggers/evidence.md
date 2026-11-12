@@ -56,3 +56,26 @@ records the individual cases. Live account qualification remains in PROD-14.
 | `GOOS=linux go build ./...` and `GOOS=darwin go build ./...` | Both arm64 builds passed. |
 | `pnpm -C web test`, `pnpm -C web exec tsc --noEmit` and `pnpm -C web exec tsc --project tsconfig.e2e.json` | All 444 Vitest tests and both type checks passed. |
 | `pnpm -C web exec playwright test e2e/activity.spec.ts e2e/triggers.spec.ts` and `pnpm -C web exec playwright test --config playwright.activity.config.ts` | Six Activity and trigger scenarios plus three work Activity scenarios passed. |
+
+## Independent review of 944a581 through 7d54912
+
+The 60-issue GitHub fixture verifies held-issue scope on the second search
+page. The claim fixture verifies retirement of the waiting label after
+selection, with unrelated labels preserved. Operator resolution checks
+pending rollback and the current hold generation before recording the actor
+and issue key. See the
+[RUN-007 fixture cases](../issue-readiness-before-work/evidence.md#independent-review-of-944a581-through-7d54912).
+
+| Verification command | Result |
+| --- | --- |
+| `go test ./... -count=1` | Full Go suite passed. |
+| `go test -count=1 ./internal/trigger ./internal/api ./internal/activity ./internal/engine ./internal/review` and `go test -tags e2e -count=1 ./cmd/weft-e2e` | Changed packages and the fixture server passed. |
+| `go test -count=20 ./internal/engine -run '^TestDurableReviewBlocksAndResumesEngine$'` | Passed all 20 runs after synchronizing fixture startup, including approval and rejection. |
+| `./scripts/go.sh vet ./...` and `docker run --pull=never --rm -v "$PWD:/repo" -w /repo/server golang:1.26-alpine gofmt -l internal` | Vet passed and gofmt listed no files. |
+| `GOOS=linux go build ./...` and `GOOS=darwin go build ./...` | Both builds passed. |
+| `pnpm -C web test`, `pnpm -C web exec tsc --noEmit`, `pnpm -C web exec tsc --project tsconfig.e2e.json` and `pnpm -C web build` | All 444 Vitest tests, both type checks and the production web build passed. |
+| `pnpm -C web exec playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` and `pnpm -C web exec playwright test --config playwright.activity.config.ts` | Nine Chromium scenarios passed. |
+
+Go tests and cross-builds used the cached `weft-review-go:git-http-backend`
+image with `--pull=never`. Tracker calls used fixtures. Live account
+qualification remains in PROD-14.

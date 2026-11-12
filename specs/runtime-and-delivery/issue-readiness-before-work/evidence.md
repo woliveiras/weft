@@ -88,3 +88,30 @@ currency per evaluation.
 | `GOOS=linux go build ./...` and `GOOS=darwin go build ./...` | Both arm64 builds passed. |
 | `pnpm -C web test`, `pnpm -C web exec tsc --noEmit` and `pnpm -C web exec tsc --project tsconfig.e2e.json` | All 444 Vitest tests and both type checks passed. |
 | `pnpm -C web exec playwright test e2e/activity.spec.ts e2e/triggers.spec.ts` and `pnpm -C web exec playwright test --config playwright.activity.config.ts` | Six Activity and trigger scenarios plus three work Activity scenarios passed. |
+
+## Independent review of 944a581 through 7d54912
+
+| Review item | Fixture evidence |
+| --- | --- |
+| Held issue scope and waiting label | `TestHeldIssueReturnsBeyondFirstQueryPage` finds issue 60 on page two and starts only that issue. The bounded-scan unit case distinguishes unverified scope from exclusion. `TestResolveLeavesWaitingLabelUntilReselectedAndClaimed` confirms that resolution itself makes no tracker write and that a later claim retires the waiting label while preserving an unrelated label. |
+| Pending rollback | The hold unit test and operator HTTP test reject resolution while assignment rollback or either pending label write remains. The hold remains available for polling and no resolution is recorded. |
+| Snapshot changes | Both the evaluation and claim paths reach the shared two-round allowance under repeated edits. They produce one intervention comment, stop calling the model and start no work. The claim fixture also checks the restored assignee. |
+| Publication receipt | Unit tests require the saved comment ID and the token author's stable identity. GitHub and Jira fixtures cover publication and self-reply filtering. The lost-response case includes matching text from another author and confirms the actual Weft comment without reposting. The identity operation is included in trigger consent. |
+| Resolution audit | The operator HTTP fixture checks the durable `trigger.hold_resolved` event, including the issue key and authenticated actor. Chromium checks that the Activity entry displays the same issue and actor. |
+| Scope edit documentation | The API contract describes paused polling, release after renewed consent and disabled holds that require an operator. |
+| Hold generation | The unit tests cover generation rotation and stable legacy holds. The runner fixture keeps the opening time constant across rounds and proves the older generation returns a conflict. The HTTP fixture expects 409 for the older generation, and Chromium resolves the current hold through the console. |
+| Durable review fixture | The original intermittent timeout did not recur in 20 baseline runs. A unit test confirms that a new replica scratch directory changes the review fingerprint. The engine fixture now waits for both replicas to finish setup in the shared checkout before injecting input and surfaces the first worker error directly. The durable gate timeout and approval and rejection assertions are unchanged. |
+
+| Verification command | Result |
+| --- | --- |
+| `go test ./... -count=1` | Full Go suite passed. |
+| `go test -count=1 ./internal/trigger ./internal/api ./internal/activity ./internal/engine ./internal/review` and `go test -tags e2e -count=1 ./cmd/weft-e2e` | Changed packages and the fixture server passed. |
+| `go test -count=20 ./internal/engine -run '^TestDurableReviewBlocksAndResumesEngine$'` | Passed all 20 runs after synchronizing fixture startup, including approval and rejection. |
+| `./scripts/go.sh vet ./...` and `docker run --pull=never --rm -v "$PWD:/repo" -w /repo/server golang:1.26-alpine gofmt -l internal` | Vet passed and gofmt listed no files. |
+| `GOOS=linux go build ./...` and `GOOS=darwin go build ./...` | Both builds passed. |
+| `pnpm -C web test`, `pnpm -C web exec tsc --noEmit`, `pnpm -C web exec tsc --project tsconfig.e2e.json` and `pnpm -C web build` | All 444 Vitest tests, both type checks and the production web build passed. |
+| `pnpm -C web exec playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` and `pnpm -C web exec playwright test --config playwright.activity.config.ts` | Nine Chromium scenarios passed. |
+
+Go tests and cross-builds used the cached `weft-review-go:git-http-backend`
+image with `--pull=never`. Tracker calls used fixtures. Live account
+qualification remains in PROD-14.
