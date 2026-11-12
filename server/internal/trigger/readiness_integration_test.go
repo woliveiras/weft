@@ -1527,8 +1527,10 @@ func TestJiraMissingHoldRequiresProjectAccess(t *testing.T) {
 				if len(tr.Holds) != 0 || len(tr.HoldResolutions) != 1 || tr.RetainedReadiness["jira:APP-1@factory"].Round != 1 {
 					t.Fatalf("verified absence did not preserve progress: %+v", tr)
 				}
-			} else if len(tr.Holds) != 1 || len(tr.HoldResolutions) != 0 || !strings.Contains(tr.LastError, "could not access the held issue's Jira project") {
-				t.Fatalf("inaccessible project did not preserve the hold and report why: %+v", tr)
+			} else if len(tr.Holds) != 1 || len(tr.HoldResolutions) != 0 ||
+				!strings.Contains(tr.LastError, "could not access the held issue's Jira project") ||
+				!strings.Contains(tr.LastError, "Browse Projects") || !strings.Contains(tr.LastError, "read:project:jira") {
+				t.Fatalf("inaccessible project did not preserve the hold and report how to restore access: %+v", tr)
 			}
 		})
 	}

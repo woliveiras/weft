@@ -358,3 +358,14 @@ func TestRateLimitedAccessChecksPreserveTheFailureBudget(t *testing.T) {
 		}
 	}
 }
+
+func TestJiraProjectAccessDenialExplainsRequiredPermissionAndScope(t *testing.T) {
+	tr := &Trigger{Source: SourceConfig{Kind: "jira"}}
+	for _, status := range []int{http.StatusForbidden, http.StatusNotFound} {
+		release, _, err := missingHoldDisposition(tr, Hold{}, trackerHTTPFailure{Status: 404, AccessStatus: status}, time.Now())
+		if release || !errors.Is(err, errHeldProjectAccess) || !strings.Contains(err.Error(), "Browse Projects") ||
+			!strings.Contains(err.Error(), "read:project:jira") {
+			t.Fatalf("project HTTP %d: release=%v, guidance=%v", status, release, err)
+		}
+	}
+}

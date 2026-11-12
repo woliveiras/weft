@@ -757,9 +757,11 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	return r.assessIssue(ctx, t, call, i, h, replies, scopeVerified)
 }
 
+const jiraProjectAccessGuidance = "Verify that the connection has the Browse Projects permission and, for granular API scopes, read:project:jira."
+
 var errHeldRepositoryAccess = errors.New("The tracker connection could not access the configured GitHub repository. Review its permissions.")
 var errHeldIssuesDisabled = errors.New("Issues are disabled in the configured GitHub repository. Held issues remain pending.")
-var errHeldProjectAccess = errors.New("The tracker connection could not access the held issue's Jira project. Review its permissions.")
+var errHeldProjectAccess = errors.New("The tracker connection could not access the held issue's Jira project. " + jiraProjectAccessGuidance)
 var errHeldIssueAccessUnverified = errors.New("The tracker could not verify access to the repository or project. Held issues remain pending.")
 
 const issueMissingForOperator = "could not be found. Review the tracker and resolve the hold"
@@ -859,7 +861,7 @@ func recordIssueAccessFailure(h *Hold, source string, now time.Time, failure tra
 	guidance := "Check tracker availability, the connection credential and repository access."
 	if source == "jira" {
 		resource = "Jira project"
-		guidance = "Check tracker availability, the connection credential and Browse Projects permission. For granular API scopes, check read:project:jira."
+		guidance = "Check tracker availability and the connection credential. " + jiraProjectAccessGuidance
 	}
 	detail := ""
 	if failure.AccessStatus >= 400 && failure.AccessStatus <= 599 {
