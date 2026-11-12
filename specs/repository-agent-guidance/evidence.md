@@ -91,3 +91,22 @@ for macOS. The frozen web dependencies were restored from the local pnpm store.
 | `pnpm -C web exec tsc --noEmit`, `pnpm -C web test`, `pnpm -C web exec tsc --project tsconfig.e2e.json` | Both type checks and 444 Vitest tests passed. |
 | `pnpm -C web exec playwright test --config playwright.activity.config.ts` | Three Chromium scenarios passed. |
 | `pnpm -C web exec playwright test --config playwright.instructions.config.ts` | Two Chromium scenarios passed, including the historical guidance view as Viewer. |
+
+## Independent review follow-up on 2026-11-12
+
+| Finding | Fail-first result | Verification after correction |
+| --- | --- | --- |
+| Reference authorization with `workspace.subdir` | The native fixture denied the contained workdir-relative grant and accepted references outside `src` under both open grants. | `TestGuidanceGrantPathPreservesPhysicalWorkdir` verifies mapping and confinement, including a workdir alias. `TestGuidanceReferenceChecksWorkdirRelativeGrant` checks the gateway. The native subdirectory fixtures now allow a contained grant and refuse outside references for both omitted `paths` and `**`. Discovery still sees the checkout root. |
+| Body budget at activation | The unit and native fixtures kept the console catalogue active and did not offer the repository skill after refusing the console body. | `TestConsoleBodyBudgetOffersRepositoryFallback` verifies a fitting and non-fitting replacement, cumulative framing cost and repeat selection. `TestRepositoryGuidanceFallsBackAfterConsoleBodyBudget` verifies the initial shadow, console omission, replacement catalogue and explicitly selected body through provider requests and persisted Activity. |
+| Precedence for a selected global skill | A lower-ranked default consumed the available catalogue budget. The native fixture also delivered the explicitly selected body at installation precedence. | `TestSelectedGlobalSkillUsesGraphBudgetPriority` verifies tight-budget admission and the installation duplicate. `TestRepositoryGuidanceSelectedGlobalSkillKeepsHigherPrecedence` verifies body order and the graph scope in historical evidence. |
+| Journal write diagnostics | Re-running the journal unit and native execution tests with the old journal through a Go overlay showed the absolute path and raw cause in the returned error. | `TestGuidanceJournalRedactsStorageFailure` checks body and tool-limit writes without advancing delivery state. `TestRepositoryGuidanceNeverDispatchesAnUnrecordedRead` verifies the safe execution error and event, and that the body never reaches the model. |
+
+| Verification | Result |
+| --- | --- |
+| `go test -count=1 ./...` and `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed in the locally cached Go image on Linux. |
+| `go build ./...`, `go vet ./...` with `GOOS=linux` and `GOOS=darwin`, and `gofmt -l .` | Both arm64 builds and vet checks passed in Docker. The formatting check returned no files. |
+| `pnpm -C web exec tsc --noEmit`, `pnpm -C web test`, `pnpm -C web exec tsc --project tsconfig.e2e.json` | Both type checks and 444 Vitest tests passed. |
+| `pnpm -C web exec playwright test --config playwright.activity.config.ts` and `pnpm -C web exec playwright test --config playwright.instructions.config.ts` | Three Activity scenarios and two instruction scenarios passed. |
+
+Go and the cross-built browser fixture used the cached
+`weft-review-go:git-http-backend` image with `--pull=never`.
