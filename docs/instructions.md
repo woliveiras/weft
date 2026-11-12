@@ -132,10 +132,10 @@ The prompt preamble identifies checkout sources. Each source is framed with
 a header and closing line. Every payload line is quoted, with control line
 separators escaped, so source text cannot introduce a header, closer or task.
 Reference reads use the existing `filesystem.read` gateway and its path
-constraints, rate limits and approvals. For guidance references, path grants
-match paths relative to the checkout root, including when the agent runs in a
-configured `workspace.subdir`. They are distinct from ordinary
-file reads. The tool metric and span identify them as `guidance.reference`,
+constraints, rate limits and approvals. Discovery and Activity identify the
+reference from the checkout root. Authorization confines the reference to the
+agent's working directory, including any `workspace.subdir`, and matches
+path grants relative to that directory. The tool metric and span identify them as `guidance.reference`,
 while grants and approvals use `filesystem.read`. The
 `weft_guidance_load_duration_seconds` histogram counts and times progressive
 catalogue and body loads by stage and outcome. Their spans are

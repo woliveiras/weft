@@ -66,6 +66,7 @@ func (g *Gateway) Invoke(ctx context.Context, p *Principal, name string, args js
 
 // ReadGuidanceReference runs a package-scoped, bounded reader behind the
 // existing filesystem.read grants, path constraints, rate and approval gates.
+// The caller confines the target to the workdir and supplies its relative path.
 func (g *Gateway) ReadGuidanceReference(ctx context.Context, p *Principal, path string, read func() string) (*Result, error) {
 	args, err := json.Marshal(map[string]string{"path": path})
 	if err != nil {

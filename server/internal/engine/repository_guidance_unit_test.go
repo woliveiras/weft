@@ -2,6 +2,7 @@ package engine
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -37,5 +38,30 @@ func TestToolCallBudgetRefusalCanBeDistinguishedFromYield(t *testing.T) {
 	env.yielded = true
 	if err := env.countTool(); err == nil || errors.As(err, &limit) {
 		t.Fatalf("yield should be distinguishable from budget exhaustion: %v", err)
+	}
+}
+
+func TestGuidanceGrantPathPreservesPhysicalWorkdir(t *testing.T) {
+	root := t.TempDir()
+	const pkg = ".agents/skills/sample"
+	workdir := filepath.Join(root, pkg)
+	if err := os.MkdirAll(workdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(root, "src")
+	if err := os.Symlink(pkg, alias); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ workdir, ref, want string }{
+		{root, pkg + "/ref.md", pkg + "/ref.md"},
+		{workdir, pkg + "/ref.md", "ref.md"},
+		{alias, pkg + "/ref.md", "ref.md"},
+		{workdir, ".agents/skills/sample-sibling/ref.md", ""},
+		{root, "../ref.md", ""},
+		{"", pkg + "/ref.md", ""},
+	} {
+		if got, ok := guidanceGrantPath(root, tc.workdir, tc.ref); got != tc.want || ok != (tc.want != "") {
+			t.Errorf("path %q under %q: got %q, %t; want %q", tc.ref, tc.workdir, got, ok, tc.want)
+		}
 	}
 }

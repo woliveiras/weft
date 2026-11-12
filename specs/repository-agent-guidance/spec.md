@@ -223,8 +223,12 @@ acceptance criteria above and matrix use these decisions as their oracles.
   items expose a name, description and selection identity. An
   execution-bound selection opens only the chosen body. A later request can
   open one chosen textual reference in that repository package, subject to
-  its policy and workspace permissions. No implicit activation, recursion or
-  import occurs.
+  its policy and workspace permissions. Discovery and Activity identify files
+  from the checkout root. Reference authorization confines the target to the
+  agent's working directory and evaluates filesystem path grants relative to
+  that directory, including when `workspace.subdir` is configured. An
+  unrestricted path grant still applies only within the working directory.
+  No implicit activation, recursion or import occurs.
 - Identify repository scopes in the progressive prompt preamble. Frame each
   optional source so its text cannot introduce a source header, closing marker
   or task outside its frame. Stage digests identify the payload before framing.

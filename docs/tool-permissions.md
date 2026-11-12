@@ -130,8 +130,8 @@ Tool *failures* (non-zero exit, missing file, HTTP error) are returned to the ag
 | Approvals | `approval.requested/decided` with detail `{tool, args}` |
 
 A [progressive guidance reference](instructions.md) uses the
-`filesystem.read` grant, rate limit and approvals. Its path is relative to
-the checkout root. The gateway traces and measures it as
+`filesystem.read` grant, rate limit and approvals. Grants and approvals use the path
+relative to the agent working directory. Activity uses the checkout path. The gateway traces and measures it as
 `guidance.reference` and records failed reads as errors.
 
 ## Recipes

@@ -460,23 +460,19 @@ func TestRepositoryGuidanceUsesCheckoutRootForAgentSubdirectory(t *testing.T) {
 		o.Models.(*llm.Registry).Add(llm.ProviderConfig{Name: p.Name()}, p)
 	})
 	root := filepath.Join(dir, "ws", "guidance-subdirectory")
-	subdir := filepath.Join(root, "src")
-	if err := os.MkdirAll(subdir, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	pkg := filepath.Join(root, ".agents", "skills", "sample")
 	if err := os.MkdirAll(pkg, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for file, content := range map[string]string{
-		filepath.Join(pkg, "SKILL.md"):     "---\nname: sample\ndescription: Sample skill\n---\nSample body",
-		filepath.Join(pkg, "allowed.md"):   "CHECKOUT REFERENCE",
-		filepath.Join(pkg, "large.md"):     strings.Repeat("x", instructions.MaxBytes+1),
-		filepath.Join(pkg, "utf8.md"):      "BAD UTF8\xff",
-		filepath.Join(pkg, "nul.md"):       "BAD NUL\x00",
-		filepath.Join(pkg, "denied.md"):    "DENIED REFERENCE",
-		filepath.Join(root, "AGENTS.md"):   "CHECKOUT ROOT",
-		filepath.Join(subdir, "AGENTS.md"): "NESTED MARKER",
+		filepath.Join(pkg, "SKILL.md"):   "---\nname: sample\ndescription: Sample skill\n---\nSample body",
+		filepath.Join(pkg, "allowed.md"): "CHECKOUT REFERENCE",
+		filepath.Join(pkg, "large.md"):   strings.Repeat("x", instructions.MaxBytes+1),
+		filepath.Join(pkg, "utf8.md"):    "BAD UTF8\xff",
+		filepath.Join(pkg, "nul.md"):     "BAD NUL\x00",
+		filepath.Join(pkg, "denied.md"):  "DENIED REFERENCE",
+		filepath.Join(root, "AGENTS.md"): "CHECKOUT ROOT",
+		filepath.Join(pkg, "AGENTS.md"):  "NESTED MARKER",
 	} {
 		if err := os.WriteFile(file, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
@@ -489,9 +485,9 @@ spec:
     - id: reader
       prompt: Check guidance scope
       model: {provider: guidance-fixture, name: fixture}
-      workspace: {subdir: src}
+      workspace: {subdir: .agents/skills/sample}
       tools:
-        - {name: filesystem.read, paths: [".agents/skills/sample/allowed.md", ".agents/skills/sample/missing.md", ".agents/skills/sample/large.md", ".agents/skills/sample/utf8.md", ".agents/skills/sample/nul.md"]}
+        - {name: filesystem.read, paths: ["allowed.md", "missing.md", "large.md", "utf8.md", "nul.md"]}
       loop: {mode: once}
       isolation: {mode: process}
 `)
@@ -574,5 +570,51 @@ spec:
 	if x.Status != domain.ExecSucceeded || len(requests) != 3 || !strings.Contains(requests[2], "omitted: tool_call_limit") ||
 		strings.Contains(requests[2], "UNREAD REFERENCE") {
 		t.Fatalf("unexpected result %s (%s), model requests: %v", x.Status, x.Error, requests)
+	}
+}
+
+func TestRepositoryGuidanceReferenceCannotWidenSubdirectoryGrant(t *testing.T) {
+	for _, grant := range []string{"{name: filesystem.read}", `{name: filesystem.read, paths: ["**"]}`} {
+		t.Run(grant, func(t *testing.T) {
+			dir := t.TempDir()
+			p := &guidanceProvider{calls: []llm.ToolCall{
+				{ID: "body", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample"}`)},
+				{ID: "ref", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample","reference":"ref.md"}`)},
+			}}
+			r := newRig(t, openStore(t, dir), memory.New(), dir, "scoped-guidance", func(o *engine.Options) {
+				o.Models.(*llm.Registry).Add(llm.ProviderConfig{Name: p.Name()}, p)
+			})
+			root := filepath.Join(dir, "ws", "scoped-guidance")
+			pkg := filepath.Join(root, ".agents", "skills", "sample")
+			if err := os.MkdirAll(pkg, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			for name, content := range map[string]string{
+				"SKILL.md": "---\nname: sample\ndescription: Sample skill\n---\nCATALOGUED BODY",
+				"ref.md":   "OUTSIDE AGENT WORKDIR",
+			} {
+				if err := os.WriteFile(filepath.Join(pkg, name), []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			r.deploy(fmt.Sprintf(`metadata: {name: scoped-guidance}
+spec:
+  instructions: {repositoryGuidance: {}}
+  nodes:
+    - id: reader
+      prompt: Check reference confinement
+      model: {provider: guidance-fixture, name: fixture}
+      workspace: {subdir: src}
+      tools: [%s]
+      loop: {mode: once}
+      isolation: {mode: process}
+`, grant))
+			eventually(t, 5*time.Second, "reference refusal reaches model", func() bool { return len(p.observed()) == 3 })
+			prompt := p.observed()[2]
+			if !strings.Contains(prompt, "CATALOGUED BODY") || !strings.Contains(prompt, "omitted: permission_denied") ||
+				strings.Contains(prompt, "OUTSIDE AGENT WORKDIR") {
+				t.Fatal("reference grant escaped the workdir or discovery failed")
+			}
+		})
 	}
 }

@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"strings"
 
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/instructions"
@@ -44,21 +46,45 @@ func (g *turnGuidance) Load(ctx context.Context, skill, ref string) (string, err
 	return g.Session.Load(ctx, skill, ref)
 }
 
-func (t *turnEnv) readGuidanceReference(ctx context.Context, path string, read func() (string, string)) (string, string, error) {
+// guidanceGrantPath maps the canonical checkout path into the physical
+// workdir used by ordinary filesystem grants. Resolve only the roots here.
+// The guidance reader opens the file without following symlinks.
+func guidanceGrantPath(checkout, workdir, reference string) (string, bool) {
+	if checkout == "" || workdir == "" || !filepath.IsLocal(filepath.FromSlash(reference)) {
+		return "", false
+	}
+	root, err := filepath.EvalSymlinks(checkout)
+	if err != nil {
+		return "", false
+	}
+	workdir, err = filepath.EvalSymlinks(workdir)
+	if err != nil {
+		return "", false
+	}
+	rel, err := filepath.Rel(workdir, filepath.Join(root, filepath.FromSlash(reference)))
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return filepath.ToSlash(rel), true
+}
+
+func (t *turnEnv) readGuidanceReference(ctx context.Context, checkout, path string, read func() (string, string)) (string, string, error) {
 	gateway, ok := t.gr.e.opt.Tools.(interface {
 		ReadGuidanceReference(context.Context, *tools.Principal, string, func() string) (*tools.Result, error)
 	})
 	if !ok {
 		return "", "permission_denied", nil
 	}
+	grantPath, contained := guidanceGrantPath(checkout, t.principal.Workdir, path)
+	if !contained {
+		return "", "permission_denied", nil
+	}
 	if t.gr.e.opt.Tools.NeedsApproval(t.principal, "filesystem.read") {
 		t.r.setState(domain.ReplicaAwaitingApproval, "waiting for approval: filesystem.read")
 		defer t.r.setState(domain.ReplicaRunning, "")
 	}
-	// Session supplies the validated checkout-relative path. Ordinary tools
-	// still resolve their paths from the principal's working directory.
 	var content, reason string
-	result, err := gateway.ReadGuidanceReference(ctx, t.principal, path, func() string {
+	result, err := gateway.ReadGuidanceReference(ctx, t.principal, grantPath, func() string {
 		content, reason = read()
 		return reason
 	})
