@@ -120,6 +120,12 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 	observability.TriggerSeconds.Observe(time.Since(started).Seconds())
 	now = r.Triggers.now()
 	next := now.Add(time.Duration(t.IntervalMinutes) * time.Minute)
+	if !search.reopensAt.IsZero() {
+		next = search.reopensAt
+		if next.Before(now) {
+			next = now
+		}
+	}
 	if _, uerr := r.Triggers.Update(ctx, id, "system:trigger", func(t *Trigger) error {
 		t.LastRunAt, t.NextRunAt = &now, &next
 		t.PollSequence++
@@ -127,7 +133,7 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 		t.LastError = ""
 		if search.attempted {
 			t.SearchDeferredReason = ""
-			if search.deferred {
+			if !search.reopensAt.IsZero() {
 				t.SearchDeferredReason = githubSearchDeferred
 			}
 			if search.turn != 0 {

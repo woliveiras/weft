@@ -26,9 +26,16 @@ type githubSearchWindow struct {
 	Turn  uint64      `json:"turn"`
 }
 
+type searchBudgetDeferral struct {
+	reopensAt time.Time
+}
+
+func (e searchBudgetDeferral) Error() string { return errSearchBudgetDeferred.Error() }
+func (e searchBudgetDeferral) Unwrap() error { return errSearchBudgetDeferred }
+
 type githubSearchPoll struct {
 	attempted bool
-	deferred  bool
+	reopensAt time.Time
 	turn      uint64
 }
 
@@ -68,7 +75,13 @@ func reserveGitHubSearch(ctx context.Context, st storage.Store, now time.Time) (
 			}
 		}
 		if len(active) >= githubSearchesPerMinute {
-			return 0, errSearchBudgetDeferred
+			oldest := active[0]
+			for _, at := range active[1:] {
+				if at.Before(oldest) {
+					oldest = at
+				}
+			}
+			return 0, searchBudgetDeferral{reopensAt: oldest.Add(time.Minute)}
 		}
 		window.Calls = append(active, now)
 		window.Turn++
@@ -80,7 +93,9 @@ func reserveGitHubSearch(ctx context.Context, st storage.Store, now time.Time) (
 			return window.Turn, err
 		}
 	}
-	return 0, errSearchBudgetDeferred
+	// A concurrent reservation kept winning the compare-and-set. The
+	// next runner tick can reload the window rather than wait a full interval.
+	return 0, searchBudgetDeferral{reopensAt: now}
 }
 
 func (r *Runner) boundGitHubSearch(t *Trigger, call Invoker, poll *githubSearchPoll) Invoker {
@@ -90,8 +105,9 @@ func (r *Runner) boundGitHubSearch(t *Trigger, call Invoker, poll *githubSearchP
 			turn, err := reserveGitHubSearch(ctx, r.Store, r.Triggers.now())
 			if poll != nil {
 				poll.attempted = true
-				if errors.Is(err, errSearchBudgetDeferred) {
-					poll.deferred = true
+				var deferred searchBudgetDeferral
+				if errors.As(err, &deferred) {
+					poll.reopensAt = deferred.reopensAt
 				}
 				if err == nil {
 					poll.turn = turn

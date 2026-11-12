@@ -1357,3 +1357,60 @@ func TestMissingHeldIssuePreservesProgressAndOperatorHolds(t *testing.T) {
 		})
 	}
 }
+
+func TestDeferredLongTriggerGetsFirstTurnInReopenedWindow(t *testing.T) {
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	r := runner(triggerStore(t), c, "one", gh)
+	in := input()
+	in.IntervalMinutes = 5
+	first := c.t
+	create := func(name string, interval int) *trigger.Trigger {
+		t.Helper()
+		in.Name, in.IntervalMinutes = name, interval
+		tr, err := r.Triggers.Create(t.Context(), in, "admin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tr
+	}
+	for n := range 30 {
+		create(fmt.Sprintf("Short %d", n), 5)
+	}
+	c.t = first.Add(time.Second)
+	long := create("Long", 15)
+	short := create("Short due next window", 5)
+	reopensAt := c.t.Add(time.Minute)
+	if _, err := r.Triggers.Update(t.Context(), short.ID, "fixture", func(t *trigger.Trigger) error {
+		t.NextRunAt = &reopensAt
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	get := func(id string) *trigger.Trigger {
+		t.Helper()
+		tr, err := r.Triggers.Get(t.Context(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tr
+	}
+	r.Tick(t.Context())
+	long = get(long.ID)
+	if len(gh.args) != 30 || long.NextRunAt == nil || !long.NextRunAt.Equal(reopensAt) ||
+		long.SearchDeferredReason == "" || long.SearchTurn != 0 {
+		t.Fatalf("long trigger missed the next budget window: %+v, searches=%d", long, len(gh.args))
+	}
+	c.t = reopensAt.Add(-time.Nanosecond)
+	r.Tick(t.Context())
+	if len(gh.args) != 30 {
+		t.Fatal("a search was dispatched before the budget reopened")
+	}
+	c.t = reopensAt
+	r.Tick(t.Context())
+	long, short = get(long.ID), get(short.ID)
+	if len(gh.args) != 32 || long.SearchTurn != 31 || short.SearchTurn != 32 ||
+		long.SearchDeferredReason != "" || !long.NextRunAt.Equal(reopensAt.Add(15*time.Minute)) {
+		t.Fatalf("deferred trigger did not get first turn: long %+v, short %+v, searches=%d", long, short, len(gh.args))
+	}
+}

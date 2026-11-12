@@ -56,7 +56,9 @@ search calls verifying held scope and may spend one more on admission.
 The runner checks the least recently verified holds first and surfaces
 budget deferrals in trigger state and Activity. Across due GitHub triggers,
 polling gives deferred triggers the first turn and orders each group by
-least recent shared-budget grant.
+least recent shared-budget grant. A trigger deferred by the shared
+budget is due again when the oldest charged search leaves the rolling
+window, independently of its configured polling interval.
 
 ### AC-003 — Gateway write-back
 

@@ -67,3 +67,26 @@ func TestSearchBudgetPreservesLegacyReservations(t *testing.T) {
 		t.Fatalf("legacy window did not recover: %d, %v", turn, err)
 	}
 }
+
+func TestSearchBudgetReportsOldestReservationExpiry(t *testing.T) {
+	st, err := fsstore.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	first := time.Now().UTC()
+	for n := range githubSearchesPerMinute {
+		at := first.Add(time.Duration(n) * time.Second)
+		if _, err := reserveGitHubSearch(t.Context(), st, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err = reserveGitHubSearch(t.Context(), st, first.Add(40*time.Second))
+	var deferred searchBudgetDeferral
+	if !errors.As(err, &deferred) || !deferred.reopensAt.Equal(first.Add(time.Minute)) {
+		t.Fatalf("wrong reopening: %+v, %v", deferred, err)
+	}
+	if _, err := reserveGitHubSearch(t.Context(), st, deferred.reopensAt); err != nil {
+		t.Fatalf("reopened window did not accept the next request: %v", err)
+	}
+}
