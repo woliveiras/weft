@@ -7,7 +7,19 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/instructions"
 	"github.com/woliveiras/weft/server/internal/tools"
+	"github.com/woliveiras/weft/server/internal/workspace"
 )
+
+func guidanceCheckoutRoot(workspaces *workspace.Manager, g *domain.Graph, n *domain.Node, workdir string) (string, error) {
+	if n.Workspace.Mode == domain.WorkspaceWorktree || n.Workspace.Subdir == "" {
+		return workdir, nil
+	}
+	root, err := workspaces.GraphDir(g)
+	if err != nil {
+		return "", instructions.ErrWorkspaceUnavailable
+	}
+	return root, nil
+}
 
 type turnGuidance struct {
 	*instructions.Session

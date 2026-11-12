@@ -226,11 +226,7 @@ func (r *replica) turn(loopCtx context.Context, n *domain.Node, dels []queue.Del
 	instructionStart := time.Now()
 	manager := instructions.Manager{Store: e.store}
 	rt := e.opt.Runtimes[n.Runtime.Kind]
-	checkout := in.Workdir
-	var rootErr error
-	if n.Workspace.Mode != domain.WorkspaceWorktree && n.Workspace.Subdir != "" {
-		checkout, rootErr = e.opt.Workspaces.GraphDir(gr.g)
-	}
+	checkout, rootErr := guidanceCheckoutRoot(e.opt.Workspaces, gr.g, n, in.Workdir)
 	snapshot, guidance, instructionErr := manager.Prepare(turnCtx, gr.g, n, checkout, in.Workdir, in.Prompt, in.OperatorMessages)
 	instructionErr = errors.Join(instructionErr, rootErr)
 	if guidance != nil {

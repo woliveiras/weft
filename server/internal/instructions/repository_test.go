@@ -401,3 +401,28 @@ func TestRepositoryConsoleShadowingUsesSelectedAdmittedSkills(t *testing.T) {
 		})
 	}
 }
+
+func TestRepositoryWorkspaceUnavailableSnapshotUsesRelativeSource(t *testing.T) {
+	m := manager(t)
+	g := &domain.Graph{Spec: domain.GraphSpec{Instructions: domain.InstructionRefs{
+		RepositoryGuidance: &domain.RepositoryGuidancePolicy{},
+	}}}
+	privatePath := filepath.Join(t.TempDir(), "missing")
+	snap, session, err := m.Prepare(t.Context(), g, &domain.Node{ID: "worker"}, privatePath, privatePath, "task", nil)
+	if err != nil || session == nil {
+		t.Fatal(snap, err)
+	}
+	snap.ExecutionID = "unavailable-checkout"
+	if err := m.SaveSnapshot(t.Context(), snap); err != nil {
+		t.Fatal(err)
+	}
+	historical, err := m.Snapshot(t.Context(), snap.ExecutionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	findOmission(t, historical, ".", "workspace_unavailable")
+	raw, err := json.Marshal(historical)
+	if err != nil || strings.Contains(string(raw), privatePath) {
+		t.Fatalf("unsafe historical snapshot: %s (%v)", raw, err)
+	}
+}

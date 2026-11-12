@@ -13,6 +13,8 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 )
 
+var ErrWorkspaceUnavailable = errors.New("guidance workspace unavailable")
+
 var ErrIncompatibleRuntime = errors.New("runtime does not support progressive guidance")
 
 const maxReferences = 16
@@ -135,7 +137,7 @@ func (m Manager) Prepare(ctx context.Context, g *domain.Graph, n *domain.Node, r
 		defer repoRoot.Close()
 		turn.rootInfo, err = repoRoot.Stat()
 		if err != nil {
-			return nil, nil, fmt.Errorf("stat guidance workspace: %w", err)
+			return nil, nil, ErrWorkspaceUnavailable
 		}
 		candidates, omissions := discoverSkills(repoRoot, blocked)
 		packages := map[string]bool{}
