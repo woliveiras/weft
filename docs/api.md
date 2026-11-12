@@ -175,7 +175,7 @@ administrator's current consent.
 | `GET /api/v1/triggers?workflow=` | viewer | List trigger state, consent, current task, skips and readiness holds. |
 | `POST /api/v1/triggers` | admin | Create and consent to `{name, workflow, nodeId, resultNodeId?, source: {kind, connectionId, repository?, cloudId?, query?}, label?, owner?, intervalMinutes?, scmConnection?, projectId?, executionMode?, authorizationMode?, readinessDisabled?}`. |
 | `GET /api/v1/triggers/{trigger}` | viewer | Read one trigger. |
-| `PUT /api/v1/triggers/{trigger}` | admin | Edit using the create body. Changing consent scope pauses the trigger and preserves holds. |
+| `PUT /api/v1/triggers/{trigger}` | admin | Edit using the create body. Changing consent scope pauses the trigger. After consent and resumption, readiness-enabled polling releases holds that fall outside the updated scope. Holds stay in place while readiness is disabled until an operator resolves them. |
 | `GET /api/v1/triggers/{trigger}/matches` | operator | Read-only preview returning `{next, waiting[], skipped[], busy}`. Preview never evaluates readiness or writes to the tracker. |
 | `POST /api/v1/triggers/{trigger}/resolve-hold` | operator | Resolve the hold identified by `{key, openedAt}`. Records the reason and frees capacity without writing to the tracker or starting work. Returns 409 if polling is in progress or the hold generation changed. |
 | `POST /api/v1/triggers/{trigger}/pause` | admin | Pause polling. |
