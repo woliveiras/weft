@@ -72,7 +72,8 @@ test('an operator resolves a hold and Activity records why', async ({ page }) =>
   await expect(resolution).toContainText('e2e-operator');
 });
 
-test('shows the pending access retry in local time', async ({ page }) => {
+test('shows the access retry in local time until its deadline', async ({ page }) => {
+  await page.clock.install();
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-viewer-token'));
   await page.goto('/#/g/git-inspect/canvas');
   const results = page.waitForResponse((response) =>
@@ -85,7 +86,12 @@ test('shows the pending access retry in local time', async ({ page }) => {
   expect(deadline).toBeDefined();
   const formatted = await page.evaluate((iso) => new Date(iso).toLocaleString(), deadline!);
   const card = page.getByRole('article', { name: 'Trigger Unpublished readiness fixture' });
-  await expect(card.getByRole('list', { name: 'Held issues' })).toContainText(`Retry after ${formatted}`);
+  const holds = card.getByRole('list', { name: 'Held issues' });
+  await expect(holds).toContainText(`Retry after ${formatted}`);
+  const remaining = await page.evaluate((iso) => Date.parse(iso) - Date.now(), deadline!);
+  await page.clock.fastForward(remaining + 1);
+  await expect(holds).toBeVisible();
+  await expect(holds).not.toContainText('Retry after');
 });
 
 test('forced resolution requires confirmation and records the unpublished comment', async ({ page }) => {

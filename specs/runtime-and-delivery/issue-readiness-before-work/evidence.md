@@ -273,3 +273,38 @@ Fixture verification on 2026-11-12.
 Go used cached Docker images with pulls disabled. Web verification used
 installed tools and Chromium. Playwright built the web bundle and a
 disposable Darwin backend. All tracker operations used fixtures.
+
+## Independent review of 1ac3098 through 9251f46
+
+Fixture verification on 2026-11-12.
+
+- The disposition table covered unverified, inaccessible, first, early
+  and confirmed Jira 410 responses. The runner fixture exercised both
+  Jira 404 and 410 with project access granted and denied. Verified
+  absence preserved readiness progress.
+- Unit tests covered retry counts, deadlines and guidance for 401, 503
+  and unavailable probe results. Persisted runner fixtures verified
+  that the count survived a restart, stopped at five, kept the hold
+  and allowed unrelated discovery. Renewed consent resumed verification
+  without spending a round. The console unit test exercised that action.
+- The workflow guide and D-05 document why project denial blocks a poll
+  and identify the required project permission and API scopes.
+  [Atlassian Get project](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-projects/#api-rest-api-3-project-projectidorkey-get)
+- Vitest expired two visible deadlines in order with the page open.
+  Chromium rendered the localized access deadline and removed it as
+  the clock passed it while the hold remained visible.
+
+| Command | Result |
+| --- | --- |
+| `go test -count=1 ./internal/trigger ./internal/observability ./internal/api ./internal/activity` | All four packages passed. |
+| `go test -count=1 -p 1 ./...` and `go test -count=1 ./internal/engine` | The full suite passed. The engine passed in the full suite (30.571s) and on its standalone run (30.417s). |
+| `./scripts/go.sh vet ./...` and `gofmt -l .` in `server/` | Vet passed. Gofmt listed no files. |
+| `GOOS=linux CGO_ENABLED=0 go build ./...` and `GOOS=darwin CGO_ENABLED=0 go build ./...` | Both arm64 builds passed. |
+| `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed the disposable browser fixture tests. |
+| `./node_modules/.bin/vitest run` in `web/` | 449 tests passed in 88 files. |
+| `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/tsc --project tsconfig.e2e.json` in `web/` | Both type checks passed. |
+| `./node_modules/.bin/playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` in `web/` | Five trigger and three Activity scenarios passed in Chromium. |
+
+Go used cached Docker images with pulls disabled. Playwright used installed
+Chromium and a disposable Darwin backend. Live tracker qualification remains
+in PROD-14.

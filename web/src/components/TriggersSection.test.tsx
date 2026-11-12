@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Graph, Trigger } from '../api/types';
@@ -146,6 +146,39 @@ describe('TriggersSection', () => {
       expect(expired.querySelector('time')).toBeNull();
     } finally {
       clock.mockRestore();
+    }
+  });
+
+  it('removes each retry when it expires while the page stays open', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-11-12T10:45:00Z'));
+      const first = '2026-11-12T10:45:01Z';
+      const second = '2026-11-12T10:45:02Z';
+      const api = fakeApi({
+        'GET /api/v1/triggers': () => [{
+          ...paused, holds: [
+            { generation: 'gen-1', key: 'APP-7', reason: 'tracker_unavailable', round: 1, retryAccessAt: first },
+            { generation: 'gen-2', key: 'APP-8', reason: 'incomplete', round: 1, retryCommentAt: second },
+          ],
+        }],
+        'GET /api/v1/scm/connections': () => [],
+      });
+      await act(async () => { render(<TriggersSection graph={graph} role="viewer" />); });
+      const holds = screen.getByRole('list', { name: 'Held issues' });
+      const [early, late] = within(holds).getAllByRole('listitem');
+      expect(early.textContent).toContain(`Retry after ${new Date(first).toLocaleString()}`);
+      expect(late.textContent).toContain(`Retry after ${new Date(second).toLocaleString()}`);
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+      expect(early.textContent).not.toContain('Retry after');
+      expect(late.textContent).toContain('Retry after');
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+      expect(late.textContent).not.toContain('Retry after');
+      expect(api.find('GET', '/api/v1/triggers')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
     }
   });
 

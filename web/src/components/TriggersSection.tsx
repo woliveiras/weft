@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import type { Graph, Trigger, TriggerInput, TriggerMatches } from '../api/types';
 import { useAsync } from '../hooks/useData';
@@ -24,6 +24,12 @@ function holdResolutionWarning(hold: NonNullable<Trigger['holds']>[number]): str
   }
 }
 
+function holdRetryDeadline(hold: NonNullable<Trigger['holds']>[number], now: number): string | undefined {
+  return [hold.retryAt, hold.retryLabelAt, hold.retryCommentAt, hold.retryAccessAt]
+    .filter((at): at is string => Boolean(at && Date.parse(at) > now))
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+}
+
 /** Issue triggers of a saved workflow: labelled issues start tasks under the consent of the administrator who saves or resumes them. */
 export function TriggersSection({ graph, role }: { graph: Graph; role?: string }) {
   const list = useAsync(() => api.triggers(graph.metadata.id), [graph.metadata.id]);
@@ -37,7 +43,21 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
   const admin = role === 'admin';
   const canPreview = admin || role === 'operator';
   const nodes = graph.spec.nodes.filter((n) => !n.disabled);
+  const [deadlineTick, refreshDeadlines] = useState(0);
   const now = Date.now();
+  let nextDeadline = Infinity;
+  for (const trigger of list.data ?? []) {
+    for (const hold of trigger.holds ?? []) {
+      const deadline = holdRetryDeadline(hold, now);
+      if (deadline) nextDeadline = Math.min(nextDeadline, Date.parse(deadline));
+    }
+  }
+  useEffect(() => {
+    if (!Number.isFinite(nextDeadline)) return;
+    const delay = Math.min(2_147_483_647, Math.max(0, nextDeadline - Date.now()));
+    const timer = window.setTimeout(() => refreshDeadlines((tick) => tick + 1), delay);
+    return () => window.clearTimeout(timer);
+  }, [nextDeadline, deadlineTick]);
   const set = (patch: Partial<TriggerInput>) => setDraft((d) => ({ ...(d ?? emptyInput(graph)), ...patch }));
   const setSource = (patch: Partial<TriggerInput['source']>) => setDraft((d) => {
     const cur = d ?? emptyInput(graph);
@@ -136,9 +156,7 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
             {Boolean(t.holds?.length) && <ul aria-label="Held issues">
               {t.holds?.map(h => {
                 const warning = holdResolutionWarning(h);
-                const retryAt = [h.retryAt, h.retryLabelAt, h.retryCommentAt, h.retryAccessAt]
-                  .filter((at): at is string => Boolean(at && Date.parse(at) > now))
-                  .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+                const retryAt = holdRetryDeadline(h, now);
                 return <li key={h.key}>
                   {h.url ? <a href={h.url}>{h.key}</a> : h.key} · round {h.round} · {h.message || h.reason} · edits {h.snapshotEdits ?? 0} of 3
                   {h.eligibility && ` The issue ${h.eligibility}.`}

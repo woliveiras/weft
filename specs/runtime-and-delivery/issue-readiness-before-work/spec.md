@@ -160,7 +160,8 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   backoffs through the applicable Retry-After or primary reset deadline,
   capped at one hour from the failed attempt. Trigger details show the
   latest future retry deadline in local time, including an access-check
-  retry. Expired deadlines are omitted.
+  retry. A deadline disappears as it expires while the trigger details are
+  open.
   A 401 ends retries only when a same-connection identity read also
   returns 401.
 
