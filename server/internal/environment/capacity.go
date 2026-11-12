@@ -259,27 +259,52 @@ func (m *Manager) prepareBoundedImage(ctx context.Context, g *domain.Graph, fina
 		input = f
 		args = append(args, "--file", contextDockerfile)
 	}
+	endpoint, err := m.builderContext(ctx, b.id)
+	if err != nil {
+		return "", err
+	}
+	var dockerFlags []string
+	if endpoint != "" {
+		dockerFlags = []string{"--context", endpoint}
+		defer func() {
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+			defer cancel()
+			err = errors.Join(err, m.removeBuilderContext(cleanup, endpoint))
+		}()
+	}
+	buildx := func(ctx context.Context, stdin io.Reader, out io.Writer, args ...string) error {
+		return m.docker(ctx, stdin, out, append(dockerFlags, args...)...)
+	}
 	// Remove only our generated Buildx configuration. Physical workers were
 	// already reconciled before admission; an absent local builder is harmless.
 	var builders bytes.Buffer
-	if err = m.docker(ctx, nil, &builders, "buildx", "ls", "--format", "{{.Name}}"); err != nil {
-		return "", err
+	if err = buildx(ctx, nil, &builders, "buildx", "ls", "--format", "{{.Name}}"); err != nil {
+		return "", builderConnectionError(ctx, "list bounded builders")
 	}
 	for _, name := range strings.Fields(builders.String()) {
 		if strings.TrimSuffix(name, "*") == builderName(b.id) {
-			if err = m.docker(ctx, nil, log, "buildx", "rm", "--force", builderName(b.id)); err != nil {
-				return "", err
+			if err = buildx(ctx, nil, io.Discard, "buildx", "rm", "--force", builderName(b.id)); err != nil {
+				return "", builderConnectionError(ctx, "remove stale bounded builder")
 			}
 		}
 	}
 	memory := strconv.FormatInt(b.memory, 10)
 	create := []string{"buildx", "create", "--name", builderName(b.id), "--driver", "docker-container", "--driver-opt", "memory=" + memory + ",memory-swap=" + memory + ",restart-policy=no,cpu-period=100000,cpu-quota=" + strconv.FormatInt(b.cpu*100, 10)}
-	var configuration io.Reader
 	if n, ok := ctx.Value(preparationKey{}).(preparationNetwork); ok {
 		// The worker has no uplink. RUN DNS is disabled; proxy requests use the
 		// inspected internal address, never Docker's external DNS forwarding.
-		configuration = strings.NewReader("[dns]\n  nameservers = [\"127.0.0.1\"]\n[worker.oci]\n  networkMode = \"bridge\"\n")
-		create = append(create, "--buildkitd-config", "/dev/stdin", "--driver-opt", "network="+n.name)
+		config, err := os.CreateTemp("", "weft-buildkitd-*.toml")
+		if err != nil {
+			return "", fmt.Errorf("create preparation worker config: %w", err)
+		}
+		defer os.Remove(config.Name())
+		// Buildx reads this file twice, first for entitlements and then for the
+		// configuration copied to the worker. A stdin pipe cannot be reread.
+		_, err = config.WriteString("[dns]\n  nameservers = [\"127.0.0.1\"]\n[worker.oci]\n  networkMode = \"bridge\"\n")
+		if err := errors.Join(err, config.Close()); err != nil {
+			return "", fmt.Errorf("write preparation worker config: %w", err)
+		}
+		create = append(create, "--buildkitd-config", config.Name(), "--driver-opt", "network="+n.name)
 		for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
 			create = append(create, "--driver-opt", "env."+key+"="+n.proxyURL)
 			args = append(args, "--build-arg", key+"="+n.proxyURL)
@@ -289,19 +314,22 @@ func (m *Manager) prepareBoundedImage(ctx context.Context, g *domain.Graph, fina
 			args = append(args, "--build-arg", key+"=")
 		}
 	}
-	if err = m.docker(ctx, configuration, log, create...); err != nil {
-		return "", fmt.Errorf("create bounded builder: %w", err)
+	if endpoint != "" {
+		create = append(create, endpoint)
+	}
+	if err = buildx(ctx, nil, io.Discard, create...); err != nil {
+		return "", builderConnectionError(ctx, "create bounded builder (check sandbox daemon connectivity and Docker Buildx)")
 	}
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
 		defer cancel()
-		e := m.docker(cleanup, nil, log, "buildx", "rm", "--force", builderName(b.id))
+		e := buildx(cleanup, nil, log, "buildx", "rm", "--force", builderName(b.id))
 		if e != nil {
 			err = errors.Join(err, fmt.Errorf("remove bounded builder: %w", e))
 		}
 	}()
 	fmt.Fprintf(log, "==> Building with a %d-byte worker memory cap\n", b.memory)
-	if err = m.docker(ctx, input, log, append(args, "-")...); err != nil {
+	if err = buildx(ctx, input, log, append(args, "-")...); err != nil {
 		return "", fmt.Errorf("bounded Dockerfile build: %w", err)
 	}
 	return final + "-user", nil

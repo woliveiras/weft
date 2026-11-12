@@ -61,6 +61,7 @@ services:
       - weftd-data:/var/lib/weft/data
       - workspace-journal:/var/lib/weft/journal:ro
       - sandbox-certs-client:/certs/client:ro
+    tmpfs: ["/var/lib/weft/.docker/contexts:uid=10001,gid=10001,mode=0700"]
     networks: [default, sandbox]
     depends_on:
       nats: {condition: service_healthy}

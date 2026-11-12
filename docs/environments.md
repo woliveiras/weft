@@ -434,6 +434,14 @@ The control-plane image includes `docker-cli-buildx`; local control-plane
 installations also need the Docker Buildx plugin. The first build may download
 the BuildKit worker image.
 
+For a TCP sandbox endpoint configured with Docker TLS environment variables,
+Weft gives Buildx a temporary Docker context for the graph. Compose mounts
+the `weftd` Docker context store in memory, separate from Buildx builder metadata.
+If the build reports a sandbox daemon build connection error, check daemon
+reachability, Docker Buildx, and access to the Docker client TLS files.
+`scripts/test-environment-build-tls.sh` checks this path over Compose mutual TLS
+using the cached Go base, BuildKit worker, and egress proxy images.
+
 Reservations survive controller restarts. Build again or Reset the same graph
 to reconcile interrupted workers. A cleanup failure is reported and retains
 capacity until removal is confirmed. Prepared-image and dependency-seed reuse

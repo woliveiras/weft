@@ -34,6 +34,7 @@ RUN apk add --no-cache ca-certificates git python3 tini docker-cli docker-cli-bu
  && addgroup -S -g 10001 weft && adduser -S -u 10001 -G weft -h /var/lib/weft weft \
  && mkdir -p /var/lib/weft/data /var/lib/weft/workspaces /app \
  && chown -R weft:weft /var/lib/weft
+RUN install -d -m 0700 -o weft -g weft /var/lib/weft/.docker
 COPY --from=build /out/weftd /out/weft /usr/local/bin/
 COPY --from=build /out/weft-preview-linux /usr/local/lib/weft/weft-preview-linux
 COPY --from=web /web/dist /app/web

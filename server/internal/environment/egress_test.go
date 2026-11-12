@@ -69,7 +69,7 @@ func TestPreparationEgressPipelineIntegration(t *testing.T) {
 				t.Fatalf("%+v", v)
 			}
 			calls := strings.Join(h.docker.calls(t), "\n")
-			for _, want := range []string{"gateway_mode_ipv4=isolated", "network connect bridge", "--read-only", "--buildkitd-config /dev/stdin", "network=weft-envbuild-bookaneer-network", "--build-arg HTTPS_PROXY=http://172.20.0.2:3128", "--dns 127.0.0.1", "--change ENV HTTP_PROXY="} {
+			for _, want := range []string{"gateway_mode_ipv4=isolated", "network connect bridge", "--read-only", "--buildkitd-config ", "network=weft-envbuild-bookaneer-network", "--build-arg HTTPS_PROXY=http://172.20.0.2:3128", "--dns 127.0.0.1", "--change ENV HTTP_PROXY="} {
 				if !strings.Contains(calls, want) {
 					t.Fatalf("missing %s: %s", want, calls)
 				}

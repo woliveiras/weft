@@ -35,12 +35,25 @@ func newFakeDocker(t *testing.T) *fakeDocker {
 	script := `#!/bin/sh
 d=` + dir + `
 echo "$*" >> "$d/calls.log"
-sub="$1"; [ "$1" = image ] || [ "$1" = volume ] || [ "$1" = buildx ] || [ "$1" = network ] && sub="$1-$2"
+[ "$1" != --context ] || shift 2
+if [ "$1" = --tlscert ]; then
+  for file in "$2" "$4" "$DOCKER_CERT_PATH/ca.pem"; do
+    if [ ! -f "$file" ] || [ ! -r "$file" ]; then echo "cannot read $file" >&2; exit 1; fi
+  done
+  shift 4
+fi
+sub="$1"; [ "$1" = image ] || [ "$1" = volume ] || [ "$1" = buildx ] || [ "$1" = network ] || [ "$1" = context ] && sub="$1-$2"
 [ -f "$d/slow-$sub" ] && sleep 30
 if [ -f "$d/fail-$sub" ]; then echo "step output"; echo "boom: $sub failed" >&2; exit 1; fi
 case "$sub" in
   inspect) [ -f "$d/proxy-address" ] && cat "$d/proxy-address" ;;
-  buildx-create) cat > /dev/null ;;
+  context-ls) [ ! -f "$d/contexts" ] || cat "$d/contexts" ;;
+  buildx-create)
+    while [ "$#" -gt 1 ]; do
+      if [ "$1" = --buildkitd-config ]; then cat "$2" > "$d/buildkitd-config" || exit 1; fi
+      shift
+    done
+    cat > /dev/null ;;
   pull) echo "Pulling from library"; echo "Status: Downloaded" ;;
   build|buildx-build) cat > /dev/null; echo "Successfully built" ;;
   run) echo "setup ran: $*" ;;
