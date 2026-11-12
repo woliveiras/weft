@@ -285,10 +285,10 @@ func (s *Session) Prompt() string {
 	for _, item := range s.items {
 		if item.entry.Included {
 			b.WriteString(renderEntry(item.entry, item.content))
-			for _, read := range s.reads {
-				if read.entry.Order == item.entry.Order && read.entry.Included {
-					b.WriteString(renderEntry(read.entry, read.content))
-				}
+		}
+		for _, read := range s.reads {
+			if read.entry.Order == item.entry.Order && read.entry.Included {
+				b.WriteString(renderEntry(read.entry, read.content))
 			}
 		}
 	}
@@ -393,7 +393,11 @@ func (s *Session) Load(ctx context.Context, selection, reference string) (_ stri
 	}
 	cost := len(renderEntry(e, content))
 	if cost > s.snapshot.Budget {
-		return s.omitRequest(ctx, e, "token_budget")
+		status, err := s.omitRequest(ctx, e, "token_budget")
+		if err != nil || item.repo != nil {
+			return status, err
+		}
+		return s.offerRepositoryFallback(ctx, item, status)
 	}
 	e.Included, e.Delivery, e.SHA256 = true, "prepared", hash(content)
 	if err := s.recordRead(ctx, e, content); err != nil {
@@ -403,6 +407,35 @@ func (s *Session) Load(ctx context.Context, selection, reference string) (_ stri
 	s.applied[key] = true
 	outcome = "loaded"
 	return "loaded at its assigned guidance precedence", nil
+}
+
+// An oversized console body cannot fit later because the budget only
+// decreases. Release its live slot while retaining the initial audit entry.
+func (s *Session) offerRepositoryFallback(ctx context.Context, console progressiveEntry, status string) (string, error) {
+	s.items[console.entry.Order-1].entry.Included = false
+	delete(s.selected, console.entry.Selection)
+	for _, item := range s.items {
+		if item.repo == nil || item.entry.Reason != "shadowed_by_console" || item.repo.name != console.entry.Source {
+			continue
+		}
+		entry := item.entry
+		entry.Record = 0
+		entry.Selection = "repository:" + item.repo.name
+		cost := len(renderEntry(entry, item.content))
+		if cost > s.snapshot.Budget {
+			_, err := s.omitRequest(ctx, entry, "token_budget")
+			return status, err
+		}
+		entry.Included, entry.Reason, entry.Delivery = true, "", "prepared"
+		if err := s.recordRead(ctx, entry, item.content); err != nil {
+			return "", err
+		}
+		s.snapshot.Budget -= cost
+		item.entry = entry
+		s.selected[entry.Selection] = item
+		return status + "; repository fallback available: " + entry.Selection, nil
+	}
+	return status, nil
 }
 
 // Use fixed stages and outcomes in metrics and traces. Paths, selection IDs

@@ -196,7 +196,13 @@ acceptance criteria above and matrix use these decisions as their oracles.
   selected by the graph or agent shadows a matching valid repository skill
   name when the console catalogue entry is admitted. Installation defaults
   alone and console entries omitted for budget leave repository skills
-  eligible. Distinct repository packages with the same name prefer
+  eligible. If an admitted console skill's body exceeds the remaining budget
+  on activation, release its active catalogue slot and offer the matching
+  repository entry if its framed catalogue fits the remaining budget. Charge
+  the replacement without refunding previously delivered content. Record the
+  console omission and the replacement outcome separately. The repository
+  body still requires an explicit selection and its own budget check.
+  Distinct repository packages with the same name prefer
   `.agents`, then `.claude`, then `.github`. Within a family use the
   canonical relative path tie-breaker. Report the suppressed candidates.
 
@@ -234,7 +240,7 @@ acceptance criteria above and matrix use these decisions as their oracles.
   or task outside its frame. Stage digests identify the payload before framing.
 - Cap each body, root instruction or reference at 16 KiB, package metadata
   at 2 KiB, enumeration at 128 candidates per source family, the catalogue
-  at 128 items per execution and reference reads at 16 distinct references
+  at 128 active items per execution and reference reads at 16 distinct references
   per execution. Legacy steering and registry limits still apply.
 - Keep the 8,192-byte conservative guidance budget for opted-in executions.
   Reserve mandatory prompt and operator messages first, including the

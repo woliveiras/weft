@@ -618,3 +618,70 @@ spec:
 		})
 	}
 }
+
+func TestRepositoryGuidanceFallsBackAfterConsoleBodyBudget(t *testing.T) {
+	dir := t.TempDir()
+	p := &guidanceProvider{calls: []llm.ToolCall{
+		{ID: "console", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"console:sample"}`)},
+		{ID: "repository", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample"}`)},
+	}}
+	r := newRig(t, openStore(t, dir), memory.New(), dir, "guidance-fallback", func(o *engine.Options) {
+		o.Models.(*llm.Registry).Add(llm.ProviderConfig{Name: p.Name()}, p)
+	})
+	const id = "guidance-fallback"
+	m := instructions.Manager{Store: r.store}
+	if _, err := m.Save(r.ctx, instructions.Input{ID: "sample", Title: "Sample", Body: strings.Repeat("x", instructions.MaxTokens), Enabled: true}, 0, "test", false); err != nil {
+		t.Fatal(err)
+	}
+	const source = ".agents/skills/sample/SKILL.md"
+	file := filepath.Join(dir, "ws", id, source)
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, []byte("---\nname: sample\ndescription: FALLBACK CATALOGUE\n---\nFALLBACK BODY"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.deploy(`metadata: {name: guidance-fallback}
+spec:
+  instructions: {repositoryGuidance: {}, skillIds: [sample]}
+  nodes:
+    - id: reader
+      prompt: Request a sample skill
+      model: {provider: guidance-fixture, name: fixture}
+      loop: {mode: once}
+      isolation: {mode: process}
+`)
+	var execution *domain.Execution
+	eventually(t, 5*time.Second, "fallback turn finishes", func() bool {
+		rows, _ := r.store.ListExecutions(r.ctx, storage.ExecutionFilter{GraphID: id})
+		if len(rows) == 1 && rows[0].Status.Terminal() {
+			execution = rows[0]
+			return true
+		}
+		return false
+	})
+	requests := p.observed()
+	if execution.Status != domain.ExecSucceeded || len(requests) != 3 ||
+		strings.Contains(requests[0], "FALLBACK CATALOGUE") || !strings.Contains(requests[1], "FALLBACK CATALOGUE") ||
+		strings.Contains(requests[1], "FALLBACK BODY") || !strings.Contains(requests[2], "FALLBACK BODY") {
+		t.Fatal("fallback did not become available progressively", execution.Status, execution.Error)
+	}
+	snap, err := m.Snapshot(r.ctx, execution.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(snap.Entries, func(e instructions.Entry) bool {
+		return e.Source == source && e.Reason == "shadowed_by_console" && !e.Included
+	}) || !slices.ContainsFunc(snap.Reads, func(e instructions.Entry) bool {
+		return e.Source == "sample" && e.Stage == "body" && e.Reason == "token_budget"
+	}) {
+		t.Fatal("initial shadowing or body refusal was not preserved in Activity")
+	}
+	for _, stage := range []string{"catalogue", "body"} {
+		if !slices.ContainsFunc(snap.Reads, func(e instructions.Entry) bool {
+			return e.Source == source && e.Stage == stage && e.Included && e.Delivery == "confirmed"
+		}) {
+			t.Fatalf("fallback %s lacks confirmed evidence: %+v", stage, snap.Reads)
+		}
+	}
+}

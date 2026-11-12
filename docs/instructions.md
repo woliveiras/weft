@@ -113,7 +113,12 @@ in the same checkout. Both the alias and canonical source must be allowed,
 and a canonical package is catalogued once. Files, references and legacy
 steering still reject symlinks. A console skill shadows a matching repository
 name when the graph or agent selects its ID and its catalogue entry fits.
-Installation defaults alone leave matching repository skills eligible. Distinct repository packages sharing a name
+Installation defaults alone leave matching repository skills eligible. If
+the selected console body exceeds the remaining budget on activation, it
+releases its active catalogue slot. Weft offers the matching repository
+catalogue entry if it fits, and the agent can explicitly activate it.
+Activity retains the original shadowing and records the activation refusal
+and the fallback outcome. Distinct repository packages sharing a name
 prefer `.agents`, `.claude`, then `.github`, with canonical relative
 paths in bytewise order to break ties. A v2 `skills-lock.json`
 `skills.<name>.computedHash` is an advisory version declaration. Observed
@@ -147,7 +152,7 @@ effective discovery retain legacy delivery for console skills.
 
 Each body, root instruction or reference is limited to 16 KiB and package
 metadata to 2 KiB. Discovery accepts at most 128 candidates per family and
-128 catalogued skills per execution. An over-limit family is omitted as a
+128 active catalogue slots per execution. An over-limit family is omitted as a
 whole. Each execution can request up to 16 distinct package references.
 A request refused by the turn's tool call limit appears in Activity as
 `tool_call_limit`. The shared
