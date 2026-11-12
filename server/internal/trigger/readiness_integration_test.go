@@ -1156,3 +1156,75 @@ func TestGitHubIndexLagProcessesVerifiedReturnSignalsWithoutClaiming(t *testing.
 		})
 	}
 }
+
+func TestSharedGitHubBudgetRotatesAcrossFourTriggers(t *testing.T) {
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	gh.pageSearch = true
+	gh.issues = []map[string]any{ghIssue(1, "Issue", "weft")}
+	r := runner(triggerStore(t), c, "one", gh)
+	r.Tasks = &tasks{}
+	r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+		return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+	})
+	in := input()
+	in.Source.Query = "milestone:release"
+	first, err := r.Triggers.Create(t.Context(), in, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first = advance(r, c, t, first.ID)
+	holds := append([]trigger.Hold(nil), first.Holds...)
+	for n := 2; n <= 10; n++ {
+		gh.issues = append(gh.issues, ghIssue(n, "Issue", trigger.LabelFailed))
+		hold := first.Holds[0]
+		hold.Key = fmt.Sprintf("acme/app#%d", n)
+		holds = append(holds, hold)
+	}
+	triggers := []*trigger.Trigger{first}
+	for n := 2; n <= 4; n++ {
+		c.t = c.t.Add(time.Second)
+		in.Name = fmt.Sprintf("Trigger %d", n)
+		tr, err := r.Triggers.Create(t.Context(), in, "admin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		triggers = append(triggers, tr)
+	}
+	for _, tr := range triggers {
+		if _, err := r.Triggers.Update(t.Context(), tr.ID, "fixture", func(t *trigger.Trigger) error {
+			t.Holds = holds
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deferred := map[string]bool{}
+	for range 4 {
+		before := len(gh.args)
+		advance(r, c, t, first.ID)
+		if len(gh.args)-before != 30 {
+			t.Fatalf("shared window dispatched %d searches", len(gh.args)-before)
+		}
+		current, err := r.Triggers.List(t.Context(), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		numDeferred := 0
+		for _, tr := range current {
+			if tr.SearchDeferredReason != "" {
+				numDeferred++
+				deferred[tr.ID] = true
+			}
+			if tr.LastError != "" || tr.SearchTurn == 0 {
+				t.Fatalf("deferral was an error or turn was lost: %+v", tr)
+			}
+		}
+		if numDeferred != 1 {
+			t.Fatalf("expected one visibly deferred trigger, got %d", numDeferred)
+		}
+	}
+	if len(deferred) != 4 {
+		t.Fatalf("the same triggers kept getting deferred: %v", deferred)
+	}
+}

@@ -121,6 +121,7 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
             </p>
             {t.currentTask && <p className="small">Working on {t.currentIssue?.key}: <a href={`#/tasks/${encodeURIComponent(t.currentTask)}`}>open task</a></p>}
             <p className="small">Readiness {t.readinessDisabled ? 'disabled' : 'enabled'}</p>
+            {t.searchDeferredReason && <p role="status">{t.searchDeferredReason}</p>}
             {t.readinessBlock && <p role="status">{t.readinessBlock}</p>}
             {Boolean(t.holds?.length) && <ul aria-label="Held issues">
               {t.holds?.map(h => {

@@ -48,10 +48,15 @@ result agent returns HTTP 422 with the corresponding field error and preserves
 the saved trigger and consent.
 Automated GitHub polling shares a rolling budget of
 [30 search calls per minute](https://docs.github.com/en/rest/rate-limit/rate-limit)
-across the installation. Each trigger poll spends at most eight
+across the installation with the operator's matching-issues preview.
+Agent searches through MCP use their connection quota and are outside the
+trigger budget. Preview reserves search capacity while leaving trigger and
+tracker state read-only. Each trigger poll spends at most eight
 search calls verifying held scope and may spend one more on admission.
 The runner checks the least recently verified holds first and surfaces
-budget deferrals in trigger state and Activity.
+budget deferrals in trigger state and Activity. Across due GitHub triggers,
+polling gives deferred triggers the first turn and orders each group by
+least recent shared-budget grant.
 
 ### AC-003 — Gateway write-back
 

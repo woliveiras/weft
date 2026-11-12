@@ -72,6 +72,7 @@ func (r *Runner) Tick(ctx context.Context) {
 		return
 	}
 	now := r.Triggers.now()
+	slices.SortStableFunc(list, compareSearchTurn)
 	for _, t := range list {
 		if ctx.Err() != nil {
 			return
@@ -96,7 +97,8 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 	}
 	started := time.Now()
 	pollCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	outcome, err := r.step(pollCtx, t)
+	var search githubSearchPoll
+	outcome, err := r.step(pollCtx, t, &search)
 	cancel()
 	if err != nil {
 		outcome = "error"
@@ -109,6 +111,15 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 	if _, uerr := r.Triggers.Update(ctx, id, "system:trigger", func(t *Trigger) error {
 		t.LastRunAt, t.NextRunAt = &now, &next
 		t.LastError = ""
+		if search.attempted {
+			t.SearchDeferredReason = ""
+			if search.deferred {
+				t.SearchDeferredReason = githubSearchDeferred
+			}
+			if search.turn != 0 {
+				t.SearchTurn = search.turn
+			}
+		}
 		if err != nil {
 			t.LastError = err.Error()
 		}
@@ -126,7 +137,7 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 }
 
 // step does one run of a trigger and returns a bounded outcome label.
-func (r *Runner) step(ctx context.Context, t *Trigger) (string, error) {
+func (r *Runner) step(ctx context.Context, t *Trigger, search *githubSearchPoll) (string, error) {
 	problem, err := r.Triggers.ConsentProblem(ctx, t)
 	if err != nil {
 		return "", err
@@ -158,7 +169,7 @@ func (r *Runner) step(ctx context.Context, t *Trigger) (string, error) {
 	heldCall := call
 	holds := slices.Clone(t.Holds)
 	if t.Source.Kind == "github" {
-		call = r.boundGitHubSearch(t, call)
+		call = r.boundGitHubSearch(t, call, search)
 		heldCall = boundHeldGitHubSearch(t, call)
 		slices.SortStableFunc(holds, func(a, b Hold) int { return a.ScopeCheckedAt.Compare(b.ScopeCheckedAt) })
 	}
@@ -178,6 +189,9 @@ func (r *Runner) step(ctx context.Context, t *Trigger) (string, error) {
 		}
 	}
 	m, err := match(ctx, t, src, call)
+	if errors.Is(err, errSearchBudgetDeferred) {
+		return "search_deferred", heldErr
+	}
 	if err != nil {
 		return "", err
 	}

@@ -92,17 +92,19 @@ type Trigger struct {
 	State        string `json:"state"`
 	PausedReason string `json:"pausedReason,omitempty"`
 
-	LastRunAt      *time.Time        `json:"lastRunAt,omitempty"`
-	NextRunAt      *time.Time        `json:"nextRunAt,omitempty"`
-	CurrentTask    string            `json:"currentTask,omitempty"`
-	Claiming       string            `json:"claiming,omitempty"`
-	ClaimAdmission string            `json:"claimAdmission,omitempty"`
-	CurrentSource  SourceConfig      `json:"currentSource,omitzero"`
-	CurrentIssue   *Issue            `json:"currentIssue,omitempty"`
-	Processed      map[string]string `json:"processed,omitempty"` // issue key → task id
-	Skipped        []Skip            `json:"skipped,omitempty"`
-	Notes          []string          `json:"notes,omitempty"`
-	LastError      string            `json:"lastError,omitempty"`
+	LastRunAt            *time.Time        `json:"lastRunAt,omitempty"`
+	NextRunAt            *time.Time        `json:"nextRunAt,omitempty"`
+	CurrentTask          string            `json:"currentTask,omitempty"`
+	Claiming             string            `json:"claiming,omitempty"`
+	ClaimAdmission       string            `json:"claimAdmission,omitempty"`
+	CurrentSource        SourceConfig      `json:"currentSource,omitzero"`
+	CurrentIssue         *Issue            `json:"currentIssue,omitempty"`
+	Processed            map[string]string `json:"processed,omitempty"` // issue key → task id
+	Skipped              []Skip            `json:"skipped,omitempty"`
+	Notes                []string          `json:"notes,omitempty"`
+	SearchTurn           uint64            `json:"searchTurn,omitempty"`
+	SearchDeferredReason string            `json:"searchDeferredReason,omitempty"`
+	LastError            string            `json:"lastError,omitempty"`
 
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -373,6 +375,9 @@ func (m Manager) Edit(ctx context.Context, id string, in Input, actor string) (*
 			return err
 		}
 		covered := t.Consent.Scope != reviewed.Scope
+		if t.Source != in.Source {
+			t.SearchDeferredReason, t.SearchTurn = "", 0
+		}
 		apply(t, in)
 		if covered && t.State == Active {
 			t.State, t.PausedReason = Paused, "The trigger changed what was consented to. Review it and resume to record new consent."

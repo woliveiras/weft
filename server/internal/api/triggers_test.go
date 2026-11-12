@@ -596,3 +596,38 @@ func TestGitHubReadinessHonorsRateLimitDeadlines(t *testing.T) {
 		})
 	}
 }
+
+func TestGitHubPreviewSharesTheRollingSearchBudget(t *testing.T) {
+	srv, a := setupTriggerApp(t, nil)
+	now := time.Now().UTC()
+	a.Triggers.Triggers.Now = func() time.Time { return now }
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", taskGraph, nil); c != 201 {
+		t.Fatal(c)
+	}
+	searches := 0
+	a.Tools.MustRegister(fixtureTool{name: "mcp.gh.search_issues", calls: &searches, content: `{"items":[]}`})
+	var tr trigger.Trigger
+	if c := call(t, srv, "POST", "/api/v1/triggers", adminTok, "application/json", triggerBody, &tr); c != 201 {
+		t.Fatal(c)
+	}
+	path := "/api/v1/triggers/" + tr.ID + "/matches"
+	for range 30 {
+		var m struct{ Error string }
+		if c := call(t, srv, "GET", path, operatorTok, "", "", &m); c != 200 || m.Error != "" {
+			t.Fatalf("unexpected preview: %d %+v", c, m)
+		}
+	}
+	var m struct{ Error string }
+	if c := call(t, srv, "GET", path, operatorTok, "", "", &m); c != 200 || !strings.Contains(m.Error, "budget") || searches != 30 {
+		t.Fatalf("preview did not share the quota: %d %+v searches=%d", c, m, searches)
+	}
+	saved, err := a.Triggers.Triggers.Get(t.Context(), tr.ID)
+	if err != nil || saved.SearchTurn != 0 || saved.SearchDeferredReason != "" || saved.LastRunAt != nil {
+		t.Fatalf("preview changed trigger state: %+v, %v", saved, err)
+	}
+	a.Triggers.Tick(t.Context())
+	saved, err = a.Triggers.Triggers.Get(t.Context(), tr.ID)
+	if err != nil || saved.SearchDeferredReason == "" || saved.LastError != "" || searches != 30 {
+		t.Fatalf("poll did not observe preview usage: %+v, %v searches=%d", saved, err, searches)
+	}
+}

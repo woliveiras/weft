@@ -74,6 +74,9 @@ func (r *Runner) Match(ctx context.Context, t *Trigger) (Matches, Source, Invoke
 		return Matches{}, nil, nil, err
 	}
 	call := GatewayInvoker(r.Gateway, Principal(t))
+	if t.Source.Kind == "github" {
+		call = r.boundGitHubSearch(t, call, nil)
+	}
 	m, err := match(ctx, t, src, call)
 	return m, src, call, err
 }
