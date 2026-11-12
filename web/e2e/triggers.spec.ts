@@ -54,4 +54,18 @@ test('shows the same held issue and round in the trigger and Activity', async ({
   await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
   const trigger = page.getByRole('article', { name: 'Trigger Held readiness fixture' });
   await expect(trigger.getByRole('list', { name: 'Held issues' })).toContainText('acme/app#11 · round 1 · The issue is waiting for clarification.');
+  await expect(trigger.getByRole('button', { name: 'Resolve hold' })).toHaveCount(0);
+});
+
+test('an operator resolves a hold and Activity records why', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-operator-token'));
+  await page.goto('/#/g/git-inspect/canvas');
+  await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
+  const trigger = page.getByRole('article', { name: 'Trigger Held readiness fixture' });
+  await trigger.getByRole('button', { name: 'Resolve hold' }).click();
+  await expect(trigger.getByRole('list', { name: 'Held issues' })).toHaveCount(0);
+  await trigger.getByText('Resolved readiness holds', { exact: true }).click();
+  await expect(trigger).toContainText('An operator resolved the readiness hold.');
+  await page.goto('/#/activity');
+  await expect(page.getByRole('region', { name: 'Resolved readiness holds' })).toContainText('acme/app#11');
 });

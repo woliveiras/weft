@@ -145,6 +145,7 @@ type Builder struct {
 
 // View is the response of GET /api/v1/activity.
 type View struct {
+	ResolvedTriggerHolds  []TriggerHold `json:"resolvedTriggerHolds,omitempty"`
 	TriggerHolds          []TriggerHold `json:"triggerHolds,omitempty"`
 	TriggerHoldsTruncated bool          `json:"triggerHoldsTruncated,omitempty"`
 	Window                string        `json:"window"`

@@ -68,9 +68,10 @@ type Skip struct {
 
 // Trigger starts a workflow's tasks from labelled issues.
 type Trigger struct {
-	ReadinessDisabled bool   `json:"readinessDisabled"`
-	Holds             []Hold `json:"holds,omitempty"`
-	ReadinessBlock    string `json:"readinessBlock,omitempty"`
+	ReadinessDisabled bool             `json:"readinessDisabled"`
+	HoldResolutions   []HoldResolution `json:"holdResolutions,omitempty"`
+	Holds             []Hold           `json:"holds,omitempty"`
+	ReadinessBlock    string           `json:"readinessBlock,omitempty"`
 
 	ID              string        `json:"id"`
 	Name            string        `json:"name"`

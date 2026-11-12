@@ -349,8 +349,11 @@ configured human owner, or a verified maintainer manually adding
 `weft:todo`, requests reevaluation. After two question rounds, Weft asks
 for operator intervention. The maintainer can clarify the issue and
 requeue it for the same readiness and consent checks. Turning readiness
-off preserves existing holds. Re-enable and re-consent to evaluate them
-again. Activity and the trigger show the reason, round and any pending
+off preserves existing holds. An Operator or Admin can use **Resolve hold**
+in the trigger to release one without changing the issue or starting work.
+Enabled triggers also release holds when current tracker evidence shows the
+issue is ineligible or out of scope. The resolution reason appears in both
+Activity and the trigger. Activity and the trigger show the reason, round and any pending
 tracker update. Other issues can advance while one is held. At ten holds,
 new evaluations stop until a hold resolves.
 

@@ -260,7 +260,7 @@ func run() error {
 		}
 	}
 	cfg.Secrets = config.Secrets{KeyFile: filepath.Join(root, "fixture.key"), GenerateKeyFile: true}
-	cfg.Auth.Tokens = []config.Token{{Name: "e2e-admin", Role: config.RoleAdmin, Token: "e2e-admin-token"}, {Name: "e2e-viewer", Role: config.RoleViewer, Token: "e2e-viewer-token"}}
+	cfg.Auth.Tokens = []config.Token{{Name: "e2e-admin", Role: config.RoleAdmin, Token: "e2e-admin-token"}, {Name: "e2e-operator", Role: config.RoleOperator, Token: "e2e-operator-token"}, {Name: "e2e-viewer", Role: config.RoleViewer, Token: "e2e-viewer-token"}}
 	cfg.Isolation.Docker.Bin = bin
 	cfg.Isolation.Docker.Host = ""
 	cfg.Isolation.Docker.IdleTimeout = time.Second

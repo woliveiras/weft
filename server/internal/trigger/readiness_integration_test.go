@@ -279,7 +279,7 @@ func TestReadinessScopeAndBudgetChangesInvalidateConsentBeforePolling(t *testing
 }
 
 func TestHeldIssueRechecksEligibilityBeforeReopening(t *testing.T) {
-	for _, state := range []string{"closed", "blocked", "assigned", "processed"} {
+	for _, state := range []string{"closed", "blocked", "assigned", "processed", "unlabeled"} {
 		t.Run(state, func(t *testing.T) {
 			st := triggerStore(t)
 			c := &clock{t: time.Now().UTC()}
@@ -309,6 +309,8 @@ func TestHeldIssueRechecksEligibilityBeforeReopening(t *testing.T) {
 				issue["labels"] = append(issue["labels"].([]map[string]any), map[string]any{"name": "blocked"})
 			case "assigned":
 				issue["assignees"] = []map[string]any{{"login": "other"}}
+			case "unlabeled":
+				issue["labels"] = []map[string]any{}
 			case "processed":
 				_, err := r.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
 					current.Processed = map[string]string{"github:acme/app#1@factory": "tsk_prior"}
@@ -320,9 +322,40 @@ func TestHeldIssueRechecksEligibilityBeforeReopening(t *testing.T) {
 			}
 			gh.replies["#1"] = []map[string]any{ghReply(1, "author", "User", "Acceptance example", c.t.Add(time.Second))}
 			tr = advance(r, c, t, tr.ID)
-			if calls != 1 || len(tasks.started) != 0 || tr.Holds[0].Eligibility == "" {
+			if calls != 1 || len(tasks.started) != 0 || len(tr.Holds) != 0 || len(tr.HoldResolutions) != 1 || tr.HoldResolutions[0].Reason == "" {
 				t.Fatalf("ineligible issue was reevaluated or admitted: %+v", tr.Holds)
 			}
 		})
+	}
+}
+
+func TestClosedHoldsReleaseFullCapacity(t *testing.T) {
+	st := triggerStore(t)
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	for n := 1; n <= 11; n++ {
+		gh.issues = append(gh.issues, ghIssue(n, "Issue", "weft"))
+	}
+	r := runner(st, c, "one", gh)
+	r.Tasks = &tasks{}
+	r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+		return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+	})
+	tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 10 {
+		tr = advance(r, c, t, tr.ID)
+	}
+	if len(tr.Holds) != 10 || tr.ReadinessBlock == "" {
+		t.Fatal(tr)
+	}
+	for n := range 10 {
+		gh.issues[n]["state"] = "closed"
+	}
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.HoldResolutions) != 10 || len(tr.Holds) != 1 || tr.Holds[0].Key != "acme/app#11" || tr.ReadinessBlock != "" {
+		t.Fatalf("closed holds stranded the queue: %+v", tr)
 	}
 }

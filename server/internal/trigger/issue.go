@@ -161,6 +161,8 @@ func (raw githubIssue) issue(repository string) Issue {
 	return i
 }
 
+const trackerSearchLimit = 50
+
 func (g github) Search(ctx context.Context, call Invoker, label string) ([]Issue, error) {
 	q := fmt.Sprintf(`repo:%s is:issue is:open label:"%s"`, g.c.Repository, label)
 	if g.c.Query != "" {
@@ -169,7 +171,7 @@ func (g github) Search(ctx context.Context, call Invoker, label string) ([]Issue
 	var out struct {
 		Items []githubIssue `json:"items"`
 	}
-	res, err := call(ctx, tool(g.c, "search_issues"), map[string]any{"query": q, "sort": "created", "order": "asc", "perPage": 50})
+	res, err := call(ctx, tool(g.c, "search_issues"), map[string]any{"query": q, "sort": "created", "order": "asc", "perPage": trackerSearchLimit})
 	if err := decode(res, err, &out); err != nil {
 		return nil, err
 	}
@@ -257,7 +259,7 @@ func (j jira) Search(ctx context.Context, call Invoker, label string) ([]Issue, 
 	var out struct {
 		Issues []jiraIssue `json:"issues"`
 	}
-	args := map[string]any{"cloudId": j.c.CloudID, "jql": jql, "maxResults": 50, "fields": jiraFields}
+	args := map[string]any{"cloudId": j.c.CloudID, "jql": jql, "maxResults": trackerSearchLimit, "fields": jiraFields}
 	res, err := call(ctx, tool(j.c, "searchJiraIssuesUsingJql"), args)
 	if err := decode(res, err, &out); err != nil {
 		return nil, err

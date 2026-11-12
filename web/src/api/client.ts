@@ -319,6 +319,7 @@ export const api = {
   createTrigger: (input: TriggerInput) => request<Trigger>(`${V1}/triggers`, { method: 'POST', body: input }),
   triggerAction: (id: string, action: 'pause' | 'resume') => request<Trigger>(`${V1}/triggers/${enc(id)}/${action}`, { method: 'POST' }),
   deleteTrigger: (id: string) => request<void>(`${V1}/triggers/${enc(id)}`, { method: 'DELETE' }),
+  resolveTriggerHold: (id: string, key: string, openedAt: string) => request<Trigger>(`${V1}/triggers/${enc(id)}/resolve-hold`, { method: 'POST', body: { key, openedAt } }),
   triggerMatches: (id: string) => request<TriggerMatches>(`${V1}/triggers/${enc(id)}/matches`),
   scmConnections: () => request<SCMConnection[]>(`${V1}/scm/connections`),
   createSCMConnection: (input: SCMConnectionInput) => request<SCMConnection>(`${V1}/scm/connections`, { method: 'POST', body: input }),

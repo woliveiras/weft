@@ -268,37 +268,29 @@ func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Is
 
 func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Invoker, h Hold) (bool, error) {
 	if h.Scope != holdScope(t) {
-		if h.Reason != "scope_changed" {
-			h.Reason = "scope_changed"
-			return false, r.saveHold(ctx, t, h)
-		}
-		return false, nil
-	}
-	if h.Publication == "label_pending" || h.Publication == "label_pending_only" || h.Publication == "comment_pending" {
-		return false, r.publishHold(ctx, t, call, h)
+		return false, r.releaseHold(ctx, t, h, ReadinessReason("scope_changed"))
 	}
 	i, err := trackerRead[Issue](ctx, call, trackerGet, trackerArgs{Key: h.Key})
 	if err != nil {
 		return false, err
 	}
-	eligibility := issueReason(t, i)
-	if eligibility != h.Eligibility {
-		h.Eligibility = eligibility
-		if err := r.saveHold(ctx, t, h); err != nil {
-			return false, err
-		}
-	}
-	if eligibility != "" {
-		return false, nil
-	}
-	if h.State == "evaluating" {
-		return false, r.finishHold(ctx, t, call, h, ReadinessAssessment{Failure: "evaluation_interrupted"}, i)
+	if reason := holdReleaseReason(t, h, i); reason != "" {
+		return false, r.releaseHold(ctx, t, h, reason)
 	}
 	if t.Source.Query != "" {
 		inScope, err := searchHeldScope(ctx, src, call, i, t.Label)
-		if err != nil || !inScope {
+		if err != nil {
 			return false, err
 		}
+		if !inScope && !(h.Publication == "label_pending" && i.HasLabel(LabelInProgress)) {
+			return false, r.releaseHold(ctx, t, h, "The issue no longer matches the trigger query.")
+		}
+	}
+	if h.Publication == "label_pending" || h.Publication == "label_pending_only" || h.Publication == "comment_pending" {
+		return false, r.publishHold(ctx, t, call, h)
+	}
+	if h.State == "evaluating" {
+		return false, r.finishHold(ctx, t, call, h, ReadinessAssessment{Failure: "evaluation_interrupted"}, i)
 	}
 	replies, err := r.currentReplies(ctx, t, call, h, i)
 	if err != nil {
@@ -329,6 +321,7 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 }
 
 func searchHeldScope(ctx context.Context, src Source, call Invoker, i Issue, selection string) (bool, error) {
+	uncertain := false
 	for _, label := range []string{LabelFailed, LabelTodo, selection} {
 		if !i.HasLabel(label) {
 			continue
@@ -340,6 +333,10 @@ func searchHeldScope(ctx context.Context, src Source, call Invoker, i Issue, sel
 		if slices.ContainsFunc(issues, func(found Issue) bool { return found.Key == i.Key }) {
 			return true, nil
 		}
+		uncertain = uncertain || len(issues) >= trackerSearchLimit
+	}
+	if uncertain {
+		return false, errors.New("the bounded tracker search could not verify the held issue scope")
 	}
 	return false, nil
 }

@@ -230,6 +230,7 @@ func (s *Server) routes() {
 		{"PUT /api/v1/triggers/{trigger}", A, s.updateTrigger},
 		{"GET /api/v1/triggers/{trigger}/matches", O, s.previewTrigger},
 		{"DELETE /api/v1/triggers/{trigger}", A, s.deleteTrigger},
+		{"POST /api/v1/triggers/{trigger}/resolve-hold", O, s.resolveTriggerHold},
 		{"POST /api/v1/triggers/{trigger}/pause", A, s.pauseTrigger},
 		{"POST /api/v1/triggers/{trigger}/resume", A, s.resumeTrigger},
 		{"GET /api/v1/scm/connections", R, s.scmConnections},

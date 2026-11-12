@@ -24,6 +24,7 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
   const [draft, setDraft] = useState<TriggerInput>();
   const [error, setError] = useState<string>();
   const [matches, setMatches] = useState<Record<string, TriggerMatches | string>>({});
+  const [resolving, setResolving] = useState<string>();
   const admin = role === 'admin';
   const canPreview = admin || role === 'operator';
   const nodes = graph.spec.nodes.filter((n) => !n.disabled);
@@ -67,6 +68,18 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
       await list.reload();
     } catch (e) {
       setError(errorMessage(e));
+    }
+  };
+  const resolve = async (id: string, key: string, openedAt: string) => {
+    setError(undefined);
+    setResolving(`${id}:${key}`);
+    try {
+      await api.resolveTriggerHold(id, key, openedAt);
+      await list.reload();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setResolving(undefined);
     }
   };
   const preview = async (t: Trigger) => {
@@ -114,8 +127,13 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
                 {h.eligibility && ` The issue ${h.eligibility}.`}
                 {h.publication === 'comment_pending' && ' Tracker comment delivery is unconfirmed.'}
                 {(h.publication === 'label_pending' || h.publication === 'label_pending_only') && ' Tracker label update is pending.'}
+                {canPreview && <Btn small disabled={resolving !== undefined} onClick={() => void resolve(t.id, h.key, h.openedAt)}>Resolve hold</Btn>}
               </li>)}
             </ul>}
+            {Boolean(t.holdResolutions?.length) && <details>
+              <summary>Resolved readiness holds</summary>
+              <ul>{t.holdResolutions?.map((h, index) => <li key={`${h.key}:${h.resolvedAt}:${index}`}>{h.key} · {h.reason}</li>)}</ul>
+            </details>}
             {(t.skipped ?? []).length > 0 && (
               <details>
                 <summary>{t.skipped!.length} skipped issues</summary>

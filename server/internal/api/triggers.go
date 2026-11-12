@@ -3,13 +3,14 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/trigger"
 )
 
 // Issue triggers start tasks without a person present, under consent the
 // administrator who creates or resumes them records. Reads are open to
-// viewers; every change needs an administrator.
+// viewers. Operators can resolve holds; other changes need an administrator.
 
 func (s *Server) triggers() trigger.Manager {
 	if s.TriggerManager != nil {
@@ -86,6 +87,22 @@ func (s *Server) deleteTrigger(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+func (s *Server) resolveTriggerHold(w http.ResponseWriter, r *http.Request) error {
+	var input struct {
+		Key      string    `json:"key"`
+		OpenedAt time.Time `json:"openedAt"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.Key == "" || len(input.Key) > 160 || input.OpenedAt.IsZero() {
+		return badRequest("an issue key and hold opening timestamp are required")
+	}
+	t, err := s.triggers().ResolveHold(r.Context(), r.PathValue("trigger"), input.Key, input.OpenedAt, identityFrom(r.Context()).Name)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, t)
 	return nil
 }
 

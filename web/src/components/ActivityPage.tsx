@@ -166,6 +166,15 @@ function ActivityOverview({ state, onChange, tabs }: { state: ActivityRouteState
         </section>
       )}
 
+      {(show('needs') || show('history')) && Boolean(view.resolvedTriggerHolds?.length) && (
+        <section className="activity-section" aria-label="Resolved readiness holds">
+          <h2>Resolved readiness holds</h2>
+          <ul>{view.resolvedTriggerHolds?.map((h, index) => <li key={`${h.triggerId}:${h.key}:${h.resolvedAt}:${index}`}>
+            <strong>{h.key}</strong> · {h.triggerName} · round {h.round} · {h.reason}
+          </li>)}</ul>
+        </section>
+      )}
+
       {show('running') && <section className="activity-section" aria-label="Running now">
         <h2>Running now</h2>
         <SectionNotes view={view} sections={['running']} />

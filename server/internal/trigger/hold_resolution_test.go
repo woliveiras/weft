@@ -1,0 +1,35 @@
+package trigger
+
+import (
+	"testing"
+	"time"
+)
+
+func TestHoldReleaseReasonKeepsWaitingAndRollbackLabels(t *testing.T) {
+	trigger := &Trigger{Label: "custom", Owner: "owner"}
+	for _, tc := range []struct {
+		hold     Hold
+		issue    Issue
+		released bool
+	}{
+		{Hold{}, Issue{Open: true, Labels: []string{LabelFailed}}, false},
+		{Hold{}, Issue{Open: true, Labels: []string{LabelTodo}}, false},
+		{Hold{}, Issue{Open: true, Labels: []string{"unrelated"}}, true},
+		{Hold{}, Issue{Open: true, Labels: []string{LabelFailed}, Assignee: "other"}, true},
+		{Hold{Publication: "label_pending", Removals: []string{LabelInProgress}}, Issue{Open: true, Labels: []string{LabelInProgress}}, false},
+	} {
+		if reason := holdReleaseReason(trigger, tc.hold, tc.issue); (reason != "") != tc.released {
+			t.Errorf("unexpected release reason %q for %+v", reason, tc)
+		}
+	}
+}
+
+func TestRecordHoldResolutionBoundsHistoryAndFreesCapacity(t *testing.T) {
+	now := time.Now().UTC()
+	tr := &Trigger{Holds: []Hold{{Key: "a", Round: 2}, {Key: "b"}}, HoldResolutions: make([]HoldResolution, 20), ReadinessBlock: readinessCapacity}
+	recordHoldResolution(tr, 0, "Resolved", now)
+	if len(tr.Holds) != 1 || tr.Holds[0].Key != "b" || tr.ReadinessBlock != "" ||
+		len(tr.HoldResolutions) != 20 || tr.HoldResolutions[19] != (HoldResolution{Key: "a", Round: 2, Reason: "Resolved", ResolvedAt: now}) {
+		t.Fatalf("resolution not recorded: %+v", tr)
+	}
+}

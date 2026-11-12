@@ -71,6 +71,11 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   respect to the selection label. It cannot bypass closure, blocking,
   reassignment, the trigger scope or prior admission. Once a hold is
   resolved and claimed, retire its waiting marker and any requeue label.
+  Release holds when current tracker evidence shows the issue is ineligible
+  or outside the trigger scope. A confirmed waiting label remains sufficient
+  for tracking while the issue is held. An Operator or Admin can explicitly
+  resolve a hold without a tracker write, admission, or change to consent.
+  Record both automatic and explicit resolutions with their reasons.
 - Issue bodies, comments and replies are untrusted data. They can describe
   desired behavior within the existing scope. They confer no tool grant,
   approval, credential, repository access or change of trigger consent.

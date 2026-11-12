@@ -419,3 +419,44 @@ func TestReadinessHoldVisibleInActivityWithoutTaskOrPayload(t *testing.T) {
 		}
 	}
 }
+
+func TestOperatorResolvesHoldWhileReadinessIsDisabled(t *testing.T) {
+	srv, a := setupTriggerApp(t, nil)
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", taskGraph, nil); c != 201 {
+		t.Fatal(c)
+	}
+	body := strings.Replace(triggerBody, `"label":"weft"`, `"label":"weft","readinessDisabled":true`, 1)
+	var tr trigger.Trigger
+	if c := call(t, srv, "POST", "/api/v1/triggers", adminTok, "application/json", body, &tr); c != 201 {
+		t.Fatal(c)
+	}
+	opened := time.Now().UTC()
+	h := trigger.Hold{Key: "acme/app#7", OpenedAt: opened, Round: 1}
+	_, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
+		current.Holds = []trigger.Hold{h}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/triggers/" + tr.ID + "/resolve-hold"
+	raw, _ := json.Marshal(h)
+	if c := call(t, srv, "POST", path, viewerTok, "application/json", string(raw), nil); c != 403 {
+		t.Fatal(c)
+	}
+	stale, _ := json.Marshal(trigger.Hold{Key: h.Key, OpenedAt: opened.Add(-time.Hour)})
+	if c := call(t, srv, "POST", path, operatorTok, "application/json", string(stale), nil); c != 409 {
+		t.Fatal(c)
+	}
+	if c := call(t, srv, "POST", path, operatorTok, "application/json", string(raw), &tr); c != 200 {
+		t.Fatal(c)
+	}
+	var view activity.View
+	if c := call(t, srv, "GET", "/api/v1/activity", viewerTok, "", "", &view); c != 200 {
+		t.Fatal(c)
+	}
+	if !tr.ReadinessDisabled || len(tr.HoldResolutions) != 1 || len(view.ResolvedTriggerHolds) != 1 ||
+		view.ResolvedTriggerHolds[0].Reason != tr.HoldResolutions[0].Reason || len(view.TriggerHolds) != 0 || tr.CurrentTask != "" {
+		t.Fatalf("resolution not visible: %+v %+v", tr, view.ResolvedTriggerHolds)
+	}
+}
