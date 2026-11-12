@@ -1604,3 +1604,76 @@ func TestTemporaryRepositoryProbeFailureDefersOnlyAffectedHold(t *testing.T) {
 		})
 	}
 }
+
+func TestMissingIssueConfirmationSpacingSurvivesRestartAndResetsOnSuccess(t *testing.T) {
+	for _, successfulRead := range []bool{false, true} {
+		t.Run(fmt.Sprintf("successful_read=%t", successfulRead), func(t *testing.T) {
+			c := &clock{t: time.Now().UTC()}
+			st := triggerStore(t)
+			gh := newTracker("gh")
+			gh.pageSearch = true
+			gh.issues = []map[string]any{ghIssue(1, "Waiting", "weft")}
+			configure := func(instance string) *trigger.Runner {
+				r := runner(st, c, instance, gh)
+				r.Tasks = &tasks{}
+				r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+					return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+				})
+				return r
+			}
+			r := configure("first")
+			tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			// Move a scheduled poll forward as a search-budget deferral can.
+			poll := func(at time.Time) *trigger.Trigger {
+				t.Helper()
+				c.t = at
+				if _, err := r.Triggers.Update(t.Context(), tr.ID, "fixture", func(t *trigger.Trigger) error {
+					t.NextRunAt = &at
+					return nil
+				}); err != nil {
+					t.Fatal(err)
+				}
+				r.Tick(t.Context())
+				got, err := r.Triggers.Get(t.Context(), tr.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return got
+			}
+			const read = "GET /repos/acme/app/issues/1"
+			first := c.t.Add(time.Hour)
+			gh.status[read] = 404
+			tr = poll(first)
+			if len(tr.Holds) != 1 || !tr.Holds[0].MissingSince.Equal(first) {
+				t.Fatalf("first observation was not persisted: %+v", tr.Holds)
+			}
+			r = configure("restarted")
+			tr = poll(first.Add(time.Minute))
+			if len(tr.Holds) != 1 || !tr.Holds[0].MissingSince.Equal(first) {
+				t.Fatalf("early poll released the hold or lost its durable observation: %+v", tr.Holds)
+			}
+			interval := time.Duration(tr.IntervalMinutes) * time.Minute
+			if successfulRead {
+				delete(gh.status, read)
+				tr = poll(first.Add(2 * time.Minute))
+				if len(tr.Holds) != 1 || tr.Holds[0].MissingPoll != 0 || !tr.Holds[0].MissingSince.IsZero() {
+					t.Fatalf("successful issue read did not clear the observation: %+v", tr.Holds)
+				}
+				gh.status[read] = 404
+				first = first.Add(interval)
+				tr = poll(first)
+				if len(tr.Holds) != 1 || !tr.Holds[0].MissingSince.Equal(first) {
+					t.Fatalf("404 counted across a successful issue read: %+v", tr.Holds)
+				}
+			}
+			tr = poll(first.Add(interval))
+			if len(tr.Holds) != 0 || len(tr.HoldResolutions) != 1 {
+				t.Fatalf("consecutive verified 404s at the minimum spacing did not release: %+v", tr)
+			}
+		})
+	}
+}

@@ -432,6 +432,8 @@ func TestReadinessHoldVisibleInActivityWithoutTaskOrPayload(t *testing.T) {
 	}
 
 	deleted = true
+	pollAt := time.Now().UTC()
+	a.Triggers.Triggers.Now = func() time.Time { return pollAt }
 	for n := range 2 {
 		if _, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
 			current.NextRunAt = nil
@@ -441,6 +443,7 @@ func TestReadinessHoldVisibleInActivityWithoutTaskOrPayload(t *testing.T) {
 		}
 		a.Triggers.Tick(t.Context())
 		if n == 0 {
+			pollAt = pollAt.Add(time.Duration(tr.IntervalMinutes) * time.Minute)
 			current, err := a.Triggers.Triggers.Get(t.Context(), tr.ID)
 			if err != nil || len(current.Holds) != 1 || len(current.HoldResolutions) != 0 {
 				t.Fatalf("a single 404 released the issue: %+v, %v", current, err)

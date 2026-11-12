@@ -39,6 +39,7 @@ type Hold struct {
 	ScopeAssessment *ReadinessAssessment `json:"scopeAssessment,omitempty"`
 	ScopeCheckedAt  time.Time            `json:"scopeCheckedAt,omitzero"`
 	ScopeLagPolls   int                  `json:"scopeLagPolls,omitempty"`
+	MissingSince    time.Time            `json:"missingSince,omitzero"`
 	MissingPoll     uint64               `json:"missingPoll,omitempty"`
 	ScopeMiss       string               `json:"scopeMiss,omitempty"`
 	SnapshotEdits   int                  `json:"snapshotEdits,omitempty"`
@@ -677,7 +678,7 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 		return false, err
 	}
 	if h.MissingPoll != 0 || h.RetryAccessAt != nil || h.Eligibility == issueMissingForOperator || h.Eligibility == issueMissingAwaitingPoll {
-		h.MissingPoll, h.RetryAccessAt, h.Eligibility = 0, nil, ""
+		h.MissingPoll, h.MissingSince, h.RetryAccessAt, h.Eligibility = 0, time.Time{}, nil, ""
 		if err := r.saveHold(ctx, t, h); err != nil {
 			return false, err
 		}
@@ -753,9 +754,13 @@ var errHeldProjectAccess = errors.New("The tracker connection could not access t
 var errHeldIssueAccessUnverified = errors.New("The tracker could not verify access to the repository or project. Held issues remain pending.")
 
 const issueMissingForOperator = "could not be found. Review the tracker and resolve the hold"
-const issueMissingAwaitingPoll = "could not be found and is awaiting confirmation in the next poll"
+const issueMissingAwaitingPoll = "could not be found and is awaiting confirmation after the minimum polling interval"
 
-func missingHoldDisposition(t *Trigger, h Hold, failure trackerHTTPFailure) (release bool, reason string, err error) {
+func hasConsecutiveMissingObservation(t *Trigger, h Hold) bool {
+	return h.MissingPoll != 0 && h.MissingPoll == t.PollSequence && !h.MissingSince.IsZero()
+}
+
+func missingHoldDisposition(t *Trigger, h Hold, failure trackerHTTPFailure, now time.Time) (release bool, reason string, err error) {
 	if t.Source.Kind == "github" || (t.Source.Kind == "jira" && failure.Status == http.StatusNotFound) {
 		if failure.IssuesDisabled {
 			return false, "", errHeldIssuesDisabled
@@ -779,8 +784,9 @@ func missingHoldDisposition(t *Trigger, h Hold, failure trackerHTTPFailure) (rel
 	if failure.Status == http.StatusGone {
 		return true, "The tracker reported that the issue was deleted (HTTP 410).", nil
 	}
-	if h.MissingPoll != 0 && h.MissingPoll == t.PollSequence {
-		return true, "The tracker could not find the issue in two consecutive polls (HTTP 404).", nil
+	minimum := time.Duration(max(1, t.IntervalMinutes)) * time.Minute
+	if hasConsecutiveMissingObservation(t, h) && !now.Before(h.MissingSince.Add(minimum)) {
+		return true, "The tracker could not find the issue in consecutive polls at least one polling interval apart (HTTP 404).", nil
 	}
 	return false, issueMissingAwaitingPoll, nil
 }
@@ -790,11 +796,11 @@ func (r *Runner) checkMissingHold(ctx context.Context, t *Trigger, h Hold, err e
 	if !errors.As(err, &failure) {
 		return err
 	}
-	release, reason, err := missingHoldDisposition(t, h, failure)
+	now := r.Triggers.now()
+	release, reason, err := missingHoldDisposition(t, h, failure, now)
 	if errors.Is(err, errHeldIssueAccessUnverified) {
-		now := r.Triggers.now()
 		next := issueAccessRetryAt(now, failure)
-		h.MissingPoll, h.RetryAccessAt = 0, &next
+		h.MissingPoll, h.MissingSince, h.RetryAccessAt = 0, time.Time{}, &next
 		h.Eligibility = "could not be checked because repository or project access verification is temporarily unavailable"
 		return r.saveHold(ctx, t, h)
 	}
@@ -806,9 +812,12 @@ func (r *Runner) checkMissingHold(ctx context.Context, t *Trigger, h Hold, err e
 	}
 	h.RetryAccessAt = nil
 	if reason == issueMissingAwaitingPoll {
+		if !hasConsecutiveMissingObservation(t, h) {
+			h.MissingSince = now
+		}
 		h.MissingPoll = t.PollSequence + 1
 	} else {
-		h.MissingPoll = 0
+		h.MissingPoll, h.MissingSince = 0, time.Time{}
 		if h.Eligibility == reason {
 			return nil
 		}

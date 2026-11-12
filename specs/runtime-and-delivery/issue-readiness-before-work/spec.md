@@ -76,8 +76,11 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   for tracking while the issue is held. An Operator or Admin can explicitly
   resolve a hold without a tracker write, admission, or change to consent.
   Record both automatic and explicit resolutions with their reasons.
-  Two consecutive polling runs must confirm a direct issue 404 before
-  releasing an ordinary hold. For GitHub, both observations require
+  An uninterrupted sequence of verified issue 404 responses must span
+  at least the configured polling interval or one minute, whichever is
+  longer, before releasing an ordinary hold. Earlier polling due to the
+  search budget cannot shorten confirmation. The first observation
+  survives runner restart. A successful issue read clears it. For GitHub, both observations require
   access to the configured repository through the same tracker connection
   and confirmation that Issues are enabled. An access denial or disabled
   Issues is visible and preserves holds. A GitHub 410 confirms deletion

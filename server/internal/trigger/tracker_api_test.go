@@ -200,7 +200,8 @@ func TestOnlyAnExplicitTracker404MeansIssueMissing(t *testing.T) {
 }
 
 func TestMissingHoldDispositionRequiresConsecutiveVerifiedPolls(t *testing.T) {
-	tr := &Trigger{Source: SourceConfig{Kind: "github"}, PollSequence: 5}
+	now := time.Now().UTC()
+	tr := &Trigger{Source: SourceConfig{Kind: "github"}, PollSequence: 5, IntervalMinutes: 15}
 	for _, tc := range []struct {
 		name    string
 		hold    Hold
@@ -212,8 +213,10 @@ func TestMissingHoldDispositionRequiresConsecutiveVerifiedPolls(t *testing.T) {
 		{"missing repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 404}, false, "", errHeldRepositoryAccess},
 		{"refused repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 403}, false, "", errHeldRepositoryAccess},
 		{"failed probe", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 503}, false, "", errHeldIssueAccessUnverified},
-		{"miss after gap", Hold{MissingPoll: 4}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil},
-		{"second miss", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, true, "two consecutive polls", nil},
+		{"miss after gap", Hold{MissingPoll: 4, MissingSince: now.Add(-time.Hour)}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil},
+		{"second miss at boundary", Hold{MissingPoll: 5, MissingSince: now.Add(-15 * time.Minute)}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, true, "one polling interval apart", nil},
+		{"early second miss", Hold{MissingPoll: 5, MissingSince: now.Add(-time.Minute)}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil},
+		{"legacy observation without timestamp", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil},
 		{"deleted", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 200}, true, "HTTP 410", nil},
 		{"disabled Issues", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 200, IssuesDisabled: true}, false, "", errHeldIssuesDisabled},
 		{"deleted with inaccessible repository", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 404}, false, "", errHeldRepositoryAccess},
@@ -221,7 +224,7 @@ func TestMissingHoldDispositionRequiresConsecutiveVerifiedPolls(t *testing.T) {
 		{"comment failure", Hold{Publication: "comment_failed", MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingForOperator, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			release, reason, err := missingHoldDisposition(tr, tc.hold, tc.failure)
+			release, reason, err := missingHoldDisposition(tr, tc.hold, tc.failure, now)
 			if release != tc.release || !strings.Contains(reason, tc.reason) || !errors.Is(err, tc.err) {
 				t.Fatalf("got %t, %q, %v", release, reason, err)
 			}
