@@ -46,6 +46,12 @@ claiming an issue or creating a task draft.
 An edit referencing a removed workflow, entry agent or explicitly selected
 result agent returns HTTP 422 with the corresponding field error and preserves
 the saved trigger and consent.
+Automated GitHub polling shares a rolling budget of
+[30 search calls per minute](https://docs.github.com/en/rest/rate-limit/rate-limit)
+across the installation. Each trigger poll spends at most eight
+search calls verifying held scope and may spend one more on admission.
+The runner checks the least recently verified holds first and surfaces
+budget deferrals in trigger state and Activity.
 
 ### AC-003 — Gateway write-back
 

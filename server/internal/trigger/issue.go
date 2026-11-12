@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/tools"
@@ -24,6 +25,7 @@ type Issue struct {
 	Key            string   `json:"key"`    // owner/repo#12 or PROJ-12
 	Title          string   `json:"title"`
 	Author         string   `json:"author,omitempty"`
+	Created        string   `json:"created,omitempty"`
 	Updated        string   `json:"updated,omitempty"`
 	OtherAssignee  bool     `json:"otherAssignee,omitempty"`
 	EvaluatedInput string   `json:"-"`
@@ -143,6 +145,7 @@ type githubIssue struct {
 	Labels        []struct{ Name string }  `json:"labels"`
 	Assignees     []struct{ Login string } `json:"assignees"`
 	User          trackerActor             `json:"user"`
+	Created       string                   `json:"created_at"`
 	Updated       string                   `json:"updated_at"`
 	RepositoryURL string                   `json:"repository_url"`
 	PullRequest   json.RawMessage          `json:"pull_request"`
@@ -150,7 +153,7 @@ type githubIssue struct {
 
 func (raw githubIssue) issue(repository string) Issue {
 	i := Issue{Source: "github", Key: fmt.Sprintf("%s#%d", repository, raw.Number), Title: raw.Title, Body: raw.Body,
-		URL: raw.HTMLURL, Open: raw.State == "open", Labels: []string{}, Author: raw.User.human("github"), Updated: raw.Updated}
+		URL: raw.HTMLURL, Open: raw.State == "open", Labels: []string{}, Author: raw.User.human("github"), Created: raw.Created, Updated: raw.Updated}
 	for _, l := range raw.Labels {
 		i.Labels = append(i.Labels, l.Name)
 	}
@@ -165,41 +168,69 @@ func (raw githubIssue) issue(repository string) Issue {
 const trackerSearchLimit = 50
 
 func (g github) Search(ctx context.Context, call Invoker, label string) ([]Issue, error) {
-	issues, _, err := g.searchPage(ctx, call, label, 1)
+	q := g.baseQuery() + fmt.Sprintf(` label:"%s"`, label)
+	issues, _, err := g.search(ctx, call, withScopeQuery(q, g.c.Query))
 	return issues, err
 }
 
 var errHeldScopeUnverified = errors.New("held issue scope could not be verified within the tracker search bound")
+var errHeldScopeIndexLag = errors.New("the current issue revision is not yet visible in GitHub search")
 
-func (g github) MatchesHeld(ctx context.Context, call Invoker, issue Issue, label string) (bool, error) {
-	for page := 1; page <= 5; page++ {
-		issues, more, err := g.searchPage(ctx, call, label, page)
-		if err != nil {
-			return false, err
-		}
-		for _, found := range issues {
-			if found.Key == issue.Key {
-				return true, nil
+func (g github) baseQuery() string {
+	return fmt.Sprintf("repo:%s is:issue is:open", g.c.Repository)
+}
+
+func withScopeQuery(base, query string) string {
+	if query == "" {
+		return base
+	}
+	return base + " " + query
+}
+
+func (g github) MatchesHeld(ctx context.Context, call Invoker, issue Issue, _ string) (bool, error) {
+	created, err := time.Parse(time.RFC3339, issue.Created)
+	if err != nil {
+		return false, errHeldScopeUnverified
+	}
+	// GitHub's REST search supports second-precision creation filters. Use
+	// that immutable value to narrow the query, then verify the exact key.
+	base := g.baseQuery() + " created:" + created.UTC().Format(time.RFC3339)
+	issues, complete, err := g.search(ctx, call, withScopeQuery(base, g.c.Query))
+	if err != nil {
+		return false, err
+	}
+	for _, found := range issues {
+		if found.Key == issue.Key {
+			if issue.Updated == "" || found.Updated != issue.Updated {
+				return false, errHeldScopeIndexLag
 			}
+			return true, nil
 		}
-		if !more {
+	}
+	if !complete {
+		return false, errHeldScopeUnverified
+	}
+	// A miss can establish scope only when the index has caught up with
+	// the direct issue read. The caller confirms the miss on another poll.
+	indexed, _, err := g.search(ctx, call, base)
+	if err != nil {
+		return false, err
+	}
+	for _, found := range indexed {
+		if found.Key == issue.Key && issue.Updated != "" && found.Updated == issue.Updated {
 			return false, nil
 		}
 	}
-	return false, errHeldScopeUnverified
+	return false, errHeldScopeIndexLag
 }
 
-func (g github) searchPage(ctx context.Context, call Invoker, label string, page int) ([]Issue, bool, error) {
-	q := fmt.Sprintf(`repo:%s is:issue is:open label:"%s"`, g.c.Repository, label)
-	if g.c.Query != "" {
-		q += " " + g.c.Query
-	}
+func (g github) search(ctx context.Context, call Invoker, query string) ([]Issue, bool, error) {
 	var out struct {
 		Items      []githubIssue `json:"items"`
 		Incomplete bool          `json:"incomplete_results"`
 		Total      *int          `json:"total_count"`
 	}
-	res, err := call(ctx, tool(g.c, "search_issues"), map[string]any{"query": q, "sort": "created", "order": "asc", "perPage": trackerSearchLimit, "page": page})
+	res, err := call(ctx, tool(g.c, "search_issues"), map[string]any{"query": query, "sort": "created", "order": "asc", "perPage": trackerSearchLimit, "page": 1})
 	if err := decode(res, err, &out); err != nil {
 		return nil, false, err
 	}
@@ -214,11 +245,7 @@ func (g github) searchPage(ctx context.Context, call Invoker, label string, page
 		}
 		issues = append(issues, it.issue(g.c.Repository))
 	}
-	more := len(out.Items) >= trackerSearchLimit
-	if out.Total != nil {
-		more = (page-1)*trackerSearchLimit+len(out.Items) < *out.Total
-	}
-	return issues, more, nil
+	return issues, out.Total != nil && *out.Total == len(out.Items), nil
 }
 
 type jira struct{ c SourceConfig }

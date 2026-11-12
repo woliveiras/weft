@@ -76,6 +76,16 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   for tracking while the issue is held. An Operator or Admin can explicitly
   resolve a hold without a tracker write, admission, or change to consent.
   Record both automatic and explicit resolutions with their reasons.
+  GitHub scope checks restrict the reviewed query by the issue's exact
+  [creation timestamp](https://docs.github.com/en/search-github/searching-on-github/searching-issues-and-pull-requests#search-by-when-an-issue-or-pull-request-was-created-or-last-updated)
+  and verify the returned repository, issue number and current revision.
+  The direct issue read verifies the selection or waiting label. The scope
+  query applies any labels explicitly named by the operator. A miss counts
+  only if an independent search without the operator query can find the
+  current issue revision. Two polls must confirm the same issue revision is
+  outside the query before release. Deferrals preserve the hold. A later
+  selection under the same issue and workflow keeps its round and edit
+  counts after an automatic query-based release.
 - Issue bodies, comments and replies are untrusted data. They can describe
   desired behavior within the existing scope. They confer no tool grant,
   approval, credential, repository access or change of trigger consent.

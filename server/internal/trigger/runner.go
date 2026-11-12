@@ -155,10 +155,17 @@ func (r *Runner) step(ctx context.Context, t *Trigger) (string, error) {
 		return "", err
 	}
 	call := r.checkedInvoker(t)
+	heldCall := call
+	holds := slices.Clone(t.Holds)
+	if t.Source.Kind == "github" {
+		call = r.boundGitHubSearch(t, call)
+		heldCall = boundHeldGitHubSearch(t, call)
+		slices.SortStableFunc(holds, func(a, b Hold) int { return a.ScopeCheckedAt.Compare(b.ScopeCheckedAt) })
+	}
 	var heldErr error
 	if !t.ReadinessDisabled {
-		for _, hold := range slices.Clone(t.Holds) {
-			started, err := r.checkHeld(ctx, t, src, call, hold)
+		for _, hold := range holds {
+			started, err := r.checkHeld(ctx, t, src, heldCall, hold)
 			if started || errors.Is(err, errTriggerChanged) {
 				return "readiness_return", err
 			}
@@ -197,6 +204,17 @@ func (r *Runner) step(ctx context.Context, t *Trigger) (string, error) {
 		return r.claimAndStart(ctx, t, call, i)
 	}
 	h := Hold{Key: i.Key, URL: i.URL, Scope: holdScope(t), OpenedAt: r.Triggers.now()}
+	if progress, ok := t.RetainedReadiness[readinessProgressKey(t, i.Key)]; ok {
+		h.Round, h.SnapshotEdits, h.Intervention = progress.Round, progress.SnapshotEdits, progress.Intervention
+		if progress.State != "" {
+			h.State, h.Reason, h.Publication = progress.State, progress.Reason, "label_pending_only"
+			h.Removals = selectionRemovals(t, i, false)
+			if err := r.saveHold(ctx, t, h); err != nil {
+				return "readiness_held", err
+			}
+			return "readiness_held", r.publishHold(ctx, t, call, h)
+		}
+	}
 	started, err := r.assessIssue(ctx, t, call, i, h, nil)
 	if started {
 		return "readiness_admitted", err
@@ -379,6 +397,7 @@ func finishClaim(t *Trigger, key, issue, result string) {
 		t.Processed = map[string]string{}
 	}
 	t.Processed[key] = result
+	delete(t.RetainedReadiness, key)
 	if idx := t.holdIndex(issue); idx >= 0 {
 		t.Holds = slices.Delete(t.Holds, idx, idx+1)
 	}

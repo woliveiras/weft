@@ -31,26 +31,28 @@ type Hold struct {
 	CommentAttempts    int        `json:"commentAttempts,omitempty"`
 	RetryCommentAt     *time.Time `json:"retryCommentAt,omitempty"`
 
-	RetryFailures int        `json:"retryFailures,omitempty"`
-	RetryAt       *time.Time `json:"retryAt,omitempty"`
-	SnapshotEdits int        `json:"snapshotEdits,omitempty"`
-	Eligibility   string     `json:"eligibility,omitempty"`
-	Message       string     `json:"message"`
-	Key           string     `json:"key"`
-	URL           string     `json:"url,omitempty"`
-	Reason        string     `json:"reason"`
-	State         string     `json:"state"`
-	Round         int        `json:"round"`
-	OpenedAt      time.Time  `json:"openedAt"`
-	RoundAt       time.Time  `json:"roundAt"`
-	Publication   string     `json:"publication,omitempty"`
-	Scope         string     `json:"scope"`
-	Evaluated     string     `json:"evaluated,omitempty"`
-	Signal        string     `json:"signal,omitempty"`
-	Questions     []string   `json:"questions,omitempty"`
-	Marker        string     `json:"marker,omitempty"`
-	Intervention  bool       `json:"intervention,omitempty"`
-	Removals      []string   `json:"removals,omitempty"`
+	RetryFailures  int        `json:"retryFailures,omitempty"`
+	RetryAt        *time.Time `json:"retryAt,omitempty"`
+	ScopeCheckedAt time.Time  `json:"scopeCheckedAt,omitzero"`
+	ScopeMiss      string     `json:"scopeMiss,omitempty"`
+	SnapshotEdits  int        `json:"snapshotEdits,omitempty"`
+	Eligibility    string     `json:"eligibility,omitempty"`
+	Message        string     `json:"message"`
+	Key            string     `json:"key"`
+	URL            string     `json:"url,omitempty"`
+	Reason         string     `json:"reason"`
+	State          string     `json:"state"`
+	Round          int        `json:"round"`
+	OpenedAt       time.Time  `json:"openedAt"`
+	RoundAt        time.Time  `json:"roundAt"`
+	Publication    string     `json:"publication,omitempty"`
+	Scope          string     `json:"scope"`
+	Evaluated      string     `json:"evaluated,omitempty"`
+	Signal         string     `json:"signal,omitempty"`
+	Questions      []string   `json:"questions,omitempty"`
+	Marker         string     `json:"marker,omitempty"`
+	Intervention   bool       `json:"intervention,omitempty"`
+	Removals       []string   `json:"removals,omitempty"`
 }
 
 // Legacy holds need an identifier even while readiness is disabled and the
@@ -188,6 +190,7 @@ func (r *Runner) saveHoldState(ctx context.Context, t *Trigger, h Hold, rollback
 			}
 			h.Generation = nextHoldGeneration(Hold{}, h)
 			current.Holds = append(current.Holds, h)
+			delete(current.RetainedReadiness, readinessProgressKey(current, h.Key))
 		}
 		if len(current.Holds) >= maxReadinessHolds {
 			current.ReadinessBlock = readinessCapacity
@@ -195,7 +198,7 @@ func (r *Runner) saveHoldState(ctx context.Context, t *Trigger, h Hold, rollback
 		return nil
 	})
 	if err == nil {
-		t.Holds, t.ReadinessBlock = current.Holds, current.ReadinessBlock
+		t.Holds, t.ReadinessBlock, t.RetainedReadiness = current.Holds, current.ReadinessBlock, current.RetainedReadiness
 	}
 	return err
 }
@@ -572,7 +575,7 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 			return false, r.failHoldLabels(ctx, t, h, "The pending update belongs to a different trigger scope.")
 		}
 		if h.Publication != "label_failed" {
-			return false, r.releaseHold(ctx, t, h, ReadinessReason("scope_changed"))
+			return false, r.releaseHold(ctx, t, h, ReadinessReason("scope_changed"), false)
 		}
 	}
 	if holdHasPendingWrite(h) {
@@ -590,35 +593,19 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 		return false, err
 	}
 	if reason := holdReleaseReason(t, h, i); reason != "" {
-		return false, r.releaseHold(ctx, t, h, reason)
-	}
-	if t.Source.Query != "" {
-		inScope, err := searchHeldScope(ctx, src, call, i, t.Label)
-		if errors.Is(err, errHeldScopeUnverified) {
-			const reason = "could not be verified against the trigger query within the tracker search limit"
-			if h.Eligibility == reason {
-				return false, nil
-			}
-			h.Eligibility = reason
-			return false, r.saveHold(ctx, t, h)
-		}
-		if err != nil {
-			return false, err
-		}
-		if h.Eligibility != "" {
-			h.Eligibility = ""
-			if err := r.saveHold(ctx, t, h); err != nil {
-				return false, err
-			}
-		}
-		if !inScope && !(h.Publication == "label_pending" && i.HasLabel(LabelInProgress)) {
-			return false, r.releaseHold(ctx, t, h, "The issue no longer matches the trigger query.")
-		}
+		return false, r.releaseHold(ctx, t, h, reason, false)
 	}
 	if h.Publication == "label_applied" || h.Publication == "comment_pending" {
 		return false, r.publishHold(ctx, t, call, h)
 	}
-	if h.Publication == "comment_failed" || (h.Reason == "failure_round_limit" || h.Reason == "history_limit" || h.Reason == "snapshot_round_limit") {
+	if t.Source.Query != "" {
+		var inScope bool
+		h, inScope, err = r.verifyHeldScope(ctx, t, src, call, h, i)
+		if err != nil || !inScope {
+			return false, err
+		}
+	}
+	if h.Publication == "comment_failed" || requiresOperator(h) {
 		return false, nil
 	}
 	if h.State == "evaluating" {
@@ -659,6 +646,57 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 		h.Signal = signal
 	}
 	return r.assessIssue(ctx, t, call, i, h, replies)
+}
+
+func requiresOperator(h Hold) bool {
+	return h.State == "retry_failed" || h.Reason == "failure_round_limit" || h.Reason == "history_limit" || h.Reason == "snapshot_round_limit"
+}
+
+func (r *Runner) verifyHeldScope(ctx context.Context, t *Trigger, src Source, call Invoker, h Hold, i Issue) (Hold, bool, error) {
+	var matches bool
+	var err error
+	isGitHub := t.Source.Kind == "github"
+	if isGitHub {
+		matches, err = src.MatchesHeld(ctx, call, i, "")
+	} else {
+		matches, err = searchHeldScope(ctx, src, call, i, t.Label)
+	}
+	previous := h
+	switch {
+	case errors.Is(err, errSearchBudgetDeferred):
+		h.Eligibility = "could not be verified because the GitHub polling search budget was reached"
+	case errors.Is(err, errHeldScopeIndexLag):
+		h.Eligibility = "could not be verified because GitHub search has not indexed the current issue revision"
+		h.ScopeMiss = ""
+	case errors.Is(err, errHeldScopeUnverified):
+		h.Eligibility = "could not be verified against the trigger query within the tracker search limit"
+		h.ScopeMiss = ""
+	case err != nil && (!isGitHub || errors.Is(err, errTriggerChanged)):
+		return h, false, err
+	case err != nil:
+		h.Eligibility = "could not be verified because the GitHub search is unavailable"
+		h.ScopeMiss = ""
+	case matches:
+		h.Eligibility, h.ScopeMiss = "", ""
+	case !isGitHub:
+		return h, false, r.releaseHold(ctx, t, h, "The issue no longer matches the trigger query.", false)
+	default:
+		revision := triggerFingerprint(i)
+		if h.ScopeMiss == revision {
+			return h, false, r.releaseHold(ctx, t, h, "The issue no longer matches the trigger query.", true)
+		}
+		h.ScopeMiss = revision
+		h.Eligibility = "was absent from the trigger query and is awaiting confirmation in another poll"
+	}
+	if isGitHub && !errors.Is(err, errSearchBudgetDeferred) {
+		h.ScopeCheckedAt = r.Triggers.now()
+	}
+	if h.Eligibility != previous.Eligibility || h.ScopeMiss != previous.ScopeMiss || h.ScopeCheckedAt != previous.ScopeCheckedAt {
+		if err := r.saveHold(ctx, t, h); err != nil {
+			return h, false, err
+		}
+	}
+	return h, matches, nil
 }
 
 func searchHeldScope(ctx context.Context, src Source, call Invoker, i Issue, selection string) (bool, error) {

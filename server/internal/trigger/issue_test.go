@@ -125,17 +125,23 @@ func TestSourcesRunThroughTheGatewayWithExactGrants(t *testing.T) {
 	}
 }
 
-func TestHeldGitHubScopeDoesNotTreatBoundedScanAsExclusion(t *testing.T) {
-	tr := newTracker("gh")
-	tr.pageSearch = true
-	for n := 1; n <= 251; n++ {
-		tr.issues = append(tr.issues, ghIssue(n, "Older", "weft"))
-	}
-	src, err := (trigger.SourceConfig{Kind: "github", ConnectionID: "gh", Repository: "acme/app"}).Open()
+func TestHeldGitHubScopeDoesNotTreatTruncatedTargetedSearchAsExclusion(t *testing.T) {
+	src, err := (trigger.SourceConfig{Kind: "github", ConnectionID: "gh", Repository: "acme/app", Query: "milestone:release"}).Open()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if found, err := src.MatchesHeld(t.Context(), direct(tr), trigger.Issue{Key: "acme/app#251"}, "weft"); found || err == nil || len(tr.calls) != 5 {
-		t.Fatalf("bounded search disposition: found=%v calls=%d error=%v", found, len(tr.calls), err)
+	calls := 0
+	search := func(_ context.Context, name string, raw any) (*tools.Result, error) {
+		calls++
+		args := raw.(map[string]any)
+		want := "repo:acme/app is:issue is:open created:2026-11-01T00:00:01Z milestone:release"
+		if name != "mcp.gh.search_issues" || args["query"] != want || args["page"] != 1 {
+			t.Fatalf("unexpected query: %s %v", name, args)
+		}
+		return ok(map[string]any{"items": []any{ghIssue(2, "Another issue from the same second", "weft")}, "total_count": 51}), nil
+	}
+	i := trigger.Issue{Key: "acme/app#1", Created: "2026-11-01T01:00:01+01:00"}
+	if found, err := src.MatchesHeld(t.Context(), search, i, "weft"); found || err == nil || calls != 1 {
+		t.Fatalf("truncated search disposition: found=%v calls=%d error=%v", found, calls, err)
 	}
 }

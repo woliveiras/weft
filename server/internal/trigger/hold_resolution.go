@@ -104,19 +104,43 @@ func (m Manager) auditHoldResolution(ctx context.Context, t *Trigger) {
 	}).WithActor(h.Actor))
 }
 
-func (r *Runner) releaseHold(ctx context.Context, t *Trigger, h Hold, reason string) error {
+func (r *Runner) releaseHold(ctx context.Context, t *Trigger, h Hold, reason string, retainProgress bool) error {
 	current, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
 		index := current.holdIndex(h.Key)
 		if current.State != Active || current.ReadinessDisabled || current.Consent.Scope != t.Consent.Scope ||
 			current.Consent.RecordedAt != t.Consent.RecordedAt || index < 0 {
 			return errTriggerChanged
 		}
+		if retainProgress {
+			if current.RetainedReadiness == nil {
+				current.RetainedReadiness = make(map[string]ReadinessProgress)
+			}
+			progress := ReadinessProgress{Round: h.Round, SnapshotEdits: h.SnapshotEdits, Intervention: h.Intervention}
+			if requiresOperator(h) {
+				progress.State, progress.Reason = h.State, h.Reason
+			}
+			current.RetainedReadiness[readinessProgressKey(current, h.Key)] = progress
+		}
 		recordHoldResolution(current, index, reason, "system:trigger", r.Triggers.now())
 		return nil
 	})
 	if err == nil {
-		t.Holds, t.ReadinessBlock = current.Holds, current.ReadinessBlock
+		t.Holds, t.ReadinessBlock, t.RetainedReadiness = current.Holds, current.ReadinessBlock, current.RetainedReadiness
 		r.Triggers.auditHoldResolution(ctx, current)
 	}
 	return err
+}
+
+// ReadinessProgress preserves the allowances when a GitHub issue leaves a
+// trigger query and is later selected again for the same workflow.
+type ReadinessProgress struct {
+	Round         int    `json:"round"`
+	SnapshotEdits int    `json:"snapshotEdits,omitempty"`
+	Intervention  bool   `json:"intervention,omitempty"`
+	State         string `json:"state,omitempty"`
+	Reason        string `json:"reason,omitempty"`
+}
+
+func readinessProgressKey(t *Trigger, key string) string {
+	return DedupKey(t, Issue{Source: t.Source.Kind, Key: key})
 }

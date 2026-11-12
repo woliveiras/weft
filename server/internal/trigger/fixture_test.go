@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/tools"
 )
@@ -15,6 +16,8 @@ import (
 // tracker is an in-memory GitHub or Jira project behind MCP tool names.
 type tracker struct {
 	pageSearch          bool
+	unindexed           map[int]bool
+	outsideQuery        map[int]bool
 	editOnAssignment    bool
 	transientComments   int
 	claimReadFailures   int
@@ -35,7 +38,7 @@ type tracker struct {
 }
 
 func newTracker(conn string) *tracker {
-	return &tracker{conn: conn, status: map[string]int{}, comments: map[string][]string{}, fail: map[string]bool{}, replies: map[string][]map[string]any{}, labelEvents: map[string][]map[string]any{}, roles: map[string]string{}}
+	return &tracker{conn: conn, unindexed: map[int]bool{}, outsideQuery: map[int]bool{}, status: map[string]int{}, comments: map[string][]string{}, fail: map[string]bool{}, replies: map[string][]map[string]any{}, labelEvents: map[string][]map[string]any{}, roles: map[string]string{}}
 }
 
 // toolFn is a tools.Tool backed by the tracker.
@@ -89,10 +92,28 @@ func (t *tracker) handle(name string, raw json.RawMessage) *tools.Result {
 	switch name {
 	case "search_issues":
 		if t.pageSearch {
+			query := args["query"].(string)
+			rows := make([]map[string]any, 0, len(t.issues))
+			var created, label string
+			if _, tail, ok := strings.Cut(query, " created:"); ok {
+				created = strings.Fields(tail)[0]
+			}
+			if _, tail, ok := strings.Cut(query, ` label:"`); ok {
+				label, _, _ = strings.Cut(tail, `"`)
+			}
+			for _, row := range t.issues {
+				number := row["number"].(int)
+				if t.unindexed[number] || (t.outsideQuery[number] && strings.Contains(query, "milestone:release")) ||
+					(created != "" && row["created_at"] != created) ||
+					(label != "" && !slices.ContainsFunc(row["labels"].([]map[string]any), func(l map[string]any) bool { return l["name"] == label })) {
+					continue
+				}
+				rows = append(rows, row)
+			}
 			page := int(args["page"].(float64))
 			size := int(args["perPage"].(float64))
-			start := min((page-1)*size, len(t.issues))
-			return ok(map[string]any{"items": t.issues[start:min(start+size, len(t.issues))], "total_count": len(t.issues)})
+			start := min((page-1)*size, len(rows))
+			return ok(map[string]any{"items": rows[start:min(start+size, len(rows))], "total_count": len(rows)})
 		}
 		return ok(map[string]any{"items": t.issues})
 	case "searchJiraIssuesUsingJql":
@@ -145,7 +166,8 @@ func ghIssue(n int, title string, labels ...string) map[string]any {
 	for _, l := range labels {
 		ls = append(ls, map[string]any{"name": l})
 	}
-	return map[string]any{"number": n, "title": title, "body": "Body of " + title, "html_url": fmt.Sprintf("https://github.example/acme/app/issues/%d", n), "state": "open", "user": map[string]string{"login": "author", "type": "User"}, "labels": ls, "assignees": []any{}}
+	created := time.Date(2026, 11, 1, 0, 0, n, 0, time.UTC).Format(time.RFC3339)
+	return map[string]any{"number": n, "created_at": created, "updated_at": created, "title": title, "body": "Body of " + title, "html_url": fmt.Sprintf("https://github.example/acme/app/issues/%d", n), "state": "open", "user": map[string]string{"login": "author", "type": "User"}, "labels": ls, "assignees": []any{}}
 }
 
 func jiraIssue(key, title string, labels ...string) map[string]any {

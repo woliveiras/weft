@@ -531,7 +531,7 @@ func TestHistoryLimitBecomesAResolvableHoldWithoutRepeatedScans(t *testing.T) {
 	}
 }
 
-func TestHeldIssueReturnsBeyondFirstQueryPage(t *testing.T) {
+func TestHeldIssueReturnsWithTargetedQueryBeyondFirstAdmissionPage(t *testing.T) {
 	st := triggerStore(t)
 	c := &clock{t: time.Now().UTC()}
 	gh := newTracker("gh")
@@ -559,13 +559,13 @@ func TestHeldIssueReturnsBeyondFirstQueryPage(t *testing.T) {
 	target := gh.issues[0]
 	gh.issues = nil
 	for n := 1; n < 60; n++ {
-		gh.issues = append(gh.issues, ghIssue(n, "Older", trigger.LabelFailed))
+		gh.issues = append(gh.issues, ghIssue(n, "Older", "weft"))
 	}
 	gh.issues = append(gh.issues, target)
 	gh.replies["#60"] = []map[string]any{ghReply(1, "author", "User", "expected output", c.t.Add(time.Second))}
 	tr = advance(r, c, t, tr.ID)
 	if len(starter.started) != 1 || starter.started[0].Key != "acme/app#60" || len(tr.Holds) != 0 ||
-		!slices.ContainsFunc(gh.args, func(a map[string]any) bool { return a["page"] == float64(2) }) {
+		len(gh.args) != 2 || !strings.Contains(gh.args[1]["query"].(string), "created:2026-11-01T00:01:00Z milestone:release") {
 		t.Fatalf("held issue was not found beyond the first page: %+v", tr)
 	}
 	if got := target["labels"].([]map[string]any); len(got) != 2 || got[0]["name"] != "bug" || got[1]["name"] != trigger.LabelInProgress {
@@ -908,5 +908,110 @@ func TestReadinessTrackerIdentityRetryDoesNotSpendCommentAttempts(t *testing.T) 
 				})
 			}
 		})
+	}
+}
+
+func TestHeldGitHubSearchBudgetRotatesTenIssues(t *testing.T) {
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	gh.pageSearch = true
+	for n := 1; n <= 60; n++ {
+		gh.issues = append(gh.issues, ghIssue(n, "Issue", "weft"))
+	}
+	r := runner(triggerStore(t), c, "one", gh)
+	r.Tasks = &tasks{}
+	r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+		return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+	})
+	in := input()
+	in.Source.Query = "milestone:release"
+	tr, err := r.Triggers.Create(t.Context(), in, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 10 {
+		before := len(gh.args)
+		tr = advance(r, c, t, tr.ID)
+		if len(gh.args)-before > 9 {
+			t.Fatalf("poll exceeded its search budget: %d", len(gh.args)-before)
+		}
+	}
+	if len(tr.Holds) != 10 {
+		t.Fatalf("wanted ten held issues, got %d", len(tr.Holds))
+	}
+	seen := map[string]bool{}
+	for range 2 {
+		before := len(gh.args)
+		tr = advance(r, c, t, tr.ID)
+		if len(gh.args)-before != 8 {
+			t.Fatalf("held scope searches: %d", len(gh.args)-before)
+		}
+		for _, args := range gh.args[before:] {
+			query := args["query"].(string)
+			if !strings.Contains(query, " created:") || args["page"] != float64(1) {
+				t.Fatalf("unbounded held scope query: %v", args)
+			}
+			seen[query] = true
+		}
+		deferred := 0
+		for _, h := range tr.Holds {
+			if strings.Contains(h.Eligibility, "search budget") {
+				deferred++
+			}
+			if h.Round != 1 {
+				t.Fatalf("verification changed rounds: %+v", h)
+			}
+		}
+		if deferred != 2 {
+			t.Fatalf("wanted two visible deferrals, got %d", deferred)
+		}
+	}
+	if len(seen) != 10 {
+		t.Fatalf("only %d holds received a search turn", len(seen))
+	}
+}
+
+func TestGitHubScopeReleaseRequiresTwoConfirmedMissesAndPreservesRounds(t *testing.T) {
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	gh.pageSearch = true
+	row := ghIssue(1, "Issue", "weft")
+	gh.issues = []map[string]any{row}
+	r := runner(triggerStore(t), c, "one", gh)
+	r.Tasks = &tasks{}
+	r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+		return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+	})
+	in := input()
+	in.Source.Query = "milestone:release"
+	tr, err := r.Triggers.Create(t.Context(), in, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	gh.unindexed[1] = true
+	for range 2 {
+		tr = advance(r, c, t, tr.ID)
+		if len(tr.Holds) != 1 || tr.Holds[0].Round != 1 || !strings.Contains(tr.Holds[0].Eligibility, "has not indexed") {
+			t.Fatalf("lagging index released the hold: %+v", tr)
+		}
+	}
+	delete(gh.unindexed, 1)
+	gh.outsideQuery[1] = true
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.Holds) != 1 || !strings.Contains(tr.Holds[0].Eligibility, "another poll") {
+		t.Fatalf("first miss released the hold: %+v", tr)
+	}
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.Holds) != 0 || len(tr.HoldResolutions) != 1 || tr.HoldResolutions[0].Round != 1 ||
+		tr.HoldResolutions[0].Actor != "system:trigger" {
+		t.Fatalf("second verified miss did not release the hold: %+v", tr)
+	}
+	delete(gh.outsideQuery, 1)
+	row["labels"] = append(row["labels"].([]map[string]any), map[string]any{"name": "weft"})
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.Holds) != 1 || tr.Holds[0].Round != 2 || len(gh.comments["#1"]) != 2 ||
+		!strings.Contains(gh.comments["#1"][1], "round 2 of 2") {
+		t.Fatalf("rounds lost on return: %+v, %v", tr, gh.comments)
 	}
 }
