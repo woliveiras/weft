@@ -92,6 +92,7 @@ type Trigger struct {
 	State        string `json:"state"`
 	PausedReason string `json:"pausedReason,omitempty"`
 
+	PollSequence         uint64            `json:"pollSequence,omitempty"`
 	LastRunAt            *time.Time        `json:"lastRunAt,omitempty"`
 	NextRunAt            *time.Time        `json:"nextRunAt,omitempty"`
 	CurrentTask          string            `json:"currentTask,omitempty"`

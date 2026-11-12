@@ -198,3 +198,31 @@ func TestOnlyAnExplicitTracker404MeansIssueMissing(t *testing.T) {
 		t.Fatal("wrapped tracker 404 was lost")
 	}
 }
+
+func TestMissingHoldDispositionRequiresConsecutiveVerifiedPolls(t *testing.T) {
+	tr := &Trigger{Source: SourceConfig{Kind: "github"}, PollSequence: 5}
+	for _, tc := range []struct {
+		name    string
+		hold    Hold
+		failure trackerHTTPFailure
+		release bool
+		reason  string
+		err     error
+	}{
+		{"missing repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, RepositoryStatus: 404}, false, "", errHeldRepositoryAccess},
+		{"refused repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, RepositoryStatus: 403}, false, "", errHeldRepositoryAccess},
+		{"failed probe", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, RepositoryStatus: 503}, false, "", errHeldRepositoryUnverified},
+		{"miss after gap", Hold{MissingPoll: 4}, trackerHTTPFailure{Status: 404, RepositoryStatus: 200}, false, issueMissingAwaitingPoll, nil},
+		{"second miss", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, RepositoryStatus: 200}, true, "two consecutive polls", nil},
+		{"deleted", Hold{}, trackerHTTPFailure{Status: 410}, true, "HTTP 410", nil},
+		{"operator deleted", Hold{Reason: "snapshot_round_limit"}, trackerHTTPFailure{Status: 410}, false, issueMissingForOperator, nil},
+		{"comment failure", Hold{Publication: "comment_failed", MissingPoll: 5}, trackerHTTPFailure{Status: 404, RepositoryStatus: 200}, false, issueMissingForOperator, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			release, reason, err := missingHoldDisposition(tr, tc.hold, tc.failure)
+			if release != tc.release || !strings.Contains(reason, tc.reason) || !errors.Is(err, tc.err) {
+				t.Fatalf("got %t, %q, %v", release, reason, err)
+			}
+		})
+	}
+}

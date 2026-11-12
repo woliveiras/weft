@@ -122,6 +122,7 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 	next := now.Add(time.Duration(t.IntervalMinutes) * time.Minute)
 	if _, uerr := r.Triggers.Update(ctx, id, "system:trigger", func(t *Trigger) error {
 		t.LastRunAt, t.NextRunAt = &now, &next
+		t.PollSequence++
 		t.pruneRetainedReadiness(now)
 		t.LastError = ""
 		if search.attempted {
@@ -190,6 +191,9 @@ func (r *Runner) step(ctx context.Context, t *Trigger, search *githubSearchPoll)
 	if !t.ReadinessDisabled {
 		for _, hold := range holds {
 			started, err := r.checkHeld(ctx, t, src, heldCall, hold)
+			if errors.Is(err, errHeldRepositoryAccess) || errors.Is(err, errHeldRepositoryUnverified) {
+				return "tracker_access_unverified", err
+			}
 			if started || errors.Is(err, errTriggerChanged) {
 				return "readiness_return", err
 			}

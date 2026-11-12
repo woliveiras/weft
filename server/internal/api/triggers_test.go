@@ -374,6 +374,8 @@ func TestReadinessHoldVisibleInActivityWithoutTaskOrPayload(t *testing.T) {
 	a.TrackerAPI.Client = &http.Client{Transport: trackerTransport(func(req *http.Request) (*http.Response, error) {
 		body := "{}"
 		switch {
+		case req.URL.Path == "/repos/acme/app":
+			body = `{"full_name":"acme/app"}`
 		case req.URL.Path == "/user":
 			body = `{"id":700}`
 		case req.Method == "GET":
@@ -430,13 +432,21 @@ func TestReadinessHoldVisibleInActivityWithoutTaskOrPayload(t *testing.T) {
 	}
 
 	deleted = true
-	if _, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
-		current.NextRunAt = nil
-		return nil
-	}); err != nil {
-		t.Fatal(err)
+	for n := range 2 {
+		if _, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
+			current.NextRunAt = nil
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		a.Triggers.Tick(t.Context())
+		if n == 0 {
+			current, err := a.Triggers.Triggers.Get(t.Context(), tr.ID)
+			if err != nil || len(current.Holds) != 1 || len(current.HoldResolutions) != 0 {
+				t.Fatalf("a single 404 released the issue: %+v, %v", current, err)
+			}
+		}
 	}
-	a.Triggers.Tick(t.Context())
 	view = activity.View{}
 	if c := call(t, srv, "GET", "/api/v1/activity", viewerTok, "", "", &view); c != 200 ||
 		len(view.TriggerHolds) != 0 || len(view.ResolvedTriggerHolds) != 1 {

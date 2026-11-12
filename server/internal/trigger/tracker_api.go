@@ -33,16 +33,18 @@ type TrackerCall func(ctx context.Context, connection, kind string, revision int
 type trackerScopeKey struct{}
 
 type trackerArgs struct {
-	UndoOwner string    `json:"undoOwner,omitempty"`
-	Key       string    `json:"key"`
-	Remove    []string  `json:"remove,omitempty"`
-	Add       string    `json:"add,omitempty"`
-	Owner     string    `json:"owner,omitempty"`
-	Body      string    `json:"body,omitempty"`
-	Since     time.Time `json:"since,omitempty"`
+	VerifyMissing bool      `json:"verifyMissing,omitempty"`
+	UndoOwner     string    `json:"undoOwner,omitempty"`
+	Key           string    `json:"key"`
+	Remove        []string  `json:"remove,omitempty"`
+	Add           string    `json:"add,omitempty"`
+	Owner         string    `json:"owner,omitempty"`
+	Body          string    `json:"body,omitempty"`
+	Since         time.Time `json:"since,omitempty"`
 }
 
 type trackerHTTPFailure struct {
+	RepositoryStatus   int           `json:"repositoryStatus,omitempty"`
 	Status             int           `json:"status"`
 	RateLimited        bool          `json:"rateLimited,omitempty"`
 	RetryDelay         time.Duration `json:"retryDelay,omitempty"`
@@ -63,7 +65,7 @@ func (e trackerHTTPFailure) definitive() bool {
 
 func trackerIssueMissing(err error) bool {
 	var failure trackerHTTPFailure
-	return errors.As(err, &failure) && failure.Status == http.StatusNotFound
+	return errors.As(err, &failure) && (failure.Status == http.StatusNotFound || failure.Status == http.StatusGone)
 }
 
 func (e trackerHTTPFailure) guidance() string {
@@ -209,6 +211,17 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 			failure.CredentialRejected = probeStatus == http.StatusUnauthorized
 			if probe := trackerFailure(probeStatus, probeErr); probe.RateLimited {
 				failure.RateLimited, failure.RetryDelay, failure.RetryDeadline = true, probe.RetryDelay, probe.RetryDeadline
+			}
+		}
+		if t.name == trackerGet && a.VerifyMissing && scope.Source.Kind == "github" && failure.Status == http.StatusNotFound {
+			// The endpoint is fixed to the repository in reviewed consent.
+			// Repository contents do not leave the transport boundary.
+			_, code, probeErr := request(http.MethodGet, "/repos/"+scope.Source.Repository, nil)
+			if probeErr == nil || code >= 400 {
+				failure.RepositoryStatus = code
+			}
+			if probe := trackerFailure(code, probeErr); probe.RateLimited {
+				failure.RepositoryStatus = 0
 			}
 		}
 		data, _ := json.Marshal(failure)

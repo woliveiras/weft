@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -36,6 +37,7 @@ type Hold struct {
 	RetryAt        *time.Time `json:"retryAt,omitempty"`
 	ScopeCheckedAt time.Time  `json:"scopeCheckedAt,omitzero"`
 	ScopeLagPolls  int        `json:"scopeLagPolls,omitempty"`
+	MissingPoll    uint64     `json:"missingPoll,omitempty"`
 	ScopeMiss      string     `json:"scopeMiss,omitempty"`
 	SnapshotEdits  int        `json:"snapshotEdits,omitempty"`
 	Eligibility    string     `json:"eligibility,omitempty"`
@@ -629,31 +631,37 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 		if holdHasPendingWrite(h) {
 			return false, r.failHoldLabels(ctx, t, h, "The pending update belongs to a different trigger scope.")
 		}
-		if h.Publication != "label_failed" {
-			return false, r.releaseHold(ctx, t, h, ReadinessReason("scope_changed"), false)
+		if h.Publication == "label_failed" {
+			return false, nil
 		}
+		return false, r.releaseHold(ctx, t, h, ReadinessReason("scope_changed"), false)
 	}
 	if holdHasPendingWrite(h) {
 		return false, r.publishHold(ctx, t, call, h)
 	}
-	if h.Publication == "label_failed" ||
-		(h.RetryAt != nil && r.Triggers.now().Before(*h.RetryAt)) {
+	if h.RetryAt != nil && r.Triggers.now().Before(*h.RetryAt) {
 		return false, nil
 	}
-	i, err := trackerRead[Issue](ctx, call, trackerGet, trackerArgs{Key: h.Key})
+	i, err := trackerRead[Issue](ctx, call, trackerGet, trackerArgs{Key: h.Key, VerifyMissing: true})
 	if err != nil {
+		if trackerIssueMissing(err) {
+			return false, r.checkMissingHold(ctx, t, h, err)
+		}
 		if h.State == "recheck" && h.RetryFailures > 0 {
 			return false, r.retryReadiness(ctx, t, h, "tracker_unavailable", err)
 		}
-		if h.Publication != "comment_pending" && h.RetryCommentAt == nil && trackerIssueMissing(err) {
-			return false, r.releaseHold(ctx, t, h, "The tracker could not find the issue (HTTP 404).", false)
-		}
-		if h.State == "retry_failed" {
+		if h.State == "retry_failed" || h.Publication == "label_failed" {
 			return false, nil
 		}
 		return false, err
 	}
-	if h.State == "retry_failed" {
+	if h.MissingPoll != 0 || h.Eligibility == issueMissingForOperator || h.Eligibility == issueMissingAwaitingPoll {
+		h.MissingPoll, h.Eligibility = 0, ""
+		if err := r.saveHold(ctx, t, h); err != nil {
+			return false, err
+		}
+	}
+	if h.State == "retry_failed" || h.Publication == "label_failed" {
 		return false, nil
 	}
 	if reason := holdReleaseReason(t, h, i); reason != "" {
@@ -712,6 +720,60 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 		h.Signal = signal
 	}
 	return r.assessIssue(ctx, t, call, i, h, replies, scopeVerified)
+}
+
+var errHeldRepositoryAccess = errors.New("The tracker connection could not access the configured GitHub repository. Review its permissions.")
+var errHeldRepositoryUnverified = errors.New("The tracker could not verify access to the configured GitHub repository. Held issues remain pending.")
+
+const issueMissingForOperator = "could not be found. Review the tracker and resolve the hold"
+const issueMissingAwaitingPoll = "could not be found and is awaiting confirmation in the next poll"
+
+func missingHoldDisposition(t *Trigger, h Hold, failure trackerHTTPFailure) (release bool, reason string, err error) {
+	if failure.Status == http.StatusNotFound && t.Source.Kind == "github" {
+		switch failure.RepositoryStatus {
+		case http.StatusNotFound, http.StatusForbidden:
+			return false, "", errHeldRepositoryAccess
+		default:
+			if failure.RepositoryStatus < 200 || failure.RepositoryStatus >= 300 {
+				return false, "", errHeldRepositoryUnverified
+			}
+		}
+	}
+	if requiresOperator(h) || h.State == "operator" || h.Publication == "comment_failed" || h.Publication == "label_failed" ||
+		h.Publication == "comment_pending" || h.RetryCommentAt != nil {
+		return false, issueMissingForOperator, nil
+	}
+	if failure.Status == http.StatusGone {
+		return true, "The tracker reported that the issue was deleted (HTTP 410).", nil
+	}
+	if h.MissingPoll != 0 && h.MissingPoll == t.PollSequence {
+		return true, "The tracker could not find the issue in two consecutive polls (HTTP 404).", nil
+	}
+	return false, issueMissingAwaitingPoll, nil
+}
+
+func (r *Runner) checkMissingHold(ctx context.Context, t *Trigger, h Hold, err error) error {
+	var failure trackerHTTPFailure
+	if !errors.As(err, &failure) {
+		return err
+	}
+	release, reason, err := missingHoldDisposition(t, h, failure)
+	if err != nil {
+		return err
+	}
+	if release {
+		return r.releaseHold(ctx, t, h, reason, true)
+	}
+	if reason == issueMissingAwaitingPoll {
+		h.MissingPoll = t.PollSequence + 1
+	} else {
+		h.MissingPoll = 0
+		if h.Eligibility == reason {
+			return nil
+		}
+	}
+	h.Eligibility = reason
+	return r.saveHold(ctx, t, h)
 }
 
 func requiresOperator(h Hold) bool {

@@ -200,6 +200,9 @@ func (t *tracker) request(_ context.Context, connection, kind string, _ int64, m
 	if t.fail[method+" "+u.Path] {
 		return nil, 403, fmt.Errorf("tracker fixture refused operation")
 	}
+	if method == "GET" && u.Path == "/repos/acme/app" {
+		return rawFixture(map[string]string{"full_name": "acme/app"})
+	}
 	if u.Path == "/user" {
 		return rawFixture(map[string]any{"id": 700, "login": "weft-service"})
 	}

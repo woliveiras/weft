@@ -1287,3 +1287,73 @@ func TestPollingMaintenancePrunesExpiredReadinessOnPausedTrigger(t *testing.T) {
 		t.Fatalf("maintenance dispatched polling or failed to prune: %+v", tr)
 	}
 }
+
+func TestMissingHeldIssuePreservesProgressAndOperatorHolds(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		status      int
+		repository  int
+		operator    bool
+		wantRelease bool
+	}{
+		{"repository hidden", 404, 404, false, false},
+		{"repository refused", 404, 403, false, false},
+		{"consecutive absence", 404, 0, false, true},
+		{"deleted", 410, 0, false, true},
+		{"operator absent", 404, 0, true, false},
+		{"operator deleted", 410, 0, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &clock{t: time.Now().UTC()}
+			gh := newTracker("gh")
+			gh.issues = []map[string]any{ghIssue(1, "Issue", "weft")}
+			r := runner(triggerStore(t), c, "one", gh)
+			r.Tasks = &tasks{}
+			r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+				return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+			})
+			tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			if _, err := r.Triggers.Update(t.Context(), tr.ID, "fixture", func(t *trigger.Trigger) error {
+				h := &t.Holds[0]
+				h.SnapshotEdits = 2
+				if tc.operator {
+					h.State, h.Reason = "operator", "eligibility_edit_limit"
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			gh.status["GET /repos/acme/app/issues/1"] = tc.status
+			gh.status["GET /repos/acme/app"] = tc.repository
+			tr = advance(r, c, t, tr.ID)
+			if tc.status == 404 {
+				if len(tr.Holds) != 1 || len(tr.HoldResolutions) != 0 {
+					t.Fatalf("first 404 released the hold: %+v", tr)
+				}
+				tr = advance(r, c, t, tr.ID)
+			}
+			if tc.wantRelease {
+				progress := tr.RetainedReadiness["github:acme/app#1@factory"]
+				if len(tr.Holds) != 0 || len(tr.HoldResolutions) != 1 || progress.Round != 1 || progress.SnapshotEdits != 2 {
+					t.Fatalf("release did not preserve progress: %+v", tr)
+				}
+			} else if len(tr.Holds) != 1 || len(tr.HoldResolutions) != 0 {
+				t.Fatalf("unsafe release: %+v", tr)
+			}
+			if tc.repository != 0 && !strings.Contains(tr.LastError, "could not access the configured GitHub repository") {
+				t.Fatalf("repository loss is not visible: %+v", tr)
+			}
+			if tc.operator && (!strings.Contains(tr.Holds[0].Eligibility, "could not be found") || tr.Holds[0].Reason != "eligibility_edit_limit") {
+				t.Fatalf("operator issue loss is not visible or changed the hold reason: %+v", tr.Holds)
+			}
+			probes := slices.DeleteFunc(slices.Clone(gh.rest), func(s string) bool { return s != "GET /repos/acme/app" })
+			if (tc.status == 404 && len(probes) != 2) || (tc.status == 410 && len(probes) != 0) {
+				t.Fatalf("unexpected repository probes: %v", gh.rest)
+			}
+		})
+	}
+}
