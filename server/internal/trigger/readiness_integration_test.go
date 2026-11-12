@@ -1487,8 +1487,10 @@ func TestGitHubIndexLagDefersQuestionsUntilQueryConfirmation(t *testing.T) {
 }
 
 func TestJiraMissingHoldRequiresProjectAccess(t *testing.T) {
-	for _, denied := range []int{0, 403, 404} {
-		t.Run(fmt.Sprint(denied), func(t *testing.T) {
+	for _, tc := range []struct{ issueStatus, projectStatus int }{
+		{404, 0}, {404, 403}, {404, 404}, {410, 0}, {410, 403}, {410, 404},
+	} {
+		t.Run(fmt.Sprintf("issue=%d/project=%d", tc.issueStatus, tc.projectStatus), func(t *testing.T) {
 			c := &clock{t: time.Now().UTC()}
 			atl := newTracker("jira")
 			atl.issues = []map[string]any{jiraIssue("APP-1", "Issue", "weft")}
@@ -1509,20 +1511,21 @@ func TestJiraMissingHoldRequiresProjectAccess(t *testing.T) {
 				t.Fatalf("fixture did not hold the issue: %+v", tr)
 			}
 			project := "GET /ex/jira/" + cloudID + "/rest/api/3/project/APP"
-			atl.status[project] = denied
+			atl.status[project] = tc.projectStatus
+			atl.status["GET /ex/jira/"+cloudID+"/rest/api/3/issue/APP-1"] = tc.issueStatus
 			atl.issues = nil
 			tr = advance(r, c, t, tr.ID)
 			if len(tr.Holds) != 1 {
-				t.Fatal("first issue 404 released the hold")
+				t.Fatal("first missing issue response released the hold")
 			}
 			tr = advance(r, c, t, tr.ID)
 			probes := strings.Count(strings.Join(atl.rest, "\n"), project)
 			if probes != 2 {
 				t.Fatalf("expected same-connection project checks: %v", atl.rest)
 			}
-			if denied == 0 {
+			if tc.projectStatus == 0 {
 				if len(tr.Holds) != 0 || len(tr.HoldResolutions) != 1 || tr.RetainedReadiness["jira:APP-1@factory"].Round != 1 {
-					t.Fatalf("verified issue 404 did not preserve progress: %+v", tr)
+					t.Fatalf("verified absence did not preserve progress: %+v", tr)
 				}
 			} else if len(tr.Holds) != 1 || len(tr.HoldResolutions) != 0 || !strings.Contains(tr.LastError, "could not access the held issue's Jira project") {
 				t.Fatalf("inaccessible project did not preserve the hold and report why: %+v", tr)

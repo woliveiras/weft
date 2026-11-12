@@ -209,21 +209,28 @@ func TestMissingHoldDispositionRequiresConsecutiveVerifiedPolls(t *testing.T) {
 		release bool
 		reason  string
 		err     error
+		source  string
 	}{
-		{"missing repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 404}, false, "", errHeldRepositoryAccess},
-		{"refused repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 403}, false, "", errHeldRepositoryAccess},
-		{"failed probe", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 503}, false, "", errHeldIssueAccessUnverified},
-		{"miss after gap", Hold{MissingPoll: 4, MissingSince: now.Add(-time.Hour)}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil},
-		{"second miss at boundary", Hold{MissingPoll: 5, MissingSince: now.Add(-15 * time.Minute)}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, true, "one polling interval apart", nil},
-		{"early second miss", Hold{MissingPoll: 5, MissingSince: now.Add(-time.Minute)}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil},
-		{"legacy observation without timestamp", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil},
-		{"deleted", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 200}, true, "HTTP 410", nil},
-		{"disabled Issues", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 200, IssuesDisabled: true}, false, "", errHeldIssuesDisabled},
-		{"deleted with inaccessible repository", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 404}, false, "", errHeldRepositoryAccess},
-		{"operator deleted", Hold{Reason: "snapshot_round_limit"}, trackerHTTPFailure{Status: 410, AccessStatus: 200}, false, issueMissingForOperator, nil},
-		{"comment failure", Hold{Publication: "comment_failed", MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingForOperator, nil},
+		{"missing repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 404}, false, "", errHeldRepositoryAccess, "github"},
+		{"refused repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 403}, false, "", errHeldRepositoryAccess, "github"},
+		{"failed probe", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 503}, false, "", errHeldIssueAccessUnverified, "github"},
+		{"miss after gap", Hold{MissingPoll: 4, MissingSince: now.Add(-time.Hour)}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil, "github"},
+		{"second miss at boundary", Hold{MissingPoll: 5, MissingSince: now.Add(-15 * time.Minute)}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, true, "one polling interval apart", nil, "github"},
+		{"early second miss", Hold{MissingPoll: 5, MissingSince: now.Add(-time.Minute)}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil, "github"},
+		{"legacy observation without timestamp", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil, "github"},
+		{"deleted", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 200}, true, "HTTP 410", nil, "github"},
+		{"disabled Issues", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 200, IssuesDisabled: true}, false, "", errHeldIssuesDisabled, "github"},
+		{"deleted with inaccessible repository", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 404}, false, "", errHeldRepositoryAccess, "github"},
+		{"operator deleted", Hold{Reason: "snapshot_round_limit"}, trackerHTTPFailure{Status: 410, AccessStatus: 200}, false, issueMissingForOperator, nil, "github"},
+		{"comment failure", Hold{Publication: "comment_failed", MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingForOperator, nil, "github"},
+		{"Jira 410 with inaccessible project", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 403}, false, "", errHeldProjectAccess, "jira"},
+		{"Jira 410 with unverified project", Hold{}, trackerHTTPFailure{Status: 410}, false, "", errHeldIssueAccessUnverified, "jira"},
+		{"first Jira 410", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil, "jira"},
+		{"early Jira 410", Hold{MissingPoll: 5, MissingSince: now.Add(-time.Minute)}, trackerHTTPFailure{Status: 410, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil, "jira"},
+		{"confirmed Jira 410", Hold{MissingPoll: 5, MissingSince: now.Add(-15 * time.Minute)}, trackerHTTPFailure{Status: 410, AccessStatus: 200}, true, "HTTP 410", nil, "jira"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			tr.Source.Kind = tc.source
 			release, reason, err := missingHoldDisposition(tr, tc.hold, tc.failure, now)
 			if release != tc.release || !strings.Contains(reason, tc.reason) || !errors.Is(err, tc.err) {
 				t.Fatalf("got %t, %q, %v", release, reason, err)

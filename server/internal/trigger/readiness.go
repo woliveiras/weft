@@ -761,7 +761,7 @@ func hasConsecutiveMissingObservation(t *Trigger, h Hold) bool {
 }
 
 func missingHoldDisposition(t *Trigger, h Hold, failure trackerHTTPFailure, now time.Time) (release bool, reason string, err error) {
-	if t.Source.Kind == "github" || (t.Source.Kind == "jira" && failure.Status == http.StatusNotFound) {
+	if t.Source.Kind == "github" || t.Source.Kind == "jira" {
 		if failure.IssuesDisabled {
 			return false, "", errHeldIssuesDisabled
 		}
@@ -781,12 +781,12 @@ func missingHoldDisposition(t *Trigger, h Hold, failure trackerHTTPFailure, now 
 		h.Publication == "comment_pending" || h.RetryCommentAt != nil {
 		return false, issueMissingForOperator, nil
 	}
-	if failure.Status == http.StatusGone {
+	if t.Source.Kind == "github" && failure.Status == http.StatusGone {
 		return true, "The tracker reported that the issue was deleted (HTTP 410).", nil
 	}
 	minimum := time.Duration(max(1, t.IntervalMinutes)) * time.Minute
 	if hasConsecutiveMissingObservation(t, h) && !now.Before(h.MissingSince.Add(minimum)) {
-		return true, "The tracker could not find the issue in consecutive polls at least one polling interval apart (HTTP 404).", nil
+		return true, fmt.Sprintf("The tracker could not find the issue in consecutive polls at least one polling interval apart (HTTP %d).", failure.Status), nil
 	}
 	return false, issueMissingAwaitingPoll, nil
 }

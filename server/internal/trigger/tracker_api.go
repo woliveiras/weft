@@ -215,7 +215,7 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 			}
 		}
 		if t.name == trackerGet && a.VerifyMissing &&
-			(failure.Status == http.StatusNotFound || (scope.Source.Kind == "github" && failure.Status == http.StatusGone)) {
+			(failure.Status == http.StatusNotFound || failure.Status == http.StatusGone) {
 			var code int
 			var probeErr error
 			if scope.Source.Kind == "github" {

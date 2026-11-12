@@ -86,7 +86,8 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   Issues is visible and preserves holds. A GitHub 410 confirms deletion
   immediately after the same repository check succeeds. For Jira, the
   same connection must be able to read the issue's project before an
-  issue 404 can count. A temporarily unavailable access check defers only
+  issue 404 or 410 can count. Both Jira responses require the same
+  consecutive-poll confirmation and minimum spacing. A temporarily unavailable access check defers only
   the affected hold through the applicable rate-limit deadline, subject
   to the one-hour cap. Other holds and ordinary discovery continue.
   Holds requiring operator
@@ -258,7 +259,7 @@ spec-derived oracles for implementation.
 - **D-05 — Jira (AC-002, AC-003, AC-004, AC-006).** Use comments and labels.
   Exclude status transitions. On 2026-11-12, the maintainer extended the
   GitHub missing-issue access rule to Jira. Before counting a Jira issue
-  404, verify access to the issue's project with the same reviewed
+  404 or 410, verify access to the issue's project with the same reviewed
   connection. A project 404 or 403 reports an access failure and
   preserves the hold.
 - **D-06 — Consent (AC-005).** Bind readiness policy, reply reads, comments
