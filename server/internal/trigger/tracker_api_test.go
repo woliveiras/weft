@@ -209,14 +209,16 @@ func TestMissingHoldDispositionRequiresConsecutiveVerifiedPolls(t *testing.T) {
 		reason  string
 		err     error
 	}{
-		{"missing repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, RepositoryStatus: 404}, false, "", errHeldRepositoryAccess},
-		{"refused repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, RepositoryStatus: 403}, false, "", errHeldRepositoryAccess},
-		{"failed probe", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, RepositoryStatus: 503}, false, "", errHeldRepositoryUnverified},
-		{"miss after gap", Hold{MissingPoll: 4}, trackerHTTPFailure{Status: 404, RepositoryStatus: 200}, false, issueMissingAwaitingPoll, nil},
-		{"second miss", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, RepositoryStatus: 200}, true, "two consecutive polls", nil},
-		{"deleted", Hold{}, trackerHTTPFailure{Status: 410}, true, "HTTP 410", nil},
-		{"operator deleted", Hold{Reason: "snapshot_round_limit"}, trackerHTTPFailure{Status: 410}, false, issueMissingForOperator, nil},
-		{"comment failure", Hold{Publication: "comment_failed", MissingPoll: 5}, trackerHTTPFailure{Status: 404, RepositoryStatus: 200}, false, issueMissingForOperator, nil},
+		{"missing repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 404}, false, "", errHeldRepositoryAccess},
+		{"refused repository", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 403}, false, "", errHeldRepositoryAccess},
+		{"failed probe", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 503}, false, "", errHeldRepositoryUnverified},
+		{"miss after gap", Hold{MissingPoll: 4}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingAwaitingPoll, nil},
+		{"second miss", Hold{MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, true, "two consecutive polls", nil},
+		{"deleted", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 200}, true, "HTTP 410", nil},
+		{"disabled Issues", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 200, IssuesDisabled: true}, false, "", errHeldIssuesDisabled},
+		{"deleted with inaccessible repository", Hold{}, trackerHTTPFailure{Status: 410, AccessStatus: 404}, false, "", errHeldRepositoryAccess},
+		{"operator deleted", Hold{Reason: "snapshot_round_limit"}, trackerHTTPFailure{Status: 410, AccessStatus: 200}, false, issueMissingForOperator, nil},
+		{"comment failure", Hold{Publication: "comment_failed", MissingPoll: 5}, trackerHTTPFailure{Status: 404, AccessStatus: 200}, false, issueMissingForOperator, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			release, reason, err := missingHoldDisposition(tr, tc.hold, tc.failure)
@@ -233,5 +235,28 @@ func TestReadinessRetryCapsTheGatewayDeadline(t *testing.T) {
 	failure := trackerHTTPFailure{Status: 403, RateLimited: true, RetryDelay: 24 * time.Hour, RetryDeadline: &far}
 	if got := trackerRetryDeadline(now, failure); !got.Equal(now.Add(time.Hour)) {
 		t.Fatalf("retry beyond cap: %v", got)
+	}
+}
+
+func TestGitHubIssueAccessRequiresAnExplicitIssuesSetting(t *testing.T) {
+	for _, tc := range []struct {
+		body       string
+		wantStatus int
+		disabled   bool
+	}{
+		{`{"has_issues":true}`, 200, false},
+		{`{"has_issues":false}`, 200, true},
+		{`{}`, 0, false},
+		{`{"has_issues":null}`, 0, false},
+	} {
+		code, disabled, err := githubIssueAccess(func(method, path string, body any) (json.RawMessage, int, error) {
+			if method != http.MethodGet || path != "/repos/acme/app" || body != nil {
+				t.Fatalf("unexpected probe: %s %s", method, path)
+			}
+			return json.RawMessage(tc.body), 200, nil
+		}, "acme/app")
+		if code != tc.wantStatus || disabled != tc.disabled || (err != nil) != (tc.wantStatus == 0) {
+			t.Fatalf("probe for %s: %d, %t, %v", tc.body, code, disabled, err)
+		}
 	}
 }

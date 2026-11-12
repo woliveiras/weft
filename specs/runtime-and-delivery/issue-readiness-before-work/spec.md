@@ -78,9 +78,10 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   Record both automatic and explicit resolutions with their reasons.
   Two consecutive polling runs must confirm a direct issue 404 before
   releasing an ordinary hold. For GitHub, both observations require
-  access to the configured repository through the same tracker connection.
-  A failed repository access check is visible and preserves holds.
-  GitHub 410 confirms deletion immediately. Holds requiring operator
+  access to the configured repository through the same tracker connection
+  and confirmation that Issues are enabled. An access denial or disabled
+  Issues is visible and preserves holds. A GitHub 410 confirms deletion
+  immediately after the same repository check succeeds. Holds requiring operator
   intervention report a missing issue and remain held. Automatic release
   for a missing issue retains its round and edit counts.
   GitHub scope checks restrict the reviewed query by the issue's exact

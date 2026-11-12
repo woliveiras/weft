@@ -197,7 +197,7 @@ func (r *Runner) step(ctx context.Context, t *Trigger, search *githubSearchPoll)
 	if !t.ReadinessDisabled {
 		for _, hold := range holds {
 			started, err := r.checkHeld(ctx, t, src, heldCall, hold)
-			if errors.Is(err, errHeldRepositoryAccess) || errors.Is(err, errHeldRepositoryUnverified) {
+			if errors.Is(err, errHeldRepositoryAccess) || errors.Is(err, errHeldRepositoryUnverified) || errors.Is(err, errHeldIssuesDisabled) {
 				return "tracker_access_unverified", err
 			}
 			if started || errors.Is(err, errTriggerChanged) {

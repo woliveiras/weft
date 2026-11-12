@@ -375,7 +375,7 @@ func TestReadinessHoldVisibleInActivityWithoutTaskOrPayload(t *testing.T) {
 		body := "{}"
 		switch {
 		case req.URL.Path == "/repos/acme/app":
-			body = `{"full_name":"acme/app"}`
+			body = `{"full_name":"acme/app","has_issues":true}`
 		case req.URL.Path == "/user":
 			body = `{"id":700}`
 		case req.Method == "GET":

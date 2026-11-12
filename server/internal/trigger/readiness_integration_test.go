@@ -1295,13 +1295,15 @@ func TestMissingHeldIssuePreservesProgressAndOperatorHolds(t *testing.T) {
 		repository  int
 		operator    bool
 		wantRelease bool
+		disabled    bool
 	}{
-		{"repository hidden", 404, 404, false, false},
-		{"repository refused", 404, 403, false, false},
-		{"consecutive absence", 404, 0, false, true},
-		{"deleted", 410, 0, false, true},
-		{"operator absent", 404, 0, true, false},
-		{"operator deleted", 410, 0, true, false},
+		{"repository hidden", 404, 404, false, false, false},
+		{"repository refused", 404, 403, false, false, false},
+		{"consecutive absence", 404, 0, false, true, false},
+		{"deleted", 410, 0, false, true, false},
+		{"operator absent", 404, 0, true, false, false},
+		{"operator deleted", 410, 0, true, false, false},
+		{"repository Issues disabled", 410, 0, false, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := &clock{t: time.Now().UTC()}
@@ -1329,6 +1331,7 @@ func TestMissingHeldIssuePreservesProgressAndOperatorHolds(t *testing.T) {
 			}
 			gh.status["GET /repos/acme/app/issues/1"] = tc.status
 			gh.status["GET /repos/acme/app"] = tc.repository
+			gh.githubIssuesDisabled = tc.disabled
 			tr = advance(r, c, t, tr.ID)
 			if tc.status == 404 {
 				if len(tr.Holds) != 1 || len(tr.HoldResolutions) != 0 {
@@ -1351,7 +1354,10 @@ func TestMissingHeldIssuePreservesProgressAndOperatorHolds(t *testing.T) {
 				t.Fatalf("operator issue loss is not visible or changed the hold reason: %+v", tr.Holds)
 			}
 			probes := slices.DeleteFunc(slices.Clone(gh.rest), func(s string) bool { return s != "GET /repos/acme/app" })
-			if (tc.status == 404 && len(probes) != 2) || (tc.status == 410 && len(probes) != 0) {
+			if tc.disabled && !strings.Contains(tr.LastError, "Issues are disabled") {
+				t.Fatalf("disabled Issues is not visible: %+v", tr)
+			}
+			if (tc.status == 404 && len(probes) != 2) || (tc.status == 410 && len(probes) != 1) {
 				t.Fatalf("unexpected repository probes: %v", gh.rest)
 			}
 		})

@@ -746,18 +746,22 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 }
 
 var errHeldRepositoryAccess = errors.New("The tracker connection could not access the configured GitHub repository. Review its permissions.")
+var errHeldIssuesDisabled = errors.New("Issues are disabled in the configured GitHub repository. Held issues remain pending.")
 var errHeldRepositoryUnverified = errors.New("The tracker could not verify access to the configured GitHub repository. Held issues remain pending.")
 
 const issueMissingForOperator = "could not be found. Review the tracker and resolve the hold"
 const issueMissingAwaitingPoll = "could not be found and is awaiting confirmation in the next poll"
 
 func missingHoldDisposition(t *Trigger, h Hold, failure trackerHTTPFailure) (release bool, reason string, err error) {
-	if failure.Status == http.StatusNotFound && t.Source.Kind == "github" {
-		switch failure.RepositoryStatus {
+	if t.Source.Kind == "github" {
+		if failure.IssuesDisabled {
+			return false, "", errHeldIssuesDisabled
+		}
+		switch failure.AccessStatus {
 		case http.StatusNotFound, http.StatusForbidden:
 			return false, "", errHeldRepositoryAccess
 		default:
-			if failure.RepositoryStatus < 200 || failure.RepositoryStatus >= 300 {
+			if failure.AccessStatus < 200 || failure.AccessStatus >= 300 {
 				return false, "", errHeldRepositoryUnverified
 			}
 		}

@@ -44,7 +44,8 @@ type trackerArgs struct {
 }
 
 type trackerHTTPFailure struct {
-	RepositoryStatus   int           `json:"repositoryStatus,omitempty"`
+	IssuesDisabled     bool          `json:"issuesDisabled,omitempty"`
+	AccessStatus       int           `json:"accessStatus,omitempty"`
 	Status             int           `json:"status"`
 	RateLimited        bool          `json:"rateLimited,omitempty"`
 	RetryDelay         time.Duration `json:"retryDelay,omitempty"`
@@ -213,15 +214,12 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 				failure.RateLimited, failure.RetryDelay, failure.RetryDeadline = true, probe.RetryDelay, probe.RetryDeadline
 			}
 		}
-		if t.name == trackerGet && a.VerifyMissing && scope.Source.Kind == "github" && failure.Status == http.StatusNotFound {
-			// The endpoint is fixed to the repository in reviewed consent.
-			// Repository contents do not leave the transport boundary.
-			_, code, probeErr := request(http.MethodGet, "/repos/"+scope.Source.Repository, nil)
-			if probeErr == nil || code >= 400 {
-				failure.RepositoryStatus = code
-			}
+		if t.name == trackerGet && a.VerifyMissing && scope.Source.Kind == "github" &&
+			(failure.Status == http.StatusNotFound || failure.Status == http.StatusGone) {
+			code, disabled, probeErr := githubIssueAccess(request, scope.Source.Repository)
+			failure.AccessStatus, failure.IssuesDisabled = code, disabled
 			if probe := trackerFailure(code, probeErr); probe.RateLimited {
-				failure.RepositoryStatus = 0
+				failure.AccessStatus = 0
 			}
 		}
 		data, _ := json.Marshal(failure)
@@ -238,6 +236,25 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 		return nil, err
 	}
 	return &tools.Result{Data: raw}, nil
+}
+
+// Repository data stays in the gateway. Only the access status and the
+// Issues setting can affect release of a held issue.
+func githubIssueAccess(request apiRequest, repository string) (int, bool, error) {
+	raw, code, err := request(http.MethodGet, "/repos/"+repository, nil)
+	if err != nil {
+		if code >= 400 {
+			return code, false, err
+		}
+		return 0, false, err
+	}
+	var repo struct {
+		HasIssues *bool `json:"has_issues"`
+	}
+	if err := json.Unmarshal(raw, &repo); err != nil || repo.HasIssues == nil {
+		return 0, false, errors.New("GitHub repository Issues setting could not be verified")
+	}
+	return code, !*repo.HasIssues, nil
 }
 
 func jiraComment(text string) any {

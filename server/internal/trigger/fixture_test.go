@@ -15,27 +15,28 @@ import (
 
 // tracker is an in-memory GitHub or Jira project behind MCP tool names.
 type tracker struct {
-	pageSearch          bool
-	incompleteSearch    bool
-	unindexed           map[int]bool
-	outsideQuery        map[int]bool
-	editOnAssignment    bool
-	transientComments   int
-	claimReadFailures   int
-	loseCommentResponse bool
-	rest                []string
-	status              map[string]int
-	replies             map[string][]map[string]any
-	labelEvents         map[string][]map[string]any
-	roles               map[string]string
-	mu                  sync.Mutex
-	conn                string
-	issues              []map[string]any // GitHub: search items; Jira: issues
-	calls               []string         // tool names in call order
-	args                []map[string]any
-	comments            map[string][]string
-	transitions         []map[string]any // Jira transitions offered
-	fail                map[string]bool  // tool short name → answer an error
+	githubIssuesDisabled bool
+	pageSearch           bool
+	incompleteSearch     bool
+	unindexed            map[int]bool
+	outsideQuery         map[int]bool
+	editOnAssignment     bool
+	transientComments    int
+	claimReadFailures    int
+	loseCommentResponse  bool
+	rest                 []string
+	status               map[string]int
+	replies              map[string][]map[string]any
+	labelEvents          map[string][]map[string]any
+	roles                map[string]string
+	mu                   sync.Mutex
+	conn                 string
+	issues               []map[string]any // GitHub: search items; Jira: issues
+	calls                []string         // tool names in call order
+	args                 []map[string]any
+	comments             map[string][]string
+	transitions          []map[string]any // Jira transitions offered
+	fail                 map[string]bool  // tool short name → answer an error
 }
 
 func newTracker(conn string) *tracker {
@@ -201,7 +202,7 @@ func (t *tracker) request(_ context.Context, connection, kind string, _ int64, m
 		return nil, 403, fmt.Errorf("tracker fixture refused operation")
 	}
 	if method == "GET" && u.Path == "/repos/acme/app" {
-		return rawFixture(map[string]string{"full_name": "acme/app"})
+		return rawFixture(map[string]bool{"has_issues": !t.githubIssuesDisabled})
 	}
 	if u.Path == "/user" {
 		return rawFixture(map[string]any{"id": 700, "login": "weft-service"})
