@@ -114,8 +114,8 @@ and a canonical package is catalogued once. Files, references and legacy
 steering still reject symlinks. A console skill shadows a matching repository
 name when the graph or agent selects its ID and its catalogue entry fits.
 Installation defaults alone leave matching repository skills eligible. If
-the selected console body exceeds the remaining budget on activation, it
-releases its active catalogue slot. Weft offers the matching repository
+a selected console body with a shadowed match exceeds the remaining budget
+on activation, it releases its active catalogue slot. Weft offers the matching repository
 catalogue entry if it fits, and the agent can explicitly activate it.
 Activity retains the original shadowing and records the activation refusal
 and the fallback outcome. Distinct repository packages sharing a name

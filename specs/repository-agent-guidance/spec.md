@@ -199,8 +199,8 @@ acceptance criteria above and matrix use these decisions as their oracles.
   selected by the graph or agent shadows a matching valid repository skill
   name when the console catalogue entry is admitted. Installation defaults
   alone and console entries omitted for budget leave repository skills
-  eligible. If an admitted console skill's body exceeds the remaining budget
-  on activation, release its active catalogue slot and offer the matching
+  eligible. If an admitted console skill with a shadowed match exceeds the
+  remaining budget on body activation, release its active slot and offer the
   repository entry if its framed catalogue fits the remaining budget. Charge
   the replacement without refunding previously delivered content. Record the
   console omission and the replacement outcome separately. The repository

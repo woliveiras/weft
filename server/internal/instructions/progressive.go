@@ -410,10 +410,9 @@ func (s *Session) Load(ctx context.Context, selection, reference string) (_ stri
 }
 
 // An oversized console body cannot fit later because the budget only
-// decreases. Release its live slot while retaining the initial audit entry.
+// decreases. Release its live slot for a matching candidate while retaining
+// the initial audit entry.
 func (s *Session) offerRepositoryFallback(ctx context.Context, console progressiveEntry, status string) (string, error) {
-	s.items[console.entry.Order-1].entry.Included = false
-	delete(s.selected, console.entry.Selection)
 	for _, item := range s.items {
 		if item.repo == nil || item.entry.Reason != "shadowed_by_console" || item.repo.name != console.entry.Source {
 			continue
@@ -423,17 +422,22 @@ func (s *Session) offerRepositoryFallback(ctx context.Context, console progressi
 		entry.Selection = "repository:" + item.repo.name
 		cost := len(renderEntry(entry, item.content))
 		if cost > s.snapshot.Budget {
-			_, err := s.omitRequest(ctx, entry, "token_budget")
-			return status, err
+			if _, err := s.omitRequest(ctx, entry, "token_budget"); err != nil {
+				return "", err
+			}
+		} else {
+			entry.Included, entry.Reason, entry.Delivery = true, "", "prepared"
+			if err := s.recordRead(ctx, entry, item.content); err != nil {
+				return "", err
+			}
+			s.snapshot.Budget -= cost
+			item.entry = entry
+			s.selected[entry.Selection] = item
+			status += "; repository fallback available: " + entry.Selection
 		}
-		entry.Included, entry.Reason, entry.Delivery = true, "", "prepared"
-		if err := s.recordRead(ctx, entry, item.content); err != nil {
-			return "", err
-		}
-		s.snapshot.Budget -= cost
-		item.entry = entry
-		s.selected[entry.Selection] = item
-		return status + "; repository fallback available: " + entry.Selection, nil
+		s.items[console.entry.Order-1].entry.Included = false
+		delete(s.selected, console.entry.Selection)
+		break
 	}
 	return status, nil
 }
