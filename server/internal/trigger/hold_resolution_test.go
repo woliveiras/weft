@@ -60,14 +60,16 @@ func TestHoldHasPendingTrackerWrite(t *testing.T) {
 	}
 }
 
-func TestSnapshotInvalidationUsesTheSharedRoundAllowance(t *testing.T) {
-	h := Hold{}
-	recordSnapshotInvalidation(&h)
-	if h.Round != 1 || h.State != "recheck" || h.Intervention {
-		t.Fatal(h)
+func TestSnapshotInvalidationPreservesClarificationRounds(t *testing.T) {
+	h := Hold{Round: 1}
+	for edits := 1; edits < maxSnapshotEdits; edits++ {
+		recordSnapshotInvalidation(&h)
+		if h.Round != 1 || h.SnapshotEdits != edits || h.State != "recheck" || h.Intervention {
+			t.Fatal(h)
+		}
 	}
 	recordSnapshotInvalidation(&h)
-	if h.Round != maxReadinessRounds || h.State != "operator" || h.Reason != "snapshot_round_limit" || !h.Intervention {
+	if h.Round != 1 || h.SnapshotEdits != maxSnapshotEdits || h.State != "operator" || h.Reason != "snapshot_round_limit" || !h.Intervention {
 		t.Fatal(h)
 	}
 }

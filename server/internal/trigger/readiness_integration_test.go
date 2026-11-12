@@ -646,23 +646,20 @@ func TestRepeatedSnapshotChangesStopReadinessAndPublishOnlyIntervention(t *testi
 				t.Fatal(err)
 			}
 			tr = advance(r, c, t, tr.ID)
-			if len(gh.comments["#1"]) != 0 || tr.Holds[0].Round != 1 {
+			if len(gh.comments["#1"]) != 0 || tr.Holds[0].Round != 0 || tr.Holds[0].SnapshotEdits != 1 {
 				t.Fatalf("first invalidation: %+v", tr.Holds)
 			}
 			first := tr.Holds[0]
-			// Ensure the second assignment also changes the evaluated body.
-			if duringClaim {
-				row["body"] = "Edited before the second assessment."
-			}
 			for range 4 {
 				tr = advance(r, c, t, tr.ID)
 			}
-			if calls != 2 || len(starter.started) != 0 || len(gh.comments["#1"]) != 1 ||
+			if calls != 3 || len(starter.started) != 0 || len(gh.comments["#1"]) != 1 ||
+				tr.Holds[0].Round != 0 || tr.Holds[0].SnapshotEdits != 3 ||
 				tr.Holds[0].Reason != "snapshot_round_limit" || len(row["assignees"].([]map[string]any)) != 0 {
 				t.Fatalf("stale snapshots were not bounded: %d calls, holds %+v, comments %+v", calls, tr.Holds, gh.comments)
 			}
 			if tr.Holds[0].Generation == first.Generation || !tr.Holds[0].OpenedAt.Equal(first.OpenedAt) {
-				t.Fatalf("the second round did not rotate the same hold: %+v -> %+v", first, tr.Holds[0])
+				t.Fatalf("the edit did not rotate the same hold: %+v -> %+v", first, tr.Holds[0])
 			}
 			if _, err := r.Triggers.ResolveHold(t.Context(), tr.ID, first.Key, first.Generation, "operator"); !errors.Is(err, storage.ErrConflict) {
 				t.Fatalf("stale operator action returned %v", err)
@@ -760,5 +757,38 @@ func TestPendingClaimRollbackRunsWithoutReadiness(t *testing.T) {
 				t.Fatalf("rollback not completed: %+v, issue %+v", tr, row)
 			}
 		})
+	}
+}
+
+func TestReadinessEditLeavesBothQuestionRoundsAvailable(t *testing.T) {
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	row := ghIssue(1, "Issue", "weft")
+	gh.issues = []map[string]any{row}
+	r := runner(triggerStore(t), c, "one", gh)
+	r.Tasks = &tasks{}
+	calls := 0
+	r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+		calls++
+		if calls == 1 {
+			row["body"] = "Edited during the first assessment."
+		}
+		return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+	})
+	tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	if tr.Holds[0].Round != 0 || tr.Holds[0].SnapshotEdits != 1 || len(gh.comments) != 0 {
+		t.Fatalf("the stale verdict spent a question: %+v", tr.Holds)
+	}
+	tr = advance(r, c, t, tr.ID)
+	gh.replies["#1"] = append(gh.replies["#1"], ghReply(9, "author", "User", "Here is a partial answer.", c.t.Add(time.Second)))
+	tr = advance(r, c, t, tr.ID)
+	comments := gh.comments["#1"]
+	if tr.Holds[0].Round != 2 || tr.Holds[0].SnapshotEdits != 1 || len(comments) != 2 ||
+		!strings.Contains(comments[0], "round 1 of 2") || !strings.Contains(comments[1], "round 2 of 2") {
+		t.Fatalf("questions: %v, hold: %+v", comments, tr.Holds)
 	}
 }

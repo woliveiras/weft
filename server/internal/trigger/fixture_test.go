@@ -263,7 +263,7 @@ func (t *tracker) request(_ context.Context, connection, kind string, _ int64, m
 			} else {
 				i["assignees"] = []map[string]any{{"login": owner}}
 				if t.editOnAssignment {
-					i["body"] = "Edited during assignment."
+					i["body"] = fmt.Sprintf("Edited during assignment at request %d.", len(t.rest))
 				}
 			}
 			return rawFixture(i)

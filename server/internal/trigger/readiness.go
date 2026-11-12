@@ -15,6 +15,8 @@ import (
 	"github.com/woliveiras/weft/server/internal/tools"
 )
 
+const maxSnapshotEdits = 3
+
 const readinessCapacity = "The trigger has 10 held issues. Resolve a hold before it evaluates new issues."
 
 type Hold struct {
@@ -28,23 +30,24 @@ type Hold struct {
 	CommentAttempts    int        `json:"commentAttempts,omitempty"`
 	RetryCommentAt     *time.Time `json:"retryCommentAt,omitempty"`
 
-	Eligibility  string    `json:"eligibility,omitempty"`
-	Message      string    `json:"message"`
-	Key          string    `json:"key"`
-	URL          string    `json:"url,omitempty"`
-	Reason       string    `json:"reason"`
-	State        string    `json:"state"`
-	Round        int       `json:"round"`
-	OpenedAt     time.Time `json:"openedAt"`
-	RoundAt      time.Time `json:"roundAt"`
-	Publication  string    `json:"publication,omitempty"`
-	Scope        string    `json:"scope"`
-	Evaluated    string    `json:"evaluated,omitempty"`
-	Signal       string    `json:"signal,omitempty"`
-	Questions    []string  `json:"questions,omitempty"`
-	Marker       string    `json:"marker,omitempty"`
-	Intervention bool      `json:"intervention,omitempty"`
-	Removals     []string  `json:"removals,omitempty"`
+	SnapshotEdits int       `json:"snapshotEdits,omitempty"`
+	Eligibility   string    `json:"eligibility,omitempty"`
+	Message       string    `json:"message"`
+	Key           string    `json:"key"`
+	URL           string    `json:"url,omitempty"`
+	Reason        string    `json:"reason"`
+	State         string    `json:"state"`
+	Round         int       `json:"round"`
+	OpenedAt      time.Time `json:"openedAt"`
+	RoundAt       time.Time `json:"roundAt"`
+	Publication   string    `json:"publication,omitempty"`
+	Scope         string    `json:"scope"`
+	Evaluated     string    `json:"evaluated,omitempty"`
+	Signal        string    `json:"signal,omitempty"`
+	Questions     []string  `json:"questions,omitempty"`
+	Marker        string    `json:"marker,omitempty"`
+	Intervention  bool      `json:"intervention,omitempty"`
+	Removals      []string  `json:"removals,omitempty"`
 }
 
 // Legacy holds need an identifier even while readiness is disabled and the
@@ -59,7 +62,7 @@ func (t *Trigger) fillHoldGenerations() {
 }
 
 func nextHoldGeneration(previous, current Hold) string {
-	if previous.Generation == "" || previous.Round != current.Round || previous.Marker != current.Marker {
+	if previous.Generation == "" || previous.Round != current.Round || previous.SnapshotEdits != current.SnapshotEdits || previous.Marker != current.Marker {
 		return domain.NewID("holdgen")
 	}
 	return previous.Generation
@@ -88,7 +91,7 @@ func holdMessage(h Hold) string {
 		}
 	case "operator":
 		if h.Reason == "snapshot_round_limit" {
-			lines = []string{"Weft readiness failure. Repeated issue changes exhausted the readiness allowance. An operator should review the current issue and resolve the hold before it is selected again."}
+			lines = []string{"Weft readiness failure. The issue changed repeatedly during readiness checks and reached the three-edit limit. An operator should review the current issue and resolve the hold before it is selected again."}
 			break
 		}
 		if h.Reason == "failure_round_limit" {
@@ -131,9 +134,11 @@ func ReadinessReason(reason string) string {
 	case "tracker_unavailable":
 		return "The tracker could not verify the current issue or its responses."
 	case "snapshot_round_limit":
-		return "The issue changed repeatedly and exhausted the readiness allowance. Review the current issue and resolve the hold before selecting it again."
+		return "The issue changed repeatedly during readiness checks and reached the three-edit limit. Review the current issue and resolve the hold before selecting it again."
 	case "snapshot_changed":
 		return "The issue changed during readiness evaluation."
+	case "eligibility_changed":
+		return "The tracker state changed during readiness checks. Weft will verify eligibility again."
 	case "evaluation_interrupted":
 		return "Readiness evaluation was interrupted."
 	case "scope_changed":
@@ -468,9 +473,9 @@ func (r *Runner) currentReplies(ctx context.Context, t *Trigger, call Invoker, h
 }
 
 func recordSnapshotInvalidation(h *Hold) {
-	h.Round = min(h.Round+1, maxReadinessRounds)
+	h.SnapshotEdits = min(h.SnapshotEdits+1, maxSnapshotEdits)
 	h.State, h.Reason = "recheck", "snapshot_changed"
-	if h.Round >= maxReadinessRounds {
+	if h.SnapshotEdits >= maxSnapshotEdits {
 		h.State, h.Reason, h.Intervention = "operator", "snapshot_round_limit", true
 	}
 }
@@ -502,9 +507,6 @@ func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Is
 		return false, err
 	}
 	a := r.Assessor.Assess(ctx, t, input)
-	if a.Failure != "" || len(a.Missing) > 0 {
-		return false, r.finishHold(ctx, t, call, h, a, i)
-	}
 	current, err := trackerRead[Issue](ctx, call, trackerGet, trackerArgs{Key: i.Key})
 	if err != nil {
 		return false, r.finishHold(ctx, t, call, h, ReadinessAssessment{Failure: "tracker_unavailable"}, i)
@@ -516,9 +518,15 @@ func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Is
 	if err != nil {
 		return false, r.finishHold(ctx, t, call, h, ReadinessAssessment{Failure: "tracker_unavailable"}, current)
 	}
-	if i.Updated != current.Updated || readinessInput(current, latest) != input || issueReason(t, current) != "" ||
-		!slices.Equal(i.Labels, current.Labels) {
+	if readinessInput(current, latest) != input {
 		return false, r.recheckSnapshot(ctx, t, call, h, current)
+	}
+	if i.Updated != current.Updated || issueReason(t, current) != "" || !slices.Equal(i.Labels, current.Labels) {
+		h.State, h.Reason = "recheck", "eligibility_changed"
+		return false, r.saveHold(ctx, t, h)
+	}
+	if a.Failure != "" || len(a.Missing) > 0 {
+		return false, r.finishHold(ctx, t, call, h, a, current)
 	}
 	current.EvaluatedInput = input
 	outcome, err := r.claimAndStart(ctx, t, call, current)

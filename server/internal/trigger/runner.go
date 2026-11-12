@@ -308,8 +308,12 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 		if err == nil {
 			replies, err = r.currentReplies(ctx, t, call, h, current)
 		}
-		if err != nil || issueReason(t, current) != "" || readinessInput(current, replies) != i.EvaluatedInput {
-			recordSnapshotInvalidation(&h)
+		edited := err == nil && readinessInput(current, replies) != i.EvaluatedInput
+		if err != nil || issueReason(t, current) != "" || edited {
+			h.State, h.Reason = "recheck", "eligibility_changed"
+			if edited {
+				recordSnapshotInvalidation(&h)
+			}
 			h.Publication = "label_pending_only"
 			if errors.Is(err, errTrackerHistoryLimit) {
 				h.State, h.Reason = "operator", "history_limit"
