@@ -139,6 +139,13 @@ only to guidance references. Ordinary tools remain confined to the workdir
 even with a `**` grant. Activity uses the checkout path. The gateway traces and measures it as
 `guidance.reference` and records failed reads as errors.
 
+With `workspace.subdir: src`, a `.agents/**` path grant matches ordinary
+reads under `src/.agents/`. The same grant also matches canonical checkout
+paths under `.agents/` for references in discovered packages outside
+`src`. Use narrower patterns when a grant should cover only particular
+files or skill packages. The ordinary filesystem tool cannot read the
+checkout-root package through that grant.
+
 ## Issue-trigger gateway operations
 
 An issue trigger has the exact reviewed MCP search tool and specific tracker

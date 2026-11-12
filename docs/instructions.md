@@ -155,6 +155,12 @@ A detected mismatch requires a later execution to rediscover the skill.
 Runtimes without progressive support fail before dispatch. Graphs without
 effective discovery retain legacy delivery for console skills.
 
+For an agent running in `src`, a `filesystem.read` path pattern of
+`.agents/**` matches `src/.agents/**` for ordinary reads and can also match
+a discovered checkout-root reference such as
+`.agents/skills/review/references/checklist.md` through `guidance.load`.
+Ordinary filesystem reads remain confined to `src`.
+
 Each body, root instruction or reference is limited to 16 KiB and package
 metadata to 2 KiB. Discovery accepts at most 128 candidates per family and
 128 active catalogue slots per execution. An over-limit family is omitted as a

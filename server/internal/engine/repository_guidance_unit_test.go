@@ -9,6 +9,7 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/instructions"
+	"github.com/woliveiras/weft/server/internal/tools"
 	"github.com/woliveiras/weft/server/internal/workspace"
 )
 
@@ -81,5 +82,22 @@ func TestGuidanceGrantPathPreservesPhysicalWorkdir(t *testing.T) {
 	}
 	if got, ok := guidanceGrantPath(root, sibling, pkg, pkg+"/ref.md", false); ok {
 		t.Fatalf("out-of-workdir reference without subdir allowed: %q", got)
+	}
+}
+
+func TestSubdirGrantMatchesCanonicalRootReference(t *testing.T) {
+	root := t.TempDir()
+	workdir := filepath.Join(root, "src")
+	if err := os.Mkdir(workdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const pkg = ".agents/skills/review"
+	path, ok := guidanceGrantPath(root, workdir, pkg, pkg+"/reference.md", true)
+	grant := domain.ToolGrant{Paths: []string{".agents/**"}}
+	if !ok || tools.CheckPath(grant, path) != nil || tools.CheckPath(grant, ".agents/local.md") != nil {
+		t.Fatalf("grant did not match its two scoped paths: %q", path)
+	}
+	if _, ok := guidanceGrantPath(root, workdir, pkg, ".agents/private.md", true); ok {
+		t.Fatal("path outside the discovered skill was accepted")
 	}
 }

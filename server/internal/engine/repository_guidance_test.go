@@ -635,6 +635,7 @@ func TestRepositoryGuidanceRootPackageException(t *testing.T) {
 	}{
 		{"open grant", "", true},
 		{"glob grant", `, paths: ["**"]`, true},
+		{"subdirectory glob", `, paths: [".agents/**"]`, true},
 		{"package grant", `, paths: [".agents/skills/sample/**"]`, true},
 		{"unrelated grant", `, paths: ["docs/**"]`, false},
 	} {
@@ -647,6 +648,8 @@ func TestRepositoryGuidanceRootPackageException(t *testing.T) {
 				{ID: "link", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample","reference":"link.md"}`)},
 				{ID: "fs-traverse", Name: "filesystem.read", Arguments: json.RawMessage(`{"path":"../root.md"}`)},
 				{ID: "fs-link", Name: "filesystem.read", Arguments: json.RawMessage(`{"path":"link.md"}`)},
+				{ID: "fs-local", Name: "filesystem.read", Arguments: json.RawMessage(`{"path":".agents/local.md"}`)},
+				{ID: "fs-root-agents", Name: "filesystem.read", Arguments: json.RawMessage(`{"path":"../.agents/private.md"}`)},
 				{ID: "fs-ref", Name: "filesystem.read", Arguments: json.RawMessage(`{"path":"../.agents/skills/sample/ref.md"}`)},
 			}}
 			r := newRig(t, openStore(t, dir), memory.New(), dir, "scoped-guidance", func(o *engine.Options) {
@@ -660,6 +663,8 @@ func TestRepositoryGuidanceRootPackageException(t *testing.T) {
 				".agents/skills/sample/SKILL.md": "---\nname: sample\ndescription: Sample skill\n---\nCATALOGUED BODY",
 				ref:                              payload,
 				"root.md":                        "UNRELATED CHECKOUT FILE",
+				"src/.agents/local.md":           "WORKDIR FILE",
+				".agents/private.md":             "UNRELATED CHECKOUT FILE",
 				"src/keep.md":                    "",
 			} {
 				file := filepath.Join(root, name)
@@ -702,6 +707,10 @@ spec:
 				strings.Contains(prompt, "UNRELATED CHECKOUT FILE") || !strings.Contains(prompt, "omitted: invalid_reference") {
 				t.Fatal(prompt)
 			}
+			localAllowed := tc.paths == "" || tc.name == "glob grant" || tc.name == "subdirectory glob"
+			if strings.Contains(prompt, "WORKDIR FILE") != localAllowed {
+				t.Fatal("workdir-relative read did not follow its path grant", prompt)
+			}
 			if tc.allowed && !strings.Contains(prompt, "omitted: unsafe_path") {
 				t.Fatal("package symlink was not rejected", prompt)
 			}
@@ -727,7 +736,7 @@ spec:
 			}); found != tc.allowed {
 				t.Fatal("unexpected successful reference audit", events)
 			}
-			for _, path := range []string{"../root.md", "link.md", "../" + ref} {
+			for _, path := range []string{"../root.md", "link.md", "../" + ref, "../.agents/private.md"} {
 				if !slices.ContainsFunc(events, func(e *domain.Event) bool {
 					return strings.Contains(string(e.Data), `"path":"`+path+`"`) && strings.Contains(string(e.Data), `"outcome":"denied"`)
 				}) {
