@@ -331,7 +331,11 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 			if errors.Is(err, errTrackerHistoryLimit) {
 				h.State, h.Reason = "operator", "history_limit"
 			} else if err != nil {
-				recordReadinessRetry(&h, r.Triggers.now(), "claim_recheck_unavailable", err)
+				now := r.Triggers.now()
+				recordReadinessRetry(&h, now, "claim_recheck_unavailable", err)
+				if deadline := trackerRetryDeadline(now, err); !deadline.IsZero() {
+					h.RetryLabelAt = &deadline
+				}
 			} else if edited && h.State == "operator" {
 				h.prepareComment()
 			}

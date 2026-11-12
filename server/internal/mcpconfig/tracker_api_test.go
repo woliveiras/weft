@@ -2,10 +2,13 @@ package mcpconfig
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/secrets"
 	"github.com/woliveiras/weft/server/internal/storage/fsstore"
@@ -83,5 +86,37 @@ func TestTrackerAPIBindsRevisionAndRejectsRedirectAndCredentialEcho(t *testing.T
 	body, status = `{"body":"`+fixtureCredential+`"}`, 200
 	if raw, _, err := api.Call(t.Context(), view.ID, "github", rev, "GET", path, nil); err == nil || len(raw) != 0 || strings.Contains(err.Error(), fixtureCredential) {
 		t.Fatal("credential echo reached caller")
+	}
+}
+
+func TestGitHubRateLimitMetadata(t *testing.T) {
+	reset := time.Unix(1794484800, 0).UTC()
+	for _, tc := range []struct {
+		name      string
+		remaining string
+		retry     string
+		message   string
+		limited   bool
+		delay     time.Duration
+		deadline  time.Time
+	}{
+		{"primary", "0", "", "API rate limit exceeded for user ID 7.", true, 0, reset},
+		{"secondary", "42", "90", "You have exceeded a secondary rate limit.", true, 90 * time.Second, time.Time{}},
+		{"secondary without headers", "42", "", "You have exceeded a secondary rate limit.", true, 0, time.Time{}},
+		{"retry date", "", reset.Format(http.TimeFormat), "", true, 0, reset},
+		{"ordinary refusal", "42", "", "Resource not accessible by personal access token", false, 0, time.Time{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			headers := make(http.Header)
+			headers.Set("X-RateLimit-Remaining", tc.remaining)
+			headers.Set("X-RateLimit-Reset", strconv.FormatInt(reset.Unix(), 10))
+			headers.Set("Retry-After", tc.retry)
+			raw, _ := json.Marshal(map[string]string{"message": tc.message})
+			err := githubRateLimit(&http.Response{StatusCode: 403, Header: headers, Body: io.NopCloser(bytes.NewReader(raw))})
+			limited, delay, deadline := err.TrackerRateLimit()
+			if limited != tc.limited || delay != tc.delay || !deadline.Equal(tc.deadline) || err.Error() != "tracker API returned HTTP 403" {
+				t.Fatalf("rate limit metadata: %+v", err)
+			}
+		})
 	}
 }

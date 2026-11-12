@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -514,5 +515,84 @@ func TestOperatorResolvesHoldWhileReadinessIsDisabled(t *testing.T) {
 		!strings.Contains(tr.HoldResolutions[1].Reason, "current labels") ||
 		!strings.Contains(tr.HoldResolutions[1].Reason, "assignment") {
 		t.Fatalf("abandoned tracker writes were not recorded: %+v", tr.HoldResolutions)
+	}
+}
+
+func TestGitHubReadinessHonorsRateLimitDeadlines(t *testing.T) {
+	for _, operation := range []string{"labels", "identity", "claim recheck"} {
+		t.Run(operation, func(t *testing.T) {
+			srv, a := setupTriggerApp(t, nil)
+			now := time.Now().UTC().Truncate(time.Second)
+			start := now
+			a.Triggers.Triggers.Now = func() time.Time { return now }
+			model := &readinessModel{verdict: `{"missing":["acceptance"]}`}
+			if operation == "claim recheck" {
+				model.verdict = `{"missing":[]}`
+			}
+			a.Models.Add(llm.ProviderConfig{Name: model.Name(), Type: "mock", DefaultModel: "fixture"}, model)
+			graph := strings.Replace(taskGraph, `"tools":[]`, `"model":{"provider":"fixture-readiness","name":"fixture"},"tools":[]`, 1)
+			if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", graph, nil); c != 201 {
+				t.Fatal(c)
+			}
+			searches, issueReads, limited, posts := 0, 0, 0, 0
+			a.Tools.MustRegister(fixtureTool{name: "mcp.gh.search_issues", calls: &searches, content: `{"items":[` + apiFixtureIssue + `]}`})
+			a.TrackerAPI.Client = &http.Client{Transport: trackerTransport(func(req *http.Request) (*http.Response, error) {
+				path := req.URL.Path
+				headers := make(http.Header)
+				status, body := 200, "{}"
+				switch {
+				case req.Method == "GET" && strings.HasSuffix(path, "/issues/7"):
+					issueReads++
+					body = apiFixtureIssue
+				case req.Method == "POST" && strings.HasSuffix(path, "/comments"):
+					posts++
+				}
+				if (operation == "labels" && req.Method == "POST" && strings.HasSuffix(path, "/labels")) ||
+					(operation == "identity" && path == "/user") ||
+					(operation == "claim recheck" && req.Method == "GET" && strings.HasSuffix(path, "/issues/7") && issueReads >= 3) {
+					limited++
+					status = 403
+					if operation == "labels" {
+						headers.Set("X-RateLimit-Remaining", "0")
+						headers.Set("X-RateLimit-Reset", strconv.FormatInt(start.Add(45*time.Minute).Unix(), 10))
+						body = `{"message":"API rate limit exceeded for user ID 7.","documentation_url":"https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api"}`
+					} else {
+						headers.Set("X-RateLimit-Remaining", "42")
+						headers.Set("Retry-After", "2700")
+						body = `{"message":"You have exceeded a secondary rate limit. Please wait before you try again.","documentation_url":"https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api"}`
+					}
+				}
+				return &http.Response{StatusCode: status, Header: headers, Body: io.NopCloser(strings.NewReader(body))}, nil
+			})}
+			var tr trigger.Trigger
+			if c := call(t, srv, "POST", "/api/v1/triggers", adminTok, "application/json", triggerBody, &tr); c != 201 {
+				t.Fatal(c)
+			}
+			want := start.Add(45 * time.Minute)
+			for i := range 2 {
+				now = start.Add(time.Duration(i) * 16 * time.Minute)
+				a.Triggers.Tick(t.Context())
+				current, err := a.Triggers.Triggers.Get(t.Context(), tr.ID)
+				if err != nil || len(current.Holds) != 1 || current.Claiming != "" || current.CurrentTask != "" || limited != 1 || posts != 0 {
+					t.Fatalf("unexpected tracker retry: %+v, %v, limited=%d posts=%d", current, err, limited, posts)
+				}
+				h := current.Holds[0]
+				var next *time.Time
+				switch operation {
+				case "identity":
+					next = h.RetryCommentAt
+				case "labels":
+					next = h.RetryLabelAt
+				default:
+					next = h.RetryAt
+					if h.RetryLabelAt == nil || !h.RetryLabelAt.Equal(want) {
+						t.Fatalf("rollback ignored the rate limit: %+v", h)
+					}
+				}
+				if next == nil || !next.Equal(want) || h.CommentAttempts != 0 || h.SnapshotEdits != 0 {
+					t.Fatalf("deadline or readiness counters: %+v", h)
+				}
+			}
+		})
 	}
 }

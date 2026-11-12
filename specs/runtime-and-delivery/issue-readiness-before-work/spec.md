@@ -116,7 +116,10 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   verification retry up to three times after the initial failure, with
   one-, two- and four-minute minimum delays. They preserve both readiness
   counters and do not spend comment POST attempts. Exhaustion is visible
-  and requires operator review.
+  and requires operator review. GitHub rate-limit responses extend these
+  backoffs through the applicable Retry-After or primary reset deadline.
+  A 401 ends retries only when a same-connection identity read also
+  returns 401.
 
 ## Acceptance criteria
 

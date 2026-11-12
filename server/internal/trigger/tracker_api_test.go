@@ -119,7 +119,7 @@ func TestJiraVerifiedManualRequeueUsesHistoryAndProjectPermission(t *testing.T) 
 func TestDefinitiveTrackerCommentFailures(t *testing.T) {
 	for _, status := range []int{401, 403, 404, 422, 408, 429, 500, 503} {
 		failure := trackerHTTPFailure{Status: status}
-		want := status < 500 && status != 408 && status != 429
+		want := status < 500 && status != 401 && status != 408 && status != 429
 		if failure.definitive() != want || failure.guidance() == "" {
 			t.Fatalf("wrong disposition for %d", status)
 		}
@@ -161,5 +161,29 @@ func TestJiraCommentScanAdvancesByReturnedRows(t *testing.T) {
 	}
 	if replies, err := readComments(req, "jira", "/issue/APP-1", time.Time{}); err != nil || calls != 2 || len(replies) != 2 {
 		t.Fatalf("short pages skipped rows: %d %v", calls, err)
+	}
+}
+
+func TestTracker401RequiresIdentityConfirmation(t *testing.T) {
+	for _, probe := range []int{200, 401, 503} {
+		requests := 0
+		op := trackerTool{trackerLabels, func(_ context.Context, _, _ string, _ int64, method, path string, _ any) (json.RawMessage, int, error) {
+			requests++
+			if requests == 1 && method == "POST" && strings.HasSuffix(path, "/labels") {
+				return nil, 401, errors.New("fixture unauthorized")
+			}
+			if requests != 2 || method != "GET" || path != "/user" {
+				t.Fatalf("unexpected request %s %s", method, path)
+			}
+			return nil, probe, nil
+		}}
+		tr := &Trigger{ID: "fixture", Source: SourceConfig{Kind: "github", Repository: "acme/app"}, Label: LabelTodo,
+			Consent: Consent{Operations: []string{trackerLabels}}}
+		ctx := context.WithValue(t.Context(), trackerScopeKey{}, tr)
+		res, err := op.Invoke(ctx, &tools.Invocation{Principal: Principal(tr), Args: json.RawMessage(`{"key":"acme/app#7","add":"weft:needs-attention"}`)})
+		var failure trackerHTTPFailure
+		if err != nil || requests != 2 || !errors.As(trackerResultFailure(res, err), &failure) || failure.definitive() != (probe == 401) {
+			t.Fatalf("probe %d: result %+v, %v, requests %d", probe, res, err, requests)
+		}
 	}
 }

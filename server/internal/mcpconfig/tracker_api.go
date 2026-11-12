@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -99,11 +100,66 @@ func (a *TrackerAPI) Call(ctx context.Context, connection, kind string, revision
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return nil, res.StatusCode, fmt.Errorf("tracker API returned HTTP %d", res.StatusCode)
+		failure := trackerAPIError{status: res.StatusCode}
+		if kind == "github" && (res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusTooManyRequests) {
+			failure = githubRateLimit(res)
+		}
+		return nil, res.StatusCode, failure
 	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, maxBody+1))
 	if err != nil || len(raw) > maxBody || containsTransportCredential(credentialContext(ctx, r.View), raw, token) {
 		return nil, res.StatusCode, errors.New("tracker API result rejected")
 	}
 	return raw, res.StatusCode, nil
+}
+
+type trackerAPIError struct {
+	status   int
+	limited  bool
+	delay    time.Duration
+	deadline time.Time
+}
+
+func (e trackerAPIError) Error() string {
+	return fmt.Sprintf("tracker API returned HTTP %d", e.status)
+}
+
+// TrackerRateLimit exposes only normalized retry metadata to the gateway.
+func (e trackerAPIError) TrackerRateLimit() (bool, time.Duration, time.Time) {
+	return e.limited, e.delay, e.deadline
+}
+
+func githubRateLimit(res *http.Response) trackerAPIError {
+	failure := trackerAPIError{status: res.StatusCode}
+	retry := strings.TrimSpace(res.Header.Get("Retry-After"))
+	remaining := strings.TrimSpace(res.Header.Get("X-RateLimit-Remaining"))
+	failure.limited = res.StatusCode == http.StatusTooManyRequests || remaining == "0" || retry != ""
+	if !failure.limited {
+		var body struct {
+			Message string `json:"message"`
+		}
+		raw, err := io.ReadAll(io.LimitReader(res.Body, 8192))
+		if err == nil && json.Unmarshal(raw, &body) == nil {
+			failure.limited = strings.Contains(strings.ToLower(body.Message), "rate limit")
+		}
+	}
+	if !failure.limited {
+		return failure
+	}
+	if seconds, err := strconv.ParseInt(retry, 10, 32); err == nil && seconds >= 0 {
+		failure.delay = time.Duration(seconds) * time.Second
+	} else if deadline, err := http.ParseTime(retry); err == nil {
+		failure.deadline = deadline
+	}
+	// A secondary limit may have a nonzero primary allowance and an
+	// unrelated primary reset. Only the exhausted primary bucket applies.
+	if remaining == "0" {
+		if epoch, err := strconv.ParseInt(res.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil && epoch > 0 {
+			reset := time.Unix(epoch, 0).UTC()
+			if reset.After(failure.deadline) {
+				failure.deadline = reset
+			}
+		}
+	}
+	return failure
 }

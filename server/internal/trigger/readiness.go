@@ -291,6 +291,10 @@ func (r *Runner) publishHoldLabels(ctx context.Context, t *Trigger, call Invoker
 		if h.LabelAttempts >= maxLabelAttempts {
 			return r.failHoldLabels(ctx, t, h, exhausted)
 		}
+		if deadline := trackerRetryDeadline(r.Triggers.now(), err); deadline.After(next) {
+			h.RetryLabelAt = &deadline
+			return r.saveHold(ctx, t, h)
+		}
 		return nil
 	}
 	h.UndoOwner, h.LabelAttempts, h.RetryLabelAt, h.PublicationMessage = "", 0, nil, ""
@@ -321,7 +325,7 @@ func (r *Runner) postHoldComment(ctx context.Context, t *Trigger, call Invoker, 
 		if isDefinitiveTrackerFailure(err) || h.IdentityFailures > maxReadinessRetries {
 			return r.failHoldComment(ctx, t, h, "The tracker comment author could not be verified. Check the connection and resolve the hold.")
 		}
-		h.RetryCommentAt = readinessRetryAt(now, h.IdentityFailures)
+		h.RetryCommentAt = readinessRetryAt(r.Triggers.now(), h.IdentityFailures, err)
 		h.PublicationMessage = "The tracker comment author could not be verified. Weft will retry the lookup after backoff."
 		return r.saveHold(ctx, t, h)
 	}
@@ -353,6 +357,10 @@ func (r *Runner) postHoldComment(ctx context.Context, t *Trigger, call Invoker, 
 	var failure trackerHTTPFailure
 	if errors.As(err, &failure) && failure.definitive() {
 		return r.failHoldComment(ctx, t, h, failure.guidance())
+	}
+	if deadline := trackerRetryDeadline(r.Triggers.now(), err); deadline.After(next) {
+		h.RetryCommentAt = &deadline
+		return r.saveHold(ctx, t, h)
 	}
 	return errors.New("readiness comment delivery is unconfirmed")
 }
@@ -732,8 +740,23 @@ func searchHeldScope(ctx context.Context, src Source, call Invoker, i Issue, sel
 
 const maxReadinessRetries = 3
 
-func readinessRetryAt(now time.Time, failures int) *time.Time {
+func trackerRetryDeadline(now time.Time, err error) time.Time {
+	var failure trackerHTTPFailure
+	if !errors.As(err, &failure) || !failure.RateLimited {
+		return time.Time{}
+	}
+	next := now.Add(max(time.Minute, failure.RetryDelay))
+	if failure.RetryDeadline != nil && failure.RetryDeadline.After(next) {
+		return *failure.RetryDeadline
+	}
+	return next
+}
+
+func readinessRetryAt(now time.Time, failures int, err error) *time.Time {
 	next := now.Add(time.Minute << (failures - 1))
+	if deadline := trackerRetryDeadline(now, err); deadline.After(next) {
+		next = deadline
+	}
 	return &next
 }
 
@@ -762,7 +785,7 @@ func recordReadinessRetry(h *Hold, now time.Time, reason string, err error) {
 		h.State, h.RetryAt = "retry_failed", nil
 		return
 	}
-	h.RetryAt = readinessRetryAt(now, h.RetryFailures)
+	h.RetryAt = readinessRetryAt(now, h.RetryFailures, err)
 }
 
 func (r *Runner) retryReadiness(ctx context.Context, t *Trigger, h Hold, reason string, err error) error {

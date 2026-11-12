@@ -43,7 +43,11 @@ type trackerArgs struct {
 }
 
 type trackerHTTPFailure struct {
-	Status int `json:"status"`
+	Status             int           `json:"status"`
+	RateLimited        bool          `json:"rateLimited,omitempty"`
+	RetryDelay         time.Duration `json:"retryDelay,omitempty"`
+	RetryDeadline      *time.Time    `json:"retryDeadline,omitempty"`
+	CredentialRejected bool          `json:"credentialRejected,omitempty"`
 }
 
 func (e trackerHTTPFailure) Error() string {
@@ -51,6 +55,9 @@ func (e trackerHTTPFailure) Error() string {
 }
 
 func (e trackerHTTPFailure) definitive() bool {
+	if e.RateLimited || e.Status == http.StatusUnauthorized {
+		return e.Status == http.StatusUnauthorized && e.CredentialRejected
+	}
 	return e.Status >= 400 && e.Status < 500 && e.Status != http.StatusRequestTimeout && e.Status != http.StatusTooManyRequests
 }
 
@@ -67,6 +74,30 @@ func (e trackerHTTPFailure) guidance() string {
 	default:
 		return "The tracker rejected the comment. Review the trigger connection and resolve the hold."
 	}
+}
+
+// The transport exposes sanitized rate-limit metadata without passing
+// response headers or bodies across the gateway.
+func trackerFailure(status int, err error) trackerHTTPFailure {
+	failure := trackerHTTPFailure{Status: status}
+	var rate interface {
+		TrackerRateLimit() (bool, time.Duration, time.Time)
+	}
+	if errors.As(err, &rate) {
+		limited, delay, deadline := rate.TrackerRateLimit()
+		failure.RateLimited, failure.RetryDelay = limited, delay
+		if !deadline.IsZero() {
+			failure.RetryDeadline = &deadline
+		}
+	}
+	return failure
+}
+
+func trackerIdentityPath(source SourceConfig) string {
+	if source.Kind == "jira" {
+		return "/ex/jira/" + source.CloudID + "/rest/api/3/myself"
+	}
+	return "/user"
 }
 
 type trackerTool struct {
@@ -125,9 +156,10 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 		return nil, err
 	}
 	var status int
+	var requestErr error
 	request := func(method, path string, body any) (json.RawMessage, int, error) {
 		raw, code, err := t.call(ctx, scope.Source.ConnectionID, scope.Source.Kind, scope.Consent.TrackerRevision, method, path, body)
-		status = code
+		status, requestErr = code, err
 		return raw, code, err
 	}
 	var out any
@@ -144,11 +176,7 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 		}
 		err = changeLabels(request, scope.Source.Kind, path, a)
 	case trackerIdentity:
-		identityPath := "/user"
-		if scope.Source.Kind == "jira" {
-			identityPath = "/ex/jira/" + scope.Source.CloudID + "/rest/api/3/myself"
-		}
-		actor, lookupErr := readJSON[trackerActor](request, http.MethodGet, identityPath, nil)
+		actor, lookupErr := readJSON[trackerActor](request, http.MethodGet, trackerIdentityPath(scope.Source), nil)
 		err = lookupErr
 		out = actor.identity(scope.Source.Kind)
 	case trackerComment:
@@ -168,7 +196,16 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 		}
 	}
 	if err != nil && status >= 400 && status <= 599 {
-		failure := trackerHTTPFailure{Status: status}
+		failure := trackerFailure(status, requestErr)
+		if status == http.StatusUnauthorized {
+			// Confirm on the same scoped connection. Never repeat a write
+			// or return the identity lookup result as the original response.
+			_, probeStatus, probeErr := request(http.MethodGet, trackerIdentityPath(scope.Source), nil)
+			failure.CredentialRejected = probeStatus == http.StatusUnauthorized
+			if probe := trackerFailure(probeStatus, probeErr); probe.RateLimited {
+				failure.RateLimited, failure.RetryDelay, failure.RetryDeadline = true, probe.RetryDelay, probe.RetryDeadline
+			}
+		}
 		data, _ := json.Marshal(failure)
 		return &tools.Result{IsError: true, Content: failure.Error(), Data: data}, nil
 	}
