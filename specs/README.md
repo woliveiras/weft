@@ -11,7 +11,7 @@ validation needs separate authorization.
 
 New specifications live at `specs/<area>/<slug>/spec.md`, with a sibling
 `matrix.md` and an `evidence.md` when durable evidence is available. Use a
-lowercase kebab-case slug that describes the capability. The 33 historical
+lowercase kebab-case slug that describes the capability. The numbered
 capability specifications use the following area prefixes and three-digit
 sequences. IDs and slugs remain stable after assignment.
 
@@ -20,7 +20,7 @@ sequences. IDs and slugs remain stable after assignment.
 | `product-and-tasks` | `TASK-001`–`TASK-008` | Release contracts, console navigation, graph editing, Activity, prompt tasks, consent, admission, and registered projects |
 | `workspaces-and-environments` | `ENV-001`–`ENV-009` | Repository imports, workspace review, journal, human review, Docker isolation, capacity, definitions, build/reuse, and network policy |
 | `providers-and-integrations` | `INT-001`–`INT-008` | Built-in inference plugins, adapters, external plugins, budgets, MCP invocation, MCP OAuth, vendor profiles, and hosting |
-| `runtime-and-delivery` | `RUN-001`–`RUN-006` | Steering, delegation, native coding, evaluation, SCM, and issue triggers |
+| `runtime-and-delivery` | `RUN-001`–`RUN-007` | Steering, delegation, native coding, evaluation, SCM, issue triggers, and issue readiness |
 | `installation-and-operations` | `OPS-001`–`OPS-002` | Compose and standalone installations |
 
 Keep existing specification IDs and paths. Use `implemented`, `in-progress`,
@@ -105,6 +105,10 @@ The [historical source map](./historical-source-map.md) records the migration of
 
 - [RUN-002 — Dynamic Delegation and Execution Trees](./runtime-and-delivery/dynamic-delegation-and-execution-trees/spec.md) — `in-progress`. Run bounded native children under inherited grants and preserve execution-tree control and token accounting.
 - [RUN-005 — Gateway-mediated Source Control Delivery](./runtime-and-delivery/gateway-mediated-source-control-delivery/spec.md) — `in-progress`. Push and open pull requests through the reviewed SCM gateway with task-scoped credentials and evidence.
+
+### Planned
+
+- [RUN-007 — Issue Readiness Before Work](./runtime-and-delivery/issue-readiness-before-work/spec.md) — `planned`, pending maintainer review. Evaluate issues before claim, request clarification and expose held issues in Activity and trigger state.
 
 ## Installation and operations
 
