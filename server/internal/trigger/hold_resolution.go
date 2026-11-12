@@ -1,6 +1,7 @@
 package trigger
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
@@ -46,6 +47,17 @@ func holdHasPendingWrite(h Hold) bool {
 }
 
 const abandonTrackerWriteWarning = "The tracker keeps its current labels (including any selection, weft:wip, or weft:needs-attention labels) and assignment. Review them on the issue."
+const abandonTrackerCommentWarning = "The tracker keeps its current labels and assignment, including any weft:needs-attention label. The readiness comment has not been published."
+
+func holdAbandonmentWarning(h Hold) string {
+	if h.Publication == "label_applied" {
+		return abandonTrackerCommentWarning
+	}
+	if holdHasPendingWrite(h) || h.Publication == "label_failed" {
+		return abandonTrackerWriteWarning
+	}
+	return ""
+}
 
 // ResolveHold serializes operator resolution with polling, including tracker
 // write-back. The generation prevents a stale console action from resolving
@@ -79,11 +91,11 @@ func (m Manager) resolveHold(ctx context.Context, id, key, generation, actor str
 		}
 		h := current.Holds[index]
 		reason := "An operator resolved the readiness hold."
-		if holdHasPendingWrite(h) || h.Publication == "label_failed" {
+		if warning := holdAbandonmentWarning(h); warning != "" {
 			if !force {
-				return fmt.Errorf("%w: force resolution to abandon the tracker update. %s", storage.ErrConflict, abandonTrackerWriteWarning)
+				return fmt.Errorf("%w: force resolution to abandon the tracker update. %s", storage.ErrConflict, warning)
 			}
-			reason = "An operator abandoned the tracker update and resolved the readiness hold. " + abandonTrackerWriteWarning
+			reason = "An operator abandoned the tracker update and resolved the readiness hold. " + warning
 		}
 		recordHoldResolution(current, index, reason, actor, m.now())
 		return nil
@@ -111,17 +123,19 @@ func (r *Runner) releaseHold(ctx context.Context, t *Trigger, h Hold, reason str
 			current.Consent.RecordedAt != t.Consent.RecordedAt || index < 0 {
 			return errTriggerChanged
 		}
+		now := r.Triggers.now()
 		if retainProgress {
 			if current.RetainedReadiness == nil {
 				current.RetainedReadiness = make(map[string]ReadinessProgress)
 			}
-			progress := ReadinessProgress{Round: h.Round, SnapshotEdits: h.SnapshotEdits, Intervention: h.Intervention}
+			progress := ReadinessProgress{Round: h.Round, SnapshotEdits: h.SnapshotEdits, Intervention: h.Intervention, RetainedAt: now}
 			if requiresOperator(h) {
 				progress.State, progress.Reason = h.State, h.Reason
 			}
 			current.RetainedReadiness[readinessProgressKey(current, h.Key)] = progress
+			current.pruneRetainedReadiness(now)
 		}
-		recordHoldResolution(current, index, reason, "system:trigger", r.Triggers.now())
+		recordHoldResolution(current, index, reason, "system:trigger", now)
 		return nil
 	})
 	if err == nil {
@@ -134,13 +148,62 @@ func (r *Runner) releaseHold(ctx context.Context, t *Trigger, h Hold, reason str
 // ReadinessProgress preserves the allowances when an automatically released
 // issue is later selected again for the same workflow.
 type ReadinessProgress struct {
-	Round         int    `json:"round"`
-	SnapshotEdits int    `json:"snapshotEdits,omitempty"`
-	Intervention  bool   `json:"intervention,omitempty"`
-	State         string `json:"state,omitempty"`
-	Reason        string `json:"reason,omitempty"`
+	RetainedAt    time.Time `json:"retainedAt,omitzero"`
+	Round         int       `json:"round"`
+	SnapshotEdits int       `json:"snapshotEdits,omitempty"`
+	Intervention  bool      `json:"intervention,omitempty"`
+	State         string    `json:"state,omitempty"`
+	Reason        string    `json:"reason,omitempty"`
 }
 
 func readinessProgressKey(t *Trigger, key string) string {
 	return DedupKey(t, Issue{Source: t.Source.Kind, Key: key})
+}
+
+const (
+	retainedReadinessLimit = 100
+	retainedReadinessAge   = 30 * 24 * time.Hour
+)
+
+func (p ReadinessProgress) expired(now time.Time) bool {
+	return !p.RetainedAt.IsZero() && !now.Before(p.RetainedAt.Add(retainedReadinessAge))
+}
+
+func (t *Trigger) needsReadinessPrune(now time.Time) bool {
+	if len(t.RetainedReadiness) > retainedReadinessLimit {
+		return true
+	}
+	for _, progress := range t.RetainedReadiness {
+		if progress.RetainedAt.IsZero() || progress.expired(now) {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *Trigger) pruneRetainedReadiness(now time.Time) {
+	for key, progress := range t.RetainedReadiness {
+		if progress.expired(now) {
+			delete(t.RetainedReadiness, key)
+		} else if progress.RetainedAt.IsZero() {
+			progress.RetainedAt = now
+			t.RetainedReadiness[key] = progress
+		}
+	}
+	if len(t.RetainedReadiness) <= retainedReadinessLimit {
+		return
+	}
+	keys := make([]string, 0, len(t.RetainedReadiness))
+	for key := range t.RetainedReadiness {
+		keys = append(keys, key)
+	}
+	slices.SortFunc(keys, func(a, b string) int {
+		if byDate := t.RetainedReadiness[a].RetainedAt.Compare(t.RetainedReadiness[b].RetainedAt); byDate != 0 {
+			return byDate
+		}
+		return cmp.Compare(a, b)
+	})
+	for _, key := range keys[:len(keys)-retainedReadinessLimit] {
+		delete(t.RetainedReadiness, key)
+	}
 }

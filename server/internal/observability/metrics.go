@@ -25,6 +25,7 @@ var (
 	ActivitySeconds           = promauto.NewHistogram(prometheus.HistogramOpts{Namespace: ns, Name: "activity_build_duration_seconds", Help: "Latency of building one Activity view response."})
 	ActivityHealthSeconds     = promauto.NewHistogram(prometheus.HistogramOpts{Namespace: ns, Name: "activity_health_build_duration_seconds", Help: "Latency of building one Activity health response."})
 	TriggerReadiness          = promauto.NewCounterVec(prometheus.CounterOpts{Namespace: ns, Name: "trigger_readiness_total", Help: "Issue readiness assessments by bounded outcome."}, []string{"outcome"})
+	TriggerReadinessFailures  = promauto.NewCounterVec(prometheus.CounterOpts{Namespace: ns, Name: "trigger_readiness_failures_total", Help: "Issue readiness holds entering label_failed, retry_failed or comment_failed."}, []string{"outcome"})
 	TriggerReadinessSeconds   = promauto.NewHistogram(prometheus.HistogramOpts{Namespace: ns, Name: "trigger_readiness_duration_seconds", Help: "Issue readiness assessment latency."})
 	TriggerRuns               = promauto.NewCounterVec(prometheus.CounterOpts{Namespace: ns, Name: "trigger_runs_total", Help: "Issue trigger runs by bounded outcome."}, []string{"outcome"})
 	TriggerSeconds            = promauto.NewHistogram(prometheus.HistogramOpts{Namespace: ns, Name: "trigger_run_duration_seconds", Help: "Issue trigger run latency."})

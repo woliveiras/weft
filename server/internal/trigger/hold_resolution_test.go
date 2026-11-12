@@ -1,6 +1,7 @@
 package trigger
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -180,5 +181,29 @@ func TestEligibilityChangesShareTheEditCounter(t *testing.T) {
 	if h.SnapshotEdits != 3 || h.Round != 1 || h.Reason != "eligibility_edit_limit" || !requiresOperator(h) ||
 		strings.Contains(holdMessage(h), "changed repeatedly") {
 		t.Fatal(h)
+	}
+}
+
+func TestRetainedReadinessExpiresAndKeepsNewestEntries(t *testing.T) {
+	now := time.Now().UTC()
+	tr := &Trigger{RetainedReadiness: map[string]ReadinessProgress{
+		"expired": {RetainedAt: now.Add(-retainedReadinessAge)},
+		"legacy":  {Round: 2},
+	}}
+	for i := range retainedReadinessLimit + 1 {
+		tr.RetainedReadiness[fmt.Sprint(i)] = ReadinessProgress{RetainedAt: now.Add(time.Duration(i-retainedReadinessLimit) * time.Minute)}
+	}
+	if !tr.needsReadinessPrune(now) {
+		t.Fatal("overflow and expired entries were not detected")
+	}
+	tr.pruneRetainedReadiness(now)
+	if _, ok := tr.RetainedReadiness["expired"]; ok || len(tr.RetainedReadiness) != retainedReadinessLimit ||
+		!tr.RetainedReadiness["legacy"].RetainedAt.Equal(now) {
+		t.Fatalf("retention bounds or legacy age not applied: %+v", tr.RetainedReadiness)
+	}
+	for _, oldest := range []string{"0", "1"} {
+		if _, ok := tr.RetainedReadiness[oldest]; ok {
+			t.Fatalf("oldest entry %s was kept", oldest)
+		}
 	}
 }

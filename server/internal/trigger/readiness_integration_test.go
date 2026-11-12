@@ -1260,3 +1260,30 @@ func TestReadinessBoundsEligibilityChangesDuringEvaluation(t *testing.T) {
 		t.Fatalf("missing intervention label: %v", labels)
 	}
 }
+
+func TestPollingMaintenancePrunesExpiredReadinessOnPausedTrigger(t *testing.T) {
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	r := runner(triggerStore(t), c, "one", gh)
+	tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Triggers.Pause(t.Context(), tr.ID, "fixture paused", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Triggers.Update(t.Context(), tr.ID, "fixture", func(t *trigger.Trigger) error {
+		t.RetainedReadiness = map[string]trigger.ReadinessProgress{
+			"expired": {Round: 2, RetainedAt: c.t.Add(-30 * 24 * time.Hour)},
+			"recent":  {Round: 1, RetainedAt: c.t.Add(-time.Hour)},
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.RetainedReadiness) != 1 || tr.RetainedReadiness["recent"].Round != 1 ||
+		tr.State != trigger.Paused || tr.LastRunAt != nil || len(gh.calls) != 0 || len(gh.rest) != 0 {
+		t.Fatalf("maintenance dispatched polling or failed to prune: %+v", tr)
+	}
+}

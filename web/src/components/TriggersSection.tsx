@@ -15,6 +15,15 @@ function emptyInput(graph: Graph): TriggerInput {
   return { name: '', workflow: graph.metadata.id, nodeId: first, resultNodeId: '', source: { kind: 'github', connectionId: '', repository: '' }, label: 'weft:todo', owner: '', intervalMinutes: 15, authorizationMode: 'ask' };
 }
 
+function holdResolutionWarning(hold: NonNullable<Trigger['holds']>[number]): string | undefined {
+  if (hold.publication === 'label_applied') {
+    return 'Abandon the readiness comment and resolve this hold? The tracker keeps its current labels and assignment, including any weft:needs-attention label. The readiness comment has not been published.';
+  }
+  if (hold.undoOwner || hold.publication === 'label_pending' || hold.publication === 'label_pending_only' || hold.publication === 'label_failed') {
+    return 'Abandon the tracker update and resolve this hold? The tracker keeps its current labels (including any selection, weft:wip, or weft:needs-attention labels) and assignment. Review them on the issue.';
+  }
+}
+
 /** Issue triggers of a saved workflow: labelled issues start tasks under the consent of the administrator who saves or resumes them. */
 export function TriggersSection({ graph, role }: { graph: Graph; role?: string }) {
   const list = useAsync(() => api.triggers(graph.metadata.id), [graph.metadata.id]);
@@ -70,12 +79,12 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
       setError(errorMessage(e));
     }
   };
-  const resolve = async (id: string, key: string, generation: string, force: boolean) => {
-    if (force && !confirm('Abandon the tracker update and resolve this hold? The tracker keeps its current labels (including any selection, weft:wip, or weft:needs-attention labels) and assignment. Review them on the issue.')) return;
+  const resolve = async (id: string, key: string, generation: string, warning?: string) => {
+    if (warning && !confirm(warning)) return;
     setError(undefined);
     setResolving(`${id}:${key}`);
     try {
-      await api.resolveTriggerHold(id, key, generation, force);
+      await api.resolveTriggerHold(id, key, generation, Boolean(warning));
       await list.reload();
     } catch (e) {
       setError(errorMessage(e));
@@ -125,14 +134,14 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
             {t.readinessBlock && <p role="status">{t.readinessBlock}</p>}
             {Boolean(t.holds?.length) && <ul aria-label="Held issues">
               {t.holds?.map(h => {
-                const force = Boolean(h.undoOwner) || h.publication === 'label_pending' || h.publication === 'label_pending_only' || h.publication === 'label_failed';
+                const warning = holdResolutionWarning(h);
                 return <li key={h.key}>
-                  {h.url ? <a href={h.url}>{h.key}</a> : h.key} · round {h.round} · {h.message || h.reason}
+                  {h.url ? <a href={h.url}>{h.key}</a> : h.key} · round {h.round} · {h.message || h.reason} · edits {h.snapshotEdits ?? 0} of 3
                   {h.eligibility && ` The issue ${h.eligibility}.`}
                   {h.publicationMessage && ` ${h.publicationMessage}`}
                   {h.publication === 'comment_pending' && ' Tracker comment delivery is unconfirmed.'}
                   {(h.publication === 'label_pending' || h.publication === 'label_pending_only') && ' Tracker label update is pending.'}
-                  {canPreview && <Btn small disabled={resolving !== undefined} onClick={() => void resolve(t.id, h.key, h.generation, force)}>{force ? 'Force resolve hold' : 'Resolve hold'}</Btn>}
+                  {canPreview && <Btn small disabled={resolving !== undefined} onClick={() => void resolve(t.id, h.key, h.generation, warning)}>{warning ? 'Force resolve hold' : 'Resolve hold'}</Btn>}
                 </li>;
               })}
             </ul>}

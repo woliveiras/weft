@@ -167,3 +167,42 @@ used fixture accounts and trackers.
   representations of the same instant compare equal, and verify the
   transition from visible index lag to REST signal processing and then
   to query-confirmed admission.
+
+## Independent review of 30bbaa1 through 6ce5470
+
+Fixture verification on 2026-11-12.
+
+- The HTTP transport and runner fixtures exercised GitHub primary and
+  secondary 403 responses and verified retry deadlines for label writes,
+  claim rereads and identity lookups. The 401 unit fixture verified that
+  only a confirming identity 401 makes the rejection definitive.
+- Timestamp comparisons used equivalent UTC instants. After three
+  lagging polls, the GitHub runner fixture processed an author response
+  and a verified maintainer requeue through REST in separate cases.
+  Claim waited for query verification and a fresh verdict.
+- The D-10 eligibility fixture reached operator intervention at three
+  discarded evaluations without using a clarification round. The 404
+  fixture released a confirmed hold and recorded the issue-not-found
+  reason and `system:trigger` actor in Activity and the event stream.
+- Retention tests covered the 30-day boundary, the 100-entry limit and
+  paused-trigger maintenance. Persisted failure transitions emitted one
+  metric and one structured log per outcome. The web and Chromium tests
+  verified the edit count and the cancel and confirm paths when a
+  readiness comment remains unpublished after the label write.
+
+| Command | Result |
+| --- | --- |
+| `go test -count=1 ./internal/trigger ./internal/observability ./internal/api ./internal/activity ./internal/mcpconfig` | All five packages passed. |
+| `go test -count=1 -p 1 ./...` | The full Go suite passed. |
+| `go test -count=1 ./internal/engine` twice | Both runs passed (30.622 s and 30.262 s). |
+| `./scripts/go.sh vet ./...` and `gofmt -l .` in `server/` | Vet passed. Gofmt listed no files. |
+| `GOOS=linux CGO_ENABLED=0 go build ./...` and `GOOS=darwin CGO_ENABLED=0 go build ./...` | Both arm64 builds passed. |
+| `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed the disposable browser fixture tests. |
+| `./node_modules/.bin/vitest run` in `web/` | 446 tests passed in 88 files. |
+| `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/tsc --project tsconfig.e2e.json` in `web/` | Both type checks passed. |
+| `./node_modules/.bin/playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` in `web/` | Four trigger and three Activity scenarios passed, including cancel and confirm for forced resolution. |
+
+Go used cached Docker images with pulls disabled. Browser verification
+used the installed web tools and Chromium. The browser fixture built the
+production web bundle and a disposable Darwin backend. All tracker
+operations used fixtures.

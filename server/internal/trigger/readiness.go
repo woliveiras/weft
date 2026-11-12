@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/observability"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/tools"
 )
@@ -179,6 +180,8 @@ func (r *Runner) saveHold(ctx context.Context, t *Trigger, h Hold) error {
 
 func (r *Runner) saveHoldState(ctx context.Context, t *Trigger, h Hold, rollback bool) error {
 	h.Message = h.Description()
+	outcome := holdFailureOutcome(h)
+	transition := false
 	current, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
 		if current.State != t.State || current.ReadinessDisabled != t.ReadinessDisabled || current.Consent.Scope != t.Consent.Scope || current.Consent.RecordedAt != t.Consent.RecordedAt {
 			return errTriggerChanged
@@ -190,6 +193,7 @@ func (r *Runner) saveHoldState(ctx context.Context, t *Trigger, h Hold, rollback
 			current.Claiming, current.ClaimAdmission = "", ""
 		}
 		idx := current.holdIndex(h.Key)
+		transition = outcome != "" && (idx < 0 || holdFailureOutcome(current.Holds[idx]) != outcome)
 		if idx >= 0 {
 			h.Generation = nextHoldGeneration(current.Holds[idx], h)
 			current.Holds[idx] = h
@@ -208,8 +212,25 @@ func (r *Runner) saveHoldState(ctx context.Context, t *Trigger, h Hold, rollback
 	})
 	if err == nil {
 		t.Holds, t.ReadinessBlock, t.RetainedReadiness = current.Holds, current.ReadinessBlock, current.RetainedReadiness
+		if transition {
+			observability.TriggerReadinessFailures.WithLabelValues(outcome).Inc()
+			r.log().WarnContext(ctx, "issue readiness failed", "trigger", t.ID, "outcome", outcome)
+		}
 	}
 	return err
+}
+
+func holdFailureOutcome(h Hold) string {
+	switch h.Publication {
+	case "label_failed":
+		return "label_failed"
+	case "comment_failed":
+		return "comment_failed"
+	}
+	if h.State == "retry_failed" {
+		return "retry_failed"
+	}
+	return ""
 }
 
 func trackerRead[T any](ctx context.Context, call Invoker, name string, args trackerArgs) (T, error) {

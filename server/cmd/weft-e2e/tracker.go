@@ -74,6 +74,23 @@ func prepareReadinessFixture(ctx context.Context, a *app.App) error {
 	if len(tr.Holds) != 1 || tr.Holds[0].Round != 1 || tr.Holds[0].Publication != "confirmed" {
 		return errors.New("readiness fixture was not held with a confirmed question")
 	}
-	_, err = a.Triggers.Triggers.Pause(ctx, tr.ID, "Fixture waiting for clarification.", "e2e-fixture")
+	if _, err := a.Triggers.Triggers.Pause(ctx, tr.ID, "Fixture waiting for clarification.", "e2e-fixture"); err != nil {
+		return err
+	}
+	pending, err := a.Triggers.Triggers.Create(ctx, trigger.Input{Name: "Unpublished readiness fixture", Workflow: "git-inspect", NodeID: "worker",
+		Source: tr.Source}, "e2e-fixture")
+	if err != nil {
+		return err
+	}
+	if _, err := a.Triggers.Triggers.Pause(ctx, pending.ID, "Fixture waiting for comment publication.", "e2e-fixture"); err != nil {
+		return err
+	}
+	_, err = a.Triggers.Triggers.Update(ctx, pending.ID, "e2e-fixture", func(t *trigger.Trigger) error {
+		hold := tr.Holds[0]
+		hold.Key, hold.URL, hold.Generation, hold.CommentID = "acme/app#13", "", "", ""
+		hold.Publication, hold.SnapshotEdits = "label_applied", 2
+		t.Holds = []trigger.Hold{hold}
+		return nil
+	})
 	return err
 }

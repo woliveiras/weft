@@ -77,7 +77,7 @@ func (r *Runner) Tick(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if !Due(t, now) && !pausedRollbackDue(t, now) {
+		if !Due(t, now) && !pausedRollbackDue(t, now) && !t.needsReadinessPrune(now) {
 			continue
 		}
 		r.runOne(ctx, t.ID)
@@ -92,8 +92,20 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 	}
 	defer func() { _ = r.Store.ReleaseLease(context.WithoutCancel(ctx), key, r.Instance) }()
 	t, err := r.Triggers.Get(ctx, id)
-	if err != nil || (!Due(t, r.Triggers.now()) && !pausedRollbackDue(t, r.Triggers.now())) {
-		return // changed or ran elsewhere meanwhile
+	if err != nil {
+		return
+	}
+	now := r.Triggers.now()
+	if !Due(t, now) && !pausedRollbackDue(t, now) {
+		if t.needsReadinessPrune(now) {
+			if _, err := r.Triggers.Update(ctx, id, "system:trigger", func(current *Trigger) error {
+				current.pruneRetainedReadiness(now)
+				return nil
+			}); err != nil {
+				r.log().ErrorContext(ctx, "retained readiness progress could not be pruned", "trigger", id, "err", err)
+			}
+		}
+		return
 	}
 	started := time.Now()
 	pollCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
@@ -106,10 +118,11 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 	}
 	observability.TriggerRuns.WithLabelValues(outcome).Inc()
 	observability.TriggerSeconds.Observe(time.Since(started).Seconds())
-	now := r.Triggers.now()
+	now = r.Triggers.now()
 	next := now.Add(time.Duration(t.IntervalMinutes) * time.Minute)
 	if _, uerr := r.Triggers.Update(ctx, id, "system:trigger", func(t *Trigger) error {
 		t.LastRunAt, t.NextRunAt = &now, &next
+		t.pruneRetainedReadiness(now)
 		t.LastError = ""
 		if search.attempted {
 			t.SearchDeferredReason = ""
@@ -218,7 +231,7 @@ func (r *Runner) step(ctx context.Context, t *Trigger, search *githubSearchPoll)
 		return r.claimAndStart(ctx, t, call, i)
 	}
 	h := Hold{Key: i.Key, URL: i.URL, Scope: holdScope(t), OpenedAt: r.Triggers.now()}
-	if progress, ok := t.RetainedReadiness[readinessProgressKey(t, i.Key)]; ok {
+	if progress, ok := t.RetainedReadiness[readinessProgressKey(t, i.Key)]; ok && !progress.expired(r.Triggers.now()) {
 		h.Round, h.SnapshotEdits, h.Intervention = progress.Round, progress.SnapshotEdits, progress.Intervention
 		if progress.State != "" {
 			h.State, h.Reason, h.Publication = progress.State, progress.Reason, "label_pending_only"

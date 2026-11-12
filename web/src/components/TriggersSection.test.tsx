@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Graph, Trigger } from '../api/types';
 import { apiError, fakeApi } from '../test/fakeApi';
 import { TriggersSection } from './TriggersSection';
@@ -66,6 +66,37 @@ describe('TriggersSection', () => {
       name: 'Ready', workflow: 'factory', nodeId: 'planner', resultNodeId: 'integrator', label: 'weft:todo', intervalMinutes: 15, authorizationMode: 'ask',
       source: { kind: 'github', connectionId: 'gh-mcp', repository: 'acme/app' }, scmConnection: 'gh',
     });
+  });
+
+  it.each([
+    ['label_failed', 'current labels'],
+    ['label_applied', 'readiness comment has not been published'],
+  ])('requires confirmation to force resolve %s', async (publication, warning) => {
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    try {
+      let list: Trigger[] = [{
+        ...paused, holds: [{ generation: 'gen-1', key: 'APP-7', reason: 'incomplete', message: 'Waiting', round: 1, snapshotEdits: 2, publication }],
+      }];
+      const path = '/api/v1/triggers/trg_1/resolve-hold';
+      const api = fakeApi({
+        'GET /api/v1/triggers': () => list,
+        'GET /api/v1/scm/connections': () => [],
+        [`POST ${path}`]: () => { list = [paused]; return paused; },
+      });
+      const user = userEvent.setup();
+      render(<TriggersSection graph={graph} role="operator" />);
+      const force = await screen.findByRole('button', { name: 'Force resolve hold' });
+      expect(screen.getByRole('list', { name: 'Held issues' }).textContent).toContain('edits 2 of 3');
+      await user.click(force);
+      expect(confirmation).toHaveBeenCalledWith(expect.stringContaining(warning));
+      expect(api.find('POST', path)).toHaveLength(0);
+      await user.click(force);
+      await waitFor(() => expect(api.find('POST', path)).toHaveLength(1));
+      expect(api.find('POST', path)[0].body).toEqual({ key: 'APP-7', generation: 'gen-1', force: true });
+      await waitFor(() => expect(screen.queryByRole('list', { name: 'Held issues' })).toBeNull());
+    } finally {
+      confirmation.mockRestore();
+    }
   });
 
   it('keeps viewers read-only', async () => {

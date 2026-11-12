@@ -9,7 +9,7 @@ risk_domains: [prompt injection, authorization, external write-back, budget, rep
 reversibility: Pause the trigger under RUN-006; review held issues before changing the readiness policy or resuming.
 change_surfaces: [trigger configuration and runner, tracker adapters, trigger state, Activity, model gateway]
 contracts: [polling eligibility, reviewed trigger consent, bounded pre-task evaluation, issue state write-back]
-review_policy: The maintainer approved D-01 through D-09 on 2026-11-12. Qualify against fixtures.
+review_policy: The maintainer approved D-01 through D-10 on 2026-11-12. Qualify against fixtures.
 navigation: [specs/README.md, specs/runtime-and-delivery/issue-readiness-before-work/matrix.md]
 documentation: Update trigger setup, API, Activity and authorization docs with the approved behavior when delivered.
 authority:
@@ -90,7 +90,10 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   reevaluation. Claim still requires a verified query match and a fresh
   verdict. Deferrals preserve the hold. A later
   selection under the same issue and workflow keeps its round and edit
-  counts after an automatic query-based release.
+  counts after an automatic query-based release. Retain progress for
+  30 days from release and keep at most the 100 most recent entries per
+  trigger. Legacy entries without a timestamp start aging on first
+  maintenance. Polling maintenance also prunes paused triggers.
 - Issue bodies, comments and replies are untrusted data. They can describe
   desired behavior within the existing scope. They confer no tool grant,
   approval, credential, repository access or change of trigger consent.
@@ -116,12 +119,15 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   An existing claim rollback can finish while paused or disabled if the
   current consent still covers it. The operator can explicitly abandon an
   unfinished write by confirming that the planned label and assignment
-  changes may remain incomplete. The forced resolution is audited.
+  changes may remain incomplete. Resolving a hold after the label applied
+  and before the comment was published also requires confirmation. The
+  warning identifies the waiting label and unpublished comment. Forced
+  resolution is audited.
   Transient readiness reads, admission coordination and comment author
   verification retry up to three times after the initial failure, with
   one-, two- and four-minute minimum delays. They preserve both readiness
   counters and do not spend comment POST attempts. Exhaustion is visible
-  and requires operator review. GitHub rate-limit responses extend these
+  and requires operator review. [GitHub rate-limit responses](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#exceeding-the-rate-limit) extend these
   backoffs through the applicable Retry-After or primary reset deadline.
   A 401 ends retries only when a same-connection identity read also
   returns 401.
@@ -170,7 +176,11 @@ Ordinary waiting and an evaluation or write-back failure are distinguishable
 after a reload or restart. Access follows the existing console read roles.
 The views and audit expose bounded diagnostics without copying raw tracker
 payloads or secrets. Structured logs and evaluation outcome and latency
-metrics use bounded categories and carry no issue content. Partial tracker
+metrics use bounded categories and carry no issue content. Trigger details
+show the edit count. A terminal label, retry or comment failure logs a
+structured transition and increments `weft_trigger_readiness_failures_total`
+with the bounded outcome `label_failed`, `retry_failed` or
+`comment_failed`. Partial tracker
 writes or failed persistence cannot report successful publication or allow
 admission.
 
