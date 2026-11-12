@@ -187,3 +187,17 @@ func TestSchemasOnlyGranted(t *testing.T) {
 		}
 	}
 }
+
+func TestGuidanceReferenceChecksCheckoutRelativeGrant(t *testing.T) {
+	gw := NewGateway(Builtin(BuiltinConfig{}), nil, nil)
+	const ref = ".agents/skills/sample/ref.md"
+	p := principal(t.TempDir()+"/src", domain.ToolGrant{Name: "filesystem.read", Paths: []string{ref}})
+	called := false
+	read := func() { called = true }
+	if _, err := gw.ReadGuidanceReference(t.Context(), p, "src/"+ref, read); !errors.Is(err, ErrDenied) || called {
+		t.Fatalf("subdirectory path should be denied before opening, got %v", err)
+	}
+	if res, err := gw.ReadGuidanceReference(t.Context(), p, ref, read); err != nil || res.IsError || !called {
+		t.Fatalf("checkout path should be allowed, got %+v, %v", res, err)
+	}
+}

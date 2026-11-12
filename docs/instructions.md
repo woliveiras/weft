@@ -131,7 +131,9 @@ The prompt preamble identifies checkout sources. Each source is framed with
 a header and closing line. Every payload line is quoted, with control line
 separators escaped, so source text cannot introduce a header, closer or task.
 Reference reads use the existing `filesystem.read` gateway and its path
-constraints, rate limits and approvals. They are distinct from ordinary
+constraints, rate limits and approvals. For guidance references, path grants
+match paths relative to the checkout root, including when the agent runs in a
+configured `workspace.subdir`. They are distinct from ordinary
 file reads. The loader rechecks the live checkout identity and metadata.
 A detected mismatch requires a later execution to rediscover the skill.
 Runtimes without progressive support fail before dispatch. Graphs without

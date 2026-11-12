@@ -3,8 +3,6 @@ package engine
 import (
 	"context"
 	"errors"
-	"path/filepath"
-	"strings"
 
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/instructions"
@@ -30,20 +28,21 @@ func (g *turnGuidance) Load(ctx context.Context, skill, ref string) (string, err
 	return g.Session.Load(ctx, skill, ref)
 }
 
-func (t *turnEnv) readGuidanceReference(ctx context.Context, checkout, path string, read func() (string, string)) (string, string, error) {
+func (t *turnEnv) readGuidanceReference(ctx context.Context, path string, read func() (string, string)) (string, string, error) {
 	gateway, ok := t.gr.e.opt.Tools.(interface {
 		ReadGuidanceReference(context.Context, *tools.Principal, string, func()) (*tools.Result, error)
 	})
-	rel, err := filepath.Rel(t.principal.Workdir, filepath.Join(checkout, filepath.FromSlash(path)))
-	if !ok || err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	if !ok {
 		return "", "permission_denied", nil
 	}
 	if t.gr.e.opt.Tools.NeedsApproval(t.principal, "filesystem.read") {
 		t.r.setState(domain.ReplicaAwaitingApproval, "waiting for approval: filesystem.read")
 		defer t.r.setState(domain.ReplicaRunning, "")
 	}
+	// Session supplies the validated checkout-relative path. Ordinary tools
+	// still resolve their paths from the principal's working directory.
 	var content, reason string
-	result, err := gateway.ReadGuidanceReference(ctx, t.principal, filepath.ToSlash(rel), func() {
+	result, err := gateway.ReadGuidanceReference(ctx, t.principal, path, func() {
 		content, reason = read()
 	})
 	switch {

@@ -420,7 +420,11 @@ spec:
 
 func TestRepositoryGuidanceUsesCheckoutRootForAgentSubdirectory(t *testing.T) {
 	dir := t.TempDir()
-	p := &guidanceProvider{}
+	p := &guidanceProvider{calls: []llm.ToolCall{
+		{ID: "body", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample"}`)},
+		{ID: "allowed", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample","reference":"allowed.md"}`)},
+		{ID: "denied", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample","reference":"denied.md"}`)},
+	}}
 	r := newRig(t, openStore(t, dir), memory.New(), dir, "subdirectory-guidance", func(o *engine.Options) {
 		o.Models.(*llm.Registry).Add(llm.ProviderConfig{Name: p.Name()}, p)
 	})
@@ -429,7 +433,14 @@ func TestRepositoryGuidanceUsesCheckoutRootForAgentSubdirectory(t *testing.T) {
 	if err := os.MkdirAll(subdir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	pkg := filepath.Join(root, ".agents", "skills", "sample")
+	if err := os.MkdirAll(pkg, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	for file, content := range map[string]string{
+		filepath.Join(pkg, "SKILL.md"):     "---\nname: sample\ndescription: Sample skill\n---\nSample body",
+		filepath.Join(pkg, "allowed.md"):   "CHECKOUT REFERENCE",
+		filepath.Join(pkg, "denied.md"):    "DENIED REFERENCE",
 		filepath.Join(root, "AGENTS.md"):   "CHECKOUT ROOT",
 		filepath.Join(subdir, "AGENTS.md"): "NESTED MARKER",
 	} {
@@ -445,12 +456,16 @@ spec:
       prompt: Check guidance scope
       model: {provider: guidance-fixture, name: fixture}
       workspace: {subdir: src}
+      tools:
+        - {name: filesystem.read, paths: [".agents/skills/sample/allowed.md"]}
       loop: {mode: once}
       isolation: {mode: process}
 `)
-	eventually(t, 5*time.Second, "model sees checkout guidance", func() bool { return len(p.observed()) == 1 })
-	prompt := p.observed()[0]
-	if !strings.Contains(prompt, "CHECKOUT ROOT") || strings.Contains(prompt, "NESTED MARKER") {
+	eventually(t, 5*time.Second, "model sees checkout guidance", func() bool { return len(p.observed()) == len(p.calls)+1 })
+	prompt := p.observed()[len(p.calls)]
+	if !strings.Contains(prompt, "CHECKOUT ROOT") || strings.Contains(prompt, "NESTED MARKER") ||
+		!strings.Contains(prompt, "CHECKOUT REFERENCE") || strings.Contains(prompt, "DENIED REFERENCE") ||
+		!strings.Contains(prompt, "permission_denied") {
 		t.Fatal(prompt)
 	}
 }

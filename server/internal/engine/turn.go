@@ -274,9 +274,7 @@ func (r *replica) turn(loopCtx context.Context, n *domain.Node, dels []queue.Del
 	span.SetAttributes(attribute.Int("weft.instructions.omitted", omitted), attribute.Int("weft.instructions.entries", len(snapshot.Entries)))
 	in.Instructions = snapshot
 	if guidance != nil {
-		guidance.ReadReference = func(ctx context.Context, path string, read func() (string, string)) (string, string, error) {
-			return env.readGuidanceReference(ctx, checkout, path, read)
-		}
+		guidance.ReadReference = env.readGuidanceReference
 		in.Guidance = &turnGuidance{Session: guidance, env: env}
 	} else if instructions.Enabled(gr.g) {
 		in.Prompt = instructions.Context(*snapshot) + "\n" + in.Prompt
