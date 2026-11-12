@@ -268,14 +268,23 @@ func (m Manager) authorizationProblem(mode taskauth.Mode, g *domain.Graph) strin
 // consent records what the actor agrees to now.
 func (m Manager) consent(ctx context.Context, in Input, actor string) (Consent, error) {
 	g, err := m.Store.GetGraph(ctx, in.Workflow, 0)
+	if errors.Is(err, storage.ErrNotFound) {
+		fe := &FieldError{}
+		fe.add("workflow", "the workflow does not exist")
+		return Consent{}, fe
+	}
 	if err != nil {
 		return Consent{}, err
 	}
+	fe := &FieldError{}
 	if g.Node(in.NodeID) == nil {
-		return Consent{}, &FieldError{Errors: []struct {
-			Path    string `json:"path"`
-			Message string `json:"message"`
-		}{{"nodeId", "the entry agent is not in the workflow"}}}
+		fe.add("nodeId", "the entry agent is not in the workflow")
+	}
+	if in.ResultNodeID != "" && g.Node(in.ResultNodeID) == nil {
+		fe.add("resultNodeId", "the result agent is not in the workflow")
+	}
+	if len(fe.Errors) > 0 {
+		return Consent{}, fe
 	}
 	if problem := m.authorizationProblem(in.Authorization, g); problem != "" {
 		fe := &FieldError{}

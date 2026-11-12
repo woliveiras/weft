@@ -247,3 +247,50 @@ func TestTriggerWorkspaceAuthorizationFieldAndLegacyPause(t *testing.T) {
 	}
 	assertInvalid("POST", path+"/resume", "")
 }
+
+func TestEditingTriggerWithRemovedTargetReturns422(t *testing.T) {
+	for _, field := range []string{"workflow", "nodeId", "resultNodeId"} {
+		t.Run(field, func(t *testing.T) {
+			srv, a := setupApp(t, nil)
+			const fixture = `{"metadata":{"id":"task-fixture","name":"Task fixture"},"spec":{"defaults":{"runtime":{"kind":"echo"}},"nodes":[{"id":"reader"},{"id":"result"}]}}`
+			if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", fixture, nil); c != 201 {
+				t.Fatal(c)
+			}
+			body := strings.Replace(triggerBody, `"nodeId":"reader"`, `"nodeId":"reader","resultNodeId":"result"`, 1)
+			var original trigger.Trigger
+			if c := call(t, srv, "POST", "/api/v1/triggers", adminTok, "application/json", body, &original); c != 201 {
+				t.Fatal(c)
+			}
+			if field == "workflow" {
+				if err := a.Store.DeleteGraph(t.Context(), "task-fixture"); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				g, err := a.Store.GetGraph(t.Context(), "task-fixture", 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if field == "nodeId" {
+					g.Spec.Nodes = g.Spec.Nodes[1:]
+				} else {
+					g.Spec.Nodes = g.Spec.Nodes[:1]
+				}
+				if _, err := a.Store.SaveGraph(t.Context(), g, g.Metadata.Version); err != nil {
+					t.Fatal(err)
+				}
+			}
+			path := "/api/v1/triggers/" + original.ID
+			var problem apiError
+			edit := strings.Replace(body, `"Ready"`, `"Unsaved edit"`, 1)
+			if c := call(t, srv, "PUT", path, adminTok, "application/json", edit, &problem); c != 422 ||
+				len(problem.Details.Errors) != 1 || problem.Details.Errors[0].Path != field {
+				t.Fatalf("expected 422 for %s, got %d %+v", field, c, problem)
+			}
+			var saved trigger.Trigger
+			if c := call(t, srv, "GET", path, viewerTok, "", "", &saved); c != 200 ||
+				saved.Name != original.Name || saved.Consent != original.Consent || saved.State != original.State {
+				t.Fatalf("invalid edit mutated the trigger: %d %+v", c, saved)
+			}
+		})
+	}
+}

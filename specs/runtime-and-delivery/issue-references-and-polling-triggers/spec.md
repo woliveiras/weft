@@ -34,6 +34,9 @@ effective isolation and grants using TASK-006. Incompatible modes produce an
 `authorizationMode` field error. If stored consent is incompatible, the
 runner pauses the trigger with the same reason before polling the tracker,
 claiming an issue or creating a task draft.
+An edit referencing a removed workflow, entry agent or explicitly selected
+result agent returns HTTP 422 with the corresponding field error and preserves
+the saved trigger and consent.
 
 ### AC-003 — Gateway write-back
 

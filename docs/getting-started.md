@@ -177,7 +177,9 @@ issues** shows the next issue, the waiting ones and why others are skipped
 (blocked, assigned to someone else, already ran). The trigger takes one issue
 at a time, comments and relabels it as it goes (`weft:in-progress`, then
 `weft:review` or `weft:failed`), and pauses when a task fails or the
-workflow changes; resume it after reviewing.
+workflow changes; resume it after reviewing. If an edit still refers to a
+removed workflow, entry agent or result agent, select an existing target
+before saving.
 
 ### Prices and budgets
 

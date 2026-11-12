@@ -181,6 +181,11 @@ administrator who created or last resumed it.
 | `POST /api/v1/triggers/{trigger}/resume` | admin | Records the caller's consent for the trigger as it is now and activates it. |
 | `DELETE /api/v1/triggers/{trigger}` | admin | Removes it. |
 
+When editing a trigger, a missing workflow, entry agent or explicitly selected
+result agent returns HTTP 422 with a field error for `workflow`, `nodeId` or
+`resultNodeId`. The trigger and its consent are preserved. A missing trigger
+ID returns HTTP 404.
+
 An issue is eligible when it has the label, is open (Jira: status category
 To Do), is unassigned or assigned to the trigger's `owner`, is not blocked (a
 `blocked` label, or an unresolved Jira "is blocked by" link) and has never run

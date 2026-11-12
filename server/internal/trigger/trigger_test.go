@@ -113,3 +113,46 @@ func TestTriggerValidationAndConsent(t *testing.T) {
 		t.Fatalf("deleted workflow: %q", p)
 	}
 }
+
+func TestEditRejectsMissingWorkflowOrAgent(t *testing.T) {
+	for _, field := range []string{"workflow", "nodeId", "resultNodeId"} {
+		t.Run(field, func(t *testing.T) {
+			st := triggerStore(t)
+			m := trigger.Manager{Store: st}
+			original, err := m.Create(ctx, input(), "alice")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if field == "workflow" {
+				if err := st.DeleteGraph(ctx, "factory"); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				g, err := st.GetGraph(ctx, "factory", 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if field == "nodeId" {
+					g.Spec.Nodes = g.Spec.Nodes[1:]
+				} else {
+					g.Spec.Nodes = g.Spec.Nodes[:1]
+				}
+				if _, err := st.SaveGraph(ctx, g, g.Metadata.Version); err != nil {
+					t.Fatal(err)
+				}
+			}
+			edit := input()
+			edit.Name = "Unsaved edit"
+			var validation *trigger.FieldError
+			if _, err := m.Edit(ctx, original.ID, edit, "bob"); !errors.As(err, &validation) ||
+				len(validation.Errors) != 1 || validation.Errors[0].Path != field {
+				t.Fatalf("expected field error for %s, got %v", field, err)
+			}
+			saved, err := m.Get(ctx, original.ID)
+			if err != nil || saved.Name != original.Name || saved.Consent != original.Consent ||
+				saved.State != original.State || !saved.UpdatedAt.Equal(original.UpdatedAt) {
+				t.Fatalf("failed edit changed persisted trigger: %+v, %v", saved, err)
+			}
+		})
+	}
+}
