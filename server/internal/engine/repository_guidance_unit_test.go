@@ -22,3 +22,20 @@ func TestGuidanceCheckoutRootRedactsLookupFailure(t *testing.T) {
 		t.Fatalf("unexpected checkout resolution %q, %v", checkout, err)
 	}
 }
+
+func TestToolCallBudgetRefusalCanBeDistinguishedFromYield(t *testing.T) {
+	n := &domain.Node{}
+	n.Limits.MaxToolCalls = 1
+	env := &turnEnv{n: n}
+	if err := env.countTool(); err != nil {
+		t.Fatal(err)
+	}
+	var limit toolCallBudgetError
+	if err := env.countTool(); !errors.As(err, &limit) || limit != 1 {
+		t.Fatalf("second call should exhaust the budget: %v", err)
+	}
+	env.yielded = true
+	if err := env.countTool(); err == nil || errors.As(err, &limit) {
+		t.Fatalf("yield should be distinguishable from budget exhaustion: %v", err)
+	}
+}

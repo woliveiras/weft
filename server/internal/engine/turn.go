@@ -663,6 +663,12 @@ func (t *turnEnv) InvokeTool(ctx context.Context, name string, args json.RawMess
 	return result, err
 }
 
+type toolCallBudgetError int
+
+func (e toolCallBudgetError) Error() string {
+	return fmt.Sprintf("tool call budget of %d per turn exhausted", int(e))
+}
+
 func (t *turnEnv) countTool() error {
 	t.mu.Lock()
 	if t.yielded {
@@ -673,7 +679,7 @@ func (t *turnEnv) countTool() error {
 	calls := t.calls
 	t.mu.Unlock()
 	if t.n.Limits.MaxToolCalls > 0 && calls > t.n.Limits.MaxToolCalls {
-		return fmt.Errorf("tool call budget of %d per turn exhausted", t.n.Limits.MaxToolCalls)
+		return toolCallBudgetError(t.n.Limits.MaxToolCalls)
 	}
 	return nil
 }

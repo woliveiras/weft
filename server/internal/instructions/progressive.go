@@ -289,6 +289,26 @@ func (s *Session) Prompt() string {
 	return b.String()
 }
 
+// OmitToolCallLimit records an attempt that was refused before any source was opened.
+func (s *Session) OmitToolCallLimit(ctx context.Context, selection, reference string) (string, error) {
+	e := Entry{Scope: "guidance", Source: "selection", Stage: "body"}
+	if reference != "" {
+		e.Stage = "reference"
+	}
+	if item, ok := s.selected[selection]; ok {
+		e.Scope, e.Source, e.Selection = item.entry.Scope, item.entry.Source, item.entry.Selection
+		e.Order, e.Revision = item.entry.Order, item.entry.Revision
+		if reference != "" && item.repo != nil && validReference(reference) {
+			e.Source = path.Join(item.repo.pkg, reference)
+		}
+	}
+	return s.omitRequest(ctx, e, "tool_call_limit")
+}
+
+func validReference(reference string) bool {
+	return len(reference) <= 512 && reference != "SKILL.md" && safeRelative(reference)
+}
+
 func (s *Session) Load(ctx context.Context, selection, reference string) (string, error) {
 	item, ok := s.selected[selection]
 	if !ok {
@@ -307,7 +327,7 @@ func (s *Session) Load(ctx context.Context, selection, reference string) (string
 	}
 	if reference != "" {
 		e.Stage = "reference"
-		if item.repo == nil || !safeRelative(reference) || reference == "SKILL.md" || len(reference) > 512 {
+		if item.repo == nil || !validReference(reference) {
 			return s.omitRequest(ctx, e, "invalid_reference")
 		}
 		e.Source = path.Join(item.repo.pkg, reference)

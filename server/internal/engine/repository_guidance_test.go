@@ -489,3 +489,60 @@ spec:
 		t.Fatalf("missing failed read in tool audit: %+v", events)
 	}
 }
+
+func TestRepositoryGuidanceToolLimitRecordsActivityOmission(t *testing.T) {
+	dir := t.TempDir()
+	provider := &guidanceProvider{calls: []llm.ToolCall{
+		{ID: "body", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample"}`)},
+		{ID: "ref", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"repository:sample","reference":"ref.md"}`)},
+	}}
+	r := newRig(t, openStore(t, dir), memory.New(), dir, "guidance-tool-limit", func(o *engine.Options) {
+		o.Models.(*llm.Registry).Add(llm.ProviderConfig{Name: provider.Name()}, provider)
+	})
+	const graphID = "guidance-tool-limit"
+	pkg := filepath.Join(dir, "ws", graphID, ".agents", "skills", "sample")
+	if err := os.MkdirAll(pkg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{"SKILL.md": "---\nname: sample\ndescription: Sample skill\n---\nSample body", "ref.md": "UNREAD REFERENCE"} {
+		if err := os.WriteFile(filepath.Join(pkg, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r.deploy(`metadata: {name: guidance-tool-limit}
+spec:
+  instructions: {repositoryGuidance: {}}
+  nodes:
+    - id: reader
+      prompt: Check guidance limit
+      model: {provider: guidance-fixture, name: fixture}
+      tools: [{name: filesystem.read}]
+      limits: {maxToolCalls: 1}
+      loop: {mode: once}
+      isolation: {mode: process}
+`)
+	var x *domain.Execution
+	eventually(t, 5*time.Second, "turn finishes", func() bool {
+		xs, _ := r.store.ListExecutions(r.ctx, storage.ExecutionFilter{GraphID: graphID, Limit: 1})
+		if len(xs) != 1 || !xs[0].Status.Terminal() {
+			return false
+		}
+		x = xs[0]
+		return true
+	})
+	snap, err := (instructions.Manager{Store: r.store}).Snapshot(r.ctx, x.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(snap.Reads, func(e instructions.Entry) bool {
+		return e.Stage == "reference" && e.Source == ".agents/skills/sample/ref.md" &&
+			e.Reason == "tool_call_limit" && !e.Included && e.SHA256 == ""
+	}) {
+		t.Fatalf("missing safe limit omission: %+v", snap.Reads)
+	}
+	requests := provider.observed()
+	if x.Status != domain.ExecSucceeded || len(requests) != 3 || !strings.Contains(requests[2], "omitted: tool_call_limit") ||
+		strings.Contains(requests[2], "UNREAD REFERENCE") {
+		t.Fatalf("unexpected result %s (%s), model requests: %v", x.Status, x.Error, requests)
+	}
+}

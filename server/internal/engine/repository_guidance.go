@@ -35,6 +35,10 @@ func (g *turnGuidance) Load(ctx context.Context, skill, ref string) (string, err
 		return "", err
 	}
 	if err := g.env.countTool(); err != nil {
+		var budget toolCallBudgetError
+		if errors.As(err, &budget) {
+			return g.Session.OmitToolCallLimit(ctx, skill, ref)
+		}
 		return err.Error(), nil
 	}
 	return g.Session.Load(ctx, skill, ref)

@@ -143,7 +143,9 @@ effective discovery retain legacy delivery for console skills.
 Each body, root instruction or reference is limited to 16 KiB and package
 metadata to 2 KiB. Discovery accepts at most 128 candidates per family and
 128 catalogued skills per execution. An over-limit family is omitted as a
-whole. Each execution can request up to 16 distinct package references. The shared
+whole. Each execution can request up to 16 distinct package references.
+A request refused by the turn's tool call limit appears in Activity as
+`tool_call_limit`. The shared
 8,192-byte guidance budget reserves the mandatory prompt and operator
 messages first, then admits whole optional entries from higher to lower
 precedence. Activations spend the balance including framing. Retries of
