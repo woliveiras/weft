@@ -426,3 +426,94 @@ func TestRepositoryWorkspaceUnavailableSnapshotUsesRelativeSource(t *testing.T) 
 		t.Fatalf("unsafe historical snapshot: %s (%v)", raw, err)
 	}
 }
+
+func TestDiscoveryRejectsSymlinksAndSpecialFiles(t *testing.T) {
+	for _, target := range []struct{ path, source string }{
+		{"AGENTS.md", "AGENTS.md"},
+		{".agents", ".agents/skills"},
+		{".agents/skills/sample/SKILL.md", ".agents/skills/sample"},
+	} {
+		for _, kind := range []string{"symlink", "fifo"} {
+			t.Run(target.path+"/"+kind, func(t *testing.T) {
+				root := t.TempDir()
+				writeGuidance(t, root, "real/skills/sample/SKILL.md", "---\nname: sample\ndescription: UNSAFE SKILL\n---\nbody")
+				writeGuidance(t, root, "real/AGENTS.md", "UNSAFE ROOT")
+				writeGuidance(t, root, "CLAUDE.md", "FALLBACK ROOT")
+				targetPath := filepath.Join(root, target.path)
+				if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if kind == "fifo" {
+					if err := unix.Mkfifo(targetPath, 0o600); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					link := filepath.Join(root, "real")
+					if target.path != ".agents" {
+						link = filepath.Join(link, strings.TrimPrefix(target.path, ".agents/"))
+					}
+					relative, err := filepath.Rel(filepath.Dir(targetPath), link)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Symlink(relative, targetPath); err != nil {
+						t.Fatal(err)
+					}
+				}
+				g := &domain.Graph{Spec: domain.GraphSpec{Instructions: domain.InstructionRefs{
+					RepositoryGuidance: &domain.RepositoryGuidancePolicy{},
+				}}}
+				s, turn, err := (Manager{}).Prepare(t.Context(), g, &domain.Node{ID: "worker"}, root, root, "task", nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				findOmission(t, s, target.source, "unsafe_path")
+				prompt := turn.Prompt()
+				if strings.Contains(prompt, "UNSAFE") || strings.Contains(prompt, "FALLBACK ROOT") != (target.path != "AGENTS.md") {
+					t.Fatal(prompt)
+				}
+			})
+		}
+	}
+}
+
+func TestGuidanceReadTextLimits(t *testing.T) {
+	for _, tc := range []struct{ name, text, reason string }{
+		{"boundary", strings.Repeat("a", MaxBytes), ""},
+		{"large", strings.Repeat("a", MaxBytes+1), "size_limit"},
+		{"invalid UTF-8", "a\xff", "invalid_text"},
+		{"NUL", "a\x00", "invalid_text"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			text, reason := readText(strings.NewReader(tc.text))
+			if reason != tc.reason || (reason == "" && text != tc.text) || (reason != "" && text != "") {
+				t.Fatalf("read returned %d bytes with reason %q", len(text), reason)
+			}
+		})
+	}
+}
+
+func TestRepositoryCatalogueLimitAcrossConsoleAndCheckout(t *testing.T) {
+	root := t.TempDir()
+	const skillPath = ".agents/skills/sample/SKILL.md"
+	writeGuidance(t, root, skillPath, "---\nname: sample\ndescription: repository\n---\nbody")
+	m := manager(t)
+	g := &domain.Graph{Spec: domain.GraphSpec{Instructions: domain.InstructionRefs{
+		RepositoryGuidance: &domain.RepositoryGuidancePolicy{},
+	}}}
+	for i := range MaxEntries {
+		id := fmt.Sprintf("a%02x", i)
+		if _, err := m.Save(t.Context(), Input{ID: id, Title: id, Body: "body", Enabled: true}, 0, "test", false); err != nil {
+			t.Fatal(err)
+		}
+		g.Spec.Instructions.SkillIDs = append(g.Spec.Instructions.SkillIDs, id)
+	}
+	s, turn, err := m.Prepare(t.Context(), g, &domain.Node{ID: "worker"}, root, root, "task", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	findOmission(t, s, skillPath, "catalogue_limit")
+	if len(turn.selected) != MaxEntries || s.Budget <= len(renderEntry(Entry{Scope: "repository-skill", Source: skillPath}, catalogueText("repository:sample", "sample", "repository"))) {
+		t.Fatalf("expected catalogue limit with budget remaining, got %d skills and %d bytes", len(turn.selected), s.Budget)
+	}
+}

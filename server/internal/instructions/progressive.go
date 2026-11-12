@@ -220,7 +220,7 @@ func canonicalSource(e Entry) string {
 }
 
 func catalogueText(id, name, description string) string {
-	return fmt.Sprintf("Skill %q (%s)\nDescription: %q", name, id, description)
+	return fmt.Sprintf("%q (%s): %q", name, id, description)
 }
 
 func (s *Session) admit(mandatory []Entry, selectedConsoleIDs []string) {

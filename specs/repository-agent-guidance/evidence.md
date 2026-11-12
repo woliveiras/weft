@@ -62,3 +62,32 @@ and records its status without recursively hashing unrequested package files.
 The independent SHA-256 values identify the metadata and file contents
 actually used. Live checkout validation detects changed metadata and package
 identity. It can observe a changed body with stable metadata, as approved.
+
+## Independent review of `965aa72..93a7b43` on 2026-11-12
+
+| Review area | Regression evidence |
+| --- | --- |
+| Source framing | `TestProgressiveFrameQuotesAllPayloadLines` and `TestRepositoryGuidanceNativeTurn` failed before framing. The native model boundary now sees the apparent graph header, closer and task inside both the root instruction and the skill frames. |
+| Checkout-relative grants | `TestRepositoryGuidanceUsesCheckoutRootForAgentSubdirectory` failed before the fix because both reference requests were denied. It now reads the granted path and denies its sibling. `TestGuidanceReferenceChecksCheckoutRelativeGrant` verifies the path grant before opening. |
+| Console collisions | `TestRepositoryConsoleShadowingUsesSelectedAdmittedSkills` reproduced unwanted shadowing by a default, by a default after an agent opt-out, and by a console entry omitted for budget. These now leave the repository selection eligible. `TestAdmitRepositorySkillWhenSelectedConsoleDoesNotFit` exercises admission directly, and the native turn checks `shadowed_by_console` in persisted history. |
+| Reference outcomes and telemetry | `TestGuidanceReferenceReportsReadFailure` verifies the gateway completion and the separate guidance reference error counter. The native subdirectory test checks a missing reference in the event store. `TestGuidanceLoadTelemetryUsesBoundedLabels` checks histogram samples and child spans for catalogue and body loads. |
+| Safe and bounded Activity outcomes | `TestGuidanceCheckoutRootRedactsLookupFailure` and `TestRepositoryWorkspaceUnavailableSnapshotUsesRelativeSource` verify safe diagnostics. `TestToolCallBudgetRefusalCanBeDistinguishedFromYield` and `TestRepositoryGuidanceToolLimitRecordsActivityOmission` verify the exact refusal boundary and the historical omission without a digest. |
+| Discovery and authorization | `TestDiscoveryRejectsSymlinksAndSpecialFiles` covers a symlink and FIFO at each of `AGENTS.md`, `.agents` and `SKILL.md`. `TestRepositoryCatalogueLimitAcrossConsoleAndCheckout` reaches `catalogue_limit` with bytes left. `TestGuidanceReadTextLimits` and the native subdirectory test cover oversized, invalid UTF-8 and NUL references. The native turn uses the registered SCM gateway to verify push and PR denials. `TestRepositoryGuidancePreservesReviewedAuthorizationMode` verifies persisted Ask, Workspace and Full consent and their approval behavior after loading repository text. |
+| Trigger target validation | `TestEditRejectsMissingWorkflowOrAgent` and `TestEditingTriggerWithRemovedTargetReturns422` verify the field errors and persistence boundary. Before the correction the API returned 404 for a removed workflow and 200 for a removed result agent. |
+| Readiness specification | RUN-007 D-08, D-09.1 and D-09.2 and their matrix rows record options for the rubric, slot occupancy and advancement of other issues. All three choices remain open. |
+
+The explicit build matrix is recorded in [OPS-002 evidence](../installation-and-operations/standalone-installation-and-recovery/evidence.md).
+The review reused the local Docker image with `--pull=never`. The Chromium
+runs used the cached browser and the native E2E fixture cross-built in Docker
+for macOS. The frozen web dependencies were restored from the local pnpm store.
+
+| Verification | Result |
+| --- | --- |
+| `go test -count=1 ./...` in Docker on Linux | Passed the full default Go suite with a fresh run of all changed packages. |
+| `go test -count=1 -tags e2e ./cmd/weft-e2e` in Docker on Linux | Passed the E2E fixture tests. |
+| `go build ./...` and `go vet ./...`, with `GOOS=linux` and `GOOS=darwin` | All four commands passed in Docker. |
+| `gofmt -l .` in the Go module | No output. |
+| `make test-python` | 40 tests passed across the SDK, agents and scripts. |
+| `pnpm -C web exec tsc --noEmit`, `pnpm -C web test`, `pnpm -C web exec tsc --project tsconfig.e2e.json` | Both type checks and 444 Vitest tests passed. |
+| `pnpm -C web exec playwright test --config playwright.activity.config.ts` | Three Chromium scenarios passed. |
+| `pnpm -C web exec playwright test --config playwright.instructions.config.ts` | Two Chromium scenarios passed, including the historical guidance view as Viewer. |
