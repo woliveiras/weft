@@ -49,15 +49,6 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   the issue and any eligible replies. The decision applies to that snapshot
   and reviewed trigger configuration. If either changes before claim, repeat
   the applicable checks. A ready issue proceeds through ordinary admission.
-- Proposed minimum rubric. All three conditions must hold. The issue can
-  express them in ordinary prose, including in eligible replies.
-
-  | Condition | Sufficient when | Example question if missing |
-  | --- | --- | --- |
-  | Clear objective | The affected behavior or area and the desired outcome are identifiable. A defect describes the observed and expected outcomes. | What should happen after the user saves the form, and what happens today? |
-  | Verifiable acceptance | At least one observable condition distinguishes success from failure. A reproducible example, expected result, or check is sufficient. | Which input should we use to verify the fix, and what result should it produce? |
-  | Bounded scope | The requested change identifies its target and resolves material ambiguity about which behavior or surfaces may change. Explicit exclusions are needed only where they settle such an ambiguity. | Should the change apply to imports as well as entries created in the console? |
-
 - Missing, materially conflicting or ambiguous information holds the issue.
   Ask one or more concrete questions about the unmet conditions. The
   requested tracker workflow posts the questions on the issue and marks its
@@ -66,8 +57,8 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
 - While evaluating or waiting, the issue has no task draft, task run,
   assignment change by Weft, worktree, sandbox or task budget reservation.
   The evaluation alone may use its reviewed, bounded allowance. A hold
-  neither marks the issue as processed nor occupies the trigger's active-task
-  slot. Normal polling can consider other eligible issues.
+  does not mark the issue as processed. D-09 leaves trigger slot accounting
+  and polling of other eligible issues open.
 - A reply is new, substantive information tied to an outstanding question
   and received after that round opened. The tracker or console supplies the
   actor identity. Candidate responders are the issue author/reporter, the
@@ -106,9 +97,10 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
 
 ### AC-001 — Readiness before claim
 
-An eligible issue that satisfies all three rubric conditions proceeds through
-ordinary claim and admission. Each missing condition, or material ambiguity
-that prevents checking it, produces an explicit reason and blocks claim.
+An eligible issue that satisfies the rubric selected in D-08 proceeds through
+ordinary claim and admission. Each unmet requirement of that rubric, or
+material ambiguity that prevents checking it, produces an explicit reason
+and blocks claim.
 An edited issue cannot start on a verdict for an older snapshot. The content
 that justified a ready verdict is available to the admitted task as bounded,
 untrusted context under the reviewed input scope.
@@ -121,7 +113,8 @@ mapping. In the tracker workflow the issue shows the comment and the status
 label or Jira waiting state. The wait creates no task, assignment change,
 worktree, sandbox, execution budget reservation or processed admission.
 Unchanged input and repeated polling produce one request for the same round.
-Another eligible issue remains available to the trigger.
+D-09 governs slot occupancy and whether the trigger can advance other issues
+during a hold.
 
 ### AC-003 — Response and reevaluation
 
@@ -270,6 +263,43 @@ either option, replacing or clearing the waiting marker must avoid removing
 unrelated labels. A manual label change must not bypass readiness or restart
 an already admitted issue. The meanings of `weft:in-progress`, `weft:review`
 and `weft:failed` stay with RUN-006.
+
+### D-08 — Minimum readiness rubric (AC-001, AC-002)
+
+| Option | Benefit | Cost or limitation |
+| --- | --- | --- |
+| Require all three candidate conditions | Establishes a consistent threshold across triggers. | Can hold a small issue whose scope is already apparent from its objective. |
+| Require a clear objective and verifiable acceptance, with scope required when materially ambiguous | Covers short, actionable issues while prompting about consequential scope gaps. | Requires a reviewed rule for what makes scope ambiguity material. |
+| Use a reviewed rubric per trigger | Lets workflows set criteria suited to their issue types. | Adds configuration and consent review. Requires decisions about which installation-wide conditions, if any, are mandatory. |
+
+Candidate conditions for review. Decide which are required and what counts as
+sufficient evidence in ordinary prose or eligible replies.
+
+| Condition | Sufficient when | Example question if missing |
+| --- | --- | --- |
+| Clear objective | The affected behavior or area and the desired outcome are identifiable. A defect describes the observed and expected outcomes. | What should happen after the user saves the form, and what happens today? |
+| Verifiable acceptance | At least one observable condition distinguishes success from failure. A reproducible example, expected result, or check is sufficient. | Which input should we use to verify the fix, and what result should it produce? |
+| Bounded scope | The requested change identifies its target and resolves material ambiguity about which behavior or surfaces may change. Explicit exclusions are needed only where they settle such an ambiguity. | Should the change apply to imports as well as entries created in the console? |
+
+### D-09 — Trigger capacity and polling while an issue is held (AC-002, AC-006)
+
+#### D-09.1 — Does a hold reserve the trigger slot?
+
+| Option | Benefit | Cost or limitation |
+| --- | --- | --- |
+| Reserve no active-task slot for a held issue | Keeps the active-task slot available for an admitted task. | Requires a separate bound on outstanding holds if the trigger can continue polling. |
+| Reserve the trigger's one slot until the hold resolves | Keeps one issue in flight per trigger, including pre-task waiting. | A slow reply can leave the trigger idle. Slot accounting must represent a hold with no task resources. |
+
+#### D-09.2 — What happens to other eligible issues?
+
+| Option | Benefit | Cost or limitation |
+| --- | --- | --- |
+| Continue evaluating other eligible issues during a hold and admit ready work when slot policy permits | Allows independent issues to progress. | Requires ordering, separate hold limits and a policy for prioritizing newly clarified issues. |
+| Wait for the hold to resolve before advancing the queue | Preserves oldest-first processing across holds. | An unresolved issue delays later candidates. |
+
+Review the two choices together. If a hold reserves the slot and polling
+continues, decide whether evaluation can proceed without claim while the
+slot is occupied.
 
 ## Explicit exclusions
 
