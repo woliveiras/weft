@@ -20,7 +20,7 @@ sequences. IDs and slugs remain stable after assignment.
 | `product-and-tasks` | `TASK-001`–`TASK-008` | Release contracts, console navigation, graph editing, Activity, prompt tasks, consent, admission, and registered projects |
 | `workspaces-and-environments` | `ENV-001`–`ENV-009` | Repository imports, workspace review, journal, human review, Docker isolation, capacity, definitions, build/reuse, and network policy |
 | `providers-and-integrations` | `INT-001`–`INT-008` | Built-in inference plugins, adapters, external plugins, budgets, MCP invocation, MCP OAuth, vendor profiles, and hosting |
-| `runtime-and-delivery` | `RUN-001`–`RUN-007` | Steering, delegation, native coding, evaluation, SCM, issue triggers, and issue readiness |
+| `runtime-and-delivery` | `RUN-001`–`RUN-008` | Steering, delegation, native coding, evaluation, SCM, issue triggers, issue readiness, and context usage |
 | `installation-and-operations` | `OPS-001`–`OPS-002` | Compose and standalone installations |
 
 Keep existing specification IDs and paths. Use `implemented`, `in-progress`,
@@ -109,6 +109,7 @@ The [historical source map](./historical-source-map.md) records the migration of
 ### Planned
 
 - [RUN-007 — Issue Readiness Before Work](./runtime-and-delivery/issue-readiness-before-work/spec.md) — `planned`, pending maintainer review. Evaluate issues before claim, request clarification and expose held issues in Activity and trigger state.
+- [RUN-008 — Agent Context Usage Breakdown](./runtime-and-delivery/agent-context-usage/spec.md) — `planned`, pending maintainer review. Show how each native agent's context window is spent, by category, for every model call.
 
 ## Installation and operations
 
