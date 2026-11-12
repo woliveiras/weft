@@ -448,6 +448,28 @@ func TestOperatorResolvesHoldWhileReadinessIsDisabled(t *testing.T) {
 	if c := call(t, srv, "POST", path, operatorTok, "application/json", string(stale), nil); c != 409 {
 		t.Fatal(c)
 	}
+	for _, pending := range []trigger.Hold{{UndoOwner: "owner"}, {Publication: "label_pending"}, {Publication: "label_pending_only"}} {
+		_, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
+			current.Holds[0].UndoOwner, current.Holds[0].Publication = pending.UndoOwner, pending.Publication
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c := call(t, srv, "POST", path, operatorTok, "application/json", string(raw), nil); c != 409 {
+			t.Fatalf("pending tracker write returned %d", c)
+		}
+		saved, err := a.Triggers.Triggers.Get(t.Context(), tr.ID)
+		if err != nil || len(saved.Holds) != 1 || len(saved.HoldResolutions) != 0 {
+			t.Fatalf("pending hold lost: %+v %v", saved, err)
+		}
+	}
+	if _, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
+		current.Holds[0] = h
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if c := call(t, srv, "POST", path, operatorTok, "application/json", string(raw), &tr); c != 200 {
 		t.Fatal(c)
 	}

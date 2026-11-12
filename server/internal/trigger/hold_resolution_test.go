@@ -46,3 +46,16 @@ func TestEvaluationFailuresShareTheRoundAllowance(t *testing.T) {
 		}
 	}
 }
+
+func TestHoldHasPendingTrackerWrite(t *testing.T) {
+	for _, h := range []Hold{{UndoOwner: "owner"}, {Publication: "label_pending"}, {Publication: "label_pending_only"}} {
+		if !holdHasPendingWrite(h) {
+			t.Fatal(h)
+		}
+	}
+	for _, h := range []Hold{{}, {Publication: "confirmed"}, {Publication: "comment_failed"}} {
+		if holdHasPendingWrite(h) {
+			t.Fatal(h)
+		}
+	}
+}

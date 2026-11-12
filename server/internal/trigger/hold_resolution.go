@@ -40,6 +40,10 @@ func recordHoldResolution(t *Trigger, index int, reason string, now time.Time) {
 	t.ReadinessBlock = ""
 }
 
+func holdHasPendingWrite(h Hold) bool {
+	return h.UndoOwner != "" || h.Publication == "label_pending" || h.Publication == "label_pending_only"
+}
+
 // ResolveHold serializes operator resolution with polling, including tracker
 // write-back. The opening timestamp prevents a stale console action from
 // resolving a later hold for the same issue.
@@ -60,6 +64,9 @@ func (m Manager) ResolveHold(ctx context.Context, id, key string, opened time.Ti
 		}
 		if !current.Holds[index].OpenedAt.Equal(opened) || current.Claiming == key {
 			return fmt.Errorf("%w: the hold changed or has an interrupted claim", storage.ErrConflict)
+		}
+		if holdHasPendingWrite(current.Holds[index]) {
+			return fmt.Errorf("%w: finish the pending tracker label update or assignment rollback before resolving the hold", storage.ErrConflict)
 		}
 		recordHoldResolution(current, index, "An operator resolved the readiness hold.", m.now())
 		return nil
