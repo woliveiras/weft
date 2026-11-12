@@ -469,16 +469,14 @@ func TestOperatorResolvesHoldWhileReadinessIsDisabled(t *testing.T) {
 			t.Fatalf("pending hold lost: %+v %v", saved, err)
 		}
 	}
-	forced, _ := json.Marshal(map[string]any{"key": h.Key, "generation": h.Generation, "force": true})
-	if c := call(t, srv, "POST", path, viewerTok, "application/json", string(forced), nil); c != 403 {
-		t.Fatal(c)
+	if _, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
+		current.Holds[0] = h
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
-	if c := call(t, srv, "POST", path, operatorTok, "application/json", string(forced), &tr); c != 200 {
+	if c := call(t, srv, "POST", path, operatorTok, "application/json", string(raw), &tr); c != 200 {
 		t.Fatal(c)
-	}
-	if len(tr.HoldResolutions) != 1 || !strings.Contains(tr.HoldResolutions[0].Reason, "current labels") ||
-		!strings.Contains(tr.HoldResolutions[0].Reason, "assignment") {
-		t.Fatalf("abandoned tracker writes were not recorded: %+v", tr.HoldResolutions)
 	}
 	var view activity.View
 	if c := call(t, srv, "GET", "/api/v1/activity", viewerTok, "", "", &view); c != 200 {
@@ -496,5 +494,25 @@ func TestOperatorResolvesHoldWhileReadinessIsDisabled(t *testing.T) {
 	var eventData map[string]any
 	if err := json.Unmarshal(events[0].Data, &eventData); err != nil || eventData["key"] != h.Key || eventData["trigger"] != tr.ID {
 		t.Fatalf("resolution audit payload: %s (%v)", events[0].Data, err)
+	}
+
+	h.Key, h.Generation, h.Publication, h.UndoOwner = "acme/app#8", "failed-write", "label_failed", "owner"
+	if _, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
+		current.Holds = []trigger.Hold{h}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	forced, _ := json.Marshal(map[string]any{"key": h.Key, "generation": h.Generation, "force": true})
+	if c := call(t, srv, "POST", path, viewerTok, "application/json", string(forced), nil); c != 403 {
+		t.Fatal(c)
+	}
+	if c := call(t, srv, "POST", path, operatorTok, "application/json", string(forced), &tr); c != 200 {
+		t.Fatal(c)
+	}
+	if len(tr.Holds) != 0 || len(tr.HoldResolutions) != 2 ||
+		!strings.Contains(tr.HoldResolutions[1].Reason, "current labels") ||
+		!strings.Contains(tr.HoldResolutions[1].Reason, "assignment") {
+		t.Fatalf("abandoned tracker writes were not recorded: %+v", tr.HoldResolutions)
 	}
 }

@@ -137,28 +137,48 @@ func (g github) Tools() []string {
 }
 
 type githubIssue struct {
-	Number        int                      `json:"number"`
-	Title         string                   `json:"title"`
-	Body          string                   `json:"body"`
-	HTMLURL       string                   `json:"html_url"`
-	State         string                   `json:"state"`
-	Labels        []struct{ Name string }  `json:"labels"`
-	Assignees     []struct{ Login string } `json:"assignees"`
-	User          trackerActor             `json:"user"`
-	Created       string                   `json:"created_at"`
-	Updated       string                   `json:"updated_at"`
-	RepositoryURL string                   `json:"repository_url"`
-	PullRequest   json.RawMessage          `json:"pull_request"`
+	Number        int             `json:"number"`
+	Title         string          `json:"title"`
+	Body          string          `json:"body"`
+	HTMLURL       string          `json:"html_url"`
+	State         string          `json:"state"`
+	Labels        []githubName    `json:"labels"`
+	Assignees     []githubName    `json:"assignees"`
+	User          trackerActor    `json:"user"`
+	Created       string          `json:"created_at"`
+	Updated       string          `json:"updated_at"`
+	RepositoryURL string          `json:"repository_url"`
+	PullRequest   json.RawMessage `json:"pull_request"`
+}
+
+// GitHub MCP structured search returns names as strings. The REST issue
+// response and older search tools return name or login objects.
+type githubName string
+
+func (n *githubName) UnmarshalJSON(raw []byte) error {
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		var object struct{ Name, Login string }
+		if err := json.Unmarshal(raw, &object); err != nil {
+			return err
+		}
+		value = object.Name
+		if value == "" {
+			value = object.Login
+		}
+	}
+	*n = githubName(value)
+	return nil
 }
 
 func (raw githubIssue) issue(repository string) Issue {
 	i := Issue{Source: "github", Key: fmt.Sprintf("%s#%d", repository, raw.Number), Title: raw.Title, Body: raw.Body,
 		URL: raw.HTMLURL, Open: raw.State == "open", Labels: []string{}, Author: raw.User.human("github"), Created: raw.Created, Updated: raw.Updated}
 	for _, l := range raw.Labels {
-		i.Labels = append(i.Labels, l.Name)
+		i.Labels = append(i.Labels, string(l))
 	}
 	if len(raw.Assignees) > 0 {
-		i.Assignee = raw.Assignees[0].Login
+		i.Assignee = string(raw.Assignees[0])
 		i.OtherAssignee = len(raw.Assignees) > 1
 	}
 	i.Blocked = i.HasLabel("blocked")
@@ -173,6 +193,7 @@ func (g github) Search(ctx context.Context, call Invoker, label string) ([]Issue
 	return issues, err
 }
 
+var errGitHubSearchIncomplete = errors.New("GitHub returned incomplete issue search results")
 var errHeldScopeUnverified = errors.New("held issue scope could not be verified within the tracker search bound")
 var errHeldScopeIndexLag = errors.New("the current issue revision is not yet visible in GitHub search")
 
@@ -196,6 +217,9 @@ func (g github) MatchesHeld(ctx context.Context, call Invoker, issue Issue, _ st
 	// that immutable value to narrow the query, then verify the exact key.
 	base := g.baseQuery() + " created:" + created.UTC().Format(time.RFC3339)
 	issues, complete, err := g.search(ctx, call, withScopeQuery(base, g.c.Query))
+	if errors.Is(err, errGitHubSearchIncomplete) {
+		return false, errHeldScopeUnverified
+	}
 	if err != nil {
 		return false, err
 	}
@@ -213,6 +237,9 @@ func (g github) MatchesHeld(ctx context.Context, call Invoker, issue Issue, _ st
 	// A miss can establish scope only when the index has caught up with
 	// the direct issue read. The caller confirms the miss on another poll.
 	indexed, _, err := g.search(ctx, call, base)
+	if errors.Is(err, errGitHubSearchIncomplete) {
+		return false, errHeldScopeUnverified
+	}
 	if err != nil {
 		return false, err
 	}
@@ -224,28 +251,63 @@ func (g github) MatchesHeld(ctx context.Context, call Invoker, issue Issue, _ st
 	return false, errHeldScopeIndexLag
 }
 
-func (g github) search(ctx context.Context, call Invoker, query string) ([]Issue, bool, error) {
-	var out struct {
-		Items      []githubIssue `json:"items"`
-		Incomplete bool          `json:"incomplete_results"`
-		Total      *int          `json:"total_count"`
+type githubSearchReply struct {
+	Items      json.RawMessage `json:"items"`
+	Incomplete bool            `json:"incomplete_results"`
+	Total      *int            `json:"total_count"`
+}
+
+func decodeGitHubSearch(res *tools.Result, err error) (githubSearchReply, error) {
+	var reply githubSearchReply
+	var envelope struct {
+		githubSearchReply
+		Structured json.RawMessage `json:"structuredContent"`
+		Content    []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
 	}
+	if err := decode(res, err, &envelope); err != nil {
+		return reply, err
+	}
+	if envelope.Items != nil || envelope.Incomplete {
+		return envelope.githubSearchReply, nil
+	}
+	payload := envelope.Structured
+	if len(payload) == 0 || string(payload) == "null" {
+		if len(envelope.Content) != 1 || envelope.Content[0].Type != "text" {
+			return reply, errors.New("unexpected GitHub issue search result")
+		}
+		payload = []byte(envelope.Content[0].Text)
+	}
+	if err := json.Unmarshal(payload, &reply); err != nil {
+		return reply, errors.New("unexpected GitHub issue search result")
+	}
+	return reply, nil
+}
+
+func (g github) search(ctx context.Context, call Invoker, query string) ([]Issue, bool, error) {
 	res, err := call(ctx, tool(g.c, "search_issues"), map[string]any{"query": query, "sort": "created", "order": "asc", "perPage": trackerSearchLimit, "page": 1})
-	if err := decode(res, err, &out); err != nil {
+	out, err := decodeGitHubSearch(res, err)
+	if err != nil {
 		return nil, false, err
 	}
 	if out.Incomplete {
-		return nil, false, errHeldScopeUnverified
+		return nil, false, errGitHubSearchIncomplete
 	}
-	issues := make([]Issue, 0, len(out.Items))
-	for _, it := range out.Items {
+	var rows []githubIssue
+	if err := json.Unmarshal(out.Items, &rows); err != nil {
+		return nil, false, errors.New("unexpected GitHub issue search result")
+	}
+	issues := make([]Issue, 0, len(rows))
+	for _, it := range rows {
 		if it.Number <= 0 || (len(it.PullRequest) > 0 && string(it.PullRequest) != "null") ||
 			(it.RepositoryURL != "" && !strings.EqualFold(it.RepositoryURL, "https://api.github.com/repos/"+g.c.Repository)) {
 			continue
 		}
 		issues = append(issues, it.issue(g.c.Repository))
 	}
-	return issues, out.Total != nil && *out.Total == len(out.Items), nil
+	return issues, out.Total != nil && *out.Total == len(rows), nil
 }
 
 type jira struct{ c SourceConfig }

@@ -474,6 +474,16 @@ func (r *Runner) finishHold(ctx context.Context, t *Trigger, call Invoker, h Hol
 	return r.publishHold(ctx, t, call, h)
 }
 
+func claimRemovals(t *Trigger, i Issue, requeued bool) []string {
+	remove := selectionRemovals(t, i, requeued)
+	// The waiting marker is Weft-owned. Claim cleanup is independent of
+	// the current hold scope and bounded resolution history.
+	if i.HasLabel(LabelFailed) {
+		remove = append(remove, LabelFailed)
+	}
+	return remove
+}
+
 func selectionRemovals(t *Trigger, i Issue, requeued bool) []string {
 	remove := []string{}
 	for _, label := range []string{t.Label, LabelTodo} {

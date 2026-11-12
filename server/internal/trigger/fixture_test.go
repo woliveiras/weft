@@ -16,6 +16,7 @@ import (
 // tracker is an in-memory GitHub or Jira project behind MCP tool names.
 type tracker struct {
 	pageSearch          bool
+	incompleteSearch    bool
 	unindexed           map[int]bool
 	outsideQuery        map[int]bool
 	editOnAssignment    bool
@@ -91,6 +92,9 @@ func (t *tracker) handle(name string, raw json.RawMessage) *tools.Result {
 	}
 	switch name {
 	case "search_issues":
+		if t.incompleteSearch {
+			return ok(map[string]any{"content": []any{}, "structuredContent": map[string]any{"items": t.issues, "incomplete_results": true}})
+		}
 		if t.pageSearch {
 			query := args["query"].(string)
 			rows := make([]map[string]any, 0, len(t.issues))

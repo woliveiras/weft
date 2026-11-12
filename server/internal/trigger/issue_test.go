@@ -145,3 +145,38 @@ func TestHeldGitHubScopeDoesNotTreatTruncatedTargetedSearchAsExclusion(t *testin
 		t.Fatalf("truncated search disposition: found=%v calls=%d error=%v", found, calls, err)
 	}
 }
+
+func TestGitHubIncompleteSearchDistinguishesAdmissionFromHeldScope(t *testing.T) {
+	gh := newTracker("gh")
+	gh.incompleteSearch = true
+	src, err := (trigger.SourceConfig{Kind: "github", ConnectionID: "gh", Repository: "acme/app", Query: "milestone:release"}).Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, admissionErr := src.Search(t.Context(), direct(gh), "weft")
+	i := trigger.Issue{Key: "acme/app#1", Created: "2026-11-01T00:00:01Z"}
+	_, scopeErr := src.MatchesHeld(t.Context(), direct(gh), i, "weft")
+	if admissionErr == nil || admissionErr.Error() != "GitHub returned incomplete issue search results" ||
+		scopeErr == nil || !strings.Contains(scopeErr.Error(), "held issue scope") {
+		t.Fatalf("unexpected search errors: admission %v, scope %v", admissionErr, scopeErr)
+	}
+}
+
+func TestGitHubSearchDecodesMCPEnvelopes(t *testing.T) {
+	src, err := (trigger.SourceConfig{Kind: "github", ConnectionID: "gh", Repository: "acme/app"}).Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, payload := range []map[string]any{
+		{"content": []any{}, "structuredContent": map[string]any{"items": []any{
+			map[string]any{"number": 1, "state": "open", "labels": []string{"weft"}, "assignees": []string{"owner"}},
+		}}},
+		{"content": []any{map[string]string{"type": "text", "text": `{"items":[{"number":1,"state":"open","labels":[{"name":"weft"}],"assignees":[{"login":"owner"}]}]}`}}},
+	} {
+		call := func(context.Context, string, any) (*tools.Result, error) { return ok(payload), nil }
+		issues, err := src.Search(t.Context(), call, "weft")
+		if err != nil || len(issues) != 1 || issues[0].Key != "acme/app#1" || !issues[0].HasLabel("weft") || issues[0].Assignee != "owner" {
+			t.Fatalf("search result: %+v, %v", issues, err)
+		}
+	}
+}

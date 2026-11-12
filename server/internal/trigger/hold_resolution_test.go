@@ -1,6 +1,7 @@
 package trigger
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -150,5 +151,21 @@ func TestTransientReadinessFailuresUseTheirOwnBoundedBackoff(t *testing.T) {
 	recordReadinessRetry(&h, now, "claim_busy", nil)
 	if h.State != "retry_failed" || h.RetryAt != nil || h.Round != 1 || h.SnapshotEdits != 2 || h.CommentAttempts != 1 {
 		t.Fatal(h)
+	}
+}
+
+func TestClaimRemovesWeftWaitingLabelWithoutResolutionHistory(t *testing.T) {
+	tr := &Trigger{Label: "custom"}
+	i := Issue{Labels: []string{"custom", LabelTodo, LabelFailed, "bug"}}
+	for _, tc := range []struct {
+		requeued bool
+		want     string
+	}{
+		{false, "custom," + LabelFailed},
+		{true, "custom," + LabelTodo + "," + LabelFailed},
+	} {
+		if got := strings.Join(claimRemovals(tr, i, tc.requeued), ","); got != tc.want {
+			t.Fatalf("wanted %s, got %s", tc.want, got)
+		}
 	}
 }

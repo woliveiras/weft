@@ -79,3 +79,37 @@ and issue key. See the
 Go tests and cross-builds used the cached `weft-review-go:git-http-backend`
 image with `--pull=never`. Tracker calls used fixtures. Live account
 qualification remains in PROD-14.
+
+## Independent review of 7d54912 through 30bbaa1
+
+Fixture verification on 2026-11-12.
+
+`TestHeldIssueReturnsWithTargetedQueryBeyondFirstAdmissionPage` and
+`TestHeldGitHubSearchBudgetRotatesTenIssues` qualified narrowed scope
+checks against 60 issues, including fair deferrals with ten holds.
+`TestGitHubSearchBudgetUsesRollingMinute` verified that the 31st call is
+deferred until a reservation expires. The admission fixture reproduced
+an incomplete result inside the MCP envelope and verified the dedicated
+search error and zero claims. The scope edit fixture verified cleanup of
+`weft:needs-attention` after the original resolution fell out of the
+20-entry history, with an automatic `trigger.hold_resolved` event from
+`system:trigger`.
+
+| Command | Result |
+| --- | --- |
+| `go test -count=1 ./internal/trigger ./internal/api ./internal/activity` | Passed all three changed packages. |
+| `go test -count=1 ./...` and `go test -count=1 -p 1 ./...` | The final serial full suite passed. Earlier runs failed in `TestActivityAPIWithEngine` and `TestBoundedBuildPipelineIntegration`. Both passed on the final run. |
+| `go test -count=1 ./internal/engine` twice | Both runs passed (31.079 s and 29.551 s). |
+| `./scripts/go.sh vet ./...` and `gofmt -l .` in `server/` | Vet passed. Gofmt listed no files. |
+| `GOOS=linux CGO_ENABLED=0 go build ./...` and `GOOS=darwin CGO_ENABLED=0 go build ./...` | Both arm64 builds passed. |
+| `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed the disposable backend tests. |
+| `./node_modules/.bin/vitest run` in `web/` | 444 tests passed in 88 files. |
+| `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/tsc --project tsconfig.e2e.json` in `web/` | Both type checks passed. |
+| `./node_modules/.bin/playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` and `./node_modules/.bin/playwright test --config playwright.activity.config.ts` in `web/` | Six trigger and Activity scenarios plus three Work Activity scenarios passed. Both browser runs built the production web bundle and disposable Darwin fixture. |
+
+Go used the cached toolchain images with Docker pulls disabled. The pnpm
+bootstrap and dependency verification attempted registry access and failed.
+Web verification used the lockfile versions recovered from the local pnpm
+cache and the installed Chromium. The Playwright web server ran the same
+`tsc --noEmit` and `vite build` steps as the package script. The tests
+used fixture accounts and trackers.

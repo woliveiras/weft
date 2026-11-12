@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/trigger"
 )
@@ -1013,5 +1014,87 @@ func TestGitHubScopeReleaseRequiresTwoConfirmedMissesAndPreservesRounds(t *testi
 	if len(tr.Holds) != 1 || tr.Holds[0].Round != 2 || len(gh.comments["#1"]) != 2 ||
 		!strings.Contains(gh.comments["#1"][1], "round 2 of 2") {
 		t.Fatalf("rounds lost on return: %+v, %v", tr, gh.comments)
+	}
+}
+
+func TestIncompleteGitHubAdmissionSearchReportsTheSearchFailure(t *testing.T) {
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	gh.issues = []map[string]any{ghIssue(1, "Issue", "weft")}
+	gh.incompleteSearch = true
+	r := runner(triggerStore(t), c, "one", gh)
+	starter := &tasks{}
+	r.Tasks = starter
+	tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	if tr.LastError != "GitHub returned incomplete issue search results" || len(starter.started) != 0 || len(tr.Holds) != 0 {
+		t.Fatalf("incomplete search admitted work or reported the wrong error: %+v", tr)
+	}
+}
+
+func TestClaimAfterScopeEditCleansWaitingLabelBeyondResolutionHistory(t *testing.T) {
+	c := &clock{t: time.Now().UTC()}
+	gh := newTracker("gh")
+	gh.pageSearch = true
+	row := ghIssue(1, "Issue", "weft", "bug")
+	gh.issues = []map[string]any{row}
+	r := runner(triggerStore(t), c, "one", gh)
+	starter := &tasks{}
+	r.Tasks = starter
+	r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+		return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+	})
+	in := input()
+	tr, err := r.Triggers.Create(t.Context(), in, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.Holds) != 1 {
+		t.Fatal(tr.Holds)
+	}
+	key := tr.Holds[0].Key
+	in.Source.Query = "milestone:release"
+	editAndResume := func() {
+		t.Helper()
+		if _, err := r.Triggers.Edit(t.Context(), tr.ID, in, "admin"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.Triggers.Resume(t.Context(), tr.ID, "admin"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	editAndResume()
+	tr = advance(r, c, t, tr.ID)
+	if len(tr.Holds) != 0 || len(tr.HoldResolutions) != 1 || tr.HoldResolutions[0].Actor != "system:trigger" {
+		t.Fatalf("scope edit did not release hold: %+v", tr)
+	}
+	audit, err := r.Store.ListEvents(t.Context(), storage.EventFilter{Types: []domain.EventType{domain.EvTriggerHoldResolved}})
+	if err != nil || len(audit) != 1 || audit[0].Actor != "system:trigger" {
+		t.Fatalf("automatic scope resolution audit: %+v, %v", audit, err)
+	}
+	for n := 2; n <= 21; n++ {
+		other := trigger.Hold{Key: fmt.Sprintf("acme/app#%d", n), Generation: fmt.Sprint(n)}
+		if _, err := r.Triggers.Update(t.Context(), tr.ID, "fixture", func(current *trigger.Trigger) error {
+			current.Holds = []trigger.Hold{other}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.Triggers.ResolveHold(t.Context(), tr.ID, other.Key, other.Generation, "operator"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	in.ReadinessDisabled = true
+	editAndResume()
+	row["labels"] = append(row["labels"].([]map[string]any), map[string]any{"name": "weft"})
+	tr = advance(r, c, t, tr.ID)
+	labels := row["labels"].([]map[string]any)
+	if len(tr.HoldResolutions) != 20 || slices.ContainsFunc(tr.HoldResolutions, func(h trigger.HoldResolution) bool { return h.Key == key }) ||
+		len(starter.started) != 1 || len(labels) != 2 || labels[0]["name"] != "bug" || labels[1]["name"] != trigger.LabelInProgress {
+		t.Fatalf("claim depended on resolution history: %+v, labels %v", tr, labels)
 	}
 }
