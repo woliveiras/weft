@@ -192,9 +192,11 @@ acceptance criteria above and matrix use these decisions as their oracles.
 
 ### D-04 — Identity and collisions (AC-003, AC-005)
 
-- Collapse aliases by canonical package identity first. An eligible selected
-  console skill ID shadows a matching valid repository skill name before its
-  body is read. Distinct repository packages with the same name prefer
+- Collapse aliases by canonical package identity first. A console skill ID
+  selected by the graph or agent shadows a matching valid repository skill
+  name when the console catalogue entry is admitted. Installation defaults
+  alone and console entries omitted for budget leave repository skills
+  eligible. Distinct repository packages with the same name prefer
   `.agents`, then `.claude`, then `.github`. Within a family use the
   canonical relative path tie-breaker. Report the suppressed candidates.
 

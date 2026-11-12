@@ -114,7 +114,6 @@ func (m Manager) Prepare(ctx context.Context, g *domain.Graph, n *domain.Node, r
 	s.Budget -= required
 
 	var managed []progressiveEntry
-	consoleNames := map[string]bool{}
 	if err := m.managed(ctx, g, n, func(e Entry) {
 		e.Stage = "catalogue"
 		p := progressiveEntry{entry: e, managedBody: e.Body}
@@ -123,7 +122,6 @@ func (m Manager) Prepare(ctx context.Context, g *domain.Graph, n *domain.Node, r
 			p.entry.Selection = "console:" + e.Source
 			p.content = catalogueText(p.entry.Selection, e.Source, e.Description)
 			p.entry.SHA256 = hash(p.content)
-			consoleNames[e.Source] = true
 		}
 		managed = append(managed, p)
 	}); err != nil {
@@ -152,8 +150,6 @@ func (m Manager) Prepare(ctx context.Context, g *domain.Graph, n *domain.Node, r
 			switch {
 			case packages[c.pkg]:
 				p.entry.Reason = "alias"
-			case consoleNames[c.name]:
-				p.entry.Reason = "shadowed_by_console"
 			case names[c.name]:
 				p.entry.Reason = "shadowed_by_repository"
 			default:
@@ -202,7 +198,7 @@ func (m Manager) Prepare(ctx context.Context, g *domain.Graph, n *domain.Node, r
 			turn.items = append(turn.items, progressiveEntry{entry: e, content: content})
 		}
 	}
-	turn.admit(mandatory)
+	turn.admit(mandatory, selectedSkillIDs(g, n))
 	return s, turn, nil
 }
 
@@ -217,8 +213,9 @@ func catalogueText(id, name, description string) string {
 	return fmt.Sprintf("Skill %q (%s)\nDescription: %q", name, id, description)
 }
 
-func (s *Session) admit(mandatory []Entry) {
+func (s *Session) admit(mandatory []Entry, selectedConsoleIDs []string) {
 	catalogued := 0
+	shadowing := map[string]bool{}
 	// Walk the scopes in reverse rank while preserving each scope's declared
 	// order as the deterministic tie-breaker for admission.
 	for _, scope := range []string{"project", "graph", "installation", "repository", "repository-skill"} {
@@ -230,6 +227,8 @@ func (s *Session) admit(mandatory []Entry) {
 			}
 			cost := len(renderEntry(*e, item.content))
 			switch {
+			case item.repo != nil && shadowing[item.repo.name]:
+				e.Selection, e.Reason = "", "shadowed_by_console"
 			case e.Stage == "catalogue" && catalogued == MaxEntries:
 				e.Reason = "catalogue_limit"
 			case cost > s.snapshot.Budget:
@@ -239,6 +238,9 @@ func (s *Session) admit(mandatory []Entry) {
 				s.snapshot.Budget -= cost
 				if e.Stage == "catalogue" {
 					catalogued++
+					if item.repo == nil && slices.Contains(selectedConsoleIDs, e.Source) {
+						shadowing[e.Source] = true
+					}
 				}
 			}
 		}

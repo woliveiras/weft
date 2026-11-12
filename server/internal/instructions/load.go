@@ -102,16 +102,19 @@ func (m Manager) managed(ctx context.Context, g *domain.Graph, n *domain.Node, a
 			}
 		}
 	}
-	ids := refs.SkillIDs
-	if n.SkillIDs != nil {
-		ids = n.SkillIDs
-	}
-	for _, id := range ids {
+	for _, id := range selectedSkillIDs(g, n) {
 		if err := addSkill(id, "graph"); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func selectedSkillIDs(g *domain.Graph, n *domain.Node) []string {
+	if n.SkillIDs != nil {
+		return n.SkillIDs
+	}
+	return g.Spec.Instructions.SkillIDs
 }
 
 func project(s *Snapshot, root string) {

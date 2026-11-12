@@ -354,3 +354,50 @@ func TestProgressiveFrameQuotesAllPayloadLines(t *testing.T) {
 		t.Fatalf("source framing = %q, want %q", got, want)
 	}
 }
+
+func TestRepositoryConsoleShadowingUsesSelectedAdmittedSkills(t *testing.T) {
+	root := t.TempDir()
+	const skillPath = ".agents/skills/sample/SKILL.md"
+	writeGuidance(t, root, skillPath, "---\nname: sample\ndescription: repository\n---\nbody")
+	store, err := fsstore.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	m := Manager{Store: store}
+	if _, err := m.Save(t.Context(), Input{ID: "sample", Title: "Sample", Description: strings.Repeat("c", 800), Body: "console", Enabled: true, Global: true}, 0, "test", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name              string
+		graphIDs, nodeIDs []string
+		prompt            string
+		shadowed, console bool
+	}{
+		{name: "selected global", graphIDs: []string{"sample"}, shadowed: true, console: true},
+		{name: "default only", console: true},
+		{name: "node opts out", graphIDs: []string{"sample"}, nodeIDs: []string{}, console: true},
+		{name: "selected over budget", graphIDs: []string{"sample"}, prompt: strings.Repeat("p", MaxTokens-700)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := &domain.Graph{Spec: domain.GraphSpec{Instructions: domain.InstructionRefs{
+				RepositoryGuidance: &domain.RepositoryGuidancePolicy{}, InstallationDefaults: true, SkillIDs: tc.graphIDs,
+			}}}
+			snap, session, err := m.Prepare(t.Context(), g, &domain.Node{ID: "worker", SkillIDs: tc.nodeIDs}, root, root, tc.prompt, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, repo := session.selected["repository:sample"]
+			_, console := session.selected["console:sample"]
+			if repo == tc.shadowed || console != tc.console {
+				t.Fatalf("catalogue availability: repository=%t console=%t; entries=%+v", repo, console, snap.Entries)
+			}
+			if tc.shadowed {
+				findOmission(t, snap, skillPath, "shadowed_by_console")
+			}
+			if !tc.console {
+				findOmission(t, snap, "sample", "token_budget")
+			}
+		})
+	}
+}

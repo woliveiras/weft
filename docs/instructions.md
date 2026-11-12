@@ -111,8 +111,9 @@ or remote fetches.
 Relative package-directory aliases are allowed between supported skill roots
 in the same checkout. Both the alias and canonical source must be allowed,
 and a canonical package is catalogued once. Files, references and legacy
-steering still reject symlinks. Console skill IDs selected for the execution
-shadow valid repository names. Distinct repository packages sharing a name
+steering still reject symlinks. A console skill shadows a matching repository
+name when the graph or agent selects its ID and its catalogue entry fits.
+Installation defaults alone leave matching repository skills eligible. Distinct repository packages sharing a name
 prefer `.agents`, `.claude`, then `.github`, with canonical relative
 paths in bytewise order to break ties. A v2 `skills-lock.json`
 `skills.<name>.computedHash` is an advisory version declaration. Observed
