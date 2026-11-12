@@ -169,6 +169,12 @@ func (t *tracker) request(_ context.Context, connection, kind string, _ int64, m
 	if t.fail[method+" "+u.Path] {
 		return nil, 403, fmt.Errorf("tracker fixture refused operation")
 	}
+	if u.Path == "/user" {
+		return rawFixture(map[string]any{"id": 700, "login": "weft-service"})
+	}
+	if strings.HasSuffix(u.Path, "/myself") {
+		return rawFixture(map[string]string{"accountId": "jira-service"})
+	}
 	if kind == "github" && strings.Contains(u.Path, "/collaborators/") {
 		return rawFixture(map[string]string{"role_name": t.roles[parts[4]]})
 	}
@@ -226,7 +232,10 @@ func (t *tracker) request(_ context.Context, connection, kind string, _ int64, m
 		if t.loseCommentResponse {
 			return nil, 0, fmt.Errorf("tracker fixture lost the response")
 		}
-		return rawFixture(map[string]int{"id": len(t.comments[key])})
+		if kind == "jira" {
+			return rawFixture(map[string]any{"id": fmt.Sprint(len(t.comments[key])), "author": map[string]string{"accountId": "jira-service"}})
+		}
+		return rawFixture(map[string]any{"id": len(t.comments[key]), "user": map[string]int{"id": 700}})
 	}
 	if kind == "github" {
 		labels := i["labels"].([]map[string]any)

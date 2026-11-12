@@ -39,12 +39,17 @@ type issueFixtureTransport struct{}
 
 func (issueFixtureTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	const issue = `{"number":11,"title":"Add CSV export","body":"Add CSV export.","state":"open","labels":[{"name":"weft:todo"}],"user":{"login":"reporter","type":"User"}}`
-	if r.URL.Host != "api.github.com" || !strings.HasPrefix(r.URL.Path, "/repos/acme/app/issues/11") {
+	if r.URL.Host != "api.github.com" || (r.URL.Path != "/user" && !strings.HasPrefix(r.URL.Path, "/repos/acme/app/issues/11")) {
 		return nil, errors.New("unexpected fixture tracker request")
 	}
 	body := "{}"
-	if r.Method == "GET" && r.URL.Path == "/repos/acme/app/issues/11" {
+	switch {
+	case r.URL.Path == "/user":
+		body = `{"id":700}`
+	case r.Method == "GET" && r.URL.Path == "/repos/acme/app/issues/11":
 		body = issue
+	case strings.HasSuffix(r.URL.Path, "/comments"):
+		body = `{"id":1,"user":{"id":700}}`
 	}
 	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
 }

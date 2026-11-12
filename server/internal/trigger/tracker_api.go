@@ -22,6 +22,7 @@ const (
 	trackerRequeue  = "tracker.requeue"
 	trackerLabels   = "tracker.labels"
 	trackerComment  = "tracker.comment"
+	trackerIdentity = "tracker.comment_identity"
 )
 
 var trackerKey = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}-[1-9][0-9]{0,9}$`)
@@ -76,7 +77,7 @@ type trackerTool struct {
 func TrackerTools(call TrackerCall) []tools.Tool {
 	return []tools.Tool{
 		trackerTool{trackerGet, call}, trackerTool{trackerComments, call}, trackerTool{trackerRequeue, call},
-		trackerTool{trackerLabels, call}, trackerTool{trackerComment, call},
+		trackerTool{trackerLabels, call}, trackerTool{trackerComment, call}, trackerTool{trackerIdentity, call},
 	}
 }
 
@@ -139,6 +140,14 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 			return nil, tools.ErrDenied
 		}
 		err = changeLabels(request, scope.Source.Kind, path, a)
+	case trackerIdentity:
+		identityPath := "/user"
+		if scope.Source.Kind == "jira" {
+			identityPath = "/ex/jira/" + scope.Source.CloudID + "/rest/api/3/myself"
+		}
+		actor, lookupErr := readJSON[trackerActor](request, http.MethodGet, identityPath, nil)
+		err = lookupErr
+		out = actor.identity(scope.Source.Kind)
 	case trackerComment:
 		if len(a.Body) == 0 || len(a.Body) > 4096 {
 			return nil, tools.ErrDenied
@@ -150,7 +159,11 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 			body = map[string]any{"body": jiraComment(a.Body)}
 		}
 		var status int
-		_, status, err = request(http.MethodPost, commentPath, body)
+		var raw json.RawMessage
+		raw, status, err = request(http.MethodPost, commentPath, body)
+		if err == nil {
+			out, err = decodeCommentReceipt(scope.Source.Kind, raw)
+		}
 		if err != nil && status >= 400 && status <= 599 {
 			failure := trackerCommentFailure{Status: status}
 			data, _ := json.Marshal(failure)
@@ -274,11 +287,22 @@ func changeLabels(req apiRequest, kind, path string, a trackerArgs) error {
 }
 
 type trackerActor struct {
+	ID          int64  `json:"id"`
 	Login       string `json:"login"`
 	Type        string `json:"type"`
 	AccountID   string `json:"accountId"`
 	AccountType string `json:"accountType"`
 	Active      bool   `json:"active"`
+}
+
+func (a trackerActor) identity(kind string) string {
+	if kind == "jira" {
+		return a.AccountID
+	}
+	if a.ID > 0 {
+		return strconv.FormatInt(a.ID, 10)
+	}
+	return ""
 }
 
 func (a trackerActor) human(kind string) string {
@@ -292,10 +316,11 @@ func (a trackerActor) human(kind string) string {
 }
 
 type issueComment struct {
-	ID    string    `json:"id"`
-	Actor string    `json:"actor,omitempty"`
-	Body  string    `json:"body"`
-	At    time.Time `json:"at"`
+	AuthorID string    `json:"authorId,omitempty"`
+	ID       string    `json:"id"`
+	Actor    string    `json:"actor,omitempty"`
+	Body     string    `json:"body"`
+	At       time.Time `json:"at"`
 }
 
 type githubComment struct {
@@ -310,6 +335,34 @@ type jiraCommentRecord struct {
 	Author  trackerActor    `json:"author"`
 	Body    json.RawMessage `json:"body"`
 	Created string          `json:"created"`
+}
+
+type commentReceipt struct {
+	ID       string    `json:"id"`
+	AuthorID string    `json:"authorId"`
+	At       time.Time `json:"at"`
+}
+
+func decodeCommentReceipt(kind string, raw json.RawMessage) (commentReceipt, error) {
+	if len(raw) == 0 {
+		return commentReceipt{}, nil
+	}
+	if kind == "jira" {
+		var row jiraCommentRecord
+		if err := json.Unmarshal(raw, &row); err != nil {
+			return commentReceipt{}, errors.New("invalid tracker comment receipt")
+		}
+		return commentReceipt{ID: row.ID, AuthorID: row.Author.identity(kind), At: jiraTime(row.Created)}, nil
+	}
+	var row githubComment
+	if err := json.Unmarshal(raw, &row); err != nil {
+		return commentReceipt{}, errors.New("invalid tracker comment receipt")
+	}
+	id := ""
+	if row.ID > 0 {
+		id = strconv.FormatInt(row.ID, 10)
+	}
+	return commentReceipt{ID: id, AuthorID: row.User.identity(kind), At: row.Created}, nil
 }
 
 func jiraTime(s string) time.Time {
@@ -341,7 +394,7 @@ func readComments(req apiRequest, kind, path string, since time.Time) ([]issueCo
 			}
 			for _, row := range rows {
 				if row.ID > 0 && row.Created.After(since) {
-					out = append(out, issueComment{strconv.FormatInt(row.ID, 10), row.User.human(kind), row.Body, row.Created})
+					out = append(out, issueComment{ID: strconv.FormatInt(row.ID, 10), AuthorID: row.User.identity(kind), Actor: row.User.human(kind), Body: row.Body, At: row.Created})
 				}
 			}
 			if len(rows) < trackerPage {
@@ -363,7 +416,7 @@ func readComments(req apiRequest, kind, path string, since time.Time) ([]issueCo
 				return out, nil
 			}
 			if row.ID != "" && !at.IsZero() {
-				out = append(out, issueComment{row.ID, row.Author.human(kind), describe(row.Body), at})
+				out = append(out, issueComment{ID: row.ID, AuthorID: row.Author.identity(kind), Actor: row.Author.human(kind), Body: describe(row.Body), At: at})
 			}
 		}
 		offset += len(result.Comments)

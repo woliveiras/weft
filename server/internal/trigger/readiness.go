@@ -17,6 +17,8 @@ import (
 const readinessCapacity = "The trigger has 10 held issues. Resolve a hold before it evaluates new issues."
 
 type Hold struct {
+	CommentID          string     `json:"commentId,omitempty"`
+	CommentAuthor      string     `json:"commentAuthor,omitempty"`
 	UndoOwner          string     `json:"undoOwner,omitempty"`
 	PublicationMessage string     `json:"publicationMessage,omitempty"`
 	CommentAttempts    int        `json:"commentAttempts,omitempty"`
@@ -165,19 +167,35 @@ func relabel(ctx context.Context, call Invoker, key string, remove []string, add
 }
 
 func comment(ctx context.Context, call Invoker, key, body string) error {
+	_, err := writeComment(ctx, call, key, body)
+	return err
+}
+
+func writeComment(ctx context.Context, call Invoker, key, body string) (commentReceipt, error) {
 	res, err := call(ctx, trackerComment, trackerArgs{Key: key, Body: body})
 	if err == nil && res != nil && res.IsError {
 		var failure trackerCommentFailure
 		if json.Unmarshal(res.Data, &failure) == nil && failure.Status >= 400 && failure.Status <= 599 {
-			return failure
+			return commentReceipt{}, failure
 		}
 	}
-	return result(res, err)
+	var receipt commentReceipt
+	err = decode(res, err, &receipt)
+	return receipt, err
 }
 
 const maxCommentAttempts = 3
 
 func (r *Runner) postHoldComment(ctx context.Context, t *Trigger, call Invoker, h Hold) error {
+	author, err := trackerRead[string](ctx, call, trackerIdentity, trackerArgs{Key: h.Key})
+	if err != nil || author == "" {
+		h.Publication, h.UndoOwner = "comment_pending", ""
+		return r.failHoldComment(ctx, t, h, "The tracker comment author could not be verified. Check the connection and resolve the hold.")
+	}
+	if h.CommentAuthor != "" && h.CommentAuthor != author {
+		return r.failHoldComment(ctx, t, h, "The tracker comment author changed. Review the issue and resolve the hold.")
+	}
+	h.CommentAuthor = author
 	h.CommentAttempts++
 	now := r.Triggers.now()
 	if h.RoundAt.IsZero() {
@@ -188,10 +206,17 @@ func (r *Runner) postHoldComment(ctx context.Context, t *Trigger, call Invoker, 
 	if err := r.saveHold(ctx, t, h); err != nil {
 		return err
 	}
-	err := comment(ctx, call, h.Key, holdMessage(h))
-	if err == nil {
-		h.RoundAt = now
-		return r.confirmHoldComment(ctx, t, h)
+	receipt, err := writeComment(ctx, call, h.Key, holdMessage(h))
+	if err == nil && receipt.ID != "" {
+		h.CommentID = receipt.ID
+		if receipt.AuthorID == h.CommentAuthor {
+			h.RoundAt = now
+			if !receipt.At.IsZero() {
+				h.RoundAt = receipt.At
+			}
+			return r.confirmHoldComment(ctx, t, h)
+		}
+		return r.saveHold(ctx, t, h)
 	}
 	var failure trackerCommentFailure
 	if errors.As(err, &failure) && failure.definitive() {
@@ -227,6 +252,9 @@ func (r *Runner) publishHold(ctx context.Context, t *Trigger, call Invoker, h Ho
 		if h.RetryCommentAt != nil && r.Triggers.now().Before(*h.RetryCommentAt) {
 			return nil
 		}
+		if h.CommentAuthor == "" {
+			return r.failHoldComment(ctx, t, h, "The original tracker comment author is unknown. Review the issue and resolve the hold.")
+		}
 		// The tracker clock can lag the runner. Do not exclude a published
 		// comment from reconciliation based on its timestamp.
 		comments, err := trackerRead[[]issueComment](ctx, call, trackerComments, trackerArgs{Key: h.Key})
@@ -238,10 +266,12 @@ func (r *Runner) publishHold(ctx context.Context, t *Trigger, call Invoker, h Ho
 		if err != nil {
 			return errors.New("readiness comment delivery is unconfirmed")
 		}
-		expected := canonicalComment(holdMessage(h))
-		if i := slices.IndexFunc(comments, func(row issueComment) bool { return canonicalComment(row.Body) == expected }); i >= 0 {
-			h.RoundAt = comments[i].At
+		if i := publishedCommentIndex(h, comments); i >= 0 {
+			h.CommentID, h.RoundAt = comments[i].ID, comments[i].At
 			return r.confirmHoldComment(ctx, t, h)
+		}
+		if h.CommentID != "" {
+			return r.failHoldComment(ctx, t, h, "The posted tracker comment could not be verified by ID and author. Review the issue and resolve the hold.")
 		}
 		if h.CommentAttempts >= maxCommentAttempts {
 			return r.failHoldComment(ctx, t, h, "The tracker comment could not be confirmed after three attempts. Check the issue and connection, then resolve the hold.")
@@ -250,6 +280,19 @@ func (r *Runner) publishHold(ctx context.Context, t *Trigger, call Invoker, h Ho
 	default:
 		return nil
 	}
+}
+
+func publishedCommentIndex(h Hold, comments []issueComment) int {
+	expected := canonicalComment(holdMessage(h))
+	return slices.IndexFunc(comments, func(row issueComment) bool {
+		if row.ID == "" || h.CommentAuthor == "" || row.AuthorID != h.CommentAuthor {
+			return false
+		}
+		if h.CommentID != "" {
+			return row.ID == h.CommentID
+		}
+		return canonicalComment(row.Body) == expected
+	})
 }
 
 // Jira ADF flattening can omit empty paragraphs. Preserve line boundaries
@@ -262,6 +305,7 @@ func canonicalComment(body string) string {
 func (h *Hold) prepareComment() {
 	h.Marker, h.Publication = domain.NewID("hold"), "label_pending"
 	h.RoundAt, h.CommentAttempts, h.RetryCommentAt, h.PublicationMessage = time.Time{}, 0, nil, ""
+	h.CommentID, h.CommentAuthor = "", ""
 }
 
 func recordEvaluationFailure(h *Hold, reason string) {
@@ -326,6 +370,9 @@ func (r *Runner) currentReplies(ctx context.Context, t *Trigger, call Invoker, h
 		return nil, nil
 	}
 	replies, err := trackerRead[[]issueComment](ctx, call, trackerComments, trackerArgs{Key: i.Key, Since: h.OpenedAt})
+	replies = slices.DeleteFunc(replies, func(reply issueComment) bool {
+		return h.CommentID != "" && reply.ID == h.CommentID && reply.AuthorID == h.CommentAuthor
+	})
 	return eligibleReplies(i, t.Owner, replies), err
 }
 

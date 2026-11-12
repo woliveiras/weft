@@ -371,8 +371,13 @@ func TestReadinessHoldVisibleInActivityWithoutTaskOrPayload(t *testing.T) {
 	a.Tools.MustRegister(fixtureTool{name: "mcp.gh.search_issues", calls: &searches, content: `{"items":[` + issue + `]}`})
 	a.TrackerAPI.Client = &http.Client{Transport: trackerTransport(func(req *http.Request) (*http.Response, error) {
 		body := "{}"
-		if req.Method == "GET" {
+		switch {
+		case req.URL.Path == "/user":
+			body = `{"id":700}`
+		case req.Method == "GET":
 			body = issue
+		case strings.HasSuffix(req.URL.Path, "/comments"):
+			body = `{"id":1,"user":{"id":700}}`
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
 	})}

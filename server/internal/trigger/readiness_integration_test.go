@@ -23,7 +23,11 @@ func advance(r *trigger.Runner, c *clock, t *testing.T, id string) *trigger.Trig
 }
 
 func ghReply(id int, who, kind, body string, at time.Time) map[string]any {
-	return map[string]any{"id": id, "user": map[string]string{"login": who, "type": kind},
+	authorID := 701
+	if who == "weft-service" {
+		authorID = 700
+	}
+	return map[string]any{"id": id, "user": map[string]any{"login": who, "type": kind, "id": authorID},
 		"body": body, "created_at": at}
 }
 
@@ -244,11 +248,14 @@ func TestReadinessRecoversUnconfirmedCommentWithoutRepeatingIt(t *testing.T) {
 	if len(tr.Holds) != 1 || tr.Holds[0].Publication != "comment_pending" || len(gh.comments["#1"]) != 1 || tr.LastError == "" {
 		t.Fatalf("uncertain write-back not recorded: %+v", tr)
 	}
-	gh.replies["#1"] = []map[string]any{ghReply(1, "weft-service", "User", gh.comments["#1"][0], c.t.Add(-2*time.Minute))}
+	gh.replies["#1"] = []map[string]any{
+		ghReply(2, "author", "User", gh.comments["#1"][0], c.t.Add(-3*time.Minute)),
+		ghReply(1, "weft-service", "User", gh.comments["#1"][0], c.t.Add(-2*time.Minute)),
+	}
 	restarted := runner(st, c, "second", gh)
 	restarted.Tasks, restarted.Assessor = r.Tasks, r.Assessor
 	tr = advance(restarted, c, t, tr.ID)
-	if tr.Holds[0].Publication != "confirmed" || len(gh.comments["#1"]) != 1 || modelCalls != 1 || tr.CurrentTask != "" {
+	if tr.Holds[0].Publication != "confirmed" || tr.Holds[0].CommentID != "1" || tr.Holds[0].CommentAuthor != "700" || len(gh.comments["#1"]) != 1 || modelCalls != 1 || tr.CurrentTask != "" {
 		t.Fatalf("restart did not reconcile the existing comment: %+v", tr)
 	}
 }
@@ -405,7 +412,7 @@ func TestReadinessCommentRetriesOnlyAfterReconciliation(t *testing.T) {
 			tr = advance(r, c, t, tr.ID)
 			log := strings.Join(gh.rest, "\n")
 			if tr.Holds[0].Publication != "confirmed" || tr.Holds[0].CommentAttempts != 2 || len(gh.comments["#1"]) != 1 ||
-				!strings.Contains(log, "GET /repos/acme/app/issues/1/comments\n"+post) {
+				!strings.Contains(log, "GET /repos/acme/app/issues/1/comments\nGET /user\n"+post) {
 				t.Fatalf("retry was not reconciled: %+v %v", tr.Holds, gh.rest)
 			}
 		})

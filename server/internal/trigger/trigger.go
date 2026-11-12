@@ -504,7 +504,7 @@ func (m Manager) reviewedScope(ctx context.Context, in Input, g *domain.Graph) (
 		if node == nil {
 			return Consent{}, errors.New("entry agent is missing")
 		}
-		c.Operations = append(c.Operations, trackerComments, trackerRequeue)
+		c.Operations = append(c.Operations, trackerComments, trackerRequeue, trackerIdentity)
 		c.ReadinessLimits, err = m.ReadinessPolicy(ctx)
 		if err != nil {
 			return Consent{}, err

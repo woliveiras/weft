@@ -71,3 +71,20 @@ func TestSnapshotInvalidationUsesTheSharedRoundAllowance(t *testing.T) {
 		t.Fatal(h)
 	}
 }
+
+func TestPublishedCommentRequiresVerifiedAuthorAndKnownID(t *testing.T) {
+	h := Hold{Marker: "hold_marker", State: "waiting", CommentAuthor: "700"}
+	body := holdMessage(h)
+	rows := []issueComment{{ID: "1", AuthorID: "other", Body: body}, {ID: "2", AuthorID: "700", Body: body}, {ID: "3", AuthorID: "700", Body: body}}
+	if got := publishedCommentIndex(h, rows); got != 1 {
+		t.Fatal(got)
+	}
+	h.CommentID = "3"
+	if got := publishedCommentIndex(h, rows); got != 2 {
+		t.Fatal(got)
+	}
+	h.CommentID = "1"
+	if got := publishedCommentIndex(h, rows); got != -1 {
+		t.Fatal(got)
+	}
+}
