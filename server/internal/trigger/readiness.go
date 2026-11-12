@@ -16,6 +16,7 @@ import (
 const readinessCapacity = "The trigger has 10 held issues. Resolve a hold before it evaluates new issues."
 
 type Hold struct {
+	UndoOwner          string     `json:"undoOwner,omitempty"`
 	PublicationMessage string     `json:"publicationMessage,omitempty"`
 	CommentAttempts    int        `json:"commentAttempts,omitempty"`
 	RetryCommentAt     *time.Time `json:"retryCommentAt,omitempty"`
@@ -201,9 +202,10 @@ func (r *Runner) failHoldComment(ctx context.Context, t *Trigger, h Hold, messag
 func (r *Runner) publishHold(ctx context.Context, t *Trigger, call Invoker, h Hold) error {
 	switch h.Publication {
 	case "label_pending", "label_pending_only":
-		if err := relabel(ctx, call, h.Key, h.Removals, LabelFailed, ""); err != nil {
+		if err := trackerWrite(ctx, call, trackerLabels, trackerArgs{Key: h.Key, Remove: h.Removals, Add: LabelFailed, UndoOwner: h.UndoOwner}); err != nil {
 			return errors.New("readiness label write did not complete")
 		}
+		h.UndoOwner = ""
 		if h.Publication == "label_pending_only" {
 			return r.confirmHoldComment(ctx, t, h)
 		}
@@ -344,6 +346,9 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	i, err := trackerRead[Issue](ctx, call, trackerGet, trackerArgs{Key: h.Key})
 	if err != nil {
 		return false, err
+	}
+	if h.Publication == "label_pending" && h.UndoOwner != "" {
+		return false, r.publishHold(ctx, t, call, h)
 	}
 	if reason := holdReleaseReason(t, h, i); reason != "" {
 		return false, r.releaseHold(ctx, t, h, reason)

@@ -32,12 +32,13 @@ type TrackerCall func(ctx context.Context, connection, kind string, revision int
 type trackerScopeKey struct{}
 
 type trackerArgs struct {
-	Key    string    `json:"key"`
-	Remove []string  `json:"remove,omitempty"`
-	Add    string    `json:"add,omitempty"`
-	Owner  string    `json:"owner,omitempty"`
-	Body   string    `json:"body,omitempty"`
-	Since  time.Time `json:"since,omitempty"`
+	UndoOwner string    `json:"undoOwner,omitempty"`
+	Key       string    `json:"key"`
+	Remove    []string  `json:"remove,omitempty"`
+	Add       string    `json:"add,omitempty"`
+	Owner     string    `json:"owner,omitempty"`
+	Body      string    `json:"body,omitempty"`
+	Since     time.Time `json:"since,omitempty"`
 }
 
 type trackerCommentFailure struct {
@@ -200,6 +201,9 @@ func validLabelChange(t *Trigger, a trackerArgs) bool {
 	if !allowed(a.Add) || len(a.Remove) > 3 || (a.Owner != "" && (a.Add != LabelInProgress || a.Owner != t.Owner)) {
 		return false
 	}
+	if a.UndoOwner != "" && (a.UndoOwner != t.Owner || a.Owner != "" || a.Add != LabelFailed || !slices.Contains(a.Remove, LabelInProgress)) {
+		return false
+	}
 	for _, label := range a.Remove {
 		if !allowed(label) || label == a.Add {
 			return false
@@ -217,9 +221,31 @@ func changeLabels(req apiRequest, kind, path string, a trackerArgs) error {
 		body := map[string]any{"update": map[string]any{"labels": labels}}
 		if a.Owner != "" {
 			body["fields"] = map[string]any{"assignee": map[string]string{"accountId": a.Owner}}
+		} else if a.UndoOwner != "" {
+			current, err := readJSON[jiraIssue](req, http.MethodGet, path+"?fields=assignee", nil)
+			if err != nil {
+				return err
+			}
+			if current.Fields.Assignee.AccountID == a.UndoOwner {
+				body["fields"] = map[string]any{"assignee": nil}
+			}
 		}
 		_, _, err := req(http.MethodPut, path, body)
 		return err
+	}
+	if a.UndoOwner != "" {
+		type assignee struct{ Login string }
+		current, err := readJSON[struct {
+			Assignees *[]assignee `json:"assignees"`
+		}](req, http.MethodDelete, path+"/assignees", map[string]any{"assignees": []string{a.UndoOwner}})
+		if err != nil {
+			return err
+		}
+		if current.Assignees == nil || slices.ContainsFunc(*current.Assignees, func(ae assignee) bool {
+			return strings.EqualFold(ae.Login, a.UndoOwner)
+		}) {
+			return errors.New("tracker did not confirm assignment rollback")
+		}
 	}
 	if _, _, err := req(http.MethodPost, path+"/labels", map[string]any{"labels": []string{a.Add}}); err != nil {
 		return err

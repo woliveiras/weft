@@ -125,3 +125,23 @@ func TestDefinitiveTrackerCommentFailures(t *testing.T) {
 		}
 	}
 }
+
+func TestJiraRollbackClearsOnlyTheReviewedAssignment(t *testing.T) {
+	for _, account := range []string{"reviewed", "different"} {
+		req := func(method, path string, body any) (json.RawMessage, int, error) {
+			if method == http.MethodGet {
+				raw, _ := json.Marshal(map[string]any{"fields": map[string]any{"assignee": map[string]string{"accountId": account}}})
+				return raw, 200, nil
+			}
+			m := body.(map[string]any)
+			fields, clears := m["fields"].(map[string]any)
+			if clears != (account == "reviewed") || (clears && fields["assignee"] != nil) {
+				t.Fatal(m)
+			}
+			return nil, 204, nil
+		}
+		if err := changeLabels(req, "jira", "/issue/APP-1", trackerArgs{Add: LabelFailed, Remove: []string{LabelInProgress}, UndoOwner: "reviewed"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

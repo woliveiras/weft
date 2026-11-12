@@ -14,6 +14,7 @@ import (
 
 // tracker is an in-memory GitHub or Jira project behind MCP tool names.
 type tracker struct {
+	editOnAssignment    bool
 	transientComments   int
 	loseCommentResponse bool
 	rest                []string
@@ -236,7 +237,15 @@ func (t *tracker) request(_ context.Context, connection, kind string, _ int64, m
 			i["labels"] = labels
 			return rawFixture(labels)
 		case "assignees":
-			i["assignees"] = []map[string]any{{"login": body.(map[string]any)["assignees"].([]string)[0]}}
+			owner := body.(map[string]any)["assignees"].([]string)[0]
+			if method == "DELETE" {
+				i["assignees"] = slices.DeleteFunc(i["assignees"].([]map[string]any), func(a map[string]any) bool { return a["login"] == owner })
+			} else {
+				i["assignees"] = []map[string]any{{"login": owner}}
+				if t.editOnAssignment {
+					i["body"] = "Edited during assignment."
+				}
+			}
 			return rawFixture(i)
 		}
 	}

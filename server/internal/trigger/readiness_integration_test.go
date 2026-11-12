@@ -441,3 +441,33 @@ func TestFailedAssessmentsExhaustRoundsDespiteRepeatedAuthorReplies(t *testing.T
 		t.Fatalf("failed evaluations exceeded the allowance: calls %d, holds %+v, comments %v", calls, tr.Holds, gh.comments)
 	}
 }
+
+func TestChangedSnapshotRollsBackClaimAndNewAssignment(t *testing.T) {
+	for _, preassigned := range []bool{false, true} {
+		t.Run(fmt.Sprint(preassigned), func(t *testing.T) {
+			st := triggerStore(t)
+			c := &clock{t: time.Now().UTC()}
+			gh := newTracker("gh")
+			gh.issues = []map[string]any{ghIssue(1, "Issue", "weft", "bug")}
+			if preassigned {
+				gh.issues[0]["assignees"] = []map[string]any{{"login": "weft-bot"}}
+			}
+			gh.editOnAssignment = true
+			r := runner(st, c, "one", gh)
+			starter := &tasks{}
+			r.Tasks = starter
+			tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			row := gh.issues[0]
+			assignees := row["assignees"].([]map[string]any)
+			labels := row["labels"].([]map[string]any)
+			if (len(assignees) == 1) != preassigned || len(labels) != 2 || labels[0]["name"] != "bug" ||
+				labels[1]["name"] != trigger.LabelFailed || len(starter.started) != 0 || len(tr.Holds) != 1 || tr.Holds[0].Reason != "snapshot_changed" {
+				t.Fatalf("claim not restored: issue %+v, holds %+v", row, tr.Holds)
+			}
+		})
+	}
+}
