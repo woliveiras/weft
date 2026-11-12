@@ -99,6 +99,28 @@ describe('TriggersSection', () => {
     }
   });
 
+  it('lets an admin resume access checks for a hold on an active trigger', async () => {
+    const accessError = 'Check the Jira connection and read:project:jira.';
+    const active: Trigger = { ...paused, state: 'active', pausedReason: undefined };
+    let list: Trigger[] = [{
+      ...active, lastError: accessError,
+      holds: [{ generation: 'gen-1', key: 'APP-7', reason: 'incomplete', message: 'Waiting', round: 1, accessError }],
+    }];
+    const path = '/api/v1/triggers/trg_1/resume';
+    const api = fakeApi({
+      'GET /api/v1/triggers': () => list,
+      'GET /api/v1/scm/connections': () => [],
+      [`POST ${path}`]: () => { list = [active]; return active; },
+    });
+    const user = userEvent.setup();
+    render(<TriggersSection graph={graph} role="admin" />);
+    const resume = await screen.findByRole('button', { name: 'Resume and record consent' });
+    expect(screen.getByText(`Last run failed: ${accessError}`)).toBeTruthy();
+    await user.click(resume);
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Resume and record consent' })).toBeNull());
+    expect(api.find('POST', path)).toHaveLength(1);
+  });
+
   it('formats the latest future retry and omits expired deadlines', async () => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-12T10:45:00Z'));
     try {

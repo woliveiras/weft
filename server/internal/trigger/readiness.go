@@ -34,6 +34,8 @@ type Hold struct {
 	RetryCommentAt     *time.Time `json:"retryCommentAt,omitempty"`
 
 	RetryFailures   int                  `json:"retryFailures,omitempty"`
+	AccessFailures  int                  `json:"accessFailures,omitempty"`
+	AccessError     string               `json:"accessError,omitempty"`
 	RetryAccessAt   *time.Time           `json:"retryAccessAt,omitempty"`
 	RetryAt         *time.Time           `json:"retryAt,omitempty"`
 	ScopeAssessment *ReadinessAssessment `json:"scopeAssessment,omitempty"`
@@ -228,6 +230,9 @@ func (r *Runner) saveHoldState(ctx context.Context, t *Trigger, h Hold, rollback
 }
 
 func holdFailureOutcome(h Hold) string {
+	if h.AccessError != "" {
+		return "access_failed"
+	}
 	switch h.Publication {
 	case "label_failed":
 		return "label_failed"
@@ -660,6 +665,9 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	if holdHasPendingWrite(h) {
 		return false, r.publishHold(ctx, t, call, h)
 	}
+	if h.AccessError != "" {
+		return false, nil
+	}
 	now := r.Triggers.now()
 	if (h.RetryAt != nil && now.Before(*h.RetryAt)) || (h.RetryAccessAt != nil && now.Before(*h.RetryAccessAt)) {
 		return false, nil
@@ -677,8 +685,9 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 		}
 		return false, err
 	}
-	if h.MissingPoll != 0 || h.RetryAccessAt != nil || h.Eligibility == issueMissingForOperator || h.Eligibility == issueMissingAwaitingPoll {
+	if h.MissingPoll != 0 || h.AccessFailures != 0 || h.RetryAccessAt != nil || h.Eligibility == issueMissingForOperator || h.Eligibility == issueMissingAwaitingPoll {
 		h.MissingPoll, h.MissingSince, h.RetryAccessAt, h.Eligibility = 0, time.Time{}, nil, ""
+		h.AccessFailures = 0
 		if err := r.saveHold(ctx, t, h); err != nil {
 			return false, err
 		}
@@ -799,9 +808,7 @@ func (r *Runner) checkMissingHold(ctx context.Context, t *Trigger, h Hold, err e
 	now := r.Triggers.now()
 	release, reason, err := missingHoldDisposition(t, h, failure, now)
 	if errors.Is(err, errHeldIssueAccessUnverified) {
-		next := issueAccessRetryAt(now, failure)
-		h.MissingPoll, h.MissingSince, h.RetryAccessAt = 0, time.Time{}, &next
-		h.Eligibility = "could not be checked because repository or project access verification is temporarily unavailable"
+		recordIssueAccessFailure(&h, t.Source.Kind, now, failure)
 		return r.saveHold(ctx, t, h)
 	}
 	if err != nil {
@@ -810,7 +817,7 @@ func (r *Runner) checkMissingHold(ctx context.Context, t *Trigger, h Hold, err e
 	if release {
 		return r.releaseHold(ctx, t, h, reason, true)
 	}
-	h.RetryAccessAt = nil
+	h.AccessFailures, h.RetryAccessAt = 0, nil
 	if reason == issueMissingAwaitingPoll {
 		if !hasConsecutiveMissingObservation(t, h) {
 			h.MissingSince = now
@@ -824,6 +831,33 @@ func (r *Runner) checkMissingHold(ctx context.Context, t *Trigger, h Hold, err e
 	}
 	h.Eligibility = reason
 	return r.saveHold(ctx, t, h)
+}
+
+const maxIssueAccessFailures = 5
+
+func recordIssueAccessFailure(h *Hold, source string, now time.Time, failure trackerHTTPFailure) {
+	h.MissingPoll, h.MissingSince = 0, time.Time{}
+	h.AccessFailures = min(h.AccessFailures+1, maxIssueAccessFailures)
+	if h.AccessFailures < maxIssueAccessFailures {
+		next := issueAccessRetryAt(now, failure)
+		h.RetryAccessAt = &next
+		h.Eligibility = "could not be checked because repository or project access verification is temporarily unavailable"
+		return
+	}
+	h.RetryAccessAt = nil
+	h.Eligibility = "requires operator review because repository or project access could not be verified"
+	resource := "GitHub repository"
+	guidance := "Check tracker availability, the connection credential and repository access."
+	if source == "jira" {
+		resource = "Jira project"
+		guidance = "Check tracker availability, the connection credential and Browse Projects permission. For granular API scopes, check read:project:jira."
+	}
+	detail := ""
+	if failure.AccessStatus >= 400 && failure.AccessStatus <= 599 {
+		detail = fmt.Sprintf(" (HTTP %d)", failure.AccessStatus)
+	}
+	h.AccessError = fmt.Sprintf("The %s access check could not be verified after %d attempts%s. %s Resolve the hold or have an administrator resume the trigger after correcting access.",
+		resource, maxIssueAccessFailures, detail, guidance)
 }
 
 func issueAccessRetryAt(now time.Time, failure trackerHTTPFailure) time.Time {

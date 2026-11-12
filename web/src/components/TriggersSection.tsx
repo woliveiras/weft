@@ -165,7 +165,7 @@ export function TriggersSection({ graph, role }: { graph: Graph; role?: string }
               {canPreview && <Btn small onClick={() => void preview(t)}>Preview matching issues</Btn>}
               {admin && <Btn small onClick={() => edit(t)}>Edit</Btn>}
               {admin && t.state === 'active' && <Btn small onClick={() => void act(t, 'pause')}>Pause</Btn>}
-              {admin && t.state === 'paused' && <Btn small tone="primary" onClick={() => void act(t, 'resume')}>Resume and record consent</Btn>}
+              {admin && (t.state === 'paused' || (t.state === 'active' && t.holds?.some((h) => h.accessError))) && <Btn small tone="primary" onClick={() => void act(t, 'resume')}>Resume and record consent</Btn>}
               {admin && <Btn small tone="danger" onClick={() => void act(t, 'delete')}>Delete</Btn>}
             </div>
             {typeof m === 'string' && <p role="alert">{m}</p>}

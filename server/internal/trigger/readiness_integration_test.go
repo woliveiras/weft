@@ -1680,3 +1680,80 @@ func TestMissingIssueConfirmationSpacingSurvivesRestartAndResetsOnSuccess(t *tes
 		})
 	}
 }
+
+func TestPersistentIssueAccessFailuresStayVisibleUntilReviewed(t *testing.T) {
+	for _, tc := range []struct {
+		kind     string
+		status   int
+		guidance string
+	}{
+		{"jira", 401, "read:project:jira"},
+		{"github", 503, "repository access"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			c := &clock{t: time.Now().UTC()}
+			st := triggerStore(t)
+			gh := newTracker("gh")
+			gh.pageSearch = true
+			gh.issues = []map[string]any{ghIssue(1, "Waiting", "weft")}
+			in := input()
+			probe, issue := "GET /repos/acme/app", "GET /repos/acme/app/issues/1"
+			if tc.kind == "jira" {
+				const cloudID = "11111111-2222-3333-4444-555555555555"
+				in.Source = trigger.SourceConfig{Kind: "jira", ConnectionID: "gh", CloudID: cloudID}
+				gh.issues = []map[string]any{jiraIssue("APP-1", "Waiting", "weft")}
+				probe, issue = "GET /ex/jira/"+cloudID+"/rest/api/3/project/APP", "GET /ex/jira/"+cloudID+"/rest/api/3/issue/APP-1"
+			}
+			configure := func(instance string) *trigger.Runner {
+				r := runner(st, c, instance, gh)
+				r.Tasks = &tasks{}
+				r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+					return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+				})
+				return r
+			}
+			r := configure("first")
+			tr, err := r.Triggers.Create(t.Context(), in, "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			gh.status[issue], gh.status[probe] = 404, tc.status
+			for n := 1; n <= 5; n++ {
+				tr = advance(r, c, t, tr.ID)
+				if len(tr.Holds) != 1 || len(tr.HoldResolutions) != 0 || tr.Holds[0].AccessFailures != n ||
+					(n < 5 && tr.LastError != "") {
+					t.Fatalf("failure count, hold or diagnostic changed early: %+v", tr)
+				}
+				if n == 3 {
+					r = configure("restarted")
+				}
+			}
+			if !strings.Contains(tr.LastError, fmt.Sprintf("HTTP %d", tc.status)) ||
+				!strings.Contains(tr.LastError, tc.guidance) || tr.Holds[0].RetryAccessAt != nil || tr.Holds[0].Round != 1 {
+				t.Fatalf("terminal access diagnostic or preserved hold: %+v", tr)
+			}
+			searches := len(gh.calls)
+			tr = advance(r, c, t, tr.ID)
+			probes := 0
+			for _, call := range gh.rest {
+				if call == probe {
+					probes++
+				}
+			}
+			if len(gh.calls) <= searches || probes != 5 ||
+				!strings.Contains(tr.LastError, tc.guidance) {
+				t.Fatalf("terminal failure retried, stopped discovery or disappeared: %+v", tr)
+			}
+			delete(gh.status, probe)
+			if _, err := r.Triggers.Resume(t.Context(), tr.ID, "admin"); err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			if len(tr.Holds) != 1 || tr.Holds[0].AccessFailures != 0 || tr.Holds[0].Round != 1 ||
+				tr.LastError != "" || !strings.Contains(tr.Holds[0].Eligibility, "awaiting confirmation") {
+				t.Fatalf("reviewed resume did not recover the original hold: %+v", tr)
+			}
+		})
+	}
+}

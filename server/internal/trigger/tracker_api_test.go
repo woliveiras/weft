@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"reflect"
 	"strings"
@@ -308,6 +309,34 @@ func TestIssueAccessRetryUsesRateLimitDeadlineOrTransportBackoff(t *testing.T) {
 	} {
 		if got := issueAccessRetryAt(now, tc.failure); !got.Equal(tc.want) {
 			t.Fatalf("got %v, want %v", got, tc.want)
+		}
+	}
+}
+
+func TestIssueAccessFailuresExhaustRetriesAndExplainRecovery(t *testing.T) {
+	now := time.Now().UTC()
+	for _, tc := range []struct {
+		source   string
+		status   int
+		guidance string
+	}{
+		{"jira", 401, "read:project:jira"},
+		{"github", 503, "tracker availability"},
+		{"github", 0, "repository access"},
+	} {
+		h := Hold{Round: 1, SnapshotEdits: 2, MissingPoll: 7, MissingSince: now}
+		for n := 1; n <= maxIssueAccessFailures; n++ {
+			recordIssueAccessFailure(&h, tc.source, now, trackerHTTPFailure{AccessStatus: tc.status})
+			if h.AccessFailures != n || h.Round != 1 || h.SnapshotEdits != 2 || h.MissingPoll != 0 || !h.MissingSince.IsZero() {
+				t.Fatalf("access retry changed readiness progress: %+v", h)
+			}
+			if n < maxIssueAccessFailures && (h.AccessError != "" || h.RetryAccessAt == nil || !h.RetryAccessAt.Equal(now.Add(time.Minute))) {
+				t.Fatalf("access retries stopped early or lost backoff: %+v", h)
+			}
+		}
+		if h.RetryAccessAt != nil || !strings.Contains(h.AccessError, tc.guidance) || strings.Contains(h.Eligibility, "temporarily unavailable") ||
+			(tc.status != 0 && !strings.Contains(h.AccessError, fmt.Sprintf("HTTP %d", tc.status))) {
+			t.Fatalf("missing terminal guidance: %+v", h)
 		}
 	}
 }

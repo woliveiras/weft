@@ -89,7 +89,11 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   issue 404 or 410 can count. Both Jira responses require the same
   consecutive-poll confirmation and minimum spacing. A temporarily unavailable access check defers only
   the affected hold through the applicable rate-limit deadline, subject
-  to the one-hour cap. Other holds and ordinary discovery continue.
+  to the one-hour cap. Five unverified checks exhaust automatic retries
+  for the affected hold and expose connection guidance in trigger state.
+  A successful issue or access read resets the count. The hold remains
+  available for explicit resolution or renewed consent and resumption.
+  Other holds and ordinary discovery continue.
   Holds requiring operator
   intervention report a missing issue and remain held. Automatic release
   for a missing issue retains its round and edit counts.
@@ -200,8 +204,8 @@ payloads or secrets. Structured logs and evaluation outcome and latency
 metrics use bounded categories and carry no issue content. Trigger details
 show the edit count. A terminal label, retry or comment failure logs a
 structured transition and increments `weft_trigger_readiness_failures_total`
-with the bounded outcome `label_failed`, `retry_failed` or
-`comment_failed`. Partial tracker
+with a bounded outcome. The outcomes are `label_failed`, `retry_failed`,
+`comment_failed` and `access_failed`. Partial tracker
 writes or failed persistence cannot report successful publication or allow
 admission.
 

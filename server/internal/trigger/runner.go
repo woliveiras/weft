@@ -143,6 +143,9 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 		if err != nil {
 			t.LastError = err.Error()
 		}
+		if i := slices.IndexFunc(t.Holds, func(h Hold) bool { return h.AccessError != "" }); i >= 0 {
+			t.LastError = strings.TrimSpace(t.LastError + " " + t.Holds[i].AccessError)
+		}
 		return nil
 	}); uerr != nil {
 		r.log().Error("trigger state could not be saved", "trigger", id, "err", uerr)

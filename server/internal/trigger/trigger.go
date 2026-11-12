@@ -429,6 +429,12 @@ func (m Manager) Resume(ctx context.Context, id, actor string) (*Trigger, error)
 		if err != nil {
 			return err
 		}
+		for i := range t.Holds {
+			h := &t.Holds[i]
+			if h.AccessError != "" {
+				h.AccessError, h.AccessFailures, h.Eligibility = "", 0, ""
+			}
+		}
 		t.Consent, t.State, t.PausedReason, t.LastError, t.NextRunAt = c, Active, "", "", nil
 		return nil
 	})

@@ -30,6 +30,7 @@ func TestHoldFailuresReportOncePerPersistedTransition(t *testing.T) {
 		{Key: "label", Publication: "label_failed"},
 		{Key: "retry", State: "retry_failed"},
 		{Key: "comment", Publication: "comment_failed"},
+		{Key: "access", AccessError: "fixture access failure"},
 	} {
 		outcome := holdFailureOutcome(h)
 		counter := observability.TriggerReadinessFailures.WithLabelValues(outcome)
