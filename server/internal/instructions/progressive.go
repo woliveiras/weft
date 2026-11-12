@@ -29,6 +29,8 @@ var escapeFrameText = strings.NewReplacer(
 	"\u0085", `\u0085`, "\u2028", `\u2028`, "\u2029", `\u2029`,
 )
 
+var escapeFrameSource = strings.NewReplacer("[", `\x5b`, "]", `\x5d`, "\n", `\n`)
+
 // ReferenceReader routes an already scoped reference through workspace file
 // policy. The callback opens the reference only after the gateway authorizes it.
 type ReferenceReader func(ctx context.Context, packagePath, path string, read func() (string, string)) (string, string, error)
@@ -276,7 +278,7 @@ func (s *Session) admit(mandatory []Entry, selectedConsoleIDs []string) {
 
 func renderEntry(e Entry, content string) string {
 	quoted := strings.ReplaceAll(escapeFrameText.Replace(content), "\n", "\n| ")
-	return fmt.Sprintf("\n[%s %s]\n| %s\n[end guidance]\n", e.Scope, escapeFrameText.Replace(e.Source), quoted)
+	return fmt.Sprintf("\n[%s %s]\n| %s\n[end guidance]\n", e.Scope, escapeFrameSource.Replace(escapeFrameText.Replace(e.Source)), quoted)
 }
 
 func (s *Session) Prompt() string {
