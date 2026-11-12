@@ -343,6 +343,16 @@ granular scopes, include `read:project:jira` and the other scopes listed
 for the endpoint.
 [Atlassian Get project](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-projects/#api-rest-api-3-project-projectidorkey-get)
 
+A rate-limited repository or project check shows its retry deadline and
+keeps the access retry count unchanged. If access remains unverified
+after five other attempts, for example because the tracker keeps
+returning 401 or 5xx, Weft stops checking the affected hold and shows
+recovery guidance. Other holds and discovery can still proceed. After
+correcting the tracker connection or restoring service, an Admin can
+select **Resume and record consent** to restart verification and preserve
+readiness progress. An Operator or Admin can also explicitly resolve the
+hold.
+
 Readiness uses the entry agent's configured model in a separate tool-free
 call. It checks the issue and eligible replies for a clear objective,
 verifiable acceptance and scope where materially ambiguous. The installation

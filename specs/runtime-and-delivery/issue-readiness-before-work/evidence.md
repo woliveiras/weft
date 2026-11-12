@@ -308,3 +308,34 @@ Fixture verification on 2026-11-12.
 Go used cached Docker images with pulls disabled. Playwright used installed
 Chromium and a disposable Darwin backend. Live tracker qualification remains
 in PROD-14.
+
+## Independent review of 9251f46 through abf8bc6
+
+Fixture verification on 2026-11-12.
+
+- The runner observed five consecutive GitHub repository rate limits,
+  preserved each deadline and left the access failure count at zero.
+  A unit case kept four existing failures unchanged. The Jira REST
+  transport fixture preserved Retry-After from a project 429.
+  [Atlassian rate-limit response](https://developer.atlassian.com/cloud/jira/platform/rate-limiting/)
+- The persisted runner exposed both failed holds by issue key. Vitest
+  verified that each hold renders its own error, and Chromium verified
+  the error from the fixture API.
+- Jira project 403 and 404 report Browse Projects permission and the
+  granular scope `read:project:jira`. The workflow guide explains
+  recovery after five non-rate-limit failures.
+
+| Command | Result |
+| --- | --- |
+| `go test -count=1 ./internal/trigger ./internal/mcpconfig ./internal/api ./internal/activity` | All four affected packages passed. |
+| `go test -count=1 -p 1 ./...` and `go test -count=1 ./internal/engine` | The full suite passed. The engine passed in the full suite (30.524s) and on its standalone run (30.434s). |
+| `./scripts/go.sh vet ./...` and `gofmt -l .` in `server/` | Vet passed. Gofmt listed no files. |
+| `GOOS=linux CGO_ENABLED=0 go build ./...` and `GOOS=darwin CGO_ENABLED=0 go build ./...` | Both arm64 builds passed. |
+| `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed the disposable browser fixture tests. |
+| `./node_modules/.bin/vitest run` in `web/` | 450 tests passed in 88 files. |
+| `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/tsc --project tsconfig.e2e.json` in `web/` | Both type checks passed. |
+| `./node_modules/.bin/playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` in `web/` | Five trigger and three Activity scenarios passed in Chromium. |
+
+Go used cached Docker images with pulls disabled. Playwright used installed
+Chromium and a disposable Darwin backend. Live tracker qualification remains
+in PROD-14.
