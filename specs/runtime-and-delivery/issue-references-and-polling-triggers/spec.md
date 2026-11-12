@@ -2,7 +2,7 @@
 id: RUN-006
 title: "Issue References and Polling Triggers"
 summary: "Read reviewed issue references and start eligible labeled work through consent-bound polling."
-status: in-progress
+status: implemented
 scope: ["issue references and polling triggers"]
 navigation: ["specs/README.md","specs/runtime-and-delivery/issue-references-and-polling-triggers/matrix.md"]
 documentation: ["docs/task-workflows.md","docs/atlassian-bitbucket-setup.md","docs/tool-permissions.md"]

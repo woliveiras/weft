@@ -23,3 +23,15 @@ label lifecycle and closure criteria still require fixture qualification.
 The maintainer subsequently approved the specific tracker API gateway
 operations with reviewed consent and fixture verification, and qualified
 GitHub closure references for cross-repository delivery.
+
+## B2 fixture verification on 2026-11-12
+
+| Criterion | Observed evidence |
+| --- | --- |
+| AC-001 | Existing explicit issue-reference unit and integration regressions passed. |
+| AC-002 | Existing trigger lease, scheduling and eligibility regressions passed. API and Chromium tests verify consent invalidation and read-only preview. The readiness runner test verifies default `weft:todo` and the custom selection label path. |
+| AC-003 | GitHub and Jira gateway fixtures exercise claim, completion and failures with `weft:wip`, `weft:done` and `weft:needs-attention`. A label-operation unit test adds an unrelated GitHub label concurrently and verifies it is preserved. Jira status stays *To Do* throughout the fixture and no transition is invoked. |
+| AC-004 | `TestAppendClosingIssue` and `TestTriggeredPullRequestBodyUsesAdmittedIssueIdentity` verify short and qualified closing references through the SCM gateway and GitHub HTTP fixture. Delivery without a GitHub issue retains the original PR body. |
+
+See the [B2 command results](../issue-readiness-before-work/evidence.md#b2-fixture-verification-on-2026-11-12).
+Live qualification remains with PROD-14.

@@ -311,6 +311,60 @@ delegated permission limits and retained audit evidence. Include native versus
 sandbox semantics and visible limitations. Real vendor credentials, private remote
 repositories and user acceptance remain in the final external validation round.
 
+## Issue-trigger readiness and delivery
+
+Open **Graph settings → Issue triggers** on a saved workflow. Select the
+tracker, entry and result agents, and source control connection. Saving
+records consent for the current source, gateway operations, workflow,
+authorization and readiness settings. Edit the trigger and then review
+and resume it to consent to a changed scope. The prototype uses the new
+trigger policy when a trigger is reviewed again.
+
+GitHub triggers use the official GitHub MCP endpoint with a static
+repository-scoped token. Jira Cloud triggers use the official Atlassian MCP
+endpoint with a scoped API token that also works at the Atlassian API
+gateway. The same reviewed connection serves MCP search and specific
+tracker API operations. OAuth and connections with restricted operation
+catalogues require separate qualification for trigger API operations.
+Provision the GitHub labels in the repository. Manual GitHub requeue
+checks for the repository's Maintain or Admin role. Jira requeue checks
+project administration permission, which requires the calling account
+to have the Administer Jira global permission when checking other users.
+[GitHub connector](mcp-integrations.md#github) ·
+[Jira permissions API](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-permissions/#api-rest-api-3-permissions-check-post)
+
+Readiness uses the entry agent's configured model in a separate tool-free
+call. It checks the issue and eligible replies for a clear objective,
+verifiable acceptance and scope where materially ambiguous. The installation
+limits are one call, 16 KiB of input, 512 output tokens and 10 seconds.
+The monetary check uses the price catalogue and
+`readinessMaxMicros` in installation YAML, which defaults to 100,000
+micro-units of the catalogue currency per assessment. An unreliable
+verdict holds the issue with the reason. No task or execution resources
+are created for a held issue.
+
+The trigger replaces the selection label with `weft:needs-attention` and
+posts questions on the issue. A substantive reply by the human author or
+configured human owner, or a verified maintainer manually adding
+`weft:todo`, requests reevaluation. After two question rounds, Weft asks
+for operator intervention. The maintainer can clarify the issue and
+requeue it for the same readiness and consent checks. Turning readiness
+off preserves existing holds. Re-enable and re-consent to evaluate them
+again. Activity and the trigger show the reason, round and any pending
+tracker update. Other issues can advance while one is held. At ten holds,
+new evaluations stop until a hold resolves.
+
+- `weft:todo` selects issues by default. Each trigger can use a custom selection label.
+- `weft:wip` means Weft claimed the issue.
+- `weft:needs-attention` means Weft has a question or encountered a failure. The issue comment names the next action.
+- `weft:done` means Weft opened a PR and human review is pending. A task that finishes without a PR needs attention.
+
+GitHub PRs target the default branch. For a GitHub issue, Weft appends
+`Closes #N` in the same repository or `Closes owner/repo#N` across
+repositories. Jira status transitions and automatic closure of Jira
+issues on merge are outside this lifecycle.
+[Trigger API](api.md#issue-triggers)
+
 ## Vocabulary and existing foundations
 
 | Term | Meaning | Current implementation |

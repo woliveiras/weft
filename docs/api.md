@@ -166,60 +166,54 @@ arguments, agent environments, events or logs.
 
 ## Issue triggers
 
-A trigger starts a workflow's tasks from labelled issues, one at a time,
-without a person present. It runs only under the consent of the
-administrator who created or last resumed it.
+An issue trigger starts one task at a time from GitHub or Jira under the
+administrator's current consent.
 
 | Method and path | Role | Purpose |
 |---|---|---|
-| `GET /api/v1/triggers?workflow=` | viewer | Triggers with their state, consent, last run, current task and skipped issues. |
-| `POST /api/v1/triggers` | admin | `{name, workflow, nodeId, resultNodeId?, source: {kind: "github"\|"jira", connectionId, repository? (owner/name), cloudId? (Jira), query?}, label, owner?, intervalMinutes (5-1440, default 15), scmConnection?, projectId?, executionMode?, authorizationMode: "ask"\|"workspace"\|"full"}`. Records consent: the caller, the workflow version, project, environment, authorization mode and policy version. |
-| `GET /api/v1/triggers/{trigger}` | viewer | One trigger. |
-| `PUT /api/v1/triggers/{trigger}` | admin | Same body. Changing what the consent covers (workflow, agents, project, environment, authorization, source or SCM connection) pauses the trigger. |
-| `GET /api/v1/triggers/{trigger}/matches` | operator | What the next run would do now: `{next, waiting[], skipped[{key, title, reason}], busy}`. Reads the tracker through the gateway as the trigger; writes nothing. |
-| `POST /api/v1/triggers/{trigger}/pause` | admin | Stops starting tasks. |
-| `POST /api/v1/triggers/{trigger}/resume` | admin | Records the caller's consent for the trigger as it is now and activates it. |
-| `DELETE /api/v1/triggers/{trigger}` | admin | Removes it. |
+| `GET /api/v1/trigger-policy` | viewer | Read the installation readiness limits and catalogue currency. |
+| `GET /api/v1/triggers?workflow=` | viewer | List trigger state, consent, current task, skips and readiness holds. |
+| `POST /api/v1/triggers` | admin | Create and consent to `{name, workflow, nodeId, resultNodeId?, source: {kind, connectionId, repository?, cloudId?, query?}, label?, owner?, intervalMinutes?, scmConnection?, projectId?, executionMode?, authorizationMode?, readinessDisabled?}`. |
+| `GET /api/v1/triggers/{trigger}` | viewer | Read one trigger. |
+| `PUT /api/v1/triggers/{trigger}` | admin | Edit using the create body. Changing consent scope pauses the trigger and preserves holds. |
+| `GET /api/v1/triggers/{trigger}/matches` | operator | Read-only preview returning `{next, waiting[], skipped[], busy}`. Preview never evaluates readiness or writes to the tracker. |
+| `POST /api/v1/triggers/{trigger}/pause` | admin | Pause polling. |
+| `POST /api/v1/triggers/{trigger}/resume` | admin | Record current consent and activate polling. |
+| `DELETE /api/v1/triggers/{trigger}` | admin | Remove the trigger. |
 
-When editing a trigger, a missing workflow, entry agent or explicitly selected
-result agent returns HTTP 422 with a field error for `workflow`, `nodeId` or
-`resultNodeId`. The trigger and its consent are preserved. A missing trigger
-ID returns HTTP 404.
+The default selection label is `weft:todo`. The interval defaults to 15
+minutes and accepts 5–1440 minutes. `readinessDisabled` defaults to
+`false`. The tracker connection must support the provider API operations
+described in [issue-trigger setup](task-workflows.md#issue-trigger-readiness-and-delivery).
+Consent binds the source and connection revision, exact operation list,
+workflow and agents, authorization and delivery settings, and the
+readiness model and limits. A stale scope blocks polling until reviewed
+again. A removed workflow, entry agent or explicitly selected result
+agent on edit returns HTTP 422 with the `workflow`, `nodeId` or
+`resultNodeId` field error and preserves the saved trigger. An unknown
+trigger ID returns HTTP 404.
 
-An issue is eligible when it has the label, is open (Jira: status category
-To Do), is unassigned or assigned to the trigger's `owner`, is not blocked (a
-`blocked` label, or an unresolved Jira "is blocked by" link) and has never run
-with this workflow (deduplicated by source, issue and workflow). Issues are
-taken oldest first, one at a time: while the trigger's task runs, eligible
-issues wait. Tracker calls run through the tool gateway as the principal
-`trigger-<id>` with grants for exactly the source's MCP tools, and are audited
-like an agent's calls.
+An eligible issue is open (Jira *To Do* category), selected by label and
+query, unblocked, unassigned or assigned only to the configured owner,
+and has no prior admission for that source and workflow. The server
+checks triggers every 30 seconds. Polling leases coalesce missed intervals
+and keep one runner in charge of a trigger. Readiness is checked before claim, task
+creation, sandbox or workspace preparation, and execution budget
+reservation. A hold is removed from the queue and leaves the active task
+slot available. The trigger reports `readinessBlock` at ten holds. In
+`holds[]`, `key`, `url`, `reason`, `message`, `round`, `state` and
+`publication` describe the held issue and tracker write-back. The optional
+`eligibility` field explains why the issue cannot currently be reopened. Activity
+projects the same issue identity, reason, round and publication state in
+`triggerHolds[]`. Tracker text is excluded from these diagnostics.
 
-Taking an issue: the trigger assigns it to `owner` and replaces its label
-with `weft:in-progress`, creates a task (title `<key>: <issue title>`, the
-issue quoted as untrusted data in the request) as the consenting person,
-records the consented authorization mode and starts it. It then comments on
-the issue with a link to the task and, on Jira, moves it to *In Progress*
-when that transition exists; a missing transition or a failed comment is
-recorded as `trigger.note` on the task and in the trigger's `notes`, without
-failing the run. If the task cannot start, the issue is labelled
-`weft:failed` with a comment and the trigger pauses.
-
-When the task ends, the next run writes back: on success a comment with the
-pull request (or that the task finished), the `weft:review` label and Jira
-*In Review* when available, then the trigger takes the next issue; on failure
-or stop a comment with the reason, the `weft:failed` label, and the
-trigger pauses until a person resumes it.
-
-Active triggers are checked every 30 seconds on the server loop. A trigger
-runs when its interval has elapsed; a lease makes sure only one instance runs
-it, and times missed while the server was down or busy collapse into one run
-(`nextRunAt` is always one interval after the last run). Each run is recorded
-as `trigger.run` with a bounded outcome.
-
-A run whose consent no longer matches (for example, the workflow was saved
-again or the authorization policy changed) pauses the trigger with the reason
-instead of running. Changes are audited as `trigger.changed`.
+Claim applies `weft:wip`. A question or failure uses
+`weft:needs-attention` with a comment describing the required action.
+An open PR completes Weft's delivery and applies `weft:done` while human
+review is pending. The gateway adds a GitHub closing reference using
+the admitted issue identity. Jira uses comments and labels throughout.
+Other labels are preserved. Tracker operations are audited under the
+`trigger-<id>` principal. Poll outcomes are recorded as `trigger.run`.
 
 ## Model prices
 

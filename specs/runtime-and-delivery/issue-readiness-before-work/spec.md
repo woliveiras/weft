@@ -2,7 +2,7 @@
 id: RUN-007
 title: Issue Readiness Before Work
 summary: Evaluate issues selected by polling triggers and request missing information before claiming or starting work.
-status: in-progress
+status: implemented
 scope: [GitHub and Jira polling triggers, issue clarification, trigger state, Activity]
 risk: high
 risk_domains: [prompt injection, authorization, external write-back, budget, replay, compatibility]

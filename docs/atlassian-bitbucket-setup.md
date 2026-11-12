@@ -27,6 +27,10 @@ with your own hosts.
 
 ## Atlassian Cloud (Jira and Confluence)
 
+Jira issue triggers use comments and label changes through the gateway.
+They require a scoped API token and a reviewed source connection.
+[Issue-trigger setup and permissions](task-workflows.md#issue-trigger-readiness-and-delivery)
+
 Weft uses the official remote MCP server (`https://mcp.atlassian.com/v2/mcp`).
 Choose one credential type:
 

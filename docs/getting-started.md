@@ -168,18 +168,14 @@ a refused approval). Agents never run an SCM CLI or see the token.
 
 ### Start tasks from labelled issues
 
-In a saved workflow, **Graph settings → Issue triggers** adds a trigger: the
-tracker (GitHub repository or Jira site through an MCP connection), the label
-to watch (for example `weft`), the entry and result agents, how often to
-check, the authorization tasks run with and an optional source control
-hand-off. Saving records your consent; tasks start as you. **Preview matching
-issues** shows the next issue, the waiting ones and why others are skipped
-(blocked, assigned to someone else, already ran). The trigger takes one issue
-at a time, comments and relabels it as it goes (`weft:in-progress`, then
-`weft:review` or `weft:failed`), and pauses when a task fails or the
-workflow changes; resume it after reviewing. If an edit still refers to a
-removed workflow, entry agent or result agent, select an existing target
-before saving.
+In a saved workflow, open **Graph settings → Issue triggers**. Select the
+tracker connection, agents and delivery connection. The default selection
+label is `weft:todo`. Saving records your consent. **Preview matching
+issues** reads the queue. Readiness checks happen before work starts.
+Incomplete issues move to `weft:needs-attention` with a question on the
+issue, and the hold appears in Activity and the trigger. A claim applies
+`weft:wip`. An open PR changes it to `weft:done` for human review.
+[Issue-trigger setup and lifecycle](task-workflows.md#issue-trigger-readiness-and-delivery)
 
 ### Prices and budgets
 

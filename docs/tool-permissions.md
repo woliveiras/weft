@@ -139,6 +139,16 @@ only to guidance references. Ordinary tools remain confined to the workdir
 even with a `**` grant. Activity uses the checkout path. The gateway traces and measures it as
 `guidance.reference` and records failed reads as errors.
 
+## Issue-trigger gateway operations
+
+An issue trigger has the exact reviewed MCP search tool and specific tracker
+API operations for issue lookup, label changes and comments. Readiness adds
+reply reads and manual requeue verification. The gateway binds calls to the
+active trigger, source and reviewed connection revision. Its audit includes
+the operation and target. Question and reply bodies are excluded. The
+readiness model receives no tools and its output is limited to rubric codes.
+[Issue-trigger consent and setup](task-workflows.md#issue-trigger-readiness-and-delivery)
+
 ## Recipes
 
 | Role | Grants | Rationale |
