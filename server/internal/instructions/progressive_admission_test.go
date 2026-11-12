@@ -2,6 +2,7 @@ package instructions
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -87,5 +88,34 @@ func TestConsoleBodyBudgetOffersRepositoryFallback(t *testing.T) {
 				t.Fatal("repeating the rejected selection duplicated the fallback", err)
 			}
 		})
+	}
+}
+
+func TestSelectedGlobalSkillUsesGraphBudgetPriority(t *testing.T) {
+	m := manager(t)
+	for _, id := range []string{"a-default", "z-selected"} {
+		if _, err := m.Save(t.Context(), Input{ID: id, Title: id, Description: strings.Repeat("d", 120), Body: id, Enabled: true, Global: true}, 0, "test", false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	root := t.TempDir()
+	g := &domain.Graph{Spec: domain.GraphSpec{Instructions: domain.InstructionRefs{
+		RepositoryGuidance: &domain.RepositoryGuidancePolicy{}, InstallationDefaults: true, SkillIDs: []string{"z-selected"},
+	}}}
+	// Either catalogue entry fits on its own. The selected one gets priority.
+	prompt := strings.Repeat("p", MaxTokens-len(progressivePreamble)-1-250)
+	snap, session, err := m.Prepare(t.Context(), g, &domain.Node{ID: "worker"}, root, root, prompt, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := session.selected["console:z-selected"]
+	if !ok || entry.entry.Scope != "graph" {
+		t.Fatalf("selected skill did not retain its graph rank: %+v", snap.Entries)
+	}
+	findOmission(t, snap, "a-default", "token_budget")
+	if !slices.ContainsFunc(snap.Entries, func(e Entry) bool {
+		return e.Source == "z-selected" && e.Scope == "installation" && e.Reason == "duplicate" && !e.Included
+	}) {
+		t.Fatal("duplicate installation entry was not recorded")
 	}
 }

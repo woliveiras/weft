@@ -127,7 +127,8 @@ SHA-256 digests describe the bytes Weft used.
 In enabled executions, the order from lowest to highest is repository
 skills, the selected repository instruction, installation defaults,
 graph/agent console skills, legacy `.weft/steering`, the agent prompt, and
-operator messages. The initial model request has skill names, descriptions and
+operator messages. A global skill explicitly selected by the graph or agent
+takes the selected rank once. The initial model request has skill names, descriptions and
 selection IDs. The native runtime can request a skill with
 `guidance.load {"skill":"repository:example"}` or
 `guidance.load {"skill":"console:example"}`. A later request can add a

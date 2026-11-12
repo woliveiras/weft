@@ -189,6 +189,9 @@ acceptance criteria above and matrix use these decisions as their oracles.
   agent prompt, operator messages. A catalogue entry takes its skill's rank.
   Activating a body or reference preserves that rank. Ties without an
   existing declared order use the canonical relative path in bytewise order.
+  In progressive mode, an installation default also explicitly selected by
+  the graph or agent occupies the selected skill's higher rank once. Record
+  the suppressed installation occurrence. Legacy composition is unchanged.
 
 ### D-04 — Identity and collisions (AC-003, AC-005)
 

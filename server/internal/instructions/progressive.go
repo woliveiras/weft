@@ -123,7 +123,7 @@ func (m Manager) Prepare(ctx context.Context, g *domain.Graph, n *domain.Node, r
 	s.Budget -= required
 
 	var managed []progressiveEntry
-	if err := m.managed(ctx, g, n, func(e Entry) {
+	if err := m.managed(ctx, g, n, true, func(e Entry) {
 		e.Stage = "catalogue"
 		p := progressiveEntry{entry: e, managedBody: e.Body}
 		p.entry.Body = ""

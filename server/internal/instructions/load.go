@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -47,7 +48,7 @@ func (m Manager) resolveLegacy(ctx context.Context, g *domain.Graph, n *domain.N
 	}
 	s.Budget -= requiredBytes
 
-	if err := m.managed(ctx, g, n, func(e Entry) {
+	if err := m.managed(ctx, g, n, false, func(e Entry) {
 		e.Description = ""
 		add(s, e)
 	}); err != nil {
@@ -59,8 +60,9 @@ func (m Manager) resolveLegacy(ctx context.Context, g *domain.Graph, n *domain.N
 	s.Entries = append(s.Entries, mandatory...)
 	return s, nil
 }
-func (m Manager) managed(ctx context.Context, g *domain.Graph, n *domain.Node, accept func(Entry)) error {
+func (m Manager) managed(ctx context.Context, g *domain.Graph, n *domain.Node, preferSelectedRank bool, accept func(Entry)) error {
 	refs := g.Spec.Instructions
+	selected := selectedSkillIDs(g, n)
 	seen := map[string]bool{}
 	addSkill := func(id, scope string) error {
 		if seen[id] {
@@ -96,13 +98,17 @@ func (m Manager) managed(ctx context.Context, g *domain.Graph, n *domain.Node, a
 					accept(Entry{Scope: "installation", Source: "defaults", Reason: "entry_count_limit"})
 					break
 				}
+				if preferSelectedRank && slices.Contains(selected, v.ID) {
+					accept(Entry{Scope: "installation", Source: v.ID, Reason: "duplicate"})
+					continue
+				}
 				if err := addSkill(v.ID, "installation"); err != nil {
 					return err
 				}
 			}
 		}
 	}
-	for _, id := range selectedSkillIDs(g, n) {
+	for _, id := range selected {
 		if err := addSkill(id, "graph"); err != nil {
 			return err
 		}

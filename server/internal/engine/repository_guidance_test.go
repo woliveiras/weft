@@ -685,3 +685,57 @@ spec:
 		}
 	}
 }
+
+func TestRepositoryGuidanceSelectedGlobalSkillKeepsHigherPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	p := &guidanceProvider{calls: []llm.ToolCall{
+		{ID: "selected", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"console:a-selected"}`)},
+		{ID: "default", Name: "guidance.load", Arguments: json.RawMessage(`{"skill":"console:z-default"}`)},
+	}}
+	r := newRig(t, openStore(t, dir), memory.New(), dir, "guidance-global-precedence", func(o *engine.Options) {
+		o.Models.(*llm.Registry).Add(llm.ProviderConfig{Name: p.Name()}, p)
+	})
+	m := instructions.Manager{Store: r.store}
+	for id, body := range map[string]string{"a-selected": "HIGH RANK BODY", "z-default": "LOW RANK BODY"} {
+		if _, err := m.Save(r.ctx, instructions.Input{ID: id, Title: id, Body: body, Enabled: true, Global: true}, 0, "test", false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r.deploy(`metadata: {name: guidance-global-precedence}
+spec:
+  instructions: {repositoryGuidance: {}, installationDefaults: true, skillIds: [a-selected]}
+  nodes:
+    - id: reader
+      prompt: Check skill precedence
+      model: {provider: guidance-fixture, name: fixture}
+      loop: {mode: once}
+      isolation: {mode: process}
+`)
+	var execution *domain.Execution
+	eventually(t, 5*time.Second, "precedence turn finishes", func() bool {
+		rows, _ := r.store.ListExecutions(r.ctx, storage.ExecutionFilter{GraphID: "guidance-global-precedence"})
+		if len(rows) == 1 && rows[0].Status.Terminal() {
+			execution = rows[0]
+			return true
+		}
+		return false
+	})
+	requests := p.observed()
+	if execution.Status != domain.ExecSucceeded || len(requests) != 3 {
+		t.Fatal(execution.Status, execution.Error, len(requests))
+	}
+	last := requests[2]
+	low, high := strings.Index(last, "LOW RANK BODY"), strings.Index(last, "HIGH RANK BODY")
+	if low < 0 || high <= low || strings.Count(last, "HIGH RANK BODY") != 1 {
+		t.Fatal("activated bodies did not keep their effective order")
+	}
+	snap, err := m.Snapshot(r.ctx, execution.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(snap.Reads, func(e instructions.Entry) bool {
+		return e.Scope == "graph" && e.Source == "a-selected" && e.Stage == "body" && e.Delivery == "confirmed"
+	}) {
+		t.Fatal("Activity lost the selected skill's graph precedence", snap.Reads)
+	}
+}
