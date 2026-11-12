@@ -27,7 +27,7 @@ func runner(st storage.Store, c *clock, instance string, tr ...*tracker) *trigge
 		gh = tr[0]
 	}
 	reg := tools.NewRegistry()
-	reg.MustRegister(gh.tools("search_issues")...)
+	reg.MustRegister(gh.tools("search_issues", "searchJiraIssuesUsingJql")...)
 	reg.MustRegister(trigger.TrackerTools(gh.request)...)
 	return &trigger.Runner{Triggers: trigger.Manager{Store: st, Bus: bus, Now: c.now}, Store: st, Instance: instance,
 		Gateway: tools.NewGateway(reg, nil, bus), Assessor: assessFunc(ready), Log: slog.New(slog.NewTextHandler(io.Discard, nil))}

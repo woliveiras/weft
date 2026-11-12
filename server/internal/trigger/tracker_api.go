@@ -124,11 +124,13 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 	if err != nil {
 		return nil, err
 	}
+	var status int
 	request := func(method, path string, body any) (json.RawMessage, int, error) {
-		return t.call(ctx, scope.Source.ConnectionID, scope.Source.Kind, scope.Consent.TrackerRevision, method, path, body)
+		raw, code, err := t.call(ctx, scope.Source.ConnectionID, scope.Source.Kind, scope.Consent.TrackerRevision, method, path, body)
+		status = code
+		return raw, code, err
 	}
 	var out any
-	var labelStatus int
 	switch t.name {
 	case trackerGet:
 		out, err = readIssue(request, scope.Source, path, a.Key)
@@ -140,16 +142,7 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 		if !validLabelChange(scope, a) {
 			return nil, tools.ErrDenied
 		}
-		err = changeLabels(func(method, path string, body any) (json.RawMessage, int, error) {
-			raw, status, err := request(method, path, body)
-			labelStatus = status
-			return raw, status, err
-		}, scope.Source.Kind, path, a)
-		if err != nil && labelStatus >= 400 && labelStatus <= 599 {
-			failure := trackerHTTPFailure{Status: labelStatus}
-			data, _ := json.Marshal(failure)
-			return &tools.Result{IsError: true, Content: failure.Error(), Data: data}, nil
-		}
+		err = changeLabels(request, scope.Source.Kind, path, a)
 	case trackerIdentity:
 		identityPath := "/user"
 		if scope.Source.Kind == "jira" {
@@ -168,17 +161,16 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 			commentPath = path + "/comment"
 			body = map[string]any{"body": jiraComment(a.Body)}
 		}
-		var status int
 		var raw json.RawMessage
-		raw, status, err = request(http.MethodPost, commentPath, body)
+		raw, _, err = request(http.MethodPost, commentPath, body)
 		if err == nil {
 			out, err = decodeCommentReceipt(scope.Source.Kind, raw)
 		}
-		if err != nil && status >= 400 && status <= 599 {
-			failure := trackerHTTPFailure{Status: status}
-			data, _ := json.Marshal(failure)
-			return &tools.Result{IsError: true, Content: failure.Error(), Data: data}, nil
-		}
+	}
+	if err != nil && status >= 400 && status <= 599 {
+		failure := trackerHTTPFailure{Status: status}
+		data, _ := json.Marshal(failure)
+		return &tools.Result{IsError: true, Content: failure.Error(), Data: data}, nil
 	}
 	if errors.Is(err, errTrackerHistoryLimit) {
 		return &tools.Result{IsError: true, Content: errTrackerHistoryLimit.Error(), Data: trackerHistoryLimitResult}, nil

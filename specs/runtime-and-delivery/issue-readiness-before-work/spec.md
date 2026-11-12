@@ -102,6 +102,11 @@ threads. [Tracker adapter](../../../server/internal/trigger/issue.go).
   current consent still covers it. The operator can explicitly abandon an
   unfinished write by confirming that the planned label and assignment
   changes may remain incomplete. The forced resolution is audited.
+  Transient readiness reads, admission coordination and comment author
+  verification retry up to three times after the initial failure, with
+  one-, two- and four-minute minimum delays. They preserve both readiness
+  counters and do not spend comment POST attempts. Exhaustion is visible
+  and requires operator review.
 
 ## Acceptance criteria
 

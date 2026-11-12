@@ -792,3 +792,121 @@ func TestReadinessEditLeavesBothQuestionRoundsAvailable(t *testing.T) {
 		t.Fatalf("questions: %v, hold: %+v", comments, tr.Holds)
 	}
 }
+
+type admissionFaultStore struct {
+	storage.Store
+	fault string
+}
+
+func (s *admissionFaultStore) AcquireLease(ctx context.Context, key, holder string, ttl time.Duration) (bool, error) {
+	if strings.HasPrefix(key, "trigger-admissions/") {
+		switch s.fault {
+		case "busy":
+			return false, nil
+		case "lease":
+			return false, errors.New("fixture lease error")
+		}
+	}
+	return s.Store.AcquireLease(ctx, key, holder, ttl)
+}
+
+func (s *admissionFaultStore) GetSetting(ctx context.Context, key string) (*storage.Setting, error) {
+	if s.fault == "store" && strings.HasPrefix(key, "trigger-admissions/") {
+		return nil, errors.New("fixture store error")
+	}
+	return s.Store.GetSetting(ctx, key)
+}
+
+func TestTransientAdmissionFailuresPreserveReadinessAllowances(t *testing.T) {
+	for _, fault := range []string{"busy", "lease", "store", "claim read"} {
+		t.Run(fault, func(t *testing.T) {
+			st := &admissionFaultStore{Store: triggerStore(t), fault: fault}
+			c := &clock{t: time.Now().UTC()}
+			gh := newTracker("gh")
+			row := ghIssue(1, "Issue", "weft")
+			gh.issues = []map[string]any{row}
+			want := "claim_busy"
+			if fault == "claim read" {
+				gh.claimReadFailures = 1
+				want = "claim_recheck_unavailable"
+			}
+			r := runner(st, c, "one", gh)
+			starter := &tasks{}
+			r.Tasks = starter
+			tr, err := r.Triggers.Create(t.Context(), input(), "admin")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr = advance(r, c, t, tr.ID)
+			h := tr.Holds[0]
+			if h.Reason != want || h.Round != 0 || h.SnapshotEdits != 0 || h.RetryFailures != 1 || h.RetryAt == nil ||
+				tr.Claiming != "" || len(starter.started) != 0 || len(gh.comments) != 0 {
+				t.Fatalf("transient failure spent readiness or left a claim: %+v", tr)
+			}
+			if fault == "claim read" && (len(row["assignees"].([]map[string]any)) != 0 || row["labels"].([]map[string]any)[0]["name"] != trigger.LabelFailed) {
+				t.Fatalf("tracker claim not rolled back: %+v", row)
+			}
+			st.fault = ""
+			tr = advance(r, c, t, tr.ID)
+			if len(starter.started) != 1 || len(tr.Holds) != 0 || len(gh.comments["#1"]) != 1 ||
+				!strings.Contains(gh.comments["#1"][0], "started working") {
+				t.Fatalf("retry failed: %+v, comments %v", tr, gh.comments)
+			}
+		})
+	}
+}
+
+func TestReadinessTrackerIdentityRetryDoesNotSpendCommentAttempts(t *testing.T) {
+	for _, kind := range []string{"github", "jira"} {
+		t.Run(kind, func(t *testing.T) {
+			for _, recoverIdentity := range []bool{true, false} {
+				t.Run(fmt.Sprint(recoverIdentity), func(t *testing.T) {
+					c := &clock{t: time.Now().UTC()}
+					in := input()
+					gh := newTracker("gh")
+					gh.issues = []map[string]any{ghIssue(1, "Issue", "weft")}
+					lookup, key := "GET /user", "#1"
+					if kind == "jira" {
+						in.Source = trigger.SourceConfig{Kind: "jira", ConnectionID: "atl", CloudID: cloud}
+						in.Owner = "acc-1"
+						gh = newTracker("atl")
+						gh.issues = []map[string]any{jiraIssue("APP-1", "Issue", "weft")}
+						lookup, key = "GET /ex/jira/"+cloud+"/rest/api/3/myself", "APP-1"
+					}
+					gh.status[lookup] = 503
+					r := runner(triggerStore(t), c, "one", gh)
+					r.Tasks = &tasks{}
+					r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+						return trigger.ReadinessAssessment{Missing: []string{"acceptance"}}
+					})
+					tr, err := r.Triggers.Create(t.Context(), in, "admin")
+					if err != nil {
+						t.Fatal(err)
+					}
+					tr = advance(r, c, t, tr.ID)
+					h := tr.Holds[0]
+					if h.Round != 1 || h.SnapshotEdits != 0 || h.Publication != "label_applied" || h.CommentAttempts != 0 ||
+						h.RetryCommentAt == nil || !strings.Contains(h.PublicationMessage, "backoff") || len(gh.comments) != 0 {
+						t.Fatalf("identity failure spent a comment: %+v", h)
+					}
+					if recoverIdentity {
+						delete(gh.status, lookup)
+						tr = advance(r, c, t, tr.ID)
+						if tr.Holds[0].Round != 1 || tr.Holds[0].CommentAttempts != 1 || tr.Holds[0].Publication != "confirmed" ||
+							len(gh.comments[key]) != 1 || !strings.Contains(gh.comments[key][0], "round 1 of 2") {
+							t.Fatalf("identity retry did not publish original question: %+v, %v", tr.Holds, gh.comments)
+						}
+					} else {
+						for range 5 {
+							tr = advance(r, c, t, tr.ID)
+						}
+						if tr.Holds[0].Round != 1 || tr.Holds[0].CommentAttempts != 0 || tr.Holds[0].Publication != "comment_failed" ||
+							strings.Count(strings.Join(gh.rest, "\n"), lookup) != 4 || len(gh.comments) != 0 {
+							t.Fatalf("identity lookup did not stop: %+v, %v", tr.Holds, gh.rest)
+						}
+					}
+				})
+			}
+		})
+	}
+}

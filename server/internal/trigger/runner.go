@@ -275,7 +275,7 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 		})
 		return "already_admitted", err
 	} else if !errors.Is(err, storage.ErrNotFound) {
-		return "", err
+		return "claim_busy", err
 	}
 	// Write the admission intent before modifying tracker state. A crash
 	// or ambiguous write requires reconciliation, never a second start.
@@ -286,7 +286,7 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 		current.Claiming, current.ClaimAdmission = i.Key, admission
 		return nil
 	}); err != nil {
-		return "", err
+		return "claim_busy", err
 	}
 	holdIndex := t.holdIndex(i.Key)
 	remove := selectionRemovals(t, i, holdIndex >= 0 && t.Holds[holdIndex].Signal != "")
@@ -317,7 +317,9 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 			h.Publication = "label_pending_only"
 			if errors.Is(err, errTrackerHistoryLimit) {
 				h.State, h.Reason = "operator", "history_limit"
-			} else if h.State == "operator" {
+			} else if err != nil {
+				recordReadinessRetry(&h, r.Triggers.now(), "claim_recheck_unavailable", err)
+			} else if edited && h.State == "operator" {
 				h.prepareComment()
 			}
 			h.Removals = []string{LabelInProgress}

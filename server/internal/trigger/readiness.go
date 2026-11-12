@@ -27,27 +27,30 @@ type Hold struct {
 	PublicationMessage string     `json:"publicationMessage,omitempty"`
 	LabelAttempts      int        `json:"labelAttempts,omitempty"`
 	RetryLabelAt       *time.Time `json:"retryLabelAt,omitempty"`
+	IdentityFailures   int        `json:"identityFailures,omitempty"`
 	CommentAttempts    int        `json:"commentAttempts,omitempty"`
 	RetryCommentAt     *time.Time `json:"retryCommentAt,omitempty"`
 
-	SnapshotEdits int       `json:"snapshotEdits,omitempty"`
-	Eligibility   string    `json:"eligibility,omitempty"`
-	Message       string    `json:"message"`
-	Key           string    `json:"key"`
-	URL           string    `json:"url,omitempty"`
-	Reason        string    `json:"reason"`
-	State         string    `json:"state"`
-	Round         int       `json:"round"`
-	OpenedAt      time.Time `json:"openedAt"`
-	RoundAt       time.Time `json:"roundAt"`
-	Publication   string    `json:"publication,omitempty"`
-	Scope         string    `json:"scope"`
-	Evaluated     string    `json:"evaluated,omitempty"`
-	Signal        string    `json:"signal,omitempty"`
-	Questions     []string  `json:"questions,omitempty"`
-	Marker        string    `json:"marker,omitempty"`
-	Intervention  bool      `json:"intervention,omitempty"`
-	Removals      []string  `json:"removals,omitempty"`
+	RetryFailures int        `json:"retryFailures,omitempty"`
+	RetryAt       *time.Time `json:"retryAt,omitempty"`
+	SnapshotEdits int        `json:"snapshotEdits,omitempty"`
+	Eligibility   string     `json:"eligibility,omitempty"`
+	Message       string     `json:"message"`
+	Key           string     `json:"key"`
+	URL           string     `json:"url,omitempty"`
+	Reason        string     `json:"reason"`
+	State         string     `json:"state"`
+	Round         int        `json:"round"`
+	OpenedAt      time.Time  `json:"openedAt"`
+	RoundAt       time.Time  `json:"roundAt"`
+	Publication   string     `json:"publication,omitempty"`
+	Scope         string     `json:"scope"`
+	Evaluated     string     `json:"evaluated,omitempty"`
+	Signal        string     `json:"signal,omitempty"`
+	Questions     []string   `json:"questions,omitempty"`
+	Marker        string     `json:"marker,omitempty"`
+	Intervention  bool       `json:"intervention,omitempty"`
+	Removals      []string   `json:"removals,omitempty"`
 }
 
 // Legacy holds need an identifier even while readiness is disabled and the
@@ -137,6 +140,10 @@ func ReadinessReason(reason string) string {
 		return "The issue changed repeatedly during readiness checks and reached the three-edit limit. Review the current issue and resolve the hold before selecting it again."
 	case "snapshot_changed":
 		return "The issue changed during readiness evaluation."
+	case "claim_busy":
+		return "Issue admission is temporarily unavailable. Weft will retry after backoff."
+	case "claim_recheck_unavailable":
+		return "The tracker could not recheck the issue after claim. Weft will retry after rollback and backoff."
 	case "eligibility_changed":
 		return "The tracker state changed during readiness checks. Weft will verify eligibility again."
 	case "evaluation_interrupted":
@@ -148,12 +155,19 @@ func ReadinessReason(reason string) string {
 	}
 }
 
+func (h Hold) Description() string {
+	if h.State == "retry_failed" {
+		return "Readiness retries stopped because " + retryFailureCause(h.Reason) + " Review the issue and resolve the hold."
+	}
+	return ReadinessReason(h.Reason)
+}
+
 func (r *Runner) saveHold(ctx context.Context, t *Trigger, h Hold) error {
 	return r.saveHoldState(ctx, t, h, false)
 }
 
 func (r *Runner) saveHoldState(ctx context.Context, t *Trigger, h Hold, rollback bool) error {
-	h.Message = ReadinessReason(h.Reason)
+	h.Message = h.Description()
 	current, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
 		if current.State != t.State || current.ReadinessDisabled != t.ReadinessDisabled || current.Consent.Scope != t.Consent.Scope || current.Consent.RecordedAt != t.Consent.RecordedAt {
 			return errTriggerChanged
@@ -192,6 +206,9 @@ func trackerRead[T any](ctx context.Context, call Invoker, name string, args tra
 	if err == nil && res != nil && res.IsError && (name == trackerComments || name == trackerRequeue) &&
 		bytes.Equal(res.Data, trackerHistoryLimitResult) {
 		return out, errTrackerHistoryLimit
+	}
+	if failure := trackerResultFailure(res, err); failure != nil {
+		return out, failure
 	}
 	err = decode(res, err, &out)
 	return out, err
@@ -288,17 +305,28 @@ func (r *Runner) publishHoldLabels(ctx context.Context, t *Trigger, call Invoker
 }
 
 func (r *Runner) postHoldComment(ctx context.Context, t *Trigger, call Invoker, h Hold) error {
+	now := r.Triggers.now()
+	if h.RetryCommentAt != nil && now.Before(*h.RetryCommentAt) {
+		return nil
+	}
 	author, err := trackerRead[string](ctx, call, trackerIdentity, trackerArgs{Key: h.Key})
+	if errors.Is(err, errTriggerChanged) {
+		return err
+	}
 	if err != nil || author == "" {
-		h.Publication, h.UndoOwner = "comment_pending", ""
-		return r.failHoldComment(ctx, t, h, "The tracker comment author could not be verified. Check the connection and resolve the hold.")
+		h.IdentityFailures++
+		if isDefinitiveTrackerFailure(err) || h.IdentityFailures > maxReadinessRetries {
+			return r.failHoldComment(ctx, t, h, "The tracker comment author could not be verified. Check the connection and resolve the hold.")
+		}
+		h.RetryCommentAt = readinessRetryAt(now, h.IdentityFailures)
+		h.PublicationMessage = "The tracker comment author could not be verified. Weft will retry the lookup after backoff."
+		return r.saveHold(ctx, t, h)
 	}
 	if h.CommentAuthor != "" && h.CommentAuthor != author {
 		return r.failHoldComment(ctx, t, h, "The tracker comment author changed. Review the issue and resolve the hold.")
 	}
-	h.CommentAuthor = author
+	h.CommentAuthor, h.IdentityFailures, h.PublicationMessage = author, 0, ""
 	h.CommentAttempts++
-	now := r.Triggers.now()
 	if h.RoundAt.IsZero() {
 		h.RoundAt = now
 	}
@@ -401,7 +429,7 @@ func canonicalComment(body string) string {
 func (h *Hold) prepareComment() {
 	h.Marker, h.Publication = domain.NewID("hold"), "label_pending"
 	h.RoundAt, h.CommentAttempts, h.RetryCommentAt, h.PublicationMessage = time.Time{}, 0, nil, ""
-	h.CommentID, h.CommentAuthor = "", ""
+	h.CommentID, h.CommentAuthor, h.IdentityFailures = "", "", 0
 }
 
 func recordEvaluationFailure(h *Hold, reason string) {
@@ -414,6 +442,7 @@ func recordEvaluationFailure(h *Hold, reason string) {
 
 func (r *Runner) finishHold(ctx context.Context, t *Trigger, call Invoker, h Hold, a ReadinessAssessment, current Issue) error {
 	h.Questions = a.Missing
+	h.RetryFailures, h.RetryAt = 0, nil
 	if a.Failure != "" {
 		recordEvaluationFailure(&h, a.Failure)
 	} else if len(a.Missing) > 0 {
@@ -473,6 +502,7 @@ func (r *Runner) currentReplies(ctx context.Context, t *Trigger, call Invoker, h
 }
 
 func recordSnapshotInvalidation(h *Hold) {
+	h.RetryFailures, h.RetryAt = 0, nil
 	h.SnapshotEdits = min(h.SnapshotEdits+1, maxSnapshotEdits)
 	h.State, h.Reason = "recheck", "snapshot_changed"
 	if h.SnapshotEdits >= maxSnapshotEdits {
@@ -509,14 +539,14 @@ func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Is
 	a := r.Assessor.Assess(ctx, t, input)
 	current, err := trackerRead[Issue](ctx, call, trackerGet, trackerArgs{Key: i.Key})
 	if err != nil {
-		return false, r.finishHold(ctx, t, call, h, ReadinessAssessment{Failure: "tracker_unavailable"}, i)
+		return false, r.retryReadiness(ctx, t, h, "tracker_unavailable", err)
 	}
 	latest, err := r.currentReplies(ctx, t, call, h, current)
 	if errors.Is(err, errTrackerHistoryLimit) {
 		return false, r.holdForHistoryLimit(ctx, t, h)
 	}
 	if err != nil {
-		return false, r.finishHold(ctx, t, call, h, ReadinessAssessment{Failure: "tracker_unavailable"}, current)
+		return false, r.retryReadiness(ctx, t, h, "tracker_unavailable", err)
 	}
 	if readinessInput(current, latest) != input {
 		return false, r.recheckSnapshot(ctx, t, call, h, current)
@@ -531,9 +561,9 @@ func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Is
 	current.EvaluatedInput = input
 	outcome, err := r.claimAndStart(ctx, t, call, current)
 	if outcome == "claim_busy" {
-		return false, errors.Join(err, r.recheckSnapshot(ctx, t, call, h, current))
+		return false, r.retryReadiness(ctx, t, h, "claim_busy", err)
 	}
-	return true, err
+	return outcome != "readiness_changed", err
 }
 
 func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Invoker, h Hold) (bool, error) {
@@ -548,11 +578,15 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	if holdHasPendingWrite(h) {
 		return false, r.publishHold(ctx, t, call, h)
 	}
-	if h.Publication == "label_failed" {
+	if h.Publication == "label_failed" || h.State == "retry_failed" ||
+		(h.RetryAt != nil && r.Triggers.now().Before(*h.RetryAt)) {
 		return false, nil
 	}
 	i, err := trackerRead[Issue](ctx, call, trackerGet, trackerArgs{Key: h.Key})
 	if err != nil {
+		if h.State == "recheck" && h.RetryFailures > 0 {
+			return false, r.retryReadiness(ctx, t, h, "tracker_unavailable", err)
+		}
 		return false, err
 	}
 	if reason := holdReleaseReason(t, h, i); reason != "" {
@@ -588,13 +622,16 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 		return false, nil
 	}
 	if h.State == "evaluating" {
-		return false, r.finishHold(ctx, t, call, h, ReadinessAssessment{Failure: "evaluation_interrupted"}, i)
+		return false, r.retryReadiness(ctx, t, h, "evaluation_interrupted", nil)
 	}
 	replies, err := r.currentReplies(ctx, t, call, h, i)
 	if errors.Is(err, errTrackerHistoryLimit) {
 		return false, r.holdForHistoryLimit(ctx, t, h)
 	}
 	if err != nil {
+		if h.State == "recheck" && h.RetryFailures > 0 {
+			return false, r.retryReadiness(ctx, t, h, "tracker_unavailable", err)
+		}
 		return false, err
 	}
 	if h.State == "recheck" {
@@ -643,4 +680,47 @@ func searchHeldScope(ctx context.Context, src Source, call Invoker, i Issue, sel
 		return false, errHeldScopeUnverified
 	}
 	return false, nil
+}
+
+const maxReadinessRetries = 3
+
+func readinessRetryAt(now time.Time, failures int) *time.Time {
+	next := now.Add(time.Minute << (failures - 1))
+	return &next
+}
+
+func isDefinitiveTrackerFailure(err error) bool {
+	var failure trackerHTTPFailure
+	return errors.As(err, &failure) && failure.definitive()
+}
+
+func retryFailureCause(reason string) string {
+	switch reason {
+	case "claim_busy":
+		return "issue admission could not be coordinated."
+	case "claim_recheck_unavailable":
+		return "the tracker could not recheck the issue after claim."
+	case "evaluation_interrupted":
+		return "evaluation was repeatedly interrupted."
+	default:
+		return "the tracker could not verify the issue or its responses."
+	}
+}
+
+func recordReadinessRetry(h *Hold, now time.Time, reason string, err error) {
+	h.RetryFailures++
+	h.State, h.Reason = "recheck", reason
+	if isDefinitiveTrackerFailure(err) || h.RetryFailures > maxReadinessRetries {
+		h.State, h.RetryAt = "retry_failed", nil
+		return
+	}
+	h.RetryAt = readinessRetryAt(now, h.RetryFailures)
+}
+
+func (r *Runner) retryReadiness(ctx context.Context, t *Trigger, h Hold, reason string, err error) error {
+	if errors.Is(err, errTriggerChanged) {
+		return err
+	}
+	recordReadinessRetry(&h, r.Triggers.now(), reason, err)
+	return r.saveHold(ctx, t, h)
 }

@@ -17,6 +17,7 @@ type tracker struct {
 	pageSearch          bool
 	editOnAssignment    bool
 	transientComments   int
+	claimReadFailures   int
 	loseCommentResponse bool
 	rest                []string
 	status              map[string]int
@@ -203,6 +204,12 @@ func (t *tracker) request(_ context.Context, connection, kind string, _ int64, m
 	if method == "GET" {
 		switch segment {
 		case "":
+			if kind == "github" && t.claimReadFailures > 0 && slices.ContainsFunc(i["labels"].([]map[string]any), func(l map[string]any) bool {
+				return l["name"] == "weft:wip"
+			}) {
+				t.claimReadFailures--
+				return nil, 503, fmt.Errorf("tracker temporarily unavailable after claim")
+			}
 			return rawFixture(i)
 		case "comments":
 			return rawFixture(nonNil(t.replies[key]))

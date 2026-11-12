@@ -48,7 +48,7 @@ func (x *build) triggerHolds(ctx context.Context) (bool, *SectionError) {
 				break
 			}
 			x.view.TriggerHolds = append(x.view.TriggerHolds, TriggerHold{TriggerID: t.ID, TriggerName: t.Name, Workflow: t.Workflow,
-				Key: h.Key, URL: h.URL, Reason: trigger.ReadinessReason(h.Reason), Round: h.Round, State: h.State,
+				Key: h.Key, URL: h.URL, Reason: h.Description(), Round: h.Round, State: h.State,
 				Publication: h.Publication, PublicationMessage: h.PublicationMessage, Eligibility: h.Eligibility, Disabled: t.ReadinessDisabled, OpenedAt: h.OpenedAt})
 		}
 	}

@@ -137,3 +137,18 @@ func TestPausedRollbackDueUsesBackoffAndRequiresPendingRollback(t *testing.T) {
 		t.Fatal("paused trigger scheduled ordinary publication")
 	}
 }
+
+func TestTransientReadinessFailuresUseTheirOwnBoundedBackoff(t *testing.T) {
+	now := time.Now().UTC()
+	h := Hold{Round: 1, SnapshotEdits: 2, CommentAttempts: 1}
+	for i, delay := range []time.Duration{time.Minute, 2 * time.Minute, 4 * time.Minute} {
+		recordReadinessRetry(&h, now, "claim_busy", nil)
+		if h.RetryFailures != i+1 || h.State != "recheck" || !h.RetryAt.Equal(now.Add(delay)) {
+			t.Fatal(h)
+		}
+	}
+	recordReadinessRetry(&h, now, "claim_busy", nil)
+	if h.State != "retry_failed" || h.RetryAt != nil || h.Round != 1 || h.SnapshotEdits != 2 || h.CommentAttempts != 1 {
+		t.Fatal(h)
+	}
+}
