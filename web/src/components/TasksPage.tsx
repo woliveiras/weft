@@ -10,7 +10,8 @@ import {useEffect, useState} from 'react';
 import {api, errorMessage} from '../api/client';
 import type {GraphSummary, Info} from '../api/types';
 import type {TaskDraft, TaskInput, TaskReview, TaskProgress} from '../api/tasks';
-import {useAsync} from '../hooks/useData';
+import {useAsync,useThrottled} from '../hooks/useData';
+import {useOptionalEventStream} from '../hooks/useEventStream';
 import {Btn, ErrorBox} from './common';
 import {TaskCleanup} from './TaskCleanup';
 import {WorkspaceHandoff} from './WorkspaceHandoff';
@@ -105,9 +106,11 @@ function TaskBudgetPreview({workflow,project}:{workflow:string;project?:string})
 /** The run's own budget, with a raise when it paused the run. */
 function TaskRunBudget({graph,canRaise}:{graph:string;canRaise:boolean}) {
   const budget=useAsync(()=>api.budget('run',graph).catch(()=>undefined),[graph]);
+  const reload=useThrottled(()=>void budget.reload(),300);
+  useOptionalEventStream({graph,types:['budget.raised','budget.graph_transition']},reload);
   if(!budget.data)return null;
   return <section aria-label="Task run budget">
-    {budget.data.paused&&<p role="alert">This run is paused because it reached its budget. {canRaise?'Raise the budget to continue, or stop the task.':'Ask an administrator to raise the budget, or stop the task.'}</p>}
+    {budget.data.paused&&!budget.data.notResumed?.length&&<p role="alert">This run is paused because it reached its budget. {canRaise?'Raise the budget to continue, or stop the task.':'Ask an administrator to raise the budget, or stop the task.'}</p>}
     <ul className="integration-grid"><BudgetBar budget={budget.data} currency={budget.data.currency||'USD'} canRaise={canRaise} onRaised={()=>budget.reload()}/></ul>
   </section>;
 }

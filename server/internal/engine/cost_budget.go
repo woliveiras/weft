@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
@@ -33,7 +34,7 @@ func (t *turnEnv) reserveMoney(ctx context.Context, provider string, req *llm.Ch
 	r, err := budgets.Reserve(ctx, t.budgetTarget(), catalogue, provider, typ, req)
 	var reached *cost.ReachedError
 	if errors.As(err, &reached) {
-		err = errors.Join(err, t.pauseForBudget(ctx, reached.Scope, reached.ID))
+		err = errors.Join(err, t.pauseForBudget(ctx, reached.Scope, reached.ID, reached.View.Limit))
 	}
 	return r, err
 }
@@ -47,14 +48,28 @@ func (t *turnEnv) budgetTarget() cost.Target {
 }
 
 // pauseForBudget pauses the run until a person raises the budget.
-func (t *turnEnv) pauseForBudget(ctx context.Context, scope, id string) error {
+func (t *turnEnv) pauseForBudget(ctx context.Context, scope, id string, limit int64) error {
 	e := t.gr.e
-	graph := t.gr.g.Metadata.ID
-	pause := context.WithoutCancel(ctx)
-	if err := e.BudgetGraphAction(pause, graph, "pause", "system:budget"); err != nil {
+	target := cost.BudgetGraph{
+		Scope: scope, ID: id, Graph: t.gr.g.Metadata.ID,
+		GraphAction: cost.GraphAction{Action: cost.PauseGraph, RunID: t.x.RunID, Actor: "system:budget"},
+	}
+	work, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := e.monetaryBudgets().MarkPaused(work, target, limit); err != nil {
 		return err
 	}
-	return (cost.Budgets{Store: e.store, Bus: e.bus}).MarkPaused(pause, scope, id, graph)
+	outcome, err := e.waitBudgetGraphTransition(work, target)
+	if errors.Is(err, ErrGraphTransitionBusy) {
+		return nil // The reconciler will apply the persisted pause.
+	}
+	if err != nil {
+		return err
+	}
+	if outcome != "" {
+		e.auditBudgetTransition(work, target, outcome)
+	}
+	return nil
 }
 
 // settleMoney charges a call's reported usage, or its whole reservation when
@@ -64,7 +79,7 @@ func (t *turnEnv) settleMoney(ctx context.Context, r *cost.Reservation, resp *ll
 	err := r.Settle(ctx, resp)
 	var interrupt *cost.InterruptError
 	if errors.As(err, &interrupt) {
-		err = errors.Join(err, t.pauseForBudget(ctx, interrupt.Scope, interrupt.ID))
+		err = errors.Join(err, t.pauseForBudget(ctx, interrupt.Scope, interrupt.ID, interrupt.Limit))
 	}
 	return err
 }

@@ -1,6 +1,9 @@
 package api_test
 
 import (
+	"context"
+	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -61,14 +64,20 @@ func TestPriceCatalogueThroughAPI(t *testing.T) {
 // A task run that reaches its monetary budget is paused before the model is
 // called; only a person can raise the budget, which resumes the run.
 func TestTaskRunBudgetPausesAndAHumanRaiseResumes(t *testing.T) {
-	testBudgetRaise(t, false)
+	testBudgetRaise(t, "running")
 }
 
 func TestBudgetRaiseReportsGraphStillPausedAfterLeaseWait(t *testing.T) {
-	testBudgetRaise(t, true)
+	testBudgetRaise(t, "blocked")
 }
 
-func testBudgetRaise(t *testing.T, blocked bool) {
+func TestBudgetRaiseDropsStoppedOrDeletedGraphs(t *testing.T) {
+	for _, state := range []string{"stopped", "deleted"} {
+		t.Run(state, func(t *testing.T) { testBudgetRaise(t, state) })
+	}
+}
+
+func testBudgetRaise(t *testing.T, state string) {
 	t.Helper()
 	srv, a := setupApp(t, nil)
 	nativeGraph := `{"metadata":{"id":"priced-fixture","name":"Priced fixture"},"spec":{"nodes":[{"id":"reader","prompt":"Summarise the request in one line.","runtime":{"kind":"native"},"model":{"provider":"mock"},"loop":{"mode":"once"},"tools":[]}]}}`
@@ -104,8 +113,11 @@ func testBudgetRaise(t *testing.T, blocked bool) {
 		NotResumed                                 []string
 	}
 	var v view
+	path := "/api/v1/cost/budgets/run/" + gid
 	waitFor(t, 10*time.Second, "budget reached and run paused", func() bool {
-		return call(t, srv, "GET", "/api/v1/cost/budgets/run/"+gid, viewerTok, "", "", &v) == 200 && v.Reached && v.Paused
+		_, rec, err := a.Engine.GetGraph(t.Context(), gid, 0)
+		return err == nil && rec.DesiredState == domain.GraphPaused &&
+			call(t, srv, "GET", path, viewerTok, "", "", &v) == 200 && v.Reached && v.Paused
 	})
 	if v.LimitMicros != 1 || v.ChargedMicros != 0 || v.ReservedMicros != 0 {
 		t.Fatalf("refused call must cost nothing: %+v", v)
@@ -130,30 +142,77 @@ func testBudgetRaise(t *testing.T, blocked bool) {
 	if c := call(t, srv, "POST", "/api/v1/cost/budgets/run/nope/raise", adminTok, "application/json", `{"limitMicros":5}`, nil); c != 404 {
 		t.Fatalf("missing budget: %d", c)
 	}
-	if blocked {
-		key := "graph-transition/" + gid
+	key := "graph-transition/" + gid
+	want := domain.GraphRunning
+	var resumed, pending []string
+	switch state {
+	case "blocked":
+		want = domain.GraphPaused
+		pending = []string{gid}
 		if ok, err := a.Store.AcquireLease(t.Context(), key, "test-transition", time.Minute); err != nil || !ok {
 			t.Fatalf("hold graph transition: %t %v", ok, err)
 		}
-		defer a.Store.ReleaseLease(t.Context(), key, "test-transition")
+	case "stopped", "deleted":
+		want = domain.GraphStopped
+		if c := call(t, srv, "POST", "/api/v1/tasks/"+d.ID+"/cancel", adminTok, "application/json", `{"confirm":true}`, nil); c != 202 {
+			t.Fatalf("cancel: %d", c)
+		}
+		if state == "deleted" {
+			waitFor(t, 5*time.Second, "graph stopped before delete", func() bool {
+				_, rec, err := a.Engine.GetGraph(t.Context(), gid, 0)
+				return err == nil && rec.State == domain.GraphStopped
+			})
+			if err := a.Engine.WithGraphTransition(t.Context(), gid, func(ctx context.Context) error {
+				return a.Engine.DeleteGraph(ctx, gid, "admin")
+			}); err != nil {
+				t.Fatalf("delete: %v", err)
+			}
+		}
+	default:
+		resumed = []string{gid}
 	}
-	if c := call(t, srv, "POST", "/api/v1/cost/budgets/run/"+gid+"/raise", adminTok, "application/json", `{"limitMicros":10000000}`, &v); c != 200 || v.Reached || v.Paused || v.LimitMicros != 10_000_000 || v.RaisedBy != "admin" {
+	if c := call(t, srv, "POST", path+"/raise", adminTok, "application/json", `{"limitMicros":10000000}`, &v); c != 200 || v.Reached ||
+		v.Paused != (state == "blocked") || v.LimitMicros != 10_000_000 || v.RaisedBy != "admin" || !slices.Equal(v.NotResumed, pending) {
 		t.Fatalf("raise: %d %+v", c, v)
 	}
-	want := domain.GraphRunning
-	if blocked {
-		want = domain.GraphPaused
-		if len(v.NotResumed) != 1 || v.NotResumed[0] != gid {
-			t.Fatalf("blocked graph missing from response: %+v", v)
-		}
-	} else if len(v.NotResumed) != 0 {
-		t.Fatalf("unexpected resume failure: %+v", v)
-	}
-	if _, rec, err := a.Engine.GetGraph(t.Context(), gid, 0); err != nil || rec.DesiredState != want {
+	if _, rec, err := a.Engine.GetGraph(t.Context(), gid, 0); state != "deleted" && (err != nil || rec.DesiredState != want) {
 		t.Fatalf("state after raise: %+v %v", rec, err)
 	}
-	if evs, _ := a.Store.ListEvents(t.Context(), storage.EventFilter{GraphID: gid, Types: []domain.EventType{domain.EvBudgetRaised}}); len(evs) != 1 || evs[0].Actor != "admin" {
-		t.Fatalf("budget.raised audit: %+v", evs)
+	var audit struct {
+		Resumed, NotResumed []string
+		Skipped             map[string]string
+	}
+	events, err := a.Store.ListEvents(t.Context(), storage.EventFilter{GraphID: gid, Types: []domain.EventType{domain.EvBudgetRaised}})
+	if err != nil || len(events) != 1 || events[0].Actor != "admin" ||
+		json.Unmarshal(events[0].Data, &audit) != nil || !slices.Equal(audit.Resumed, resumed) || !slices.Equal(audit.NotResumed, pending) {
+		t.Fatalf("budget.raised audit: %+v (%+v) %v", audit, events, err)
+	}
+	if (state == "stopped" || state == "deleted") && audit.Skipped[gid] != state {
+		t.Fatalf("missing skip reason %q: %+v", state, audit)
+	}
+	if state == "blocked" {
+		var ledgers []view
+		if c := call(t, srv, "GET", "/api/v1/cost/ledgers", viewerTok, "", "", &ledgers); c != 200 || len(ledgers) != 1 ||
+			!ledgers[0].Paused || !slices.Equal(ledgers[0].NotResumed, pending) {
+			t.Fatalf("persisted pending resume: %d %+v", c, ledgers)
+		}
+		if err := a.Store.ReleaseLease(t.Context(), key, "test-transition"); err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, 12*time.Second, "pending resume applied and audited", func() bool {
+			_, rec, err := a.Engine.GetGraph(t.Context(), gid, 0)
+			if err != nil || rec.DesiredState != domain.GraphRunning {
+				return false
+			}
+			var fresh view
+			if c := call(t, srv, "GET", path, viewerTok, "", "", &fresh); c != 200 || fresh.Paused || len(fresh.NotResumed) != 0 {
+				return false
+			}
+			evs, err := a.Store.ListEvents(t.Context(), storage.EventFilter{GraphID: gid, Types: []domain.EventType{domain.EvBudgetGraphTransition}})
+			return err == nil && slices.ContainsFunc(evs, func(ev *domain.Event) bool {
+				return ev.Actor == "system:budget" && strings.Contains(string(ev.Data), `"outcome":"resumed"`)
+			})
+		})
 	}
 }
 
@@ -204,7 +263,9 @@ func TestMonthlyBudgetPausesRunsAndRefusesNewTasks(t *testing.T) {
 		LimitMicros     int64
 	}
 	waitFor(t, 10*time.Second, "installation budget reached", func() bool {
-		return call(t, srv, "GET", ledger, viewerTok, "", "", &v) == 200 && v.Reached && v.Paused
+		_, rec, err := a.Engine.GetGraph(t.Context(), gid, 0)
+		return err == nil && rec.DesiredState == domain.GraphPaused &&
+			call(t, srv, "GET", ledger, viewerTok, "", "", &v) == 200 && v.Reached && v.Paused
 	})
 	if _, rec, err := a.Engine.GetGraph(t.Context(), gid, 0); err != nil || rec.DesiredState != domain.GraphPaused {
 		t.Fatalf("run must be paused: %+v %v", rec, err)

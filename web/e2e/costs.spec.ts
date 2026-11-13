@@ -48,3 +48,35 @@ test('administrators price models and set budgets; viewers only read them', asyn
   expect(reset.ok()).toBe(true);
   expect((await page.request.put('/api/v1/cost/budgets', { headers: { Authorization: 'Bearer e2e-admin-token' }, data: { budgets: [] } })).ok()).toBe(true);
 });
+
+test('pending budget resumes survive a page reload and clear after recovery', async ({ page }) => {
+  const graph = 'task-run-lease-fixture';
+  const ledger = {
+    scope: 'run', id: graph, currency: 'USD', limitMicros: 1_000_000, chargedMicros: 1_000_000,
+    estimatedMicros: 0, reservedMicros: 0, remainingMicros: 0, reached: true, paused: true,
+    notResumed: [] as string[],
+  };
+  // The API integration test holds and releases a real graph lease. Here
+  // drive the browser with the corresponding persisted ledger responses.
+  await page.route('**/api/v1/cost/ledgers', route => route.fulfill({ json: ledger.paused ? [ledger] : [] }));
+  await page.route(`**/api/v1/cost/budgets/run/${graph}/raise`, route => {
+    expect(route.request().postDataJSON()).toEqual({ limitMicros: 2_000_000 });
+    Object.assign(ledger, { limitMicros: 2_000_000, remainingMicros: 1_000_000, reached: false, notResumed: [graph] });
+    return route.fulfill({ json: ledger });
+  });
+  await page.goto('/#/models');
+  await page.evaluate(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.reload();
+  const budget = page.getByRole('listitem', { name: `Budget Task run ${graph}` });
+  await expect(budget).toContainText('Runs paused');
+  page.once('dialog', dialog => dialog.accept('2'));
+  await budget.getByRole('button', { name: 'Raise budget' }).click();
+  const pending = budget.getByRole('status');
+  await expect(pending).toHaveText(`Resume pending for ${graph}. Weft will retry automatically.`);
+  await page.reload();
+  await expect(pending).toBeVisible();
+  Object.assign(ledger, { paused: false, notResumed: [] });
+  await page.reload();
+  await expect(page.getByText('No budget has been used this month.')).toBeVisible();
+  await expect(budget).toHaveCount(0);
+});

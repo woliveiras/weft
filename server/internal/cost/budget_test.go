@@ -188,34 +188,46 @@ func TestConcurrentReservationsNeverOvershoot(t *testing.T) {
 	}
 }
 
-func TestRaiseIsAnAuditedHumanDecisionAndReconcileChargesOpenWork(t *testing.T) {
-	st, b := budgetEnv(t, 50)
+func TestRaiseSchedulesResumeAndReconcileChargesOpenWork(t *testing.T) {
+	_, b := budgetEnv(t, 50)
 	if _, err := b.ReserveTaskRun(ctx, "task-run-a", "x1", cat(flat), "team", "openai", request(100)); !errors.Is(err, cost.ErrBudgetReached) {
 		t.Fatalf("expected refusal: %v", err)
 	}
-	if err := b.MarkPaused(ctx, cost.TaskRun, "task-run-a", "task-run-a"); err != nil {
+	target := cost.BudgetGraph{Scope: cost.TaskRun, ID: "task-run-a", Graph: "task-run-a",
+		GraphAction: cost.GraphAction{Action: cost.PauseGraph, RunID: "run-a", Actor: "system:budget"}}
+	if err := b.MarkPaused(ctx, target, 50); err != nil {
 		t.Fatal(err)
 	}
 	if v, _ := b.Ledger(ctx, cost.TaskRun, "task-run-a"); !v.Paused || !v.Reached {
 		t.Fatalf("paused view: %+v", v)
 	}
 	var ve *cost.ValidationError
-	if _, _, err := b.Raise(ctx, cost.TaskRun, "task-run-a", 40, "alice"); !errors.As(err, &ve) {
+	if _, _, _, err := b.Raise(ctx, cost.TaskRun, "task-run-a", 40, "alice"); !errors.As(err, &ve) {
 		t.Fatalf("lower limit: %v", err)
 	}
-	if _, _, err := b.Raise(ctx, cost.TaskRun, "task-run-a", 500, "system:budget"); err == nil {
+	if _, _, _, err := b.Raise(ctx, cost.TaskRun, "task-run-a", 500, "system:budget"); err == nil {
 		t.Fatal("the system must not raise a budget")
 	}
-	if _, _, err := b.Raise(ctx, cost.TaskRun, "task-run-zz", 500, "alice"); !errors.Is(err, storage.ErrNotFound) {
+	if _, _, _, err := b.Raise(ctx, cost.TaskRun, "task-run-zz", 500, "alice"); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("missing budget: %v", err)
 	}
-	v, resume, err := b.Raise(ctx, cost.TaskRun, "task-run-a", 500, "alice")
-	if err != nil || len(resume) != 1 || resume[0] != "task-run-a" || v.Limit != 500 || v.Reached || v.Paused || v.RaisedBy != "alice" {
-		t.Fatalf("raise: %+v %q %v", v, resume, err)
+	v, previous, resume, err := b.Raise(ctx, cost.TaskRun, "task-run-a", 500, "alice")
+	if err != nil || previous != 50 || len(resume) != 1 || resume[0].Graph != "task-run-a" ||
+		resume[0].RunID != "run-a" || v.Limit != 500 || v.Reached || !v.Paused || v.RaisedBy != "alice" ||
+		len(v.NotResumed) != 1 || v.NotResumed[0] != "task-run-a" {
+		t.Fatalf("raise: %+v %+v %v", v, resume, err)
 	}
-	evs := eventsOf(t, st, domain.EvBudgetRaised)
-	if len(evs) != 1 || evs[0].Actor != "alice" || evs[0].GraphID != "task-run-a" {
-		t.Fatalf("raise audit: %+v", evs)
+	if err := b.MarkPaused(ctx, target, 50); err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := b.ResolveGraphAction(ctx, target, true); err != nil || changed {
+		t.Fatalf("obsolete pause replaced a resume: %t %v", changed, err)
+	}
+	if changed, err := b.ResolveGraphAction(ctx, resume[0], false); err != nil || !changed {
+		t.Fatalf("complete resume: %t %v", changed, err)
+	}
+	if v, err := b.Ledger(ctx, cost.TaskRun, target.ID); err != nil || v.Paused || len(v.NotResumed) != 0 {
+		t.Fatalf("completed ledger: %+v %v", v, err)
 	}
 	r, err := b.ReserveTaskRun(ctx, "task-run-a", "x1", cat(flat), "team", "openai", request(100))
 	if err != nil {

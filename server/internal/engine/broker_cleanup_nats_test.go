@@ -14,6 +14,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/queue/natsq"
+	"github.com/woliveiras/weft/server/internal/storage"
 )
 
 func TestGraphIDReuseRecoversNATSBrokerCleanup(t *testing.T) {
@@ -79,6 +80,17 @@ func TestGraphIDReuseRecoversNATSBrokerCleanup(t *testing.T) {
 
 	r.eng.Shutdown(ctx)
 	recovered := newRig(t, store, healthy, dir, "nats-recovered")
+	eventually(t, 6*time.Second, "NATS broker cleanup before ID reuse", func() bool {
+		events, err := store.ListEvents(ctx, storage.EventFilter{GraphID: id, Types: []domain.EventType{domain.EvGraphBrokerCleanupCompleted}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(events) == 1
+	})
+	stats, err = healthy.Stats(ctx, subject, "in")
+	if err != nil || stats.Pending != 0 || stats.InFlight != 0 {
+		t.Fatalf("orphaned consumer retained old work: %+v, %v", stats, err)
+	}
 	if _, _, err := recovered.eng.SaveGraph(ctx, &g, 0, "test"); err != nil {
 		t.Fatalf("recreate after restoring broker connectivity: %v", err)
 	}

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import type { BudgetDefinition, BudgetView, Price, PriceCatalogue, SpendLine } from '../api/types';
-import { useAsync } from '../hooks/useData';
+import { useAsync, useThrottled } from '../hooks/useData';
+import { useOptionalEventStream } from '../hooks/useEventStream';
 import { Badge, Btn, ErrorBox } from './common';
 import { budgetLabel, fromMicros, money, toMicros, usedPercent } from './cost';
 
@@ -9,6 +10,8 @@ import { budgetLabel, fromMicros, money, toMicros, usedPercent } from './cost';
 export function CostsSection({ canEdit }: { canEdit: boolean }) {
   const spend = useAsync(() => api.spend(), []);
   const ledgers = useAsync(api.budgetLedgers, []);
+  const refreshLedgers = useThrottled(() => void ledgers.reload(), 300);
+  useOptionalEventStream({ types: ['budget.raised', 'budget.graph_transition'] }, refreshLedgers);
   const currency = spend.data?.currency ?? 'USD';
   const reload = async () => {
     await Promise.all([spend.reload(), ledgers.reload()]);
@@ -87,6 +90,7 @@ export function BudgetBar({ budget, currency, canRaise, onRaised }: { budget: Bu
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const pct = usedPercent(budget);
+  const pending = budget.notResumed ?? [];
   const raise = async () => {
     const text = prompt(`New limit for ${budgetLabel(budget)} (${currency})`, fromMicros(budget.limitMicros * 2));
     if (text === null) return;
@@ -98,10 +102,7 @@ export function BudgetBar({ budget, currency, canRaise, onRaised }: { budget: Bu
     setBusy(true);
     setError(undefined);
     try {
-      const result = await api.raiseBudget(budget.scope, budget.id, micros);
-      if (result?.notResumed?.length) {
-        setError(`Budget raised. Resume these graphs manually: ${result.notResumed.join(', ')}.`);
-      }
+      await api.raiseBudget(budget.scope, budget.id, micros);
       await onRaised();
     } catch (e) {
       setError(errorMessage(e));
@@ -126,7 +127,8 @@ export function BudgetBar({ budget, currency, canRaise, onRaised }: { budget: Bu
         {budget.estimatedMicros > 0 && ` · ${money(budget.estimatedMicros, currency)} estimated`}
         {budget.raisedBy && ` · raised by ${budget.raisedBy}`}
       </p>
-      {canRaise && (budget.reached || budget.paused) && (
+      {pending.length > 0 && <p className="small" role="status">Resume pending for {pending.join(', ')}. Weft will retry automatically.</p>}
+      {canRaise && (budget.reached || (budget.paused && pending.length === 0)) && (
         <Btn small tone="primary" disabled={busy} onClick={() => void raise()}>
           Raise budget
         </Btn>

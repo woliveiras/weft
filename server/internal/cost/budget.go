@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -72,26 +71,27 @@ type Ledger struct {
 	// takes the budget past it; 0 means no interrupt level.
 	InterruptPercent int `json:"interruptPercent,omitempty"`
 	WarningPercent   int `json:"warningPercent,omitempty"`
-	// PausedGraphs are the runs reaching this budget paused, so a raise
-	// resumes them.
-	PausedGraphs []string   `json:"pausedGraphs,omitempty"`
-	RaisedAt     *time.Time `json:"raisedAt,omitempty"`
-	RaisedBy     string     `json:"raisedBy,omitempty"`
+	// PausedGraphs includes runs waiting for a pause or resume to apply.
+	PausedGraphs []string               `json:"pausedGraphs,omitempty"`
+	GraphActions map[string]GraphAction `json:"graphActions,omitempty"`
+	RaisedAt     *time.Time             `json:"raisedAt,omitempty"`
+	RaisedBy     string                 `json:"raisedBy,omitempty"`
 }
 
 // View summarises a ledger.
 type View struct {
-	Scope     string `json:"scope"`
-	ID        string `json:"id"`
-	Currency  string `json:"currency"`
-	Limit     int64  `json:"limitMicros"`
-	Charged   int64  `json:"chargedMicros"`
-	Estimated int64  `json:"estimatedMicros"`
-	Reserved  int64  `json:"reservedMicros"`
-	Remaining int64  `json:"remainingMicros"`
-	Reached   bool   `json:"reached"`
-	Paused    bool   `json:"paused"`
-	RaisedBy  string `json:"raisedBy,omitempty"`
+	Scope      string   `json:"scope"`
+	ID         string   `json:"id"`
+	Currency   string   `json:"currency"`
+	Limit      int64    `json:"limitMicros"`
+	Charged    int64    `json:"chargedMicros"`
+	Estimated  int64    `json:"estimatedMicros"`
+	Reserved   int64    `json:"reservedMicros"`
+	Remaining  int64    `json:"remainingMicros"`
+	Reached    bool     `json:"reached"`
+	Paused     bool     `json:"paused"`
+	RaisedBy   string   `json:"raisedBy,omitempty"`
+	NotResumed []string `json:"notResumed,omitempty"`
 }
 
 // Warning is the warning threshold in micro-units.
@@ -114,6 +114,11 @@ func (l Ledger) View() View {
 			}
 		} else {
 			v.Reserved += e.Amount
+		}
+	}
+	for _, graph := range l.PausedGraphs {
+		if l.GraphActions[graph].Action == ResumeGraph {
+			v.NotResumed = append(v.NotResumed, graph)
 		}
 	}
 	v.Remaining = max(v.Limit-v.Charged-v.Reserved, 0)
@@ -493,7 +498,10 @@ func (r *Reservation) Release(ctx context.Context) error {
 }
 
 // InterruptError names the budget whose interrupt level a charge passed.
-type InterruptError struct{ Scope, ID string }
+type InterruptError struct {
+	Scope, ID string
+	Limit     int64
+}
 
 func (e *InterruptError) Error() string {
 	return fmt.Sprintf("%s: %s budget %s", ErrInterrupted, e.Scope, e.ID)
@@ -507,6 +515,7 @@ func (r *Reservation) settle(ctx context.Context, charged int64, estimated bool)
 	var errs []error
 	var interrupt error
 	for _, p := range r.parts {
+		var interruptLimit int64
 		passed := false
 		errs = append(errs, r.b.update(cleanup, p.scope, p.id, "settle", func(l *Ledger) (*Ledger, error) {
 			if l == nil {
@@ -518,61 +527,18 @@ func (r *Reservation) settle(ctx context.Context, charged int64, estimated bool)
 			}
 			e.Settled, e.Charged, e.Estimated = true, charged, estimated
 			l.Entries[p.rid] = e
+			interruptLimit = l.Limit
 			passed = l.InterruptPercent > 100 && charged > 0 && l.View().Charged*100 >= l.Limit*int64(l.InterruptPercent)
 			return l, nil
 		}))
 		if passed && interrupt == nil {
-			interrupt = &InterruptError{Scope: p.scope, ID: p.id}
+			interrupt = &InterruptError{Scope: p.scope, ID: p.id, Limit: interruptLimit}
 		}
 	}
 	if err := errors.Join(errs...); err != nil {
 		return err
 	}
 	return interrupt
-}
-
-// MarkPaused records that reaching a budget paused graph.
-func (b Budgets) MarkPaused(ctx context.Context, scope, id, graph string) error {
-	return b.update(ctx, scope, id, "pause", func(l *Ledger) (*Ledger, error) {
-		if l == nil || slices.Contains(l.PausedGraphs, graph) {
-			return nil, nil
-		}
-		l.PausedGraphs = append(l.PausedGraphs, graph)
-		return l, nil
-	})
-}
-
-// Raise sets a higher limit as an audited human decision. It returns the
-// runs to resume (those reaching the budget had paused).
-func (b Budgets) Raise(ctx context.Context, scope, id string, limit int64, actor string) (View, []string, error) {
-	if limit < 1 || limit > MaxBudgetMicros {
-		return View{}, nil, &ValidationError{Errors: []Issue{{"limitMicros", fmt.Sprintf("must be between 1 and %d", MaxBudgetMicros)}}}
-	}
-	if strings.HasPrefix(actor, "system") || actor == "" {
-		return View{}, nil, errors.New("cost: only a person can raise a budget")
-	}
-	var view View
-	var resume []string
-	var previous int64
-	err := b.update(ctx, scope, id, "raise", func(l *Ledger) (*Ledger, error) {
-		if l == nil {
-			return nil, fmt.Errorf("%w: budget %s/%s", storage.ErrNotFound, scope, id)
-		}
-		if limit <= l.Limit {
-			return nil, &ValidationError{Errors: []Issue{{"limitMicros", fmt.Sprintf("must be higher than the current limit (%d)", l.Limit)}}}
-		}
-		now := time.Now().UTC()
-		previous = l.Limit
-		l.Limit, l.Reached, l.Warned, l.RaisedAt, l.RaisedBy = limit, false, false, &now, actor
-		resume, l.PausedGraphs = l.PausedGraphs, nil
-		view = l.View()
-		return l, nil
-	})
-	if err != nil {
-		return View{}, nil, err
-	}
-	b.publish(ctx, domain.NewEvent(domain.EvBudgetRaised, graphOf(scope, id), map[string]any{"scope": scope, "id": id, "previousMicros": previous, "limitMicros": limit, "resumed": resume}).WithActor(actor))
-	return view, resume, nil
 }
 
 // SettleExecution closes reservations left open by an execution that ended

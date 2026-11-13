@@ -29,6 +29,8 @@ type Event struct {
 
 type EventType string
 
+const EvGraphBrokerCleanupCompleted EventType = "graph.broker_cleanup_completed"
+
 const (
 	EvGraphCreated   EventType = "graph.created"
 	EvGraphUpdated   EventType = "graph.updated"
@@ -91,6 +93,7 @@ const (
 	EvBudgetWarning           EventType = "budget.warning"
 	EvBudgetReached           EventType = "budget.reached"
 	EvBudgetRaised            EventType = "budget.raised"
+	EvBudgetGraphTransition   EventType = "budget.graph_transition"
 	EvBudgetChanged           EventType = "budget.changed"
 	EvBudgetReservationFailed EventType = "budget.reservation_failed"
 

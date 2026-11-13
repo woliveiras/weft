@@ -634,6 +634,7 @@ export interface BudgetView {
   reached: boolean;
   paused: boolean;
   raisedBy?: string;
+  notResumed?: string[];
 }
 
 export interface SpendLine {
@@ -806,7 +807,7 @@ export interface EnvironmentCleanupItem {
 export interface EnvironmentCleanupResult {
   dryRun: boolean;
   generations: EnvironmentCleanupItem[];
-  deferredGraphs?: { graph: string; actor: string; since: string; reason?: string; graphExists: boolean; daemonMatches: boolean; possibleResources?: string[] }[];
+  deferredGraphs?: { graph: string; actor: string; since: string; reason?: string; invalid?: boolean; graphExists: boolean; daemonMatches: boolean; possibleResources?: string[] }[];
 }
 
 export type EnvironmentNetworkMode = 'none' | 'bridge' | 'egress';

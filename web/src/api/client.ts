@@ -342,7 +342,7 @@ export const api = {
   budgetLedgers: () => request<BudgetView[]>(`${V1}/cost/ledgers`),
   budget: (scope: string, id: string) => request<BudgetView>(`${V1}/cost/budgets/${enc(scope)}/${enc(id)}`),
   raiseBudget: (scope: string, id: string, limitMicros: number) =>
-    request<BudgetView & { notResumed?: string[] }>(`${V1}/cost/budgets/${enc(scope)}/${enc(id)}/raise`, { method: 'POST', body: { limitMicros } }),
+    request<BudgetView>(`${V1}/cost/budgets/${enc(scope)}/${enc(id)}/raise`, { method: 'POST', body: { limitMicros } }),
   budgetPreview: (workflow: string, project?: string) =>
     request<{ taskRunBudgetMicros: number; currency: string; budgets: BudgetView[] }>(`${V1}/cost/budgets/preview`, { query: { workflow, project: project ?? '' } }),
   spend: (graph?: string) => request<SpendReport>(`${V1}/cost/spend`, { query: graph ? { graph } : undefined }),

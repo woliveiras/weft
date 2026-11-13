@@ -69,27 +69,6 @@ func (e *Engine) waitGraphTransition(ctx context.Context, id string, run func(co
 	}
 }
 
-// Budget transitions use the same lease as operator actions because they write
-// the same graph record and must not overwrite a concurrent stop or deletion.
-func (e *Engine) BudgetGraphAction(ctx context.Context, id, action, actor string) error {
-	return e.waitGraphTransition(ctx, id, func(ctx context.Context) error {
-		if action == "resume" {
-			if err := e.checkDeferredDeletion(ctx, id); err != nil {
-				return err
-			}
-		}
-		rec, err := e.store.GetGraphRecord(ctx, id)
-		if err != nil {
-			return err
-		}
-		if (action == "pause" && rec.DesiredState == domain.GraphPaused) ||
-			(action == "resume" && rec.DesiredState == domain.GraphRunning) {
-			return nil
-		}
-		return e.graphAction(ctx, id, action, actor)
-	})
-}
-
 func (e *Engine) checkDeferredDeletion(ctx context.Context, id string) error {
 	_, err := e.store.KVGet(ctx, domain.DeferredEnvironmentCleanup, id)
 	if errors.Is(err, storage.ErrNotFound) {

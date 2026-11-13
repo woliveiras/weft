@@ -62,6 +62,27 @@ describe('CostsSection', () => {
     expect(await within(alice).findByText('Enter an amount higher than the current limit.')).toBeTruthy();
   });
 
+  it('shows pending resumptions from the ledger after reload', async () => {
+    let ledger = reached;
+    routes({
+      'GET /api/v1/cost/ledgers': () => [ledger],
+      'POST /api/v1/cost/budgets/user/alice%402026-11/raise': () => {
+        ledger = { ...reached, limitMicros: 9_000_000, reached: false, notResumed: ['task-run-fixture'] };
+        return ledger;
+      },
+    });
+    vi.stubGlobal('prompt', () => '9');
+    const { unmount } = render(<CostsSection canEdit />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Raise budget' }));
+    const pending = 'Resume pending for task-run-fixture. Weft will retry automatically.';
+    expect(await screen.findByText(pending)).toBeTruthy();
+    expect(screen.getByText('Runs paused')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+    unmount();
+    render(<CostsSection canEdit={false} />);
+    expect(await screen.findByText(pending)).toBeTruthy();
+  });
+
   it('saves prices and budgets as micro-units and reports server validation', async () => {
     let failPrices = true;
     const api = routes({

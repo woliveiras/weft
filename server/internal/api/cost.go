@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -110,23 +109,11 @@ func (s *Server) raiseBudget(w http.ResponseWriter, r *http.Request) error {
 		return badRequest(`body must be {"limitMicros": <new limit>}`)
 	}
 	actor := identityFrom(r.Context()).Name
-	v, resume, err := s.budgets().Raise(r.Context(), r.PathValue("scope"), r.PathValue("budget"), in.LimitMicros, actor)
+	v, err := s.Engine.RaiseBudget(r.Context(), r.PathValue("scope"), r.PathValue("budget"), in.LimitMicros, actor)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
-	defer cancel()
-	result := struct {
-		cost.View
-		NotResumed []string `json:"notResumed,omitempty"`
-	}{View: v}
-	for _, graph := range resume {
-		if err := s.Engine.BudgetGraphAction(ctx, graph, "resume", actor); err != nil {
-			result.NotResumed = append(result.NotResumed, graph)
-			s.Log.Warn("budget raised but graph was not resumed", "graph", graph, "err", err)
-		}
-	}
-	writeJSON(w, 200, result)
+	writeJSON(w, 200, v)
 	return nil
 }
 

@@ -188,8 +188,8 @@ func (b Budgets) Preview(ctx context.Context, t Target) ([]View, error) {
 	return out, nil
 }
 
-// Ledgers lists the ledgers of the given month (monthly scopes) together
-// with the open task-run ledgers.
+// Ledgers lists the ledgers of the given month and task-run ledgers that
+// reached their limit. Runs held by earlier budgets remain visible.
 func (b Budgets) Ledgers(ctx context.Context, period string) ([]View, error) {
 	rows, err := b.Store.ListSettings(ctx, BudgetPrefix)
 	if err != nil {
@@ -203,11 +203,10 @@ func (b Budgets) Ledgers(ctx context.Context, period string) ([]View, error) {
 			errs = append(errs, fmt.Errorf("%s: corrupt", row.Key))
 			continue
 		}
-		// Monthly ledgers of the period, and task runs that need a person.
 		if l.Scope == TaskRun && !l.Reached && len(l.PausedGraphs) == 0 {
 			continue
 		}
-		if l.Scope != TaskRun && !strings.HasSuffix(l.ID, "@"+period) {
+		if l.Scope != TaskRun && !strings.HasSuffix(l.ID, "@"+period) && len(l.PausedGraphs) == 0 {
 			continue
 		}
 		out = append(out, l.View())

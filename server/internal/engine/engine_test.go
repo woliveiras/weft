@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -483,11 +484,11 @@ func TestCanceledDeletePreservesPendingBrokerMessages(t *testing.T) {
 
 type unavailableDeleteBroker struct {
 	queue.Broker
-	unavailable bool
+	unavailable atomic.Bool
 }
 
 func (b *unavailableDeleteBroker) DeleteGroup(ctx context.Context, subject, group string) error {
-	if b.unavailable {
+	if b.unavailable.Load() {
 		return fmt.Errorf("broker unavailable")
 	}
 	return b.Broker.DeleteGroup(ctx, subject, group)
@@ -505,14 +506,14 @@ func TestGraphIDReuseWaitsForBrokerCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.inject("pipe", "in", "job", map[string]int{"test": 1})
-	broker.unavailable = true
+	broker.unavailable.Store(true)
 	if err := r.eng.DeleteGraph(t.Context(), "pipe", "test"); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := r.eng.SaveGraph(t.Context(), &g, 0, "test"); !errors.Is(err, engine.ErrConflict) {
 		t.Fatalf("recreate with pending broker cleanup: %v", err)
 	}
-	broker.unavailable = false
+	broker.unavailable.Store(false)
 	if _, _, err := r.eng.SaveGraph(t.Context(), &g, 0, "test"); err != nil {
 		t.Fatal(err)
 	}
@@ -551,5 +552,47 @@ func TestStopWaitsForConcurrentGraphTransition(t *testing.T) {
 	rec, err := r.store.GetGraphRecord(t.Context(), "pipe")
 	if err != nil || rec.DesiredState != domain.GraphStopped {
 		t.Fatalf("graph after stop: %+v, %v", rec, err)
+	}
+}
+
+func TestBrokerCleanupReconcilesAfterLeaseAndBrokerRecover(t *testing.T) {
+	dir := t.TempDir()
+	broker := &unavailableDeleteBroker{Broker: memory.New()}
+	r := newRig(t, openStore(t, dir), broker, dir, "test")
+	ctx := t.Context()
+	var g domain.Graph
+	if err := yaml.Unmarshal([]byte(pipeline), &g); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.eng.SaveGraph(ctx, &g, 0, "test"); err != nil {
+		t.Fatal(err)
+	}
+	r.inject("pipe", "in", "job", map[string]int{"test": 1})
+	broker.unavailable.Store(true)
+	if err := r.eng.WithGraphTransition(ctx, "pipe", func(ctx context.Context) error {
+		return r.eng.DeleteGraph(ctx, "pipe", "test")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	key := "graph-transition/pipe"
+	if ok, err := r.store.AcquireLease(ctx, key, "test-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("hold graph transition: %t %v", ok, err)
+	}
+	broker.unavailable.Store(false)
+	if stats, err := broker.Stats(ctx, "pipe.in", "in"); err != nil || stats.Pending != 1 {
+		t.Fatalf("expected original pending work: %+v, %v", stats, err)
+	}
+	if err := r.store.ReleaseLease(ctx, key, "test-holder"); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, 6*time.Second, "broker cleanup without ID reuse", func() bool {
+		events, err := r.store.ListEvents(ctx, storage.EventFilter{GraphID: "pipe", Types: []domain.EventType{domain.EvGraphBrokerCleanupCompleted}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(events) == 1 && events[0].Actor == "system:broker"
+	})
+	if stats, err := broker.Stats(ctx, "pipe.in", "in"); err != nil || stats.Pending != 0 {
+		t.Fatalf("orphaned group retained work: %+v, %v", stats, err)
 	}
 }
