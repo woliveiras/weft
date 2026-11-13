@@ -47,7 +47,7 @@ be stored before proceeding.
 | `message.held` | engine, message parked at an approval gate | `{channel, type, approval}` |
 | `message.dropped` | engine, emit matched no channel or exceeded `maxHops` | `{type, reason}` |
 | `message.injected` | API, `POST …/channels/{c}/messages` | `{channel, type}` (actor = caller) |
-| `message.delivered` / `.acked` / `.nacked` / `.dead_lettered` | *reserved* — these transitions are recorded in **message history** (below), not as events, to keep the log small | — |
+| `message.delivered` / `message.acked` / `message.nacked` / `message.dead_lettered` | *reserved* — these transitions are recorded in **message history** (below), not as events, to keep the log small | — |
 | `tool.invoked` | tool gateway, before execution | `{tool, args (≤ 2 KiB), outcome: "started", durationMs: 0}` |
 | `tool.completed` | tool gateway, after execution | `{tool, args, outcome: "ok"\|"error", durationMs, error?}` |
 | `check.completed` | tool gateway, after a declared check ran through `check.run` (task evidence) | `{check, command, passed, exitCode, timedOut?, infraError?, durationMs, format?, failures?: [{test?, file?, line?, message?}] (≤ 20), failureCount?, truncated?, workspace: {head?, state?, partial?, base?, checkFilesChanged?}}` |
@@ -71,15 +71,19 @@ be stored before proceeding.
 | `cost.recorded` | LLM gateway, after every dispatched model call; runtime turn for `TurnResult.usage` (graph, node and execution ids) | `{source: "gateway"\|"external", provider, type, model, execution, usage, estimated, priced, rateSource: "catalogue"\|"local"\|"unpriced", priceVersion, costMicros, currency, error?}` — never prompts, completions or credentials |
 | `budget.warning` | first reservation that takes a budget past its warning level | budget view (graph id = task run) |
 | `budget.reached` | first call refused by a budget, before the run's pause is applied | budget view |
-| `budget.raised` | `POST …/cost/budgets/{scope}/{budget}/raise`, after attempting to resume affected runs | `{scope, id, previousMicros, limitMicros, resumed, notResumed, skipped}` (actor = administrator). `resumed` and `notResumed` list graph IDs. `skipped` maps graph IDs to `stopped`, `deleted`, `run_changed`, `already_running` or `another_budget`. |
-| `budget.graph_transition` | engine, after handling a budget pause or reconciling a pending pause or resume | `{scope, id, action, outcome}` (graph ID = affected run, actor = `system:budget`). `action` is `pause` or `resume`. `outcome` is `paused`, `resumed`, or one of the skip reasons above. |
+| `budget.raised` | `POST …/cost/budgets/{scope}/{budget}/raise`, after attempting to resume affected runs | `{scope, id, previousMicros, limitMicros, resumed, notResumed, skipped}` (actor = administrator). `resumed` and `notResumed` list graph IDs. `skipped` maps graph IDs to `stopped`, `deleted`, `run_changed`, `already_running`, `another_budget`, `budget_reached`, `run_finished`, `legacy_unbound`, or `period_ended`. Empty resume lists may be null. |
+| `budget.graph_transition` | engine, after attempting a budget transition or clearing a hold | `{scope, id, action, outcome, blockingScope?, blockingId?}` (graph ID = affected run, actor = `system:budget`). `action` is `pause`, `resume` or `hold`. `outcome` is `paused`, `resumed`, or one of the skip reasons above. `budget_reached` includes `blockingScope` and `blockingId`. |
+| `budget.ledger_invalid` | first detection of an invalid stored budget revision | `{scope, id, revision}` (actor = `system:budget`) |
 | `budget.changed` | `PUT /api/v1/cost/policy`, `PUT /api/v1/cost/budgets` | `{scope: "policy", taskRunBudgetMicros, warningPercent}` or `{scope: "definitions", budgets}` |
 | `budget.reservation_failed` | an unpriced call refused by the price policy under a budget | `{scope, id, reason, provider, model}` |
 | `cost.prices_changed` | `PUT /api/v1/cost/prices` (no graph id) | `{version, currency, prices, unpriced}` (actor = caller) |
 | `provider.tested` | provider connection test (no graph id) | `{provider, ok, draft, model, durationMs, error?, toolCalling?}`; `level` is `warn` on failure; errors are redacted |
-| `environment.build_started` | `POST …/environment/build` | `{hash, force}` (actor = caller) |
-| `environment.ready` | environment build finished | `{hash, image, durationMs}` |
-| `environment.failed` | environment build failed, timed out or was cancelled | `{hash, durationMs, error}` |
+| `environment.build_started` | `POST …/environment/build` | `{hash, force, buildReasons?}` (actor = caller) |
+| `environment.ready` | environment build finished | `{hash, image, durationMs, buildReasons?, reuseDecision?, reused?, reuseKey?}` |
+| `environment.failed` | environment build failed, timed out or was cancelled | `{hash, durationMs, error, buildReasons?, reuseDecision?}` |
+| `environment.build_cancel_requested` | a caller requested cancellation of an environment build | — |
+| `environment.proposal` | environment proposal state changed | `{proposal, state, resume}` |
+| `environment.cleanup` | an administrator attempted to remove a shared generation | `{generation, removed, usedBy, error}` |
 | `environment.reset` | `POST …/environment/reset`, graph deletion | `{errors}` (number of cleanup steps that failed) |
 | `environment.graph_delete_force_started` | before a forced deletion attempt, after the leases and stopped state are verified | `{attempt, reason}` (actor = administrator) |
 | `environment.graph_delete_forced` | after the forced deletion attempt, including failure | `{attempt, outcome, cleanupDeferred}` (actor = administrator). `attempt` identifies the start event and `outcome` is `deleted` or `failed`. `cleanupDeferred` reports whether the cleanup reservation remains. |
@@ -93,6 +97,27 @@ be stored before proceeding.
 
 `stop` and `kill` emit `graph.stopping` immediately; `graph.stopped` follows when the last replica
 has drained.
+
+## Installation and task audit events
+
+| Type | Data |
+|---|---|
+| `installation.history_retention.updated` | `{revision, days, maxEvents}` |
+| `installation.network_policy.updated` | `{revision}` |
+| `mcp.connection.changed`, `mcp.connection.deleted`, `mcp.tools.refreshed` | `{connectionId, revision, status, toolCount}` |
+| `mcp.connection.tested` | `{connectionId, outcome, durationMs}` |
+| `mcp.oauth.registration_started`, `mcp.oauth.registration_failed`, `mcp.oauth.registration_ready`, `mcp.oauth.exchanging`, `mcp.oauth.authorized`, `mcp.oauth.reauthorization_required`, `mcp.oauth.refreshing`, `mcp.oauth.renewed`, `mcp.oauth.revoked`, `mcp.oauth.revocation_result` | `{connectionId, revision, status, toolCount}` |
+| `mcp.oauth.cleanup` | `{connectionId, outcome}` |
+| `project.registration_requested` | `{projectId, importId?}` |
+| `project.execution_preference_requested` | `{projectId, mode}` |
+| `project.checks_requested` | `{projectId, checks}` |
+| `task.draft_save_requested` | `{taskId, expectedRevision}` |
+| `task.transition_requested` | `{taskId, from, to, expectedRevision}` |
+| `task.prompt_resolution` | `{taskId, state, expectedRevision}` |
+| `task.authorization_requested`, `task.authorization_preference_requested` | `{taskId, mode, scope, expectedRevision}` |
+| `task.workspace_cleanup_requested`, `task.workspace_cleanup_completed` | `{taskId, nodeId, replica}` |
+| `sandbox.capacity` | `{state, node?, replica?, phase?}` |
+| `sandbox.lifecycle` | See [sandbox idle lifecycle](sandbox-runtime.md#idle-suspension-and-task-resume). |
 
 ## Message lifecycle (message history)
 
@@ -225,6 +250,9 @@ for supported namespaces, limits and the meaning of controller-offline recovery.
 
 See [delegation](delegation.md) for the explicit grant, configurable approval, child
 execution records, event metadata, bounded configurable limits and inclusive usage accounting.
+
+Child turns emit `delegation.requested`, `delegation.started`, and `delegation.completed` with
+`{parentExecutionId, template, status}` and execution correlation.
 
 Delegation configuration adds `delegation.policy.updated` (revision, enabled,
 approvalMode) and `delegation.profile.updated` (profileId, revision, enabled), with

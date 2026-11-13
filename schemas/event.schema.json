@@ -25,22 +25,262 @@
     {"if": {"properties": {"type": {"enum": ["approval.requested", "approval.decided"]}}}, "then": {"properties": {"data": {"type": "object", "required": ["id", "kind", "status"]}}}},
     {"if": {"properties": {"type": {"enum": ["agent.output", "agent.broadcast"]}}}, "then": {"properties": {"data": {"type": "object", "required": ["text"]}}}},
     {"if": {"properties": {"type": {"enum": ["tool.invoked", "tool.completed", "tool.denied"]}}}, "then": {"properties": {"data": {"type": "object", "required": ["tool", "outcome", "durationMs"], "properties": {"tool": {"type": "string"}, "outcome": {"enum": ["started", "ok", "error", "denied", "rejected", "rate_limited", "unknown"]}, "durationMs": {"type": "integer"}, "args": {}, "error": {"type": "string"}}}}}},
-    {"if": {"properties": {"type": {"const": "message.published"}}}, "then": {"properties": {"data": {"type": "object", "required": ["channel", "type", "source", "consumers"]}}}}
+    {"if": {"properties": {"type": {"const": "message.published"}}}, "then": {"properties": {"data": {"type": "object", "required": ["channel", "type", "source", "consumers"]}}}},
+    {"if": {"properties": {"type": {"enum": ["budget.warning", "budget.reached"]}}}, "then": {"properties": {"data": {"$ref": "#/$defs/BudgetView"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "budget.raised"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/BudgetRaised"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "budget.graph_transition"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/BudgetGraphTransition"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "budget.ledger_invalid"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/BudgetLedgerInvalid"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "budget.changed"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/BudgetChanged"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "budget.reservation_failed"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/BudgetReservationFailed"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "cost.recorded"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/CostRecorded"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "cost.prices_changed"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/CostPricesChanged"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "environment.build_started"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/EnvironmentBuildStarted"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "environment.ready"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/EnvironmentReady"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "environment.failed"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/EnvironmentFailed"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "environment.reset"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/EnvironmentReset"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "environment.cleanup"}}}, "then": {"required": ["data"], "properties": {"data": {"$ref": "#/$defs/EnvironmentCleanup"}}}},
+    {"if": {"properties": {"type": {"const": "environment.proposal"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/EnvironmentProposal"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"enum": ["graph.deleted", "environment.build_cancel_requested", "environment.deferred_cleanup_completed"]}}}, "then": {"properties": {"data": {"$ref": "#/$defs/NoData"}}}},
+    {"if": {"properties": {"type": {"const": "environment.graph_delete_force_started"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/EnvironmentForceDeleteStarted"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "environment.graph_delete_forced"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/EnvironmentForceDeleteResult"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"enum": ["environment.deferred_cleanup_abandon_requested", "environment.deferred_cleanup_cancel_requested"]}}}, "then": {"properties": {"data": {"$ref": "#/$defs/EnvironmentCleanupDecision"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "environment.deferred_cleanup_reservation_released"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/EnvironmentCleanupReleased"}}, "required": ["data"]}},
+    {"if": {"properties": {"type": {"const": "graph.broker_cleanup_completed"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/GraphBrokerCleanupCompleted"}}, "required": ["data"]}}
   ],
   "$defs": {
     "EventType": {
       "enum": [
-        "graph.created", "graph.updated", "graph.deleted", "graph.started", "graph.stopping", "graph.stopped", "graph.paused",
-        "graph.resumed", "graph.failed", "node.scaled", "replica.state_changed", "execution.started",
-        "execution.completed", "execution.failed", "message.published", "message.delivered", "message.acked",
-        "message.nacked", "message.dead_lettered", "message.dropped", "message.held", "message.injected",
-        "tool.invoked", "tool.completed", "tool.denied", "workspace.observed", "approval.requested", "approval.decided",
-        "operator.message", "agent.output", "agent.broadcast", "log",
-        "budget.raised", "budget.graph_transition", "graph.broker_cleanup_completed",
-        "environment.graph_delete_force_started", "environment.graph_delete_forced",
-        "environment.deferred_cleanup_abandon_requested", "environment.deferred_cleanup_cancel_requested",
-        "environment.deferred_cleanup_reservation_released", "environment.deferred_cleanup_completed"
+        "agent.broadcast", "agent.context", "agent.output", "agent.plan",
+        "approval.decided", "approval.requested", "budget.changed", "budget.graph_transition",
+        "budget.ledger_invalid", "budget.raised", "budget.reached", "budget.reservation_failed",
+        "budget.warning", "check.completed", "checkpoint.created", "checkpoint.failed",
+        "checkpoint.restored", "cost.prices_changed", "cost.recorded", "delegation.completed",
+        "delegation.policy.updated", "delegation.profile.updated", "delegation.requested", "delegation.started",
+        "environment.build_cancel_requested", "environment.build_started", "environment.cleanup",
+        "environment.deferred_cleanup_abandon_requested", "environment.deferred_cleanup_cancel_requested", "environment.deferred_cleanup_completed", "environment.deferred_cleanup_reservation_released",
+        "environment.failed", "environment.graph_delete_force_started", "environment.graph_delete_forced", "environment.proposal",
+        "environment.ready", "environment.reset", "execution.cancel_requested", "execution.completed",
+        "execution.failed", "execution.instructions.loaded", "execution.started", "graph.broker_cleanup_completed",
+        "graph.created", "graph.deleted", "graph.failed", "graph.paused",
+        "graph.resumed", "graph.started", "graph.stopped", "graph.stopping",
+        "graph.updated", "installation.history_retention.updated", "installation.network_policy.updated", "instruction.skill.updated",
+        "log", "mcp.connection.changed", "mcp.connection.deleted", "mcp.connection.tested",
+        "mcp.oauth.authorized", "mcp.oauth.cleanup", "mcp.oauth.exchanging", "mcp.oauth.reauthorization_required",
+        "mcp.oauth.refreshing", "mcp.oauth.registration_failed", "mcp.oauth.registration_ready", "mcp.oauth.registration_started",
+        "mcp.oauth.renewed", "mcp.oauth.revocation_result", "mcp.oauth.revoked", "mcp.tools.refreshed",
+        "message.acked", "message.dead_lettered", "message.delivered", "message.dropped",
+        "message.held", "message.injected", "message.nacked", "message.published",
+        "node.scaled", "operator.message", "project.checks_requested", "project.execution_preference_requested",
+        "project.registration_requested", "provider.changed", "provider.tested", "replica.state_changed",
+        "repository.import_transition", "review.access_revoked", "review.cancelled", "review.continuation_queued",
+        "review.decided", "review.expired", "review.requested", "review.restarted",
+        "review.session", "review.session_failed", "review.session_stopped", "sandbox.capacity",
+        "sandbox.lifecycle", "scm.branch_pushed", "scm.connection_changed", "scm.pull_request_opened",
+        "task.authorization_preference_requested", "task.authorization_requested", "task.draft_save_requested", "task.prompt_resolution",
+        "task.transition_requested", "task.workspace_cleanup_completed", "task.workspace_cleanup_requested", "tool.completed",
+        "tool.denied", "tool.invoked", "trigger.changed", "trigger.hold_resolved",
+        "trigger.note", "trigger.run", "workspace.observed"
       ]
+    },
+    "BudgetView": {
+      "type": "object",
+      "required": ["scope", "id", "currency", "limitMicros", "chargedMicros", "estimatedMicros", "reservedMicros", "remainingMicros", "reached", "paused"],
+      "properties": {
+        "scope": {"enum": ["run", "installation", "user", "project", "workflow"]},
+        "id": {"type": "string"},
+        "currency": {"type": "string"},
+        "limitMicros": {"type": "integer", "minimum": 0},
+        "chargedMicros": {"type": "integer", "minimum": 0},
+        "estimatedMicros": {"type": "integer", "minimum": 0},
+        "reservedMicros": {"type": "integer", "minimum": 0},
+        "remainingMicros": {"type": "integer", "minimum": 0},
+        "reached": {"type": "boolean"},
+        "paused": {"type": "boolean"},
+        "raisedBy": {"type": "string"},
+        "notResumed": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "BudgetRaised": {
+      "type": "object",
+      "required": ["scope", "id", "previousMicros", "limitMicros", "resumed", "notResumed", "skipped"],
+      "properties": {
+        "scope": {"enum": ["run", "installation", "user", "project", "workflow"]},
+        "id": {"type": "string"},
+        "previousMicros": {"type": "integer", "minimum": 0},
+        "limitMicros": {"type": "integer", "minimum": 0},
+        "resumed": {"type": ["array", "null"], "items": {"type": "string"}},
+        "notResumed": {"type": ["array", "null"], "items": {"type": "string"}},
+        "skipped": {"type": "object", "additionalProperties": {"enum": ["stopped", "deleted", "run_changed", "already_running", "another_budget", "budget_reached", "run_finished", "legacy_unbound", "period_ended"]}}
+      }
+    },
+    "BudgetGraphTransition": {
+      "type": "object",
+      "required": ["scope", "id", "action", "outcome"],
+      "properties": {
+        "scope": {"enum": ["run", "installation", "user", "project", "workflow"]},
+        "id": {"type": "string"},
+        "action": {"enum": ["pause", "resume", "hold"]},
+        "outcome": {"enum": ["paused", "resumed", "stopped", "deleted", "run_changed", "already_running", "another_budget", "budget_reached", "run_finished", "legacy_unbound", "period_ended"]},
+        "blockingScope": {"enum": ["run", "installation", "user", "project", "workflow"]},
+        "blockingId": {"type": "string"}
+      },
+      "allOf": [{"if": {"properties": {"outcome": {"const": "budget_reached"}}}, "then": {"required": ["blockingScope", "blockingId"]}}]
+    },
+    "BudgetLedgerInvalid": {
+      "type": "object",
+      "required": ["scope", "id", "revision"],
+      "properties": {
+        "scope": {"enum": ["run", "installation", "user", "project", "workflow"]},
+        "id": {"type": "string"},
+        "revision": {"type": "integer", "minimum": 1}
+      }
+    },
+    "BudgetChanged": {
+      "oneOf": [{"type": "object", "required": ["scope", "taskRunBudgetMicros", "warningPercent"], "properties": {"scope": {"const": "policy"}, "taskRunBudgetMicros": {"type": "integer", "minimum": 0}, "warningPercent": {"type": "integer", "minimum": 0}}}, {"type": "object", "required": ["scope", "budgets"], "properties": {"scope": {"const": "definitions"}, "budgets": {"type": "integer", "minimum": 0}}}]
+    },
+    "BudgetReservationFailed": {
+      "type": "object",
+      "required": ["scope", "id", "reason", "provider", "model"],
+      "properties": {
+        "scope": {"enum": ["run", "installation", "user", "project", "workflow"]},
+        "id": {"type": "string"},
+        "reason": {"const": "unpriced"},
+        "provider": {"type": "string"},
+        "model": {"type": "string"}
+      }
+    },
+    "CostRecorded": {
+      "type": "object",
+      "required": ["source", "usage", "estimated", "priced", "rateSource", "priceVersion", "costMicros", "currency"],
+      "properties": {
+        "source": {"enum": ["gateway", "external"]},
+        "provider": {"type": "string"},
+        "type": {"type": "string"},
+        "model": {"type": "string"},
+        "execution": {"type": "string"},
+        "usage": {"type": "object", "required": ["inputTokens", "outputTokens"], "properties": {"inputTokens": {"type": "integer", "minimum": 0}, "outputTokens": {"type": "integer", "minimum": 0}, "cacheReadTokens": {"type": "integer", "minimum": 0}, "cacheWriteTokens": {"type": "integer", "minimum": 0}}},
+        "estimated": {"type": "boolean"},
+        "priced": {"type": "boolean"},
+        "rateSource": {"enum": ["catalogue", "local", "unpriced"]},
+        "priceVersion": {"type": "integer", "minimum": 0},
+        "costMicros": {"type": "integer", "minimum": 0},
+        "currency": {"type": "string"},
+        "error": {"type": "string"}
+      }
+    },
+    "CostPricesChanged": {
+      "type": "object",
+      "required": ["version", "currency", "prices", "unpriced"],
+      "properties": {
+        "version": {"type": "integer", "minimum": 0},
+        "currency": {"type": "string"},
+        "prices": {"type": "integer", "minimum": 0},
+        "unpriced": {"enum": ["allow", "refuse"]}
+      }
+    },
+    "EnvironmentBuildStarted": {
+      "type": "object",
+      "required": ["hash", "force"],
+      "properties": {
+        "hash": {"type": "string"},
+        "force": {"type": "boolean"},
+        "buildReasons": {"type": ["array", "null"], "items": {"type": "string"}}
+      }
+    },
+    "EnvironmentReady": {
+      "type": "object",
+      "required": ["hash", "image", "durationMs"],
+      "properties": {
+        "hash": {"type": "string"},
+        "durationMs": {"type": "integer", "minimum": 0},
+        "buildReasons": {"type": ["array", "null"], "items": {"type": "string"}},
+        "reuseDecision": {"type": "string"},
+        "image": {"type": "string"},
+        "reused": {"type": "boolean"},
+        "reuseKey": {"type": "string"}
+      }
+    },
+    "EnvironmentFailed": {
+      "type": "object",
+      "required": ["hash", "durationMs", "error"],
+      "properties": {
+        "hash": {"type": "string"},
+        "durationMs": {"type": "integer", "minimum": 0},
+        "buildReasons": {"type": ["array", "null"], "items": {"type": "string"}},
+        "reuseDecision": {"type": "string"},
+        "error": {"type": "string"}
+      }
+    },
+    "EnvironmentReset": {
+      "type": "object",
+      "required": ["errors"],
+      "properties": {
+        "errors": {"type": "integer", "minimum": 0}
+      }
+    },
+    "EnvironmentCleanup": {
+      "type": "object",
+      "required": ["generation", "removed", "usedBy", "error"],
+      "properties": {
+        "generation": {"type": "string"},
+        "removed": {"type": "boolean"},
+        "usedBy": {"type": ["array", "null"], "items": {"type": "string"}},
+        "error": {"type": "string"}
+      }
+    },
+    "EnvironmentProposal": {
+      "type": "object",
+      "required": ["proposal", "state", "resume"],
+      "properties": {
+        "proposal": {"type": "string"},
+        "state": {"type": "string"},
+        "resume": {"type": "boolean"}
+      }
+    },
+    "NoData": {
+      "type": "null"
+    },
+    "EnvironmentForceDeleteStarted": {
+      "type": "object",
+      "required": ["attempt", "reason"],
+      "properties": {
+        "attempt": {"type": "string"},
+        "reason": {"type": "string"}
+      }
+    },
+    "EnvironmentForceDeleteResult": {
+      "type": "object",
+      "required": ["attempt", "outcome", "cleanupDeferred"],
+      "properties": {
+        "attempt": {"type": "string"},
+        "outcome": {"enum": ["deleted", "failed"]},
+        "cleanupDeferred": {"type": "boolean"}
+      }
+    },
+    "EnvironmentCleanupDecision": {
+      "type": "object",
+      "required": ["reason", "possibleResources"],
+      "properties": {
+        "reason": {"type": "string", "minLength": 1, "maxLength": 500},
+        "daemon": {"type": "string"},
+        "invalid": {"const": true},
+        "possibleResources": {"type": "array", "items": {"type": "string"}}
+      },
+      "oneOf": [{"required": ["daemon"], "not": {"required": ["invalid"]}}, {"required": ["invalid"], "not": {"required": ["daemon"]}}]
+    },
+    "EnvironmentCleanupReleased": {
+      "type": "object",
+      "required": ["decision"],
+      "properties": {
+        "decision": {"type": "string"}
+      }
+    },
+    "GraphBrokerCleanupCompleted": {
+      "type": "object",
+      "required": ["groups"],
+      "properties": {
+        "groups": {"type": "integer", "minimum": 0}
+      }
     },
     "ReplicaStatus": {
       "type": "object",
