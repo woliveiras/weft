@@ -134,7 +134,7 @@ func (e *Engine) waitBudgetGraphTransition(ctx context.Context, target cost.Budg
 // are independent of that lease.
 func (e *Engine) applyBudgetGraphTransition(ctx context.Context, target cost.BudgetGraph) (string, error) {
 	budgets := e.monetaryBudgets()
-	current, err := budgets.GraphActionCurrent(ctx, target)
+	source, current, err := budgets.GraphActionRevision(ctx, target)
 	if err != nil || !current {
 		return "", err
 	}
@@ -143,6 +143,7 @@ func (e *Engine) applyBudgetGraphTransition(ctx context.Context, target cost.Bud
 	if err != nil {
 		return "", err
 	}
+	var guards []storage.SettingRevision
 	now := time.Now()
 	expired := cost.ExpiredLedger(target.Scope, target.ID, cost.Period(now))
 	switch {
@@ -150,7 +151,7 @@ func (e *Engine) applyBudgetGraphTransition(ctx context.Context, target cost.Bud
 		outcome = "legacy_unbound"
 	case outcome == "" || outcome == "resume" || outcome == "pause" || outcome == "paused" || outcome == "already_running":
 		var retain bool
-		outcome, retain, err = e.checkBudgetGraphTransition(ctx, target, rec, outcome, expired, now)
+		outcome, retain, guards, err = e.checkBudgetGraphTransition(ctx, target, rec, outcome, expired, now, source)
 		if err != nil || retain {
 			return outcome, err
 		}
@@ -161,12 +162,12 @@ func (e *Engine) applyBudgetGraphTransition(ctx context.Context, target cost.Bud
 		if actor == "" {
 			actor = "system:budget"
 		}
-		if err := e.recordGraphAction(ctx, rec, "pause", actor, ""); err != nil {
+		if err := e.recordGraphAction(ctx, rec, "pause", actor, "", guards...); err != nil {
 			return "", err
 		}
 		outcome = "paused"
 	case "resume":
-		if err := e.recordGraphAction(ctx, rec, "resume", target.Actor, target.GraphAction.ID); err != nil {
+		if err := e.recordGraphAction(ctx, rec, "resume", target.Actor, target.GraphAction.ID, guards...); err != nil {
 			// A write can commit while its caller loses the reply.
 			verify, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 			defer cancel()
@@ -191,77 +192,91 @@ func (e *Engine) applyBudgetGraphTransition(ctx context.Context, target cost.Bud
 		_, err := budgets.ResolveGraphAction(finalize, target, false)
 		return outcome, err
 	}
-	_, err = budgets.ResolveGraphAction(ctx, target, outcome == "paused")
+	if outcome != "not_applicable" && outcome != "limit_available" {
+		guards = nil
+	}
+	changed, err := budgets.ResolveGraphAction(ctx, target, outcome == "paused", guards...)
+	if !changed && err == nil && (outcome == "not_applicable" || outcome == "limit_available") {
+		return "", nil
+	}
 	return outcome, err
 }
 
 // checkBudgetGraphTransition checks a live run under the graph lease before
 // changing its desired state or transferring a hold to a different ledger.
-func (e *Engine) checkBudgetGraphTransition(ctx context.Context, target cost.BudgetGraph, rec *domain.GraphRecord, outcome string, expired bool, now time.Time) (string, bool, error) {
+func (e *Engine) checkBudgetGraphTransition(ctx context.Context, target cost.BudgetGraph, rec *domain.GraphRecord, outcome string, expired bool, now time.Time, source storage.SettingRevision) (string, bool, []storage.SettingRevision, error) {
 	budgets := e.monetaryBudgets()
 	if expired && rec.DesiredState != domain.GraphPaused && target.Action != cost.ResumeGraph {
-		return "period_ended", false, nil
+		return "period_ended", false, nil, nil
 	}
 	g, err := e.store.GetGraph(ctx, target.Graph, rec.Version)
 	if err != nil {
-		return "", false, err
+		return "", false, nil, err
 	}
 	if rec.DesiredState == domain.GraphPaused {
 		finished, err := e.runFinished(ctx, g, rec.RunID)
 		if err != nil {
-			return "", false, err
+			return "", false, nil, err
 		}
 		if finished {
-			return "run_finished", false, nil
+			return "run_finished", false, nil, nil
 		}
 		if expired && target.Action != cost.ResumeGraph {
-			return "period_ended", true, budgets.ScheduleGraphResume(ctx, target, now)
+			return "period_ended", true, nil, budgets.ScheduleGraphResume(ctx, target, now, source)
 		}
 	}
 	if target.Action == cost.ResumeGraph {
 		if err := e.checkDeferredDeletion(ctx, target.Graph); err != nil {
-			return "", false, err
+			return "", false, nil, err
 		}
 	}
-	blocker, reason, err := budgets.ResumeBlocker(ctx, graphBudgetTarget(g), target, now)
+	blocker, reason, checked, err := budgets.CheckGraphBudgets(ctx, graphBudgetTarget(g), target, now)
 	if err != nil {
-		return "", false, err
+		return "", false, nil, err
 	}
+	guards := append(checked, source)
 	switch reason {
 	case "not_applicable":
-		return reason, false, nil
+		return reason, false, guards, nil
 	case "":
 		if outcome == "pause" {
-			return "limit_available", false, nil
+			return "limit_available", false, guards, nil
 		}
 	}
 	sameLedger := target.Scope == blocker.Scope && target.ID == blocker.ID
 	if target.Action != cost.ResumeGraph {
 		if sameLedger {
-			return outcome, false, nil
+			return outcome, false, guards, nil
 		}
 		if rec.DesiredState == domain.GraphPaused {
-			return "limit_available", true, budgets.ScheduleGraphResume(ctx, target, now)
+			return "limit_available", true, nil, budgets.ScheduleGraphResume(ctx, target, now, guards...)
 		}
 	}
 	if reason == "" {
-		return outcome, false, nil
+		return outcome, false, guards, nil
 	}
-	if err := budgets.HoldForResumeBlocker(ctx, blocker, now); err != nil {
-		return "", false, err
+	if err := budgets.HoldForResumeBlocker(ctx, blocker, now, guards); err != nil {
+		return "", false, nil, err
 	}
 	if rec.DesiredState == domain.GraphRunning {
-		if err := e.recordGraphAction(ctx, rec, "pause", "system:budget", ""); err != nil {
-			return "", false, err
+		// The guarded transfer changed the blocker ledger by one revision.
+		key := cost.BudgetPrefix + blocker.Scope + "/" + blocker.ID
+		for i := range guards {
+			if guards[i].Key == key {
+				guards[i].Revision++
+			}
+		}
+		if err := e.recordGraphAction(ctx, rec, "pause", "system:budget", "", guards...); err != nil {
+			return "", false, nil, err
 		}
 	}
 	if err := e.auditBudgetTransition(ctx, target, reason, blocker); err != nil {
-		return "", false, err
+		return "", false, nil, err
 	}
 	if sameLedger {
-		return reason, true, nil
+		return reason, true, nil, nil
 	}
-	return reason, false, nil
+	return reason, false, nil, nil
 }
 
 func budgetGraphOutcome(target cost.BudgetGraph, rec *domain.GraphRecord, err error) (string, error) {

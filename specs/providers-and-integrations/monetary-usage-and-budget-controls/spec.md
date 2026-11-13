@@ -47,6 +47,12 @@ remaining capacity schedules an audited resume subject to the other
 applicable ledgers. A hold with remaining capacity and a clear reached
 state does not block manual resume.
 
+An edit to active budgets during admission invalidates a reservation using
+the previous definition. Partial reservations are released before retrying.
+A monthly definition change preserves the floor set by an explicit Raise.
+A concurrent edit or Raise invalidates a stale reconciler decision before
+it can change the graph state or retire the hold.
+
 ### AC-003 — Budget visibility
 
 Authorized operators see spend, applicable remaining budget, estimates and relevant warning or hard-limit state. Admin changes retain review and scope.

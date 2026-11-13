@@ -317,8 +317,8 @@ type budgetDeadlineStore struct {
 	loseWriteReply bool
 }
 
-func (s *budgetDeadlineStore) PutGraphRecord(ctx context.Context, rec *domain.GraphRecord) error {
-	if err := s.Store.PutGraphRecord(ctx, rec); err != nil {
+func (s *budgetDeadlineStore) PutGraphRecordIf(ctx context.Context, rec *domain.GraphRecord, guards []storage.SettingRevision) error {
+	if err := s.Store.PutGraphRecordIf(ctx, rec, guards); err != nil {
 		return err
 	}
 	if rec.BudgetResumeID != "" {

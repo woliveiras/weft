@@ -358,7 +358,7 @@ func (e *Engine) GraphAction(ctx context.Context, id, action, actor string) erro
 	})
 }
 
-func (e *Engine) recordGraphAction(ctx context.Context, rec *domain.GraphRecord, action, actor, budgetResumeID string) error {
+func (e *Engine) recordGraphAction(ctx context.Context, rec *domain.GraphRecord, action, actor, budgetResumeID string, guards ...storage.SettingRevision) error {
 	id := rec.ID
 	now := time.Now().UTC()
 	var ev domain.EventType
@@ -415,7 +415,13 @@ func (e *Engine) recordGraphAction(ctx context.Context, rec *domain.GraphRecord,
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := e.store.PutGraphRecord(ctx, rec); err != nil {
+	var err error
+	if len(guards) == 0 {
+		err = e.store.PutGraphRecord(ctx, rec)
+	} else {
+		err = e.store.PutGraphRecordIf(ctx, rec, guards)
+	}
+	if err != nil {
 		return err
 	}
 	if (action == "stop" || action == "kill") && e.opt.Reviews != nil {

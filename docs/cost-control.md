@@ -147,11 +147,18 @@ controller apply the new limit and attempt a durable, audited resume for held
 graphs. The controller checks the other applicable ledgers before resuming.
 A hold with capacity cannot by itself block a manual resume.
 
-The controller verifies the ledger revisions from its resume check just
-before writing the graph or node state. It retries when a reservation
-changes a ledger during the check. Ledger and lifecycle writes are separate,
-so spend can still change after a ledger's final read. Each priced model
-call must independently reserve capacity before dispatch.
+Budget reconciliation commits graph state and stale-hold retirement only
+while the checked definitions and ledger revisions still match. A conflicting
+write leaves the operation for the next sweep. Manual actions also check
+applicable budgets before changing state. Each priced call still reserves
+capacity before dispatch. If definitions or policy change during admission,
+the reservation releases partial holds and retries with current settings.
+
+A monthly ledger keeps the explicit Raise amount as its floor. Increases to
+the monthly definition can raise the effective limit above that floor until
+the definition changes again. Existing raised ledgers without a recorded
+Raise amount keep their stored limit as the floor until an explicit Raise
+records the new value.
 
 The controller retires holds for deleted, stopped or replaced runs, and for
 runs whose enabled fixed replicas have completed. A current-month hold

@@ -78,9 +78,13 @@ func (b Budgets) Raise(ctx context.Context, scope, id string, limit int64, actor
 	var view View
 	var actions []BudgetGraph
 	var previous int64
-	err := b.update(ctx, scope, id, "raise", func(l *Ledger) (*Ledger, error) {
+	var definition *applicable
+	applyRaise := func(l *Ledger) (*Ledger, error) {
 		if l == nil {
 			return nil, fmt.Errorf("%w: budget %s/%s", storage.ErrNotFound, scope, id)
+		}
+		if definition != nil {
+			definition.applyLimit(l)
 		}
 		if limit <= l.Limit {
 			return nil, &ValidationError{Errors: []Issue{{"limitMicros", fmt.Sprintf("must be higher than the current limit (%d)", l.Limit)}}}
@@ -88,7 +92,7 @@ func (b Budgets) Raise(ctx context.Context, scope, id string, limit int64, actor
 		now := time.Now().UTC()
 		previous = l.Limit
 		used := l.used()
-		l.Limit, l.Reached, l.RaisedAt, l.RaisedBy = limit, used >= limit, &now, actor
+		l.Limit, l.RaisedLimit, l.Reached, l.RaisedAt, l.RaisedBy = limit, limit, used >= limit, &now, actor
 		l.Warned = used >= l.warningAt()
 		actions = nil
 		for _, graph := range l.PausedGraphs {
@@ -104,8 +108,29 @@ func (b Budgets) Raise(ctx context.Context, scope, id string, limit int64, actor
 		}
 		view = l.View()
 		return l, nil
-	})
-	return view, previous, actions, err
+	}
+	if scope == TaskRun {
+		err := b.update(ctx, scope, id, "raise", applyRaise)
+		return view, previous, actions, err
+	}
+	for range 100 {
+		defs, revision, err := b.Definitions(ctx)
+		if err != nil {
+			return View{}, 0, nil, err
+		}
+		definition = nil
+		for _, d := range defs {
+			if d.Scope == scope && MonthlyID(d.ID, Period(time.Now())) == id {
+				definition = &applicable{scope: scope, limit: d.LimitMicros}
+				break
+			}
+		}
+		err = b.update(ctx, scope, id, "raise", applyRaise, storage.SettingRevision{Key: DefinitionsKey, Revision: revision})
+		if !errors.Is(err, storage.ErrConflict) {
+			return view, previous, actions, err
+		}
+	}
+	return View{}, 0, nil, fmt.Errorf("%w: budgets changed during raise", storage.ErrConflict)
 }
 
 // PendingGraphActions projects graph state without decoding reservation entries.
@@ -149,49 +174,51 @@ func (b Budgets) PendingGraphActions(ctx context.Context) ([]BudgetGraph, int, e
 // action it also reports when the source no longer applies. Re-read the
 // revisions before using the result to detect concurrent changes.
 func (b Budgets) ResumeBlocker(ctx context.Context, t Target, source BudgetGraph, now time.Time) (BudgetGraph, string, error) {
-	for range 3 {
-		blocker, reason, err := b.resumeBlocker(ctx, t, source, now)
-		if !errors.Is(err, storage.ErrConflict) {
-			return blocker, reason, err
-		}
-	}
-	return BudgetGraph{}, "", fmt.Errorf("%w: budgets changed during transition; retry the action", storage.ErrConflict)
+	blocker, reason, _, err := b.CheckGraphBudgets(ctx, t, source, now)
+	return blocker, reason, err
 }
 
-func (b Budgets) resumeBlocker(ctx context.Context, t Target, source BudgetGraph, now time.Time) (BudgetGraph, string, error) {
-	defs, revision, err := b.Definitions(ctx)
-	if err != nil {
-		return BudgetGraph{}, "", err
+// CheckGraphBudgets returns the setting revisions that a transition must
+// still observe at commit time.
+func (b Budgets) CheckGraphBudgets(ctx context.Context, t Target, source BudgetGraph, now time.Time) (BudgetGraph, string, []storage.SettingRevision, error) {
+	for range 3 {
+		blocker, reason, guards, err := b.resumeBlocker(ctx, t, source, now)
+		if !errors.Is(err, storage.ErrConflict) {
+			return blocker, reason, guards, err
+		}
 	}
-	apply, err := b.applicableDefinitions(ctx, t, now, defs)
+	return BudgetGraph{}, "", nil, fmt.Errorf("%w: budgets changed during transition; retry the action", storage.ErrConflict)
+}
+
+func (b Budgets) resumeBlocker(ctx context.Context, t Target, source BudgetGraph, now time.Time) (BudgetGraph, string, []storage.SettingRevision, error) {
+	apply, guards, err := b.applicableSnapshot(ctx, t, now)
 	if err != nil {
-		return BudgetGraph{}, "", err
+		return BudgetGraph{}, "", nil, err
 	}
-	// Prefer the source when it still applies. Moving a hold between
-	// two reached ledgers would otherwise cause repeated transitions.
+	// Prefer the source when it still applies so two reached budgets
+	// do not transfer holds back and forth.
+	sourceApplies := false
 	for i, a := range apply {
 		if a.scope == source.Scope && a.id == source.ID {
+			sourceApplies = true
 			apply[0], apply[i] = apply[i], apply[0]
 			break
 		}
 	}
 	var blocker BudgetGraph
 	reason := ""
-	if source.Scope != "" && !ExpiredLedger(source.Scope, source.ID, Period(now)) && !slices.ContainsFunc(apply, func(a applicable) bool {
-		return a.scope == source.Scope && a.id == source.ID
-	}) {
+	if source.Scope != "" && !sourceApplies && !ExpiredLedger(source.Scope, source.ID, Period(now)) {
 		reason = "not_applicable"
 	}
-	revisions := make([]int64, 0, len(apply))
 	for _, a := range apply {
 		if reason != "" {
 			break
 		}
 		l, revision, err := b.read(ctx, a.scope, a.id)
 		if err != nil {
-			return BudgetGraph{}, "", err
+			return BudgetGraph{}, "", nil, err
 		}
-		revisions = append(revisions, revision)
+		guards = append(guards, storage.SettingRevision{Key: ledgerKey(a.scope, a.id), Revision: revision})
 		if l == nil {
 			continue
 		}
@@ -201,15 +228,12 @@ func (b Budgets) resumeBlocker(ctx context.Context, t Target, source BudgetGraph
 			reason = "budget_reached"
 		}
 	}
-	for i, rev := range revisions {
-		if err := b.checkSettingRevision(ctx, ledgerKey(apply[i].scope, apply[i].id), rev); err != nil {
-			return BudgetGraph{}, "", err
+	for _, guard := range guards {
+		if err := b.checkSettingRevision(ctx, guard.Key, guard.Revision); err != nil {
+			return BudgetGraph{}, "", nil, err
 		}
 	}
-	if err := b.checkSettingRevision(ctx, DefinitionsKey, revision); err != nil {
-		return BudgetGraph{}, "", err
-	}
-	return blocker, reason, nil
+	return blocker, reason, guards, nil
 }
 
 func (b Budgets) checkSettingRevision(ctx context.Context, key string, revision int64) error {
@@ -224,8 +248,8 @@ func (b Budgets) checkSettingRevision(ctx context.Context, key string, revision 
 }
 
 // HoldForResumeBlocker records the new hold before the prior intent is retired.
-// Compare against the latest spend and limit in case a concurrent raise won.
-func (b Budgets) HoldForResumeBlocker(ctx context.Context, target BudgetGraph, now time.Time) error {
+// The guarded write commits against the same snapshot as the budget check.
+func (b Budgets) HoldForResumeBlocker(ctx context.Context, target BudgetGraph, now time.Time, guards []storage.SettingRevision) error {
 	defs, _, err := b.Definitions(ctx)
 	if err != nil {
 		return err
@@ -246,7 +270,7 @@ func (b Budgets) HoldForResumeBlocker(ctx context.Context, target BudgetGraph, n
 		l.Reached = true
 		l.setGraphAction(target.Graph, target.GraphAction)
 		return l, nil
-	})
+	}, guards...)
 }
 
 // ExpiredLedger reports whether a monthly ledger belongs to a closed period.
@@ -299,8 +323,13 @@ func (b Budgets) auditInvalidLedger(ctx context.Context, scope, id string, revis
 }
 
 func (b Budgets) GraphActionCurrent(ctx context.Context, target BudgetGraph) (bool, error) {
-	l, _, err := b.read(ctx, target.Scope, target.ID)
-	return l != nil && l.matchesGraphAction(target), err
+	_, current, err := b.GraphActionRevision(ctx, target)
+	return current, err
+}
+
+func (b Budgets) GraphActionRevision(ctx context.Context, target BudgetGraph) (storage.SettingRevision, bool, error) {
+	l, revision, err := b.read(ctx, target.Scope, target.ID)
+	return storage.SettingRevision{Key: ledgerKey(target.Scope, target.ID), Revision: revision}, l != nil && l.matchesGraphAction(target), err
 }
 
 func (l *Ledger) matchesGraphAction(target BudgetGraph) bool {
@@ -313,21 +342,27 @@ func (l *Ledger) matchesGraphAction(target BudgetGraph) bool {
 
 // ScheduleGraphResume converts a hold into a durable resume attempt after
 // rollover or when the configured limit leaves enough capacity.
-func (b Budgets) ScheduleGraphResume(ctx context.Context, target BudgetGraph, now time.Time) error {
+func (b Budgets) ScheduleGraphResume(ctx context.Context, target BudgetGraph, now time.Time, guards ...storage.SettingRevision) error {
 	op := "schedule_resume"
 	expired := ExpiredLedger(target.Scope, target.ID, Period(now))
 	if expired {
 		op = "rollover"
+	}
+	var defs []Definition
+	if !expired {
+		var revision int64
+		var err error
+		defs, revision, err = b.Definitions(ctx)
+		if err != nil {
+			return err
+		}
+		guards = append(guards, storage.SettingRevision{Key: DefinitionsKey, Revision: revision})
 	}
 	return b.update(ctx, target.Scope, target.ID, op, func(l *Ledger) (*Ledger, error) {
 		if l == nil || !l.matchesGraphAction(target) {
 			return nil, nil
 		}
 		if !expired {
-			defs, revision, err := b.Definitions(ctx)
-			if err != nil {
-				return nil, err
-			}
 			for _, d := range defs {
 				if d.Scope == target.Scope && MonthlyID(d.ID, Period(now)) == target.ID {
 					(applicable{scope: d.Scope, limit: d.LimitMicros}).applyLimit(l)
@@ -341,20 +376,18 @@ func (b Budgets) ScheduleGraphResume(ctx context.Context, target BudgetGraph, no
 			if l.Reached || l.used() >= l.Limit {
 				return nil, storage.ErrConflict
 			}
-			if err := b.checkSettingRevision(ctx, DefinitionsKey, revision); err != nil {
-				return nil, err
-			}
+
 		}
 		l.setGraphAction(target.Graph, GraphAction{
 			ID: domain.NewID("budget-resume"), Action: ResumeGraph, RunID: target.RunID, Actor: "system:budget",
 		})
 		return l, nil
-	})
+	}, guards...)
 }
 
 // ResolveGraphAction updates only the intent that was acted on. A concurrent
 // raise or a new refusal can replace it while the graph transition is running.
-func (b Budgets) ResolveGraphAction(ctx context.Context, target BudgetGraph, held bool) (bool, error) {
+func (b Budgets) ResolveGraphAction(ctx context.Context, target BudgetGraph, held bool, guards ...storage.SettingRevision) (bool, error) {
 	var changed bool
 	err := b.update(ctx, target.Scope, target.ID, "graph_transition", func(l *Ledger) (*Ledger, error) {
 		changed = l != nil && l.matchesGraphAction(target)
@@ -368,7 +401,7 @@ func (b Budgets) ResolveGraphAction(ctx context.Context, target BudgetGraph, hel
 			delete(l.GraphActions, target.Graph)
 		}
 		return l, nil
-	})
+	}, guards...)
 	return changed && err == nil, err
 }
 

@@ -68,7 +68,7 @@ func (t *turnEnv) pauseForBudget(ctx context.Context, scope, id string, limit in
 	if err != nil {
 		return err
 	}
-	if outcome != "" {
+	if outcome != "" && outcome != "budget_reached" {
 		return e.auditBudgetTransition(work, target, outcome)
 	}
 	return nil

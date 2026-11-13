@@ -76,6 +76,7 @@ type Ledger struct {
 	GraphActions map[string]GraphAction `json:"graphActions,omitempty"`
 	RaisedAt     *time.Time             `json:"raisedAt,omitempty"`
 	RaisedBy     string                 `json:"raisedBy,omitempty"`
+	RaisedLimit  int64                  `json:"raisedLimit,omitempty"`
 }
 
 // View summarises a ledger.
@@ -207,7 +208,7 @@ var ErrInvalidLedger = errors.New("cost: invalid budget ledger")
 func decodeLedger(raw []byte, scope, id string) (*Ledger, error) {
 	var l Ledger
 	if err := json.Unmarshal(raw, &l); err != nil || l.Scope != scope || l.ID != id ||
-		l.Limit < 0 || l.Limit > MaxBudgetMicros || l.Compacted < 0 || l.Entries == nil ||
+		l.Limit < 0 || l.Limit > MaxBudgetMicros || l.RaisedLimit < 0 || l.RaisedLimit > MaxBudgetMicros || l.Compacted < 0 || l.Entries == nil ||
 		len(l.Entries) > maxEntries || !validGraphActions(l.GraphActions) {
 		return nil, ErrInvalidLedger
 	}
@@ -249,7 +250,7 @@ func (b Budgets) Ledger(ctx context.Context, scope, id string) (*View, error) {
 // update applies change with compare-and-set so concurrent reservations
 // across instances can never overshoot a budget. change returns nil for
 // "no write".
-func (b Budgets) update(ctx context.Context, scope, id, op string, change func(*Ledger) (*Ledger, error)) (retErr error) {
+func (b Budgets) update(ctx context.Context, scope, id, op string, change func(*Ledger) (*Ledger, error), guards ...storage.SettingRevision) (retErr error) {
 	started := time.Now()
 	defer func() {
 		outcome := "ok"
@@ -280,6 +281,10 @@ func (b Budgets) update(ctx context.Context, scope, id, op string, change func(*
 		raw, err := json.Marshal(next)
 		if err != nil {
 			return err
+		}
+		if len(guards) != 0 {
+			_, err := b.Store.PutSettingIf(ctx, ledgerKey(scope, id), raw, rev, "system:cost-budget", guards)
+			return err // the caller must refresh its decision before retrying
 		}
 		_, err = b.Store.PutSetting(ctx, ledgerKey(scope, id), raw, rev, "system:cost-budget")
 		if errors.Is(err, storage.ErrConflict) {
@@ -355,23 +360,25 @@ type applicable struct {
 
 // applicable lists the budgets that apply to a target now.
 func (b Budgets) applicable(ctx context.Context, t Target, now time.Time) ([]applicable, error) {
-	defs, _, err := b.Definitions(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return b.applicableDefinitions(ctx, t, now, defs)
+	apply, _, err := b.applicableSnapshot(ctx, t, now)
+	return apply, err
 }
 
-func (b Budgets) applicableDefinitions(ctx context.Context, t Target, now time.Time, defs []Definition) ([]applicable, error) {
-	policy, _, err := b.Policy(ctx)
+func (b Budgets) applicableSnapshot(ctx context.Context, t Target, now time.Time) ([]applicable, []storage.SettingRevision, error) {
+	defs, definitionsRevision, err := b.Definitions(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	policy, policyRevision, err := b.Policy(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	guards := []storage.SettingRevision{{Key: DefinitionsKey, Revision: definitionsRevision}, {Key: PolicyKey, Revision: policyRevision}}
 	var out []applicable
 	if t.Graph != "" {
 		_, err := b.Store.GetSetting(ctx, ledgerKey(TaskRun, t.Graph))
 		if err != nil && !errors.Is(err, storage.ErrNotFound) {
-			return nil, err
+			return nil, nil, err
 		}
 		if err == nil || policy.TaskRunBudgetMicros > 0 {
 			out = append(out, applicable{scope: TaskRun, id: t.Graph, limit: policy.TaskRunBudgetMicros, warning: policy.WarningPercent})
@@ -399,13 +406,21 @@ func (b Budgets) applicableDefinitions(ctx context.Context, t Target, now time.T
 		}
 		out = append(out, applicable{scope: d.Scope, id: MonthlyID(d.ID, period), limit: d.LimitMicros, warning: warning, interrupt: d.InterruptPercent})
 	}
-	return out, nil
+	return out, guards, nil
 }
 
 // applyLimit applies the same monthly definition precedence at admission and resumption.
 func (a applicable) applyLimit(l *Ledger) {
-	if a.scope != TaskRun && (l.RaisedBy == "" || a.limit > l.Limit) && l.Limit != a.limit {
-		l.Limit, l.Reached = a.limit, false
+	if a.scope == TaskRun {
+		return
+	}
+	if l.RaisedBy != "" && l.RaisedLimit == 0 {
+		// Older ledgers only recorded the effective limit. Keep that cap
+		// as the floor until an explicit raise records its own value.
+		l.RaisedLimit = l.Limit
+	}
+	if limit := max(a.limit, l.RaisedLimit); limit != l.Limit {
+		l.Limit, l.Reached = limit, false
 	}
 }
 
@@ -415,19 +430,38 @@ func (a applicable) applyLimit(l *Ledger) {
 // released and nothing is held. The request's output allowance is made
 // finite so the reservation is a real ceiling.
 func (b Budgets) Reserve(ctx context.Context, t Target, catalogue func(context.Context) (Catalogue, error), provider, typ string, req *llm.ChatRequest) (*Reservation, error) {
-	apply, err := b.applicable(ctx, t, time.Now())
-	if err != nil || len(apply) == 0 {
-		return nil, err
+	var cat Catalogue
+	var loaded bool
+	for range 100 {
+		apply, guards, err := b.applicableSnapshot(ctx, t, time.Now())
+		if err != nil || len(apply) == 0 {
+			return nil, err
+		}
+		if !loaded {
+			cat, err = catalogue(ctx)
+			if err != nil {
+				return nil, err
+			}
+			loaded = true
+		}
+		r, retry, err := b.reserve(ctx, t, apply, guards, cat, provider, typ, req)
+		if !retry {
+			return r, err
+		}
 	}
-	cat, err := catalogue(ctx)
-	if err != nil {
-		// Fail closed: a budget applies and the call cannot be priced.
-		return nil, err
-	}
+	return nil, fmt.Errorf("%w: budgets changed during reservation", storage.ErrConflict)
+}
+
+func (b Budgets) reserve(ctx context.Context, t Target, apply []applicable, guards []storage.SettingRevision, cat Catalogue, provider, typ string, req *llm.ChatRequest) (*Reservation, bool, error) {
 	rate := cat.Lookup(provider, typ, req.Model)
 	if !rate.Priced() && cat.Unpriced == UnpricedRefuse {
+		for _, guard := range guards {
+			if err := b.checkSettingRevision(ctx, guard.Key, guard.Revision); err != nil {
+				return nil, errors.Is(err, storage.ErrConflict), err
+			}
+		}
 		b.publish(ctx, domain.NewEvent(domain.EvBudgetReservationFailed, t.Graph, map[string]any{"scope": apply[0].scope, "id": apply[0].id, "reason": "unpriced", "provider": provider, "model": req.Model}).WithExecution(t.Execution))
-		return nil, fmt.Errorf("%w: %s/%s", ErrUnpriced, provider, req.Model)
+		return nil, false, fmt.Errorf("%w: %s/%s", ErrUnpriced, provider, req.Model)
 	}
 	if req.MaxTokens <= 0 {
 		req.MaxTokens = llm.DefaultEstimatedOutput
@@ -439,12 +473,15 @@ func (b Budgets) Reserve(ctx context.Context, t Target, catalogue func(context.C
 	r := &Reservation{b: b, rate: rate, amount: amount}
 	rid := domain.NewID("cost")
 	for _, a := range apply {
-		if err := b.reservePart(ctx, a, t, cat.Currency, rid, amount); err != nil {
-			return nil, errors.Join(err, r.Release(ctx))
+		if err := b.reservePart(ctx, a, t, cat.Currency, rid, amount, guards); err != nil {
+			if cleanupErr := r.Release(ctx); cleanupErr != nil {
+				return nil, false, errors.Join(err, fmt.Errorf("release partial budget reservation: %w", cleanupErr))
+			}
+			return nil, errors.Is(err, storage.ErrConflict), err
 		}
 		r.parts = append(r.parts, part{scope: a.scope, id: a.id, rid: rid})
 	}
-	return r, nil
+	return r, false, nil
 }
 
 // ReserveTaskRun reserves against the task run's budget only.
@@ -452,7 +489,7 @@ func (b Budgets) ReserveTaskRun(ctx context.Context, graph, execution string, ca
 	return b.Reserve(ctx, Target{Graph: graph, Execution: execution}, catalogue, provider, typ, req)
 }
 
-func (b Budgets) reservePart(ctx context.Context, a applicable, t Target, currency, rid string, amount int64) error {
+func (b Budgets) reservePart(ctx context.Context, a applicable, t Target, currency, rid string, amount int64, guards []storage.SettingRevision) error {
 	var warn, refused, firstReach bool
 	var view View
 	err := b.update(ctx, a.scope, a.id, "reserve", func(l *Ledger) (*Ledger, error) {
@@ -472,6 +509,11 @@ func (b Budgets) reservePart(ctx context.Context, a applicable, t Target, curren
 			if firstReach {
 				return l, nil // persist Reached; the call is refused below
 			}
+			for _, guard := range guards {
+				if err := b.checkSettingRevision(ctx, guard.Key, guard.Revision); err != nil {
+					return nil, err
+				}
+			}
 			return nil, nil
 		}
 		l.Entries[rid] = Entry{Execution: t.Execution, Amount: amount}
@@ -480,7 +522,7 @@ func (b Budgets) reservePart(ctx context.Context, a applicable, t Target, curren
 		}
 		view = l.View()
 		return l, nil
-	})
+	}, guards...)
 	if err != nil {
 		return err
 	}
