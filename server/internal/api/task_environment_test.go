@@ -104,6 +104,36 @@ func TestTaskEnvironmentBuildRequiresSeparateStartAndRetainsSource(t *testing.T)
 	if c := call(t, srv, "GET", "/api/v1/tasks/"+d.ID+"/review", viewerTok, "", "", &review); c != 200 || !review.CanStart {
 		t.Fatal(c, review)
 	}
+	ledgerKey := cost.BudgetPrefix + cost.User + "/" + id
+	ledger, err := app.Store.GetSetting(t.Context(), ledgerKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var spent cost.Ledger
+	if err := json.Unmarshal(ledger.Value, &spent); err != nil {
+		t.Fatal(err)
+	}
+	spent.Compacted = spent.Limit
+	raw, err := json.Marshal(spent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Store.PutSetting(t.Context(), ledgerKey, raw, ledger.Revision, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	status, body = taskActionResponse(t, srv.URL, d.ID, "start", adminTok, review.Task.Revision)
+	assertTaskBudgetBlock(t, status, body, id)
+	if c := call(t, srv, "GET", "/api/v1/tasks/"+d.ID, viewerTok, "", "", &saved); c != 200 ||
+		saved.Status != "environment_pending" || saved.Revision != review.Task.Revision {
+		t.Fatalf("budget refusal changed the prepared task: %d %+v", c, saved)
+	}
+	if messages, err := app.Store.ListOperatorMessages(t.Context(), saved.ExecutionGraphID, saved.NodeID, 20); err != nil || len(messages) != 0 {
+		t.Fatalf("budget refusal dispatched task input: %v %v", messages, err)
+	}
+	if c := call(t, srv, "POST", "/api/v1/cost/budgets/user/"+id+"/raise", adminTok, "application/json",
+		`{"limitMicros":80}`, nil); c != 200 {
+		t.Fatalf("raise budget after build: %d", c)
+	}
 	if c := taskStart(t, srv.URL, d.ID, adminTok, review.Task.Revision); c != 202 {
 		t.Fatal(c)
 	}
