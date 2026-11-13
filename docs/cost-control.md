@@ -123,16 +123,22 @@ What happens when a threshold is reached:
 | Hard | New calls under that budget are refused. A task-run budget **pauses** the run in a visible waiting state until a human raises the budget or stops it. Other scopes refuse new tasks and pause running ones. |
 | Interrupt | The running turn is cancelled, work is kept as it is, and the run pauses. |
 
-Raising a task-run budget is an audited human decision. It is never automatic and
-cannot be requested by the model.
+An administrator raises the budget. If a graph transition lease is busy,
+the controller records the pause or resume in the ledger and retries after
+the lease becomes available. Model calls remain subject to reservation checks
+while the pause is pending. A raise clears its budget hold after the graph
+resumes or when the graph has already stopped, been deleted, or is held by
+another budget. The audit records those outcomes.
 
 ## Visibility
 
 - Console: spend per task, user, project, workflow, provider and model; budget bars
   with warning and hard levels; unpriced and estimated spend shown separately.
 - New Task and task views show the remaining budget before start and during the run.
+  The costs and task views show pending resumptions from the ledger across page
+  reloads.
 - Events: `cost.recorded`, `budget.warning`, `budget.reached`, `budget.raised`,
-  `budget.reservation_failed`.
+  `budget.graph_transition`, `budget.reservation_failed`.
 - Metrics: spend and reservation outcomes by provider and model, with bounded
   labels only (no execution, task or user IDs as labels).
 

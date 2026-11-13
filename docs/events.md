@@ -21,7 +21,9 @@ Schema: [`schemas/event.schema.json`](../schemas/event.schema.json); Go: `server
 | `level` | Reserved for log-level events. |
 | `data` | Type-specific (below). |
 
-Persisting an event never fails the operation it describes: write errors are logged and dropped.
+For most events, a write error is logged and dropped. Forced deletion and
+deferred cleanup abandonment or cancellation require the decision event to
+be stored before proceeding.
 
 ## Catalogue
 
@@ -30,6 +32,7 @@ Persisting an event never fails the operation it describes: write errors are log
 | `graph.created` | engine, first save of a graph | `{version}` |
 | `graph.updated` | engine, every later save (also bootstrap reloads that changed the document) | `{version}` |
 | `graph.deleted` | engine, `DELETE /graphs/{id}` | — |
+| `graph.broker_cleanup_completed` | engine, after the pending groups and cleanup record for a deleted graph are removed | `{groups}` (count, actor = `system:broker`) |
 | `graph.started` | engine, `start` action | `{action, runId}` |
 | `graph.paused` / `graph.resumed` | engine, `pause` / `resume` action | `{action, runId}` |
 | `graph.stopping` | engine, `stop` (graceful) or `kill` action | `{action, runId}` |
@@ -67,8 +70,9 @@ Persisting an event never fails the operation it describes: write errors are log
 | `scm.connection_changed` | SCM connection created, updated or deleted (no graph id) | `{action, connection}` (actor = caller) — never tokens |
 | `cost.recorded` | LLM gateway, after every dispatched model call; runtime turn for `TurnResult.usage` (graph, node and execution ids) | `{source: "gateway"\|"external", provider, type, model, execution, usage, estimated, priced, rateSource: "catalogue"\|"local"\|"unpriced", priceVersion, costMicros, currency, error?}` — never prompts, completions or credentials |
 | `budget.warning` | first reservation that takes a budget past its warning level | budget view (graph id = task run) |
-| `budget.reached` | first call refused by a budget (the run is paused) | budget view |
-| `budget.raised` | `POST …/cost/budgets/{scope}/{budget}/raise` | `{scope, id, previousMicros, limitMicros}` (actor = person) |
+| `budget.reached` | first call refused by a budget, before the run's pause is applied | budget view |
+| `budget.raised` | `POST …/cost/budgets/{scope}/{budget}/raise`, after attempting to resume affected runs | `{scope, id, previousMicros, limitMicros, resumed, notResumed, skipped}` (actor = administrator). `resumed` and `notResumed` list graph IDs. `skipped` maps graph IDs to `stopped`, `deleted`, `run_changed`, `already_running` or `another_budget`. |
+| `budget.graph_transition` | engine, after handling a budget pause or reconciling a pending pause or resume | `{scope, id, action, outcome}` (graph ID = affected run, actor = `system:budget`). `action` is `pause` or `resume`. `outcome` is `paused`, `resumed`, or one of the skip reasons above. |
 | `budget.changed` | `PUT /api/v1/cost/policy`, `PUT /api/v1/cost/budgets` | `{scope: "policy", taskRunBudgetMicros, warningPercent}` or `{scope: "definitions", budgets}` |
 | `budget.reservation_failed` | an unpriced call refused by the price policy under a budget | `{scope, id, reason, provider, model}` |
 | `cost.prices_changed` | `PUT /api/v1/cost/prices` (no graph id) | `{version, currency, prices, unpriced}` (actor = caller) |
@@ -77,6 +81,12 @@ Persisting an event never fails the operation it describes: write errors are log
 | `environment.ready` | environment build finished | `{hash, image, durationMs}` |
 | `environment.failed` | environment build failed, timed out or was cancelled | `{hash, durationMs, error}` |
 | `environment.reset` | `POST …/environment/reset`, graph deletion | `{errors}` (number of cleanup steps that failed) |
+| `environment.graph_delete_force_started` | before a forced deletion attempt, after the leases and stopped state are verified | `{attempt, reason}` (actor = administrator) |
+| `environment.graph_delete_forced` | after the forced deletion attempt, including failure | `{attempt, outcome, cleanupDeferred}` (actor = administrator). `attempt` identifies the start event and `outcome` is `deleted` or `failed`. `cleanupDeferred` reports whether the cleanup reservation remains. |
+| `environment.deferred_cleanup_abandon_requested` | before releasing a deferred cleanup reservation for a deleted graph | `{reason, daemon?, invalid?, possibleResources}` (actor = administrator). `invalid: true` replaces the daemon fingerprint when the record is corrupt. |
+| `environment.deferred_cleanup_cancel_requested` | before releasing a deferred cleanup reservation while preserving a graph that still exists | `{reason, daemon?, invalid?, possibleResources}` (actor = administrator) |
+| `environment.deferred_cleanup_reservation_released` | after an abandonment or cancellation successfully releases the ID | `{decision}` (decision event ID, actor = administrator) |
+| `environment.deferred_cleanup_completed` | after retrying cleanup successfully on the original sandbox daemon and releasing the ID | — (actor = administrator) |
 | `checkpoint.created` | engine, before the first workspace change of a round when the replica's files differ from its newest checkpoint ([checkpoints](native-coding-runtime.md#checkpoints-nat-07)) | `{checkpoint, ref, commit, reason: "before_edit", tool}` (actor = `agent:<node>#<n>`, execution id) |
 | `checkpoint.restored` | `POST …/checkpoints/restore` or the agent's `checkpoint.restore` | `{checkpoint, saved, written, removed, source: "api"\|"agent"}` (actor = person or agent) |
 | `checkpoint.failed` | recording or restoring a checkpoint failed (the edit still runs; a failed restore may be partial) | `{operation: "record"\|"restore", reason?, tool?, checkpoint?, source?, saved?, written?, removed?, error}` |

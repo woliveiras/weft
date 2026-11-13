@@ -35,7 +35,11 @@
         "execution.completed", "execution.failed", "message.published", "message.delivered", "message.acked",
         "message.nacked", "message.dead_lettered", "message.dropped", "message.held", "message.injected",
         "tool.invoked", "tool.completed", "tool.denied", "workspace.observed", "approval.requested", "approval.decided",
-        "operator.message", "agent.output", "agent.broadcast", "log"
+        "operator.message", "agent.output", "agent.broadcast", "log",
+        "budget.raised", "budget.graph_transition", "graph.broker_cleanup_completed",
+        "environment.graph_delete_force_started", "environment.graph_delete_forced",
+        "environment.deferred_cleanup_abandon_requested", "environment.deferred_cleanup_cancel_requested",
+        "environment.deferred_cleanup_reservation_released", "environment.deferred_cleanup_completed"
       ]
     },
     "ReplicaStatus": {
