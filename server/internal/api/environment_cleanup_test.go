@@ -9,12 +9,13 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/environment"
+	"github.com/woliveiras/weft/server/internal/eventtest"
 )
 
 func TestSharedCleanupAPI(t *testing.T) {
 	bin, _ := fakeDaemonCLI(t)
 	root := t.TempDir()
-	srv, _ := setupApp(t, func(c *config.Config) { c.Isolation.Docker.Bin = bin; c.Workspaces.Root = root })
+	srv, app := setupApp(t, func(c *config.Config) { c.Isolation.Docker.Bin = bin; c.Workspaces.Root = root })
 	endpoint := "/api/v1/environments/cleanup"
 	for _, token := range []string{viewerTok, operatorTok} {
 		if code := call(t, srv, "POST", endpoint, token, "application/json", `{}`, nil); code != 403 {
@@ -85,4 +86,5 @@ spec:
 	if code := call(t, srv, "POST", endpoint, adminTok, "application/json", string(body), &result); code != 200 || !result.Generations[0].Missing {
 		t.Fatalf("retry %d %+v", code, result)
 	}
+	eventtest.Capture(t, app.Store, "environment.cleanup")
 }

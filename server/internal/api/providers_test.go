@@ -14,6 +14,7 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/eventtest"
 	"github.com/woliveiras/weft/server/internal/llm/llmtest"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
@@ -494,4 +495,5 @@ spec:
 	if ext.Priced || ext.CostMicros != 0 || ext.Usage.InputTokens != 100 || ext.Usage.OutputTokens != 50 {
 		t.Fatalf("external record = %+v", ext)
 	}
+	eventtest.Capture(t, a.Store, domain.EvCostRecorded)
 }

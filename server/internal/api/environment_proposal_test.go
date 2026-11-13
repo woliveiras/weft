@@ -11,6 +11,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/environment"
+	"github.com/woliveiras/weft/server/internal/eventtest"
 	"github.com/woliveiras/weft/server/internal/llm"
 )
 
@@ -138,6 +139,7 @@ func TestEnvironmentProposalApprovalBuildAndResume(t *testing.T) {
 			if data, err := os.ReadFile(log); err != nil || len(data) == 0 {
 				t.Fatalf("approved build not run: %v", err)
 			}
+			eventtest.Capture(t, app.Store, "environment.proposal")
 		})
 	}
 }

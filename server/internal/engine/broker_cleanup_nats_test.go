@@ -13,6 +13,7 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
+	"github.com/woliveiras/weft/server/internal/eventtest"
 	"github.com/woliveiras/weft/server/internal/queue/natsq"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
@@ -112,4 +113,5 @@ func TestGraphIDReuseRecoversNATSBrokerCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log("new engine reused the ID, found an empty JetStream consumer and received only the new message")
+	eventtest.Capture(t, store, domain.EvGraphBrokerCleanupCompleted)
 }

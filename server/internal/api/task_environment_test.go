@@ -12,6 +12,7 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/eventtest"
 	"github.com/woliveiras/weft/server/internal/taskauth"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"github.com/woliveiras/weft/server/internal/taskrun"
@@ -124,7 +125,7 @@ func TestTaskEnvironmentFailedBuildCanRetryAndCancelWithoutDispatch(t *testing.T
 	if err = os.WriteFile(marker, []byte("fixture"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	srv, _ := setupApp(t, func(c *config.Config) { c.Isolation.Docker.Bin = bin })
+	srv, app := setupApp(t, func(c *config.Config) { c.Isolation.Docker.Bin = bin })
 	var g domain.Graph
 	if err = json.Unmarshal([]byte(taskGraph), &g); err != nil {
 		t.Fatal(err)
@@ -175,4 +176,5 @@ func TestTaskEnvironmentFailedBuildCanRetryAndCancelWithoutDispatch(t *testing.T
 	if code := call(t, srv, "GET", "/api/v1/graphs/"+progress.Task.ExecutionGraphID+"/executions", viewerTok, "", "", &executions); code != 200 || len(executions) != 0 {
 		t.Fatal(code, executions)
 	}
+	eventtest.Capture(t, app.Store, domain.EvEnvFailed, domain.EvEnvReady)
 }

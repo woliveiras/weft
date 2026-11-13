@@ -14,6 +14,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/environment"
+	"github.com/woliveiras/weft/server/internal/eventtest"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
@@ -59,7 +60,7 @@ type envView struct {
 
 func TestEnvironmentLifecycleThroughTheAPI(t *testing.T) {
 	bin, log := fakeDaemonCLI(t)
-	srv, _ := setupApp(t, func(c *config.Config) {
+	srv, app := setupApp(t, func(c *config.Config) {
 		c.Isolation.Docker.Bin = bin
 		c.Isolation.Docker.Host = "tcp://sandbox-daemon:2376"
 	})
@@ -181,6 +182,7 @@ func TestEnvironmentLifecycleThroughTheAPI(t *testing.T) {
 	if c := call(t, srv, "POST", "/api/v1/graphs/api-demo/environment/build", operatorTok, "", "", nil); c != 400 {
 		t.Fatalf("build without environment: %d", c)
 	}
+	eventtest.Capture(t, app.Store, domain.EvEnvBuildStarted, domain.EvEnvReady, domain.EvEnvReset, domain.EvGraphDeleted)
 }
 
 func waitState(t *testing.T, srv *httptest.Server, graph, state string) {
@@ -393,6 +395,7 @@ func TestForcedGraphDeletionTracksDeferredCleanup(t *testing.T) {
 	if code := call(t, srv, "POST", cleanup, adminTok, "application/json", "{}", &preview); code != 200 || len(preview.DeferredGraphs) != 0 {
 		t.Fatalf("deferred cleanup after retry = %d, %+v", code, preview)
 	}
+	eventtest.Capture(t, app.Store, "environment.graph_delete_force_started", "environment.graph_delete_forced", "environment.deferred_cleanup_completed", domain.EvGraphDeleted)
 }
 
 type resetStatusFailureStore struct{ storage.Store }
@@ -637,6 +640,7 @@ func TestDeferredCleanupResolvesDifferentDaemonAndInterruptedDeletion(t *testing
 				!strings.Contains(string(events[0].Data), "buildx_buildkit_weft-builder-env-demo0_state") {
 				t.Fatalf("audit: %+v, %v", events, err)
 			}
+			eventtest.Capture(t, app.Store, kind, "environment.deferred_cleanup_reservation_released")
 		})
 	}
 }
