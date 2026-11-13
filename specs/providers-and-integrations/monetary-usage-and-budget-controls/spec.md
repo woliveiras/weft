@@ -30,9 +30,23 @@ Gateway calls retain reported or estimated usage and the applied catalogue versi
 
 Applicable budgets reserve capacity before dispatch, settle once after usage, and block or pause at configured hard thresholds. A reviewed raise is audited. Storage failure cannot free unresolved credit or allow a covered call to bypass admission.
 
+Before resuming a graph after a raise or monthly rollover, the controller
+checks the current spend and reached state of every applicable budget. A
+reached budget retains the pause, and `budget.graph_transition` records the
+blocking scope. The controller audits removal of holds for stopped, deleted,
+finished or replaced runs and unbound legacy holds.
+
 ### AC-003 — Budget visibility
 
 Authorized operators see spend, applicable remaining budget, estimates and relevant warning or hard-limit state. Admin changes retain review and scope.
+
+The individual ledger GET and `GET /api/v1/cost/ledgers` share the optional
+`notResumed` field for pending graph IDs. The list includes monthly ledgers
+for the requested UTC period and reached or paused task-run ledgers.
+Closed monthly ledgers are read-only and expose historical spend without
+active pause flags. Invalid ledgers in scope are identified by revision
+alongside healthy ledgers. The task interface uses task progress to suppress
+pause and raise controls for terminal tasks.
 
 ## Explicit exclusions
 
