@@ -99,8 +99,8 @@ func validateDefinitions(defs []Definition) *ValidationError {
 }
 
 // SetDefinitions replaces the monthly budgets. A changed limit applies to
-// the current month's ledger on its next reservation unless a person raised
-// that ledger above it.
+// the current month's ledger during reconciliation or the next reservation
+// unless a person raised that ledger above it.
 func (b Budgets) SetDefinitions(ctx context.Context, defs []Definition, actor string, ifRevision int64) ([]Definition, error) {
 	if defs == nil {
 		defs = []Definition{}

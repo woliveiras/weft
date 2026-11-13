@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -399,30 +400,74 @@ func TestBudgetResumeFinalizesAfterContextCancellation(t *testing.T) {
 	}
 }
 
-func TestReconcileBudgetKeepsHoldAfterUncheckedResume(t *testing.T) {
-	e, rec := budgetTransitionFixture(t, nil)
-	ctx := t.Context()
-	rec.DesiredState = domain.GraphRunning
-	if err := e.store.PutGraphRecord(ctx, rec); err != nil {
-		t.Fatal(err)
-	}
-	putTransitionLedger(t, e, cost.Ledger{Scope: cost.TaskRun, ID: rec.ID, Limit: 10, Reached: true,
-		PausedGraphs: []string{rec.ID}, GraphActions: map[string]cost.GraphAction{rec.ID: {Action: cost.HoldGraph, RunID: rec.RunID}}})
-	if e.reconcileBudgetGraphs(ctx) {
-		t.Fatal("repairing an unchecked resume failed")
-	}
-	saved, err := e.store.GetGraphRecord(ctx, rec.ID)
-	if err != nil || saved.DesiredState != domain.GraphPaused {
-		t.Fatalf("unchecked resume was not repaired: %+v %v", saved, err)
-	}
-	view, err := e.monetaryBudgets().Ledger(ctx, cost.TaskRun, rec.ID)
-	if err != nil || !view.Paused || len(view.NotResumed) != 0 {
-		t.Fatalf("hold was lost: %+v %v", view, err)
+func TestReconcileBudgetChecksRunningGraphHold(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		scope      string
+		defined    bool
+		reached    bool
+		wantPaused bool
+		audit      string
+	}{
+		{"applicable reached hold", cost.TaskRun, false, true, true, "paused"},
+		{"hold with headroom", cost.TaskRun, false, false, false, "limit_available"},
+		{"removed definition", cost.Project, true, true, false, "not_applicable"},
+		{"changed attribution", cost.Project, false, true, false, "not_applicable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, rec := budgetTransitionFixture(t, nil)
+			ctx := t.Context()
+			b := e.monetaryBudgets()
+			id := rec.ID
+			if tc.scope == cost.Project {
+				project := "project-a"
+				if !tc.defined {
+					project = "project-b"
+				}
+				if _, err := b.SetDefinitions(ctx, []cost.Definition{{Scope: tc.scope, ID: project, LimitMicros: 10}}, "admin", 0); err != nil {
+					t.Fatal(err)
+				}
+				id = cost.MonthlyID(project, cost.Period(time.Now()))
+			}
+			putTransitionLedger(t, e, cost.Ledger{Scope: tc.scope, ID: id, Limit: 10, Reached: tc.reached,
+				PausedGraphs: []string{rec.ID}, GraphActions: map[string]cost.GraphAction{rec.ID: {Action: cost.HoldGraph, RunID: rec.RunID}}})
+			if tc.defined {
+				if _, err := b.SetDefinitions(ctx, nil, "admin", 0); err != nil {
+					t.Fatal(err)
+				}
+				if err := e.GraphAction(ctx, rec.ID, "resume", "operator"); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				rec.DesiredState = domain.GraphRunning
+				if err := e.store.PutGraphRecord(ctx, rec); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if e.reconcileBudgetGraphs(ctx) {
+				t.Fatal("reconciliation backed off")
+			}
+			saved, err := e.store.GetGraphRecord(ctx, rec.ID)
+			if err != nil || (saved.DesiredState == domain.GraphPaused) != tc.wantPaused {
+				t.Fatalf("unexpected graph state: %+v %v", saved, err)
+			}
+			view, err := b.Ledger(ctx, tc.scope, id)
+			if err != nil || view.Paused != tc.wantPaused || len(view.NotResumed) != 0 {
+				t.Fatalf("unexpected hold state: %+v %v", view, err)
+			}
+			audit, err := e.store.ListEvents(ctx, storage.EventFilter{GraphID: rec.ID, Types: []domain.EventType{domain.EvBudgetGraphTransition}})
+			if err != nil || len(audit) != 1 || !bytes.Contains(audit[0].Data, []byte(`"outcome":"`+tc.audit+`"`)) {
+				t.Fatalf("wrong transition audit: %v %v", audit, err)
+			}
+			eventtest.Capture(t, e.store, domain.EvBudgetGraphTransition)
+		})
 	}
 }
 
 func TestReconcileBudgetInvalidLedgerDoesNotBackOff(t *testing.T) {
 	e, rec := budgetTransitionFixture(t, nil)
+	var logs bytes.Buffer
+	e.log = slog.New(slog.NewTextHandler(&logs, nil))
 	ctx := t.Context()
 	rec.DesiredState = domain.GraphRunning
 	if err := e.store.PutGraphRecord(ctx, rec); err != nil {
@@ -447,6 +492,9 @@ func TestReconcileBudgetInvalidLedgerDoesNotBackOff(t *testing.T) {
 	if err != nil || len(audit) != 1 {
 		t.Fatalf("expected one invalid-ledger audit per revision: %v %v", audit, err)
 	}
+	if n := bytes.Count(logs.Bytes(), []byte("reconcile budget graph transitions")); n != 1 {
+		t.Fatalf("wanted one warning across the sweeps, got %d", n)
+	}
 	eventtest.Capture(t, e.store, domain.EvBudgetLedgerInvalid)
 }
 
@@ -469,8 +517,7 @@ func TestReconcileBudgetRolloverRetainsBlockingHold(t *testing.T) {
 				PausedGraphs: []string{rec.ID}, GraphActions: map[string]cost.GraphAction{rec.ID: hold}})
 			current := cost.Ledger{Scope: scope, ID: id, Limit: 10, Compacted: 10}
 			if scope == cost.TaskRun {
-				// An interrupt can leave a hold even without Reached set.
-				current.Compacted = 0
+				// A ledger can reach its limit through spend without a refusal.
 				current.PausedGraphs = []string{rec.ID}
 				current.GraphActions = map[string]cost.GraphAction{rec.ID: hold}
 			}
@@ -568,16 +615,53 @@ func TestBudgetResumeRechecksConcurrentReservation(t *testing.T) {
 	}
 }
 
-func TestPausedStatusToleratesInvalidNodeControl(t *testing.T) {
+func TestInvalidNodeControlDoesNotDelayHealthyGraph(t *testing.T) {
 	e, rec := budgetTransitionFixture(t, nil)
+	var logs bytes.Buffer
+	e.log = slog.New(slog.NewTextHandler(&logs, nil))
 	ctx := t.Context()
 	if err := e.store.KVPut(ctx, controlNS(rec.ID), "node/reader", []byte(`{"paused":"invalid"}`)); err != nil {
 		t.Fatal(err)
 	}
 	e.markCompleted(ctx, rec.ID, "reader", 0, rec.RunID)
-	status, err := e.Status(ctx, rec.ID)
-	if err != nil || status.RunFinished || status.DesiredState != domain.GraphPaused {
-		t.Fatalf("invalid control must leave the run incomplete: %+v %v", status, err)
+	putTransitionLedger(t, e, cost.Ledger{Scope: cost.TaskRun, ID: rec.ID, Limit: 10, Reached: true,
+		PausedGraphs: []string{rec.ID}, GraphActions: map[string]cost.GraphAction{rec.ID: {Action: cost.HoldGraph, RunID: rec.RunID}}})
+	healthy := *rec
+	healthy.ID += "-healthy"
+	healthy.State, healthy.DesiredState = domain.GraphRunning, domain.GraphRunning
+	g := &domain.Graph{Metadata: domain.GraphMetadata{ID: healthy.ID}}
+	if _, err := e.store.SaveGraph(ctx, g, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.PutGraphRecord(ctx, &healthy); err != nil {
+		t.Fatal(err)
+	}
+	putTransitionLedger(t, e, cost.Ledger{Scope: cost.TaskRun, ID: healthy.ID, Limit: 10, Reached: true,
+		PausedGraphs: []string{healthy.ID}, GraphActions: map[string]cost.GraphAction{healthy.ID: {Action: cost.PauseGraph, RunID: healthy.RunID}}})
+	for range 3 {
+		status, err := e.Status(ctx, rec.ID)
+		if err != nil || status.RunFinished || status.DesiredState != domain.GraphPaused {
+			t.Fatalf("invalid control must leave the run incomplete: %+v %v", status, err)
+		}
+		if e.reconcileBudgetGraphs(ctx) {
+			t.Fatal("isolated invalid control caused backoff")
+		}
+	}
+	saved, err := e.store.GetGraphRecord(ctx, healthy.ID)
+	if err != nil || saved.DesiredState != domain.GraphPaused {
+		t.Fatalf("healthy graph did not pause: %+v %v", saved, err)
+	}
+	if n := bytes.Count(logs.Bytes(), []byte("check paused run completion")); n != 1 {
+		t.Fatalf("wanted one warning across polling and sweeps, got %d", n)
+	}
+}
+
+func TestBudgetWarningDue(t *testing.T) {
+	now := time.Now()
+	var last atomic.Int64
+	if !budgetWarningDue(&last, now) || budgetWarningDue(&last, now.Add(59*time.Second)) ||
+		!budgetWarningDue(&last, now.Add(time.Minute)) || budgetWarningDue(&last, now.Add(time.Minute)) {
+		t.Fatal("expected one warning per minute")
 	}
 }
 
@@ -606,5 +690,31 @@ func TestManualBudgetResumePreservesHoldAndAuditsOperator(t *testing.T) {
 	if err != nil || len(audit) != 1 || audit[0].Actor != "operator" ||
 		!bytes.Contains(audit[0].Data, []byte(`"requestedAction":"resume"`)) {
 		t.Fatalf("missing manual resume audit: %+v %v", audit, err)
+	}
+}
+
+func TestBlockedStartKeepsRunIDAndBudgetHold(t *testing.T) {
+	e, rec := budgetTransitionFixture(t, nil)
+	ctx := t.Context()
+	rec.DesiredState, rec.State = domain.GraphStopped, domain.GraphStopped
+	if err := e.store.PutGraphRecord(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	action := cost.GraphAction{Action: cost.HoldGraph, RunID: rec.RunID}
+	putTransitionLedger(t, e, cost.Ledger{Scope: cost.TaskRun, ID: rec.ID, Limit: 10, Compacted: 10,
+		PausedGraphs: []string{rec.ID}, GraphActions: map[string]cost.GraphAction{rec.ID: action}})
+	var blocker *BudgetResumeError
+	if err := e.GraphAction(ctx, rec.ID, "start", "operator"); !errors.As(err, &blocker) || blocker.ID != rec.ID {
+		t.Fatalf("expected the inherited task-run budget to block start: %v", err)
+	}
+	saved, err := e.store.GetGraphRecord(ctx, rec.ID)
+	if err != nil || saved.RunID != rec.RunID || saved.DesiredState != domain.GraphStopped {
+		t.Fatalf("blocked start changed the graph: %+v %v", saved, err)
+	}
+	current, err := e.monetaryBudgets().GraphActionCurrent(ctx, cost.BudgetGraph{
+		Scope: cost.TaskRun, ID: rec.ID, Graph: rec.ID, GraphAction: action,
+	})
+	if err != nil || !current {
+		t.Fatalf("blocked start cleared the hold: %t %v", current, err)
 	}
 }

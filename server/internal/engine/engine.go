@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/delegation"
@@ -145,6 +146,9 @@ type Engine struct {
 	wake                 chan struct{}
 	stop                 context.CancelFunc
 	done                 chan struct{}
+
+	invalidLedgerWarningAt  atomic.Int64
+	invalidControlWarningAt atomic.Int64
 }
 
 func New(opt Options) (*Engine, error) {

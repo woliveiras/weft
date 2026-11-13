@@ -34,10 +34,18 @@ Before resuming a graph after a raise or monthly rollover, the controller
 checks the current spend and reached state of every applicable budget. A
 reached budget retains the pause, and `budget.graph_transition` records the
 blocking scope. The controller audits removal of holds for stopped, deleted,
-finished or replaced runs and unbound legacy holds. Manual graph resume,
-starting a paused graph, and node resume also check applicable ledgers.
-A blocked request reports the ledger, preserves the hold, and audits the
-operator's attempt.
+finished or replaced runs, unbound legacy holds, and current-month holds
+whose definition was removed or no longer matches the graph. The same
+applicability and budget check gates reapplying a hold to a running graph.
+
+Manual graph resume, graph start, and node resume also check applicable
+ledgers. Starting a stopped task execution graph checks its existing
+graph-keyed task-run ledger and the applicable monthly ledgers for the new
+lifecycle run. A blocked request reports the ledger, preserves any hold, and
+audits the operator's attempt. Increasing a monthly definition with enough
+remaining capacity schedules an audited resume subject to the other
+applicable ledgers. A hold with remaining capacity and a clear reached
+state does not block manual resume.
 
 ### AC-003 — Budget visibility
 

@@ -134,10 +134,18 @@ When a graph lease is busy, the ledger retains the pending transition for the
 background controller. A resume records an intent ID with the graph state so
 the controller can recognize a successful write after a timeout.
 
-Manual graph Resume, Run all on a paused graph, and node Resume check the
-same budgets. A blocked request returns `409 budget_resume_blocked`, keeps
-the hold and records the operator's attempt with the blocking ledger. The
-console shows where an administrator can raise the budget.
+Manual graph Resume, Run all, and node Resume check the same applicable
+ledgers. Starting a stopped task execution graph creates a new lifecycle run
+ID and keeps the task-run ledger keyed by graph ID. Monthly budgets for the
+current UTC month still apply. A blocked request returns
+`409 budget_resume_blocked`, preserves the current state and any hold, and
+records the operator's attempt with the blocking ledger. The console shows
+where an administrator can raise the budget.
+
+Increasing a monthly definition through `PUT /api/v1/cost/budgets` lets the
+controller apply the new limit and attempt a durable, audited resume for held
+graphs. The controller checks the other applicable ledgers before resuming.
+A hold with capacity cannot by itself block a manual resume.
 
 The controller verifies the ledger revisions from its resume check just
 before writing the graph or node state. It retries when a reservation
@@ -146,7 +154,9 @@ so spend can still change after a ledger's final read. Each priced model
 call must independently reserve capacity before dispatch.
 
 The controller retires holds for deleted, stopped or replaced runs, and for
-runs whose enabled fixed replicas have completed. An individual turn may end
+runs whose enabled fixed replicas have completed. A current-month hold
+whose definition was removed or no longer matches the graph is retired with
+`not_applicable`. An individual turn may end
 while the graph still has work. Holds written by older versions without a
 run ID are retired as `legacy_unbound`. An administrator can review and
 resume a graph that remains paused after such a hold is retired.

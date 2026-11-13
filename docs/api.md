@@ -54,7 +54,7 @@ Startup fails if no credential is configured and auth is not explicitly disabled
   | 403 | `forbidden` | Role too low; on callbacks: tool denied or rejected by a human |
   | 404 | `not_found` | Unknown graph/node/channel/approval/execution, unknown action segment |
   | 409 | `conflict` | `If-Match` mismatch, graph exists, delete while running, approval already decided, pause when not running, provider in use or default |
-  | 409 | `budget_resume_blocked` | A monetary budget blocks graph resume, starting a paused graph, or node resume. `details` contains the blocking `scope` and `id`. |
+  | 409 | `budget_resume_blocked` | A monetary budget blocks graph start, graph resume, or node resume. `details` contains the blocking `scope` and `id`. |
   | 409 | `secret_key_missing` | A credential was sent but the server has no installation key to encrypt it |
   | 422 | `invalid` | Graph validation failed, or a graph/node start whose agents cannot reach their model provider — `details` is the full `ValidationReport`; provider input invalid — `details.errors[]` with `path` and `message` |
   | 429 | `rate_limited` | Tool grant rate limit (callbacks) |
@@ -80,7 +80,7 @@ Startup fails if no credential is configured and auth is not explicitly disabled
   Defaults: messages 100, executions 50, events 200, approvals 200.
 * **Asynchronous lifecycle.** Lifecycle actions record the *desired* state and return the current
   `GraphStatus`; replicas converge within one reconcile interval (default 2 s). Poll `/status` or follow
-  the event stream. A budget-blocked action keeps the graph or node paused and is audited with the
+  the event stream. A budget-blocked action preserves the graph or node state and is audited with the
   requesting identity. An administrator can raise the blocking ledger in Models → Costs or through the
   budget raise endpoint. Graph summaries expose the graph lifecycle state and run ID.
   The budget resume receipt is internal to ledger reconciliation.
@@ -242,7 +242,7 @@ else is unpriced. Weft ships no vendor prices. See
 | `GET /api/v1/cost/policy` | viewer | `{taskRunBudgetMicros, warningPercent}`; `0` means task runs have no budget. |
 | `PUT /api/v1/cost/policy` | admin | Sets the budget every new task run starts with and the warning level (default 80%). |
 | `GET /api/v1/cost/budgets` | viewer | Monthly budget definitions `{budgets: [{scope, id, limitMicros, warningPercent?, interruptPercent?}], period}`. |
-| `PUT /api/v1/cost/budgets` | admin | Replaces the definitions. Scopes: `installation` (id `"*"`), `user` (identity name), `project` (project id), `workflow` (source graph id). `interruptPercent` (101-1000) cancels the call that takes spend past it and pauses the run. |
+| `PUT /api/v1/cost/budgets` | admin | Replaces the definitions. When a higher limit leaves capacity in a held ledger, the controller applies the limit and attempts an audited resume in the background. Scopes: `installation` (id `"*"`), `user` (identity name), `project` (project id), `workflow` (source graph id). `interruptPercent` (101-1000) cancels the call that takes spend past it and pauses the run. |
 | `GET /api/v1/cost/budgets/preview?workflow=&project=` | viewer | Budgets a new task by the caller would be held to: `{taskRunBudgetMicros, currency, budgets[]}` with what remains this month. |
 | `GET /api/v1/cost/ledgers` | viewer | Monthly ledgers for the requested UTC period (current by default), plus task-run ledgers that reached their limit or hold a graph transition. Invalid rows for this selection remain visible with `invalid: true` and `revision`. |
 | `GET /api/v1/cost/spend?period=YYYY-MM&graph=` | viewer | Spend of a month from `cost.recorded` events: `total` and the top 100 lines by provider/model, task run, user, project and workflow (`costMicros`, `estimatedMicros`, `unpricedCalls`, tokens). Follows the event history retention; `truncated` when more than 100 000 records exist. |

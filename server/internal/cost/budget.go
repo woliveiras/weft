@@ -355,6 +355,14 @@ type applicable struct {
 
 // applicable lists the budgets that apply to a target now.
 func (b Budgets) applicable(ctx context.Context, t Target, now time.Time) ([]applicable, error) {
+	defs, _, err := b.Definitions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return b.applicableDefinitions(ctx, t, now, defs)
+}
+
+func (b Budgets) applicableDefinitions(ctx context.Context, t Target, now time.Time, defs []Definition) ([]applicable, error) {
 	policy, _, err := b.Policy(ctx)
 	if err != nil {
 		return nil, err
@@ -368,10 +376,6 @@ func (b Budgets) applicable(ctx context.Context, t Target, now time.Time) ([]app
 		if err == nil || policy.TaskRunBudgetMicros > 0 {
 			out = append(out, applicable{scope: TaskRun, id: t.Graph, limit: policy.TaskRunBudgetMicros, warning: policy.WarningPercent})
 		}
-	}
-	defs, _, err := b.Definitions(ctx)
-	if err != nil {
-		return nil, err
 	}
 	period := Period(now)
 	for _, d := range defs {

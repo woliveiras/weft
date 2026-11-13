@@ -508,3 +508,130 @@ func TestManualBudgetResumeThroughAPI(t *testing.T) {
 		}
 	}
 }
+
+func TestMonthlyBudgetEditsAndGraphLifecycle(t *testing.T) {
+	for _, scenario := range []string{"remove then resume", "increase then automatic resume", "increase with a second blocker", "stop then start"} {
+		t.Run(scenario, func(t *testing.T) {
+			srv, app := setupApp(t, nil)
+			ctx := t.Context()
+			const graph = "monthly-budget-fixture"
+			const path = "/api/v1/graphs/" + graph
+			const definitions = "/api/v1/cost/budgets"
+			period := cost.Period(time.Now())
+			scope, id := cost.User, cost.MonthlyID("alice", period)
+			if c := call(t, srv, "PUT", definitions, adminTok, "application/json",
+				`{"budgets":[{"scope":"user","id":"alice","limitMicros":10}]}`, nil); c != 200 {
+				t.Fatalf("set definition: %d", c)
+			}
+			g := &domain.Graph{Metadata: domain.GraphMetadata{ID: graph, Labels: map[string]string{domain.LabelTaskUser: "alice"}},
+				Spec: domain.GraphSpec{Nodes: []domain.Node{{ID: "reader", Runtime: domain.RuntimeRef{Kind: "echo"}}}}}
+			if _, _, err := app.Engine.SaveGraph(ctx, g, 0, "admin"); err != nil {
+				t.Fatal(err)
+			}
+			rec, err := app.Store.GetGraphRecord(ctx, graph)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rec.DesiredState, rec.State, rec.RunID = domain.GraphPaused, domain.GraphPaused, "run-fixture"
+			if err := app.Store.PutGraphRecord(ctx, rec); err != nil {
+				t.Fatal(err)
+			}
+			seedLifecycleLedger(t, app.Store, graph, rec.RunID, scope, id)
+			runKey := cost.BudgetPrefix + cost.TaskRun + "/" + graph
+			if scenario == "increase with a second blocker" {
+				seedLifecycleLedger(t, app.Store, graph, rec.RunID, cost.TaskRun, graph)
+			} else {
+				raw := []byte(`{"scope":"run","id":"` + graph + `","limit":10,"entries":{}}`)
+				if _, err := app.Store.PutSetting(ctx, runKey, raw, 0, "fixture"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			switch scenario {
+			case "remove then resume":
+				if c := call(t, srv, "PUT", definitions, adminTok, "application/json", `{"budgets":[]}`, nil); c != 200 {
+					t.Fatalf("remove: %d", c)
+				}
+				if c, _, body := rawCall(t, "POST", srv.URL+path+"/resume", operatorTok, "", nil); c != 200 {
+					t.Fatalf("resume after removing the definition: %d %s", c, body)
+				}
+			case "stop then start":
+				if c, _, body := rawCall(t, "POST", srv.URL+path+"/stop", operatorTok, "", nil); c != 200 {
+					t.Fatalf("stop: %d %s", c, body)
+				}
+				for _, scope := range []string{cost.User, cost.TaskRun} {
+					if scope == cost.TaskRun {
+						row, err := app.Store.GetSetting(ctx, runKey)
+						if err != nil {
+							t.Fatal(err)
+						}
+						raw := []byte(`{"scope":"run","id":"` + graph + `","limit":10,"compacted":10,"entries":{}}`)
+						if _, err := app.Store.PutSetting(ctx, runKey, raw, row.Revision, "fixture"); err != nil {
+							t.Fatal(err)
+						}
+					}
+					c, _, body := rawCall(t, "POST", srv.URL+path+"/start", operatorTok, "", nil)
+					if c != 409 || !strings.Contains(body, `"code":"budget_resume_blocked"`) ||
+						!strings.Contains(body, `"scope":"`+scope+`"`) {
+						t.Fatalf("start with a reached %s ledger: %d %s", scope, c, body)
+					}
+				}
+				saved, err := app.Store.GetGraphRecord(ctx, graph)
+				if err != nil || saved.RunID != rec.RunID || saved.DesiredState != domain.GraphStopped {
+					t.Fatalf("blocked start created a run: %+v %v", saved, err)
+				}
+				eventtest.Capture(t, app.Store, domain.EvBudgetGraphTransition)
+				return
+			default:
+				if c := call(t, srv, "PUT", definitions, adminTok, "application/json",
+					`{"budgets":[{"scope":"user","id":"alice","limitMicros":40}]}`, nil); c != 200 {
+					t.Fatalf("increase: %d", c)
+				}
+			}
+
+			wantOutcome := map[string]string{
+				"remove then resume":             "not_applicable",
+				"increase then automatic resume": "resumed",
+				"increase with a second blocker": "budget_reached",
+			}[scenario]
+			waitFor(t, 12*time.Second, "budget transition", func() bool {
+				events, err := app.Store.ListEvents(ctx, storage.EventFilter{GraphID: graph, Types: []domain.EventType{domain.EvBudgetGraphTransition}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return slices.ContainsFunc(events, func(event *domain.Event) bool {
+					return strings.Contains(string(event.Data), `"scope":"user"`) &&
+						strings.Contains(string(event.Data), `"outcome":"`+wantOutcome+`"`)
+				})
+			})
+			wantState := domain.GraphRunning
+			if scenario == "increase with a second blocker" {
+				wantState = domain.GraphPaused
+			}
+			saved, err := app.Store.GetGraphRecord(ctx, graph)
+			if err != nil || saved.DesiredState != wantState || saved.RunID != rec.RunID {
+				t.Fatalf("wrong lifecycle state after edit: %+v %v", saved, err)
+			}
+			var view cost.View
+			if c := call(t, srv, "GET", definitions+"/"+scope+"/"+id, viewerTok, "", "", &view); c != 200 || view.Paused {
+				t.Fatalf("old hold still visible: %d %+v", c, view)
+			}
+			if strings.HasPrefix(scenario, "increase") && (view.Limit != 40 || view.Reached || view.Remaining != 10) {
+				t.Fatalf("increased limit not reflected in the ledger: %+v", view)
+			}
+			eventtest.Capture(t, app.Store, domain.EvBudgetGraphTransition)
+		})
+	}
+}
+
+func seedLifecycleLedger(t *testing.T, st storage.Store, graph, run, scope, id string) {
+	t.Helper()
+	raw, err := json.Marshal(cost.Ledger{Scope: scope, ID: id, Currency: "USD", Limit: 10, Compacted: 30, Reached: true,
+		Entries: map[string]cost.Entry{}, PausedGraphs: []string{graph},
+		GraphActions: map[string]cost.GraphAction{graph: {Action: cost.HoldGraph, RunID: run}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.PutSetting(t.Context(), cost.BudgetPrefix+scope+"/"+id, raw, 0, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+}

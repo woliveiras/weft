@@ -2,6 +2,7 @@ package cost_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
@@ -353,4 +355,52 @@ func TestRaiseRecomputesReachedAndWarning(t *testing.T) {
 		t.Fatalf("crossing the new threshold should warn again: %d", n)
 	}
 	eventtest.Capture(t, st, domain.EvBudgetWarning)
+}
+
+func TestResumeBlockerUsesApplicableEffectiveLimits(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		definition int64
+		spend      int64
+		scheduled  bool
+		want       string
+	}{
+		{"reached with sticky refusal", 10, 2, false, "budget_reached"},
+		{"definition raised with headroom", 20, 10, false, ""},
+		{"definition raised to current spend", 20, 20, true, "budget_reached"},
+		{"definition removed", 0, 10, true, "not_applicable"},
+		{"definition removed before manual resume", 0, 10, false, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			st, b := budgetEnv(t, 0)
+			now := time.Now()
+			id := cost.MonthlyID("alice", cost.Period(now))
+			target := cost.Target{Graph: "task-run-1", User: "alice"}
+			action := cost.GraphAction{RunID: "run-1", Action: cost.HoldGraph}
+			if tc.definition != 0 {
+				if _, err := b.SetDefinitions(ctx, []cost.Definition{{Scope: cost.User, ID: "alice", LimitMicros: tc.definition}}, "admin", 0); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ledger := cost.Ledger{Scope: cost.User, ID: id, Limit: 10, Compacted: tc.spend, Reached: true,
+				Entries: map[string]cost.Entry{}, PausedGraphs: []string{target.Graph},
+				GraphActions: map[string]cost.GraphAction{target.Graph: action}}
+			raw, err := json.Marshal(ledger)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.PutSetting(ctx, cost.BudgetPrefix+cost.User+"/"+id, raw, 0, "fixture"); err != nil {
+				t.Fatal(err)
+			}
+			source := cost.BudgetGraph{GraphAction: action}
+			if tc.scheduled {
+				source.Scope, source.ID = cost.User, id
+			}
+			blocker, reason, err := b.ResumeBlocker(ctx, target, source, now)
+			if err != nil || reason != tc.want || (reason == "budget_reached" && (blocker.Scope != cost.User || blocker.ID != id)) {
+				t.Fatalf("got %+v %q %v, want %q", blocker, reason, err, tc.want)
+			}
+		})
+	}
 }

@@ -337,7 +337,8 @@ func (e *Engine) GraphAction(ctx context.Context, id, action, actor string) erro
 		if err != nil {
 			return err
 		}
-		if rec.DesiredState == domain.GraphPaused && (action == "start" || action == "resume") {
+		starting := action == "start" && rec.DesiredState != domain.GraphRunning
+		if starting || (action == "resume" && rec.DesiredState == domain.GraphPaused) {
 			if err := e.checkManualBudgetResume(ctx, g, rec.RunID, actor, action, ""); err != nil {
 				return err
 			}
@@ -346,7 +347,7 @@ func (e *Engine) GraphAction(ctx context.Context, id, action, actor string) erro
 			if rep := e.preflight(ctx, g, ""); !rep.Valid {
 				return &ValidationError{Report: rep}
 			}
-			if rec.DesiredState == domain.GraphPaused {
+			if starting {
 				// Preflight can run external checks. Revalidate at the write.
 				if err := e.checkManualBudgetResume(ctx, g, rec.RunID, actor, action, ""); err != nil {
 					return err
@@ -664,7 +665,7 @@ func (e *Engine) Status(ctx context.Context, id string) (*GraphStatus, error) {
 		st.RunFinished, err = e.runFinished(ctx, g, rec.RunID)
 		var invalid *invalidNodeControl
 		if errors.As(err, &invalid) {
-			e.log.Warn("check paused run completion", "graph", id, "run", rec.RunID, "err", err)
+			e.warnInvalidNodeControl(id, rec.RunID, invalid)
 		} else if err != nil {
 			return nil, err
 		}

@@ -145,9 +145,9 @@ func (b Budgets) PendingGraphActions(ctx context.Context) ([]BudgetGraph, int, e
 	return actions, invalid, nil
 }
 
-// ResumeBlocker checks the applicable ledgers and, for a scheduled action,
-// its source ledger. Re-read their revisions before allowing a resume so a
-// concurrent reservation during the sweep triggers a fresh evaluation.
+// ResumeBlocker checks the current applicable ledgers. For a scheduled
+// action it also reports when the source no longer applies. Re-read the
+// revisions before using the result to detect concurrent changes.
 func (b Budgets) ResumeBlocker(ctx context.Context, t Target, source BudgetGraph, now time.Time) (BudgetGraph, string, error) {
 	for range 3 {
 		blocker, reason, err := b.resumeBlocker(ctx, t, source, now)
@@ -155,22 +155,38 @@ func (b Budgets) ResumeBlocker(ctx context.Context, t Target, source BudgetGraph
 			return blocker, reason, err
 		}
 	}
-	return BudgetGraph{}, "", fmt.Errorf("%w: budgets changed during resume; retry the action", storage.ErrConflict)
+	return BudgetGraph{}, "", fmt.Errorf("%w: budgets changed during transition; retry the action", storage.ErrConflict)
 }
 
 func (b Budgets) resumeBlocker(ctx context.Context, t Target, source BudgetGraph, now time.Time) (BudgetGraph, string, error) {
-	apply, err := b.applicable(ctx, t, now)
+	defs, revision, err := b.Definitions(ctx)
 	if err != nil {
 		return BudgetGraph{}, "", err
 	}
+	apply, err := b.applicableDefinitions(ctx, t, now, defs)
+	if err != nil {
+		return BudgetGraph{}, "", err
+	}
+	// Prefer the source when it still applies. Moving a hold between
+	// two reached ledgers would otherwise cause repeated transitions.
+	for i, a := range apply {
+		if a.scope == source.Scope && a.id == source.ID {
+			apply[0], apply[i] = apply[i], apply[0]
+			break
+		}
+	}
+	var blocker BudgetGraph
+	reason := ""
 	if source.Scope != "" && !ExpiredLedger(source.Scope, source.ID, Period(now)) && !slices.ContainsFunc(apply, func(a applicable) bool {
 		return a.scope == source.Scope && a.id == source.ID
 	}) {
-		apply = append(apply, applicable{scope: source.Scope, id: source.ID})
+		reason = "not_applicable"
 	}
-	var held BudgetGraph
 	revisions := make([]int64, 0, len(apply))
 	for _, a := range apply {
+		if reason != "" {
+			break
+		}
 		l, revision, err := b.read(ctx, a.scope, a.id)
 		if err != nil {
 			return BudgetGraph{}, "", err
@@ -179,36 +195,32 @@ func (b Budgets) resumeBlocker(ctx context.Context, t Target, source BudgetGraph
 		if l == nil {
 			continue
 		}
-		blocker := BudgetGraph{Scope: a.scope, ID: a.id, Graph: t.Graph, GraphAction: GraphAction{Action: HoldGraph, RunID: source.RunID}}
-		if a.limit > 0 {
-			a.applyLimit(l)
-		}
+		a.applyLimit(l)
 		if l.Reached || l.used() >= l.Limit {
-			return blocker, "budget_reached", nil
-		}
-		action := l.GraphActions[t.Graph]
-		if (a.scope != source.Scope || a.id != source.ID) && action.RunID != "" && action.RunID == source.RunID &&
-			(action.Action == PauseGraph || action.Action == HoldGraph) {
-			held = blocker
+			blocker = BudgetGraph{Scope: a.scope, ID: a.id, Graph: t.Graph, GraphAction: GraphAction{Action: HoldGraph, RunID: source.RunID}}
+			reason = "budget_reached"
 		}
 	}
-	if held.Scope != "" {
-		return held, "another_budget", nil
-	}
-	for i, a := range apply {
-		row, err := b.Store.GetSetting(ctx, ledgerKey(a.scope, a.id))
-		switch {
-		case errors.Is(err, storage.ErrNotFound):
-			if revisions[i] != 0 {
-				return BudgetGraph{}, "", storage.ErrConflict
-			}
-		case err != nil:
+	for i, rev := range revisions {
+		if err := b.checkSettingRevision(ctx, ledgerKey(apply[i].scope, apply[i].id), rev); err != nil {
 			return BudgetGraph{}, "", err
-		case row.Revision != revisions[i]:
-			return BudgetGraph{}, "", storage.ErrConflict
 		}
 	}
-	return BudgetGraph{}, "", nil
+	if err := b.checkSettingRevision(ctx, DefinitionsKey, revision); err != nil {
+		return BudgetGraph{}, "", err
+	}
+	return blocker, reason, nil
+}
+
+func (b Budgets) checkSettingRevision(ctx context.Context, key string, revision int64) error {
+	row, err := b.Store.GetSetting(ctx, key)
+	if errors.Is(err, storage.ErrNotFound) && revision == 0 {
+		return nil
+	}
+	if errors.Is(err, storage.ErrNotFound) || (err == nil && row.Revision != revision) {
+		return storage.ErrConflict
+	}
+	return err
 }
 
 // HoldForResumeBlocker records the new hold before the prior intent is retired.
@@ -299,11 +311,39 @@ func (l *Ledger) matchesGraphAction(target BudgetGraph) bool {
 	return current == target.GraphAction
 }
 
-// ScheduleRollover converts an expired hold into a durable resume attempt.
-func (b Budgets) ScheduleRollover(ctx context.Context, target BudgetGraph) error {
-	return b.update(ctx, target.Scope, target.ID, "rollover", func(l *Ledger) (*Ledger, error) {
+// ScheduleGraphResume converts a hold into a durable resume attempt after
+// rollover or when the configured limit leaves enough capacity.
+func (b Budgets) ScheduleGraphResume(ctx context.Context, target BudgetGraph, now time.Time) error {
+	op := "schedule_resume"
+	expired := ExpiredLedger(target.Scope, target.ID, Period(now))
+	if expired {
+		op = "rollover"
+	}
+	return b.update(ctx, target.Scope, target.ID, op, func(l *Ledger) (*Ledger, error) {
 		if l == nil || !l.matchesGraphAction(target) {
 			return nil, nil
+		}
+		if !expired {
+			defs, revision, err := b.Definitions(ctx)
+			if err != nil {
+				return nil, err
+			}
+			for _, d := range defs {
+				if d.Scope == target.Scope && MonthlyID(d.ID, Period(now)) == target.ID {
+					(applicable{scope: d.Scope, limit: d.LimitMicros}).applyLimit(l)
+					if d.WarningPercent != 0 {
+						l.WarningPercent = d.WarningPercent
+					}
+					l.Warned = l.used() >= l.warningAt()
+					break
+				}
+			}
+			if l.Reached || l.used() >= l.Limit {
+				return nil, storage.ErrConflict
+			}
+			if err := b.checkSettingRevision(ctx, DefinitionsKey, revision); err != nil {
+				return nil, err
+			}
 		}
 		l.setGraphAction(target.Graph, GraphAction{
 			ID: domain.NewID("budget-resume"), Action: ResumeGraph, RunID: target.RunID, Actor: "system:budget",

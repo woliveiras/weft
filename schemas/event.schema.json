@@ -110,7 +110,7 @@
         "limitMicros": {"type": "integer", "minimum": 0},
         "resumed": {"type": ["array", "null"], "items": {"type": "string"}},
         "notResumed": {"type": ["array", "null"], "items": {"type": "string"}},
-        "skipped": {"type": "object", "additionalProperties": {"enum": ["stopped", "deleted", "run_changed", "already_running", "another_budget", "budget_reached", "run_finished", "legacy_unbound", "period_ended"]}}
+        "skipped": {"type": "object", "additionalProperties": {"enum": ["stopped", "deleted", "run_changed", "already_running", "another_budget", "budget_reached", "run_finished", "legacy_unbound", "period_ended", "not_applicable", "limit_available"]}}
       }
     },
     "BudgetGraphTransition": {
@@ -120,7 +120,7 @@
         "scope": {"enum": ["run", "installation", "user", "project", "workflow"]},
         "id": {"type": "string"},
         "action": {"enum": ["pause", "resume", "hold"]},
-        "outcome": {"enum": ["paused", "resumed", "stopped", "deleted", "run_changed", "already_running", "another_budget", "budget_reached", "run_finished", "legacy_unbound", "period_ended"]},
+        "outcome": {"enum": ["paused", "resumed", "stopped", "deleted", "run_changed", "already_running", "another_budget", "budget_reached", "run_finished", "legacy_unbound", "period_ended", "not_applicable", "limit_available"]},
         "blockingScope": {"enum": ["run", "installation", "user", "project", "workflow"]},
         "blockingId": {"type": "string"},
         "requestedAction": {"enum": ["start", "resume"]}
