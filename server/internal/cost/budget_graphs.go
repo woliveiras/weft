@@ -184,9 +184,6 @@ func (b Budgets) resumeBlocker(ctx context.Context, t Target, source BudgetGraph
 	}
 	revisions := make([]int64, 0, len(apply))
 	for _, a := range apply {
-		if reason != "" {
-			break
-		}
 		l, revision, err := b.read(ctx, a.scope, a.id)
 		if err != nil {
 			return BudgetGraph{}, "", err
@@ -196,7 +193,7 @@ func (b Budgets) resumeBlocker(ctx context.Context, t Target, source BudgetGraph
 			continue
 		}
 		a.applyLimit(l)
-		if l.Reached || l.used() >= l.Limit {
+		if blocker.Scope == "" && (l.Reached || l.used() >= l.Limit) {
 			blocker = BudgetGraph{Scope: a.scope, ID: a.id, Graph: t.Graph, GraphAction: GraphAction{Action: HoldGraph, RunID: source.RunID}}
 			reason = "budget_reached"
 		}
@@ -311,15 +308,17 @@ func (l *Ledger) matchesGraphAction(target BudgetGraph) bool {
 	return current == target.GraphAction
 }
 
-// ScheduleGraphResume converts a hold into a durable resume attempt after
-// rollover or when the configured limit leaves enough capacity.
-func (b Budgets) ScheduleGraphResume(ctx context.Context, target BudgetGraph, now time.Time) error {
+// RefreshGraphBudget applies the effective definition to a held ledger.
+// It schedules resumptions on rollover or after an increase with capacity.
+func (b Budgets) RefreshGraphBudget(ctx context.Context, target BudgetGraph, graph Target, now time.Time) (bool, error) {
 	op := "schedule_resume"
 	expired := ExpiredLedger(target.Scope, target.ID, Period(now))
 	if expired {
 		op = "rollover"
 	}
-	return b.update(ctx, target.Scope, target.ID, op, func(l *Ledger) (*Ledger, error) {
+	var scheduled bool
+	err := b.update(ctx, target.Scope, target.ID, op, func(l *Ledger) (*Ledger, error) {
+		scheduled = false
 		if l == nil || !l.matchesGraphAction(target) {
 			return nil, nil
 		}
@@ -328,27 +327,50 @@ func (b Budgets) ScheduleGraphResume(ctx context.Context, target BudgetGraph, no
 			if err != nil {
 				return nil, err
 			}
-			for _, d := range defs {
-				if d.Scope == target.Scope && MonthlyID(d.ID, Period(now)) == target.ID {
-					(applicable{scope: d.Scope, limit: d.LimitMicros}).applyLimit(l)
-					if d.WarningPercent != 0 {
-						l.WarningPercent = d.WarningPercent
-					}
+			apply, err := b.applicableDefinitions(ctx, graph, now, defs)
+			if err != nil {
+				return nil, err
+			}
+			previous := l.Limit
+			for _, a := range apply {
+				if a.scope == target.Scope && a.id == target.ID {
+					a.applyLimit(l)
+					l.WarningPercent, l.InterruptPercent = a.warning, a.interrupt
 					l.Warned = l.used() >= l.warningAt()
 					break
 				}
 			}
-			if l.Reached || l.used() >= l.Limit {
-				return nil, storage.ErrConflict
+			if l.Limit == previous {
+				return nil, nil
 			}
 			if err := b.checkSettingRevision(ctx, DefinitionsKey, revision); err != nil {
 				return nil, err
 			}
+			if l.Limit > previous && !l.Reached {
+				l.scheduleHeldGraphs()
+				scheduled = true
+			}
+		} else {
+			l.scheduleResume(target.Graph, target.RunID)
+			scheduled = true
 		}
-		l.setGraphAction(target.Graph, GraphAction{
-			ID: domain.NewID("budget-resume"), Action: ResumeGraph, RunID: target.RunID, Actor: "system:budget",
-		})
 		return l, nil
+	})
+	return scheduled && err == nil, err
+}
+
+func (l *Ledger) scheduleHeldGraphs() {
+	for _, graph := range l.PausedGraphs {
+		action := l.GraphActions[graph]
+		if action.Action != ResumeGraph {
+			l.scheduleResume(graph, action.RunID)
+		}
+	}
+}
+
+func (l *Ledger) scheduleResume(graph, run string) {
+	l.setGraphAction(graph, GraphAction{
+		ID: domain.NewID("budget-resume"), Action: ResumeGraph, RunID: run, Actor: "system:budget",
 	})
 }
 

@@ -405,7 +405,11 @@ func (b Budgets) applicableDefinitions(ctx context.Context, t Target, now time.T
 // applyLimit applies the same monthly definition precedence at admission and resumption.
 func (a applicable) applyLimit(l *Ledger) {
 	if a.scope != TaskRun && (l.RaisedBy == "" || a.limit > l.Limit) && l.Limit != a.limit {
-		l.Limit, l.Reached = a.limit, false
+		previous := l.Limit
+		l.Limit = a.limit
+		// A projected reservation can latch a refusal before spend reaches
+		// the limit. A reduction cannot clear that refusal.
+		l.Reached = l.used() >= l.Limit || (a.limit < previous && l.Reached)
 	}
 }
 
@@ -461,20 +465,24 @@ func (b Budgets) reservePart(ctx context.Context, a applicable, t Target, curren
 		}
 		// A definition change applies to the current period unless a
 		// person raised this ledger above it.
+		previous, wasReached := l.Limit, l.Reached
 		a.applyLimit(l)
 		l.WarningPercent, l.InterruptPercent = a.warning, a.interrupt
 		warn, refused, firstReach = false, false, false
 		// Free calls (local or allowed unpriced models) pass even at the limit.
 		if amount > 0 && (l.Reached || l.used()+amount > l.Limit) {
-			refused, firstReach = true, !l.Reached
+			refused, firstReach = true, !l.Reached || !wasReached
 			l.Reached = true
 			view = l.View()
-			if firstReach {
-				return l, nil // persist Reached; the call is refused below
+			if firstReach || l.Limit != previous {
+				return l, nil // persist the effective limit and refusal
 			}
 			return nil, nil
 		}
 		l.Entries[rid] = Entry{Execution: t.Execution, Amount: amount}
+		if l.Limit > previous && l.used() < l.Limit {
+			l.scheduleHeldGraphs()
+		}
 		if !l.Warned && l.Limit > 0 && l.used() >= l.warningAt() {
 			l.Warned, warn = true, true
 		}

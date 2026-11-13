@@ -366,6 +366,7 @@ func TestResumeBlockerUsesApplicableEffectiveLimits(t *testing.T) {
 		want       string
 	}{
 		{"reached with sticky refusal", 10, 2, false, "budget_reached"},
+		{"definition lowered after projected refusal", 9, 8, true, "budget_reached"},
 		{"definition raised with headroom", 20, 10, false, ""},
 		{"definition raised to current spend", 20, 20, true, "budget_reached"},
 		{"definition removed", 0, 10, true, "not_applicable"},

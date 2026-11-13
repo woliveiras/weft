@@ -148,7 +148,8 @@ type Engine struct {
 	done                 chan struct{}
 
 	invalidLedgerWarningAt  atomic.Int64
-	invalidControlWarningAt atomic.Int64
+	budgetConflictWarningAt atomic.Int64
+	invalidControlWarnings  graphWarningLimiter
 }
 
 func New(opt Options) (*Engine, error) {

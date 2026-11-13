@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/observability"
 	"github.com/woliveiras/weft/server/internal/storage"
@@ -113,7 +114,9 @@ func (r *Runner) runOne(ctx context.Context, id string) {
 	outcome, err := r.step(pollCtx, t, &search)
 	cancel()
 	if err != nil {
-		outcome = "error"
+		if !errors.Is(err, cost.ErrBudgetReached) {
+			outcome = "error"
+		}
 		r.log().Warn("trigger run failed", "trigger", id, "err", err)
 	}
 	observability.TriggerRuns.WithLabelValues(outcome).Inc()
@@ -190,6 +193,9 @@ func (r *Runner) step(ctx context.Context, t *Trigger, search *githubSearchPoll)
 	}
 	if t.CurrentTask != "" {
 		return r.followTask(ctx, t)
+	}
+	if err := r.checkAdmission(ctx, t); err != nil {
+		return "budget_deferred", err
 	}
 	src, err := t.Source.Open()
 	if err != nil {
@@ -314,6 +320,11 @@ func (r *Runner) TaskURL(taskID string) string {
 	return strings.TrimRight(r.BaseURL, "/") + "/#/tasks/" + taskID
 }
 
+func (r *Runner) checkAdmission(ctx context.Context, t *Trigger) error {
+	return (cost.Budgets{Store: r.Store, Bus: r.Triggers.Bus}).CheckAdmission(ctx,
+		cost.Target{User: t.Consent.Actor, Project: t.ProjectID, Workflow: t.Workflow})
+}
+
 // claimAndStart takes one eligible issue and starts its task under current
 // trigger consent. Tracker writes use only the related selection and state labels.
 func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i Issue) (string, error) {
@@ -341,6 +352,12 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 		return "already_admitted", err
 	} else if !errors.Is(err, storage.ErrNotFound) {
 		return "claim_busy", err
+	}
+	if err := r.ensureCurrent(ctx, t); err != nil {
+		return "", err
+	}
+	if err := r.checkAdmission(ctx, t); err != nil {
+		return "budget_deferred", err
 	}
 	// Write the admission intent before modifying tracker state. A crash
 	// or ambiguous write requires reconciliation, never a second start.
@@ -406,6 +423,13 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 	taskID, startErr := r.Tasks.Start(ctx, t, i)
 	if startErr != nil {
 		reason := "Weft failure. Weft could not start a task for this issue. Review the task and trigger, then resume the trigger."
+		var reached *cost.ReachedError
+		if errors.As(startErr, &reached) {
+			reason = "Weft could not admit this task. " + reached.Error() + " in Models → Costs."
+			if taskID != "" {
+				reason += " Start the saved task after raising the budget: " + r.TaskURL(taskID)
+			}
+		}
 		writeErr := errors.Join(relabel(ctx, call, i.Key, []string{LabelInProgress}, LabelFailed, ""), comment(ctx, call, i.Key, reason))
 		_, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(t *Trigger) error {
 			finishClaim(t, key, i.Key, "failed")

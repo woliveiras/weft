@@ -47,6 +47,16 @@ remaining capacity schedules an audited resume subject to the other
 applicable ledgers. A hold with remaining capacity and a clear reached
 state does not block manual resume.
 
+- A reached applicable monthly ledger refuses a new task before graph,
+  worktree, environment, or input dispatch. The response identifies the
+  blocking ledger and the same draft can be started after a raise.
+- Starting a node that would start a stopped graph checks the same ledgers
+  as starting the graph, before changing its run ID or node controls.
+- Reducing a limit preserves a projected refusal. An increased definition
+  schedules resume only with capacity above charged and reserved spend.
+- A hold whose ledger no longer applies transfers to another reached
+  applicable ledger when one exists. The audit identifies that blocker.
+
 ### AC-003 — Budget visibility
 
 Authorized operators see spend, applicable remaining budget, estimates and relevant warning or hard-limit state. Admin changes retain review and scope.

@@ -379,6 +379,13 @@ new evaluations stop until a hold resolves. If comment or label history
 exceeds the bounded scan, Activity and the trigger show that operator
 review is needed. Resolve the hold after reviewing the issue.
 
+A reached monthly budget defers new trigger admissions and shows the blocking
+ledger in the trigger's last error. Eligible issues keep their selection and
+are reconsidered on the normal poll schedule after an administrator raises
+the budget in Models → Costs. If a budget changes between claim and final
+task admission, the failure write-back applies `weft:needs-attention` and
+the issue comment identifies the budget and links to the saved task.
+
 - `weft:todo` selects issues by default. Each trigger can use a custom selection label.
 - `weft:wip` means Weft claimed the issue.
 - `weft:needs-attention` means Weft has a question or encountered a failure. The issue comment names the next action.

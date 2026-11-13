@@ -134,8 +134,13 @@ When a graph lease is busy, the ledger retains the pending transition for the
 background controller. A resume records an intent ID with the graph state so
 the controller can recognize a successful write after a timeout.
 
-Manual graph Resume, Run all, and node Resume check the same applicable
-ledgers. Starting a stopped task execution graph creates a new lifecycle run
+Task admission checks the effective monthly limits before creating the
+execution graph, worktree, or environment and before dispatching input.
+A reached budget returns `409 budget_admission_blocked` with its scope and
+ledger ID. Raise it in Models → Costs, then retry the saved task.
+
+Manual graph Resume, Run all, node Resume, and starting a node of a stopped
+graph check the same applicable ledgers. Starting a stopped task execution graph creates a new lifecycle run
 ID and keeps the task-run ledger keyed by graph ID. Monthly budgets for the
 current UTC month still apply. A blocked request returns
 `409 budget_resume_blocked`, preserves the current state and any hold, and
@@ -145,7 +150,16 @@ where an administrator can raise the budget.
 Increasing a monthly definition through `PUT /api/v1/cost/budgets` lets the
 controller apply the new limit and attempt a durable, audited resume for held
 graphs. The controller checks the other applicable ledgers before resuming.
-A hold with capacity cannot by itself block a manual resume.
+Reductions preserve a reached hold, including a refusal from a projected
+reservation. Increases to or below charged and reserved spend keep the run
+paused. A hold with capacity cannot by itself block a manual resume. If a
+held ledger no longer applies and another applicable ledger is reached,
+the controller transfers the hold and audits the blocking ledger.
+
+The budget controller counts exhausted reconciliation conflicts in
+`weft_cost_budget_operations_total{scope="all",operation="reconcile_graph",outcome="conflict"}`.
+It logs the number of conflicted actions at most once per minute per process.
+Warnings about invalid node controls are limited to once per graph per minute.
 
 The controller verifies the ledger revisions from its resume check just
 before writing the graph or node state. It retries when a reservation
