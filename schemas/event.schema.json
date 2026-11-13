@@ -235,7 +235,15 @@
       "properties": {
         "proposal": {"type": "string"},
         "state": {"type": "string"},
-        "resume": {"type": "boolean"}
+        "resume": {"type": "boolean"},
+        "startBlocked": {
+          "type": "object",
+          "required": ["scope", "id"],
+          "properties": {
+            "scope": {"enum": ["run", "installation", "user", "project", "workflow"]},
+            "id": {"type": "string"}
+          }
+        }
       }
     },
     "NoData": {

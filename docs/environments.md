@@ -111,7 +111,10 @@ be retried after two minutes. States are `analyzing`, `awaiting_approval`,
 `environment.proposal` events contain identifiers and state, not file contents;
 analysis uses an `environment.propose` span and the existing model, approval and
 build telemetry. After approval saves the definition, reload graph settings to
-view the saved version and build logs.
+view the saved version and build logs. If a budget blocks the requested
+automatic start, the proposal stays `ready` and clears the start request.
+The proposal API and audit event record `startBlocked: {scope, id}`. Graph
+settings show the budget that blocked the attempt.
 
 For a repository using mise, an example **proposal** might use a Dockerfile that
 installs mise, setup commands `mise install` and the project's lockfile-aware

@@ -51,3 +51,12 @@ it('cancels an ongoing analysis and ignores its late response', async () => {
  expect(screen.getByText('Environment proposal: cancelled')).toBeTruthy();
  expect(screen.queryByText(/Open Approvals/)).toBeNull();
 });
+
+it('shows the budget that blocked automatic start after the environment was saved', async () => {
+  fakeApi({ [`GET ${path}`]: () => ({
+    ...pending, state: 'ready', resume: false, startBlocked: { scope: 'project', id: 'project-a@2026-11' },
+  }) });
+  render(<EnvironmentProposal graphId="g" disabled configured />);
+  expect((await screen.findByRole('status')).textContent).toContain('Automatic start was blocked by the project budget (project-a@2026-11).');
+  expect(screen.queryByRole('button', { name: 'Retry approved build' })).toBeNull();
+});

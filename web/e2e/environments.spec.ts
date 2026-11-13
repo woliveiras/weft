@@ -74,6 +74,21 @@ test('proposal waits for developer approval, then builds and resumes execution',
   await executed(page, id);
 });
 
+test('a budget-blocked automatic start leaves the approved environment ready', async ({ page }) => {
+  const id = 'proposal-budget';
+  await propose(page, id, true);
+  await expect(page.getByText('Environment proposal: awaiting_approval')).toBeVisible();
+  await page.goto('/#/approvals');
+  await page.locator('article.approval').filter({ hasText: id }).getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect.poll(async () => (await read(page, id, 'environment/proposal')).startBlocked)
+    .toEqual({ scope: 'run', id });
+  expect((await read(page, id, 'environment/proposal')).state).toBe('ready');
+  expect((await read(page, id, 'environment')).state).toBe('ready');
+  expect(await read(page, id, 'executions')).toHaveLength(0);
+  await settings(page, id);
+  await expect(page.getByText(`Automatic start was blocked by the run budget (${id}).`)).toBeVisible();
+});
+
 test('rejecting a proposal prevents build and execution', async ({ page }) => {
   const id = 'proposal-reject';
   await propose(page, id, true);

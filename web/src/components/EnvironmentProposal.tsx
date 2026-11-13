@@ -1,20 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import { useAsync } from '../hooks/useData';
+import { useOptionalEventStream } from '../hooks/useEventStream';
 import { Btn, ErrorBox, JsonView } from './common';
 
-export function EnvironmentProposal({ graphId, disabled }: { graphId: string; disabled: boolean }) {
+export function EnvironmentProposal({ graphId, disabled, configured = false }: {
+  graphId: string;
+  disabled: boolean;
+  configured?: boolean;
+}) {
   const proposal = useAsync(() => api.environmentProposal(graphId), [graphId]);
   const [resume, setResume] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const generation = useRef(0);
   const state = proposal.data?.state;
+  const pending = state === 'analyzing' || state === 'awaiting_approval' || state === 'building'
+    || (state === 'ready' && proposal.data?.resume);
+  useOptionalEventStream({ graph: graphId, types: ['environment.proposal'] }, () => void proposal.reload());
   useEffect(() => {
-    if (state !== 'analyzing' && state !== 'awaiting_approval' && state !== 'building') return;
+    if (!pending) return;
     const timer = setInterval(() => void proposal.reload(), 2000);
     return () => clearInterval(timer);
-  }, [state, proposal.reload]);
+  }, [pending, proposal.reload]);
   const act = async (action: 'propose' | 'cancel' | 'retry') => {
     const current = ++generation.current;
     setBusy(true); setError(undefined);
@@ -26,11 +34,18 @@ export function EnvironmentProposal({ graphId, disabled }: { graphId: string; di
     } catch (cause) { if (current === generation.current) { setError(errorMessage(cause)); await proposal.reload(); } }
     finally { if (current === generation.current) setBusy(false); }
   };
+  const blocked = proposal.data?.startBlocked;
+  const startWarning = blocked && <p className="field-warning" role="status">
+    Automatic start was blocked by the {blocked.scope} budget ({blocked.id}).
+  </p>;
+  if (configured) return startWarning || null;
+
   const canPropose = !state || ['failed', 'rejected', 'expired', 'cancelled'].includes(state);
   return <section aria-label="Environment analysis">
     <p>No environment definition found. Ask the analysis agent to propose one from manifests and lockfiles. It cannot run repository commands. Approval is required before any build.</p>
     <ErrorBox error={error ?? proposal.error ?? proposal.data?.error} />
     {state && <p role="status">Environment proposal: {state}</p>}
+    {startWarning}
     {proposal.data?.analysis && <>
       <p>{proposal.data.analysis.rationale}</p>
       <JsonView value={proposal.data.analysis} label="Proposed environment" open />

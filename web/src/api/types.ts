@@ -792,6 +792,7 @@ export interface EnvironmentProposal {
  state: 'analyzing' | 'awaiting_approval' | 'building' | 'ready' | 'failed' | 'rejected' | 'expired' | 'cancelled';
  error?: string;
  resume: boolean;
+ startBlocked?: { scope: string; id: string };
  analysis?: { environment: EnvironmentSpec; rationale: string; tools: string[] };
 }
 

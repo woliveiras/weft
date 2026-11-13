@@ -23,6 +23,7 @@ const EVENT_TYPES = [
   'graph.failed',
   'environment.build_started',
   'environment.ready',
+  'environment.proposal',
   'environment.failed',
   'environment.reset',
   'sandbox.capacity',

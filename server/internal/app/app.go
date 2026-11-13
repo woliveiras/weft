@@ -286,8 +286,13 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		_, _, err := a.Engine.SaveGraph(ctx, g, version, actor)
 		return err
 	}
-	a.Proposals.Start = func(ctx context.Context, id, actor string) error {
-		return a.Engine.GraphAction(ctx, id, "start", actor)
+	a.Proposals.Start = func(ctx context.Context, id, actor string) (*environment.StartBudgetBlock, error) {
+		err := a.Engine.GraphAction(ctx, id, "start", actor)
+		var blocked *engine.BudgetResumeError
+		if errors.As(err, &blocked) {
+			return &environment.StartBudgetBlock{Scope: blocked.Scope, ID: blocked.ID}, nil
+		}
+		return nil, err
 	}
 	auth, err := api.NewAuthenticator(cfg.Auth)
 	if err != nil {

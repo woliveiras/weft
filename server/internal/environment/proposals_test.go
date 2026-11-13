@@ -260,3 +260,47 @@ func TestProposalStopRevokesResume(t *testing.T) {
 		t.Fatal("stop changed approval state")
 	}
 }
+
+func TestProposalBudgetBlockIsPersistedOnce(t *testing.T) {
+	docker := newFakeDocker(t)
+	p, g, _ := proposalFixture(t, docker.bin)
+	ctx := t.Context()
+	starts := 0
+	p.Start = func(_ context.Context, graph, actor string) (*StartBudgetBlock, error) {
+		starts++
+		if graph != g.Metadata.ID || actor != "developer" {
+			t.Fatalf("unexpected automatic start for %s by %s", graph, actor)
+		}
+		return &StartBudgetBlock{Scope: "project", ID: "project-a@2026-11"}, nil
+	}
+	v, err := p.Request(ctx, g, domain.ModelRef{}, true, "developer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Approvals.Decide(ctx, v.ID, true, "developer", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		p.Reconcile(ctx)
+		v, err = p.Get(ctx, g.Metadata.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v.State == "failed" {
+			t.Fatalf("proposal failed: %s", v.Error)
+		}
+		if v.State == "ready" && !v.Resume {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if v.State != "ready" || v.Resume || v.StartBlocked == nil ||
+		*v.StartBlocked != (StartBudgetBlock{Scope: "project", ID: "project-a@2026-11"}) {
+		t.Fatalf("wrong proposal outcome: %+v", v)
+	}
+	p.Reconcile(ctx)
+	if starts != 1 {
+		t.Fatalf("automatic start attempted %d times", starts)
+	}
+}

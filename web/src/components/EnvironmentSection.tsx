@@ -10,6 +10,7 @@ import { FieldIssues } from './GraphIssues';
 import { environmentPhase } from './environmentPresentation';
 import { EnvironmentProgress } from './EnvironmentProgress';
 import { EnvironmentDiscovery } from './EnvironmentDiscovery';
+import { EnvironmentProposal } from './EnvironmentProposal';
 
 type Source = 'none' | 'image' | 'dockerfile';
 
@@ -87,6 +88,9 @@ export function EnvironmentSection({
           disabled={!!env || !!savedGraph.spec.environment || JSON.stringify(graph.spec.workspace ?? {}) !== JSON.stringify(savedGraph.spec.workspace ?? {})}
           onAccept={setEnv}
         />
+      )}
+      {savedGraph.spec.environment?.origin?.source === 'agent' && (
+        <EnvironmentProposal graphId={savedGraph.metadata.id} disabled configured />
       )}
       {env?.origin && (
         <p className="muted small">

@@ -26,6 +26,7 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/app"
 	"github.com/woliveiras/weft/server/internal/config"
+	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
@@ -406,7 +407,7 @@ func run() error {
 			return err
 		}
 	}
-	for _, id := range []string{"journey-required", "journey-automatic", "discover-a", "discover-b", "proposal-accept", "proposal-reject", "analysis-failure", "build-failure", "retry-build", "cpu-holder", "cpu-waiter", "memory-holder", "memory-waiter", "idle-resume", "preparation-holder", "preparation-waiter", "git-inspect", "git-inspect-readonly", "journal-capture", "activity-approve", "activity-reject"} {
+	for _, id := range []string{"journey-required", "journey-automatic", "discover-a", "discover-b", "proposal-accept", "proposal-budget", "proposal-reject", "analysis-failure", "build-failure", "retry-build", "cpu-holder", "cpu-waiter", "memory-holder", "memory-waiter", "idle-resume", "preparation-holder", "preparation-waiter", "git-inspect", "git-inspect-readonly", "journal-capture", "activity-approve", "activity-reject"} {
 		dir := filepath.Join(cfg.Workspaces.Root, id)
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
@@ -489,6 +490,12 @@ func run() error {
 		}
 		if _, _, err := a.Engine.SaveGraph(ctx, g, 0, "e2e-fixture"); err != nil {
 			return err
+		}
+		if id == "proposal-budget" {
+			ledger := []byte(`{"scope":"run","id":"proposal-budget","limit":10,"compacted":10,"entries":{}}`)
+			if _, err := a.Store.PutSetting(ctx, cost.BudgetPrefix+"run/"+id, ledger, 0, "e2e-fixture"); err != nil {
+				return err
+			}
 		}
 	}
 	if err := prepareReadinessFixture(ctx, a); err != nil {

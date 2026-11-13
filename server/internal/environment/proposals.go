@@ -19,18 +19,24 @@ import (
 
 const proposalPrefix = "environment/proposals/"
 
+type StartBudgetBlock struct {
+	Scope string `json:"scope"`
+	ID    string `json:"id"`
+}
+
 type Proposal struct {
-	ID           string    `json:"id"`
-	GraphID      string    `json:"graphId"`
-	GraphVersion int       `json:"graphVersion"`
-	State        string    `json:"state"`
-	Error        string    `json:"error,omitempty"`
-	Actor        string    `json:"actor"`
-	Resume       bool      `json:"resume"`
-	CreatedAt    time.Time `json:"createdAt"`
-	Analysis     *Analysis `json:"analysis,omitempty"`
-	InputSHA256  string    `json:"inputSHA256,omitempty"`
-	Revision     int64     `json:"-"`
+	ID           string            `json:"id"`
+	GraphID      string            `json:"graphId"`
+	GraphVersion int               `json:"graphVersion"`
+	State        string            `json:"state"`
+	Error        string            `json:"error,omitempty"`
+	Actor        string            `json:"actor"`
+	Resume       bool              `json:"resume"`
+	StartBlocked *StartBudgetBlock `json:"startBlocked,omitempty"`
+	CreatedAt    time.Time         `json:"createdAt"`
+	Analysis     *Analysis         `json:"analysis,omitempty"`
+	InputSHA256  string            `json:"inputSHA256,omitempty"`
+	Revision     int64             `json:"-"`
 }
 
 type Proposals struct {
@@ -40,7 +46,7 @@ type Proposals struct {
 	Manager   *Manager
 	Directory func(*domain.Graph) (string, error)
 	Save      func(context.Context, *domain.Graph, int, string) error
-	Start     func(context.Context, string, string) error
+	Start     func(context.Context, string, string) (*StartBudgetBlock, error)
 }
 
 func (p *Proposals) Get(ctx context.Context, id string) (*Proposal, error) {
@@ -71,7 +77,11 @@ func (p *Proposals) put(ctx context.Context, v *Proposal) error {
 	if err == nil {
 		v.Revision = rev
 		if p.Manager.opt.Bus != nil {
-			p.Manager.opt.Bus.Publish(ctx, domain.NewEvent("environment.proposal", v.GraphID, map[string]any{"proposal": v.ID, "state": v.State, "resume": v.Resume}).WithActor(v.Actor))
+			data := map[string]any{"proposal": v.ID, "state": v.State, "resume": v.Resume}
+			if v.StartBlocked != nil {
+				data["startBlocked"] = v.StartBlocked
+			}
+			p.Manager.opt.Bus.Publish(ctx, domain.NewEvent("environment.proposal", v.GraphID, data).WithActor(v.Actor))
 		}
 		p.Manager.opt.Log.Info("environment proposal state", "graph", v.GraphID, "proposal", v.ID, "state", v.State)
 	}
@@ -449,6 +459,9 @@ func (p *Proposals) Reconcile(ctx context.Context) {
 				return err
 			}
 			if err = p.reconcileOne(ctx, fresh); err != nil {
+				if fresh.StartBlocked != nil || errors.Is(err, storage.ErrConflict) {
+					return err
+				}
 				fresh.State = "failed"
 				fresh.Error = err.Error()
 				cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -496,9 +509,11 @@ func (p *Proposals) reconcileOne(ctx context.Context, v *Proposal) error {
 	if err = p.ValidateAccepted(ctx, g); err != nil {
 		return err
 	}
-	v.State = "ready"
-	if err = p.put(ctx, v); err != nil {
-		return err
+	if v.State != "ready" {
+		v.State = "ready"
+		if err = p.put(ctx, v); err != nil {
+			return err
+		}
 	}
 	if v.Resume && p.Start != nil {
 		rec, e := p.Store.GetGraphRecord(ctx, v.GraphID)
@@ -506,7 +521,7 @@ func (p *Proposals) reconcileOne(ctx context.Context, v *Proposal) error {
 			return e
 		}
 		if rec.DesiredState != domain.GraphRunning {
-			if err = p.Start(ctx, v.GraphID, v.Actor); err != nil {
+			if v.StartBlocked, err = p.Start(ctx, v.GraphID, v.Actor); err != nil {
 				return err
 			}
 		}

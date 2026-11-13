@@ -82,7 +82,7 @@ be stored before proceeding.
 | `environment.ready` | environment build finished | `{hash, image, durationMs, buildReasons?, reuseDecision?, reused?, reuseKey?}` |
 | `environment.failed` | environment build failed, timed out or was cancelled | `{hash, durationMs, error, buildReasons?, reuseDecision?}` |
 | `environment.build_cancel_requested` | a caller requested cancellation of an environment build | — |
-| `environment.proposal` | environment proposal state changed | `{proposal, state, resume}` |
+| `environment.proposal` | environment proposal state changed | `{proposal, state, resume, startBlocked?: {scope, id}}` |
 | `environment.cleanup` | an administrator attempted to remove a shared generation | `{generation, removed, usedBy, error}` |
 | `environment.reset` | `POST …/environment/reset`, graph deletion | `{errors}` (number of cleanup steps that failed) |
 | `environment.graph_delete_force_started` | before a forced deletion attempt, after the leases and stopped state are verified | `{attempt, reason}` (actor = administrator) |

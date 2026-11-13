@@ -5,14 +5,17 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/config"
+	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/environment"
 	"github.com/woliveiras/weft/server/internal/eventtest"
 	"github.com/woliveiras/weft/server/internal/llm"
+	"github.com/woliveiras/weft/server/internal/storage"
 )
 
 type proposalProvider struct {
@@ -35,12 +38,10 @@ func (p *proposalProvider) Chat(ctx context.Context, r *llm.ChatRequest) (*llm.C
 }
 
 func TestEnvironmentProposalApprovalBuildAndResume(t *testing.T) {
-	for _, stop := range []bool{false, true} {
-		name := "resume"
-		if stop {
-			name = "stop revokes resume"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, scenario := range []string{"resume", "stop revokes resume", "budget blocks automatic start"} {
+		t.Run(scenario, func(t *testing.T) {
+			stop := scenario == "stop revokes resume"
+			blocked := scenario == "budget blocks automatic start"
 			root := t.TempDir()
 			bin, log := fakeDaemonCLI(t)
 			srv, app := setupApp(t, func(c *config.Config) { c.Workspaces.Root = root; c.Isolation.Docker.Bin = bin })
@@ -102,6 +103,17 @@ func TestEnvironmentProposalApprovalBuildAndResume(t *testing.T) {
 			if code := call(t, srv, "POST", path, adminTok, "application/json", `{}`, nil); code != 200 {
 				t.Fatalf("approval %d", code)
 			}
+			if blocked {
+				rec, err := app.Store.GetGraphRecord(t.Context(), "proposal")
+				if err != nil {
+					t.Fatal(err)
+				}
+				rec.State, rec.DesiredState, rec.RunID = domain.GraphPaused, domain.GraphPaused, "run-budget"
+				if err := app.Store.PutGraphRecord(t.Context(), rec); err != nil {
+					t.Fatal(err)
+				}
+				seedLifecycleLedger(t, app.Store, rec.ID, rec.RunID, cost.TaskRun, rec.ID)
+			}
 			deadline := time.Now().Add(5 * time.Second)
 			for time.Now().Before(deadline) {
 				app.Proposals.Reconcile(context.Background())
@@ -132,6 +144,22 @@ func TestEnvironmentProposalApprovalBuildAndResume(t *testing.T) {
 			expected := domain.GraphRunning
 			if stop {
 				expected = domain.GraphStopped
+			}
+			if blocked {
+				expected = domain.GraphPaused
+				var view environment.Proposal
+				if code := call(t, srv, "GET", base+"/environment/proposal", viewerTok, "", "", &view); code != 200 ||
+					view.State != "ready" || view.Resume || view.Error != "" || view.StartBlocked == nil ||
+					view.StartBlocked.Scope != cost.TaskRun || view.StartBlocked.ID != "proposal" {
+					t.Fatalf("wrong outcome for blocked automatic start: %d %+v", code, view)
+				}
+				events, err := app.Store.ListEvents(t.Context(), storage.EventFilter{
+					GraphID: "proposal", Types: []domain.EventType{"environment.proposal"},
+				})
+				if err != nil || len(events) == 0 || !strings.Contains(string(events[0].Data), `"startBlocked":{"scope":"run","id":"proposal"}`) {
+					t.Fatalf("missing scoped proposal audit: %v %v", events, err)
+				}
+				eventtest.Capture(t, app.Store, domain.EvBudgetGraphTransition)
 			}
 			if err != nil || rec.DesiredState != expected {
 				t.Fatalf("not resumed %+v %v", rec, err)
