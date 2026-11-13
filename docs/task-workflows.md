@@ -514,11 +514,14 @@ Copies are visible in workflow listings and linked from task details; they are
 not silently created or usable as templates. Legacy graph mutation routes reject
 the reserved namespace. Task control routes verify the persisted ownership binding.
 
-Two tasks therefore have distinct managed roots and engine state. This does not
-isolate OS processes or external resources referenced by tools. Existing absolute
-workspace paths and environment definitions are currently blocked at admission;
-registered local project worktrees and task-owned environment preparation remain
-pending. No automatic commit, push or cleanup occurs.
+Tasks have separate managed roots and engine state. OS processes and external
+resources still follow the selected execution mode and tool policy. Admission
+rejects workflows with a fixed workspace path. Select a
+[registered project and commit](#registered-project-worktrees-2026-10-19) to use
+a task worktree. A workflow with an explicit environment definition can use the
+[reviewed preparation flow](#selecting-execution-location). An environment
+approval on the source workflow cannot authorize a task copy. Commit, push and
+cleanup require separate decisions.
 
 ## Lifecycle, results and interruption
 
@@ -528,17 +531,13 @@ connection repair or uncertain dispatch; approvals are not successful completion
 Terminal status comes from the declared completion binding and settled relevant
 work. A successful intermediate agent turn cannot imply whole-task success.
 
-The task view presents request, progress, required user action, result, changes
-and test evidence. Tool outcomes remain distinct from agent summaries. Partial
-telemetry is explicitly identified. Details link to existing executions, events,
-approvals, traces, token budgets and file inspection without broadening access.
+See [Following a prompt task](#following-a-prompt-task) for progress, approvals
+and evidence in the console.
 
-Cancel targets task-owned queued input and running roots/descendants through the
-existing control mechanisms. It must not stop unrelated graph activity. Keep
-cancel_requested until workers/leases settle; an unavailable runtime does not
-justify claiming cancellation completed. If task-scoped cancellation is not yet
-supported, show that limitation instead of substituting Stop all. Retain bindings
-and budget/accounting evidence needed for reconciliation under retention policy.
+Cancellation targets task-owned queued input and running roots and descendants.
+Unrelated graph activity continues. The task stays `cancel_requested` until
+workers and leases settle, including when a runtime is unavailable. Retain the
+bindings and budget records needed for reconciliation under the retention policy.
 
 Review readiness is separate from execution success. A result may be ready for
 human review without a commit. Open in VS Code is available only for an accessible
@@ -837,8 +836,11 @@ The task page shows the request, current stage, next action, result and workspac
 changes together. Pending approvals use the same durable IDs as the global inbox;
 approval resumes the existing workflow, while rejection remains in decision history.
 Stopping preserves files/history and requests cancellation, without undoing external
-effects. A refresh error does not imply success. Tool outcomes, traces, usage and
-delegation trees remain available under evidence and diagnostics. Review configuration
+effects. A refresh error does not imply success. The diagnostics show test
+results, separate tool outcomes from agent summaries and identify partial
+telemetry. Existing read permissions apply to executions, events, approvals,
+traces, token budgets,
+delegation trees and file inspection. Review configuration
 when a mandatory policy denies an operation; approval cannot override that denial.
 Task authorization modes and their native limitations are documented in
 [Task authorization](task-authorization.md).

@@ -1,9 +1,12 @@
 # Events, message lifecycle and traceability
 
-Every fact the platform observes is appended to the **event log** (storage) before it is fanned out
-to live subscribers. The log is the audit trail, the source of the console's live view and the
-`/api/v1/events/stream` SSE feed, and the thing to read when asking "what happened?" after a restart.
-Schema: [`schemas/event.schema.json`](../schemas/event.schema.json); Go: `server/internal/domain/event.go`.
+The **event log** stores the events shown in the console and the
+[`/api/v1/events/stream` SSE feed](api.md#event-stream-sse). The event bus wakes
+local subscribers after a successful append. Ordinary publication is best
+effort: the bus logs persistence failures and the operation can continue. A
+feature may require its own durable record and handle write failures separately.
+See [`schemas/event.schema.json`](../schemas/event.schema.json) for the schema.
+The Go envelope is in `server/internal/domain/event.go`.
 
 The event envelope and the schema's budget-transition, proposal, and
 deletion/cleanup payloads have closed fields. Other payloads follow the

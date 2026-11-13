@@ -90,8 +90,8 @@ recorded at the request estimate (`estimated: true`).
 | Task run | Ceiling for one run, raised by a human when reached |
 
 - Periods: calendar month (UTC) or per run.
-- A changed monthly definition applies to the current period. A manually raised
-  ledger keeps its higher limit until a definition exceeds it or the period ends.
+- A changed monthly definition applies to the current period, subject to the
+  [floor set by a manual raise](#monthly-budget-floor).
 - Thresholds: a **warning** level (default 80%) and a **hard** level (100%).
   An optional **interrupt** level (for example 110%) stops a turn that is still
   running.
@@ -126,7 +126,7 @@ What happens when a threshold is reached:
 | Level | Effect |
 |---|---|
 | Warning | Event, notification in the console, note on running tasks. Nothing is blocked. |
-| Hard | New calls under that budget are refused. A task-run budget **pauses** the run in a visible waiting state until a human raises the budget or stops it. Other scopes refuse new tasks and pause running ones. |
+| Hard | Calls that would charge a reached budget are refused. A hard budget block **pauses** the affected run until it can resume or a human stops it. Reached monthly budgets also block new task admission. |
 | Interrupt | The running turn is cancelled, work is kept as it is, and the run pauses. |
 
 An administrator raises the budget. The new limit is compared with charged
@@ -174,11 +174,15 @@ applicable budgets before changing state. Each priced call still reserves
 capacity before dispatch. If definitions or policy change during admission,
 the reservation releases partial holds and retries with current settings.
 
-A monthly ledger keeps the explicit Raise amount as its floor. Increases to
-the monthly definition can raise the effective limit above that floor until
-the definition changes again. Existing raised ledgers without a recorded
+### Monthly budget floor
+
+An explicit **Raise** sets a floor for that monthly ledger. The effective limit
+is the higher of the current definition and the floor. A later definition can
+lower the effective limit back to the floor. Existing raised ledgers without a recorded
 Raise amount keep their stored limit as the floor until an explicit Raise
 records the new value.
+
+### Hold retirement and period rollover
 
 The controller retires holds for deleted, stopped or replaced runs, and for
 runs whose enabled fixed replicas have completed. A current-month hold

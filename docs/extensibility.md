@@ -240,7 +240,7 @@ nodes:
 
 ## Write an agent in any other language
 
-Implement Runtime Protocol v1 (`docs/dev/contracts.md` §2): `GET /v1/health`
+Implement [Runtime Protocol v1](runtime-protocol.md): `GET /v1/health`
 and `POST /v1/turn`. During the turn, call back `input.callback.url` with
 `Authorization: Bearer <input.callback.token>` for tools, the model, emits and
 state. Example in TypeScript (Node 20+, no dependencies):

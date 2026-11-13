@@ -1,4 +1,4 @@
-# Cross-component contracts (working reference)
+# Cross-component contracts (historical working reference)
 
 > Superseded by the formal specifications: [api/openapi.yaml](../../api/openapi.yaml), [docs/api.md](../api.md),
 > [docs/runtime-protocol.md](../runtime-protocol.md) and [schemas/](../../schemas). Kept as the original build-time
@@ -7,11 +7,9 @@
 > Cross-component design contracts for capabilities not yet implemented are in
 > [product-contracts.md](../product-contracts.md); do not treat proposed operations there as shipped API.
 
-This file is the single source of truth that the Go server, the React UI and
-the Python SDK are built against while the full documentation is written.
-Field names are exactly the JSON tags of the Go structs in
-`server/internal/domain`, `server/internal/runtime`, `server/internal/llm`
-and `server/internal/tools` (camelCase).
+The original agreement used the camelCase JSON field names from the Go structs
+in `server/internal/domain`, `server/internal/runtime`, `server/internal/llm`
+and `server/internal/tools`.
 
 ## 1. Public HTTP API (`/api/v1`)
 

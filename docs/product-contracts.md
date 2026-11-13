@@ -256,146 +256,46 @@ is ready. Stale approvals, analysis failures, timeouts and build failures remain
 visible with an explicit recovery path. The API and tool contracts are documented
 in [environments](environments.md) and [tool permissions](tool-permissions.md).
 
-#### Delivered installation policy
+#### Network policy and egress
 
-`isolation.docker.environmentPolicy` now restricts preparation and execution
-networks and can disable agent proposals, Dockerfiles, setup or Compose helpers.
-It is checked on preview/save, before agent approval, on approval application,
-before builds/cache hits and before runtime admission. Developer approval cannot
-override it. Node network overrides obey the execution restriction. Manual
-Dockerfiles use the same supported subset as untrusted repository definitions.
-Network fields are managed in Integrations with persisted revisions; server YAML
-provides initial defaults and the remaining feature restrictions. Existing running
-containers are not revoked automatically.
-Omitted lists preserve `none`/`bridge` compatibility; runtime defaults to `none`.
-Dockerfile RUN follows preparation networking. Daemon-wide registry access needs separate controls; runtime and preparation HTTP/HTTPS egress
-allowlists are implemented. See
-`docs/environments.md` for configuration, migration and verification boundaries.
+The [installation policy](environments.md#installation-environment-policy-implemented)
+sets the allowed network modes and the installation host ceiling. Only admins
+can preview and save [network policy changes](api.md#installation-network-policy).
+Saved network fields override YAML defaults across controllers sharing the store.
+Policy checks apply to graph and approval changes, builds including cache hits,
+and new runtime admissions. Active containers keep their network settings until
+replaced.
 
-#### Delivered installation network administration
+[Runtime egress](environments.md#runtime-egress-proxy-and-per-environment-hosts-implemented)
+uses a per-replica proxy. [Build and setup egress](environments.md#build-and-setup-egress-proxy-implemented)
+uses a separate host list and capacity reservation. Preparation hosts affect
+the image reuse key. Runtime hosts affect the execution group. Daemon-wide
+registry controls remain planned.
 
-Integrations exposes build/setup modes, runtime modes and the installation host
-ceiling. Viewers/operators can inspect settings and graph host usage; only admins
-can preview and save edits. Confirmation shows affected saved environments and
-warns about unrestricted bridge and existing running work. Persisted revisions
-prevent concurrent edits from overwriting each other. Saved network settings
-supersede YAML defaults across controllers sharing the store; feature flags,
-proxy provisioning and credentials remain server-owned. Storage errors fail
-closed. Start/resume and post-capacity admission recheck the current policy.
-Running tasks/builds are not killed automatically. Per-environment proxy status and sampled blocked-request diagnostics are delivered
-in graph settings and agent panels.
+#### Proxy diagnostics
 
-#### Delivered runtime egress subset
-
-`network.run: egress` plus `network.allowedHosts` selects a managed per-replica
-HTTP/HTTPS proxy. The installation must permit egress and every exact host in
-`environmentPolicy.egressHosts`. Manual, repository and agent definitions follow
-the same ceiling and approval/provenance checks. The agent's internal network has
-no direct internet route or host gateway address; the proxy alone has an uplink.
-Public-IP validation and pinned dials block private DNS answers/rebinding. Requests
-outside the list are denied and logged without paths or credentials. Proxy
-lifecycle participates in global capacity, idle suspension and group ownership.
-Changed lists require replacing the old task group; they do not rebuild images.
-
-This delivers runtime HTTP/80 and CONNECT/443 destination restrictions, not TLS
-content inspection, private-service access or arbitrary protocols. Preparation
-proxying is delivered separately below. Daemon-wide registry controls remain planned. See
-`docs/environments.md` for configuration, image provisioning and tested limits.
-
-#### Delivered preparation egress subset
-
-`network.setup: egress` with `network.setupAllowedHosts` covers Dockerfile RUN and
-setup. The installation must enable that mode and approve every exact host.
-The editor exposes the preparation list separately from runtime hosts. The
-BuildKit worker and setup use an isolated internal network with external DNS
-disabled; only their managed proxy has an uplink. Preparation requires global
-capacity admission for worker plus proxy (one extra slot, 64 MiB, 0.25 CPU).
-Host-set changes invalidate compatible-image reuse. Failure/cancellation cleans
-the group, retaining capacity if cleanup cannot be confirmed; committed setup
-images clear transient proxy variables.
-
-BuildKit registry/layer requests use the preparation proxy and require approved
-registry/CDN hosts. Daemon provisioning pulls and client-side registry
-authentication are outside this subset; daemon-wide registry restrictions remain
-planned. There is no private-IP exception or automatic allowlist expansion.
-See [environment preparation](environments.md#build-and-setup-egress-proxy-implemented).
-
-#### Delivered proxy diagnostics subset
-
-The environment and agent panels expose read-only runtime/build proxy container
-state and bounded recent request outcomes, with explicit unavailable/error states.
-Queries verify graph ownership and return structured fields only. The preparation
-proxy's last snapshot persists across container cleanup until replaced/reset.
-Runtime samples remain tied to Docker container/log retention. Sampling covers
-at most 32 proxies and 100 recent log lines per proxy, not lifetime counters.
-Running means process state, not connectivity health; direct network-layer blocks
-and still-open CONNECT tunnels are outside the completed-request sample.
-Older containers require recreation for monitoring labels; reason codes require
-an updated trusted proxy image. Collected denials persist independently of Docker
-for seven days, up to 1,000 per graph by default, and survive resets/controller restarts.
-Background collection and final lifecycle capture use concurrent-safe shared
-storage. The separate history endpoint and panel disclose retention and last
-successful collection. Sampling gaps remain possible; guaranteed audit delivery
-and streaming monitoring remain planned/outside this subset. Installation retention
-is now editable in Integrations by administrators with review, confirmation and
-revision checks: 1–90 days and 1–10,000 blocks per graph. Saved changes apply on
-subsequent reads/collections across controllers; reductions remove older/excess
-records and increases do not restore discarded history.
-
-#### Delivered reuse subset
-
-Repository graphs with default isolated workspace paths reuse prepared images
-and immutable dependency-cache seeds within the installation and exact repository
-identity. Compatibility includes the effective definition/context, bounded
-manifest and lockfile inputs, daemon platform/address and versioned policy.
-Renewable leases deduplicate preparation. Each graph reruns setup and gets
-private writable cache copies; setup container state is never shared as an image.
-Reset and graph deletion retain shared generations and remove only graph-owned
-resources. Status, logs and ready events expose reuse. Unit, API integration,
-concurrency and dedicated-daemon tests cover invalidation, failure, cancellation,
-isolation and reset. See [environment reuse](environments.md#reuse-across-tasks)
-for limits and semantics.
-
-Execution sandboxes and environment pipelines now share installation-wide count
-and reserved-memory budgets,
-with finite Docker memory/swap limits, persistent reservations, cancellation,
-daemon inventory checks and confirmed-stop/removal release. Defaults are four active
-slots, 4 GiB total and 1 GiB per sandbox/pipeline. BuildKit workers, setup and
-cache-copy helpers run sequentially with the reserved memory cap and no extra
-swap; the complete pipeline holds one slot. Build timeout includes admission
-waiting. Logs/events and bounded-label metrics
-report admission. See [capacity](sandbox-runtime.md#global-execution-sandbox-capacity).
-The budget excludes daemon overhead and external runtimes.
-Idle execution sandboxes stop between turns after `isolation.docker.idleTimeout`
-(default `5m`, `0s` disables), preserving container files, workspaces and caches.
-New work resumes the same container after capacity admission. Active turns and
-approval waits inside a turn are excluded. Suspension stops processes; it does
-not checkpoint process memory. Failed stop retains capacity; failed resume
-preserves inputs for retry. Explicit task teardown still removes its container
-while keeping mounted workspace data.
-See [idle lifecycle](sandbox-runtime.md#idle-suspension-and-task-resume).
-The admin console in Integrations now previews shared resources, explains retention,
-and requires selection plus confirmation of the exact images/cache volumes before
-cleanup. It reports partial failures and refreshes after each attempt.
-Explicit admin cleanup now reclaims unused registered shared generations after
-revalidating environment/build/container references under the reuse lease.
-Stopped containers and ready stopped tasks retain their references. Partial
-failure invalidates reuse and keeps ownership records for retry; cleanup never
-forces Docker removal or deletes workspaces/private caches. Historical resources
-without registered ownership remain untouched. See
-[shared cleanup](environments.md#cleanup-of-unused-shared-generations).
-Global CPU accounting is implemented for execution, builds, setup and cache copies, with finite defaults, atomic durable reservations, kernel caps, cancellation and readmission on resume. Legacy memory-only reservations block new admission until normal stop/reset releases them.
+The [proxy diagnostics guide](environments.md#proxy-state-and-blocked-access-in-the-console)
+defines the read-only status and sampling rules. Preparation snapshots survive
+container cleanup until the next capture or Reset. The separate
+[blocked-access history API](api.md#environment-blocked-access-history) reads
+shared storage independently of Docker and applies the installation retention
+policy. The history covers collected denials and can have sampling gaps.
 
 #### Reuse and resource lifecycle
 
-[Project environments](environments.md#reuse-across-tasks) owns the reuse,
-invalidation and cleanup rules. Each task keeps its own workspace, active
-container and writable cache copies. Shared image layers exclude task-specific
-files and secrets. The console explains source selection, approval and capacity
-waits, why an image was reused or rebuilt, and what Reset retains. See
-[sandbox capacity](sandbox-runtime.md#global-execution-sandbox-capacity) for
-admission, release and recovery, and [acceptance evidence](sandbox-acceptance.md)
-for test coverage and limits.
+[Environment reuse](environments.md#reuse-across-tasks) defines compatibility
+and invalidation. Tasks keep separate workspaces, active containers and writable
+cache copies. Shared image layers exclude task-specific files and secrets.
+Reset preserves shared generations. The admin
+[cleanup API](environments.md#cleanup-of-unused-shared-generations) rechecks references before removing
+unused registered generations. The console explains source selection, approval
+and capacity waits, why an image was reused or rebuilt, and what Reset retains.
+
+[Sandbox capacity](sandbox-runtime.md#global-execution-sandbox-capacity) covers
+execution and environment preparation. [Idle suspension](sandbox-runtime.md#idle-suspension-and-task-resume)
+releases capacity after a confirmed stop and resumes the existing container
+after admission. See [acceptance evidence](sandbox-acceptance.md#evidence-map)
+for coverage of reuse, cleanup and capacity.
 
 ## 4. User Tasks and Child Executions
 

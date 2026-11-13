@@ -9,7 +9,7 @@ Weft is a self-hosted, vendor-neutral **agent factory**. Autonomous AI agents ru
 | [domain-model.md](domain-model.md) | Entities, fields, invariants, the message envelope |
 | [state-machines.md](state-machines.md) | Graph, replica, execution, message and approval state machines |
 | [execution-model.md](execution-model.md) | Loop modes, turns, delivery guarantees, clusters, routing, isolation |
-| [dev/contracts.md](dev/contracts.md) | HTTP API and Runtime Protocol v1 (wire contracts) |
+| [HTTP API](api.md) and [Runtime Protocol v1](runtime-protocol.md) | Current wire contracts |
 | [product-contracts.md](product-contracts.md) | Current-state inventory and design contracts for Release 1 capabilities |
 | [sandbox-runtime.md](sandbox-runtime.md) | The Docker daemon dedicated to agent sandboxes: architecture, usage, reset, troubleshooting |
 | [environments.md](environments.md) | Project environments: definition, build lifecycle, usage, recipes, troubleshooting |
@@ -398,7 +398,10 @@ Other operator controls are pause/resume (graph and node), operator messages, an
 
 ### 5.8 Event bus and persistence (`internal/events`, `internal/storage`)
 
-Every fact is appended to the event log *before* it is fanned out: graph lifecycle, replica state, execution, message movement, tool calls, approvals and agent narration. Live subscribers (SSE) **tail the log by sequence number** and are only *woken* by local publishes. This makes the stream correct across instances and resumable with `Last-Event-ID` or `?after=`. A nil-event heartbeat is sent every 15s.
+Live subscribers tail persisted events by sequence number. Local appends wake
+subscribers and polling picks up writes from other instances. See the
+[event catalogue](events.md) for persistence guarantees and the
+[SSE contract](api.md#event-stream-sse) for filters and resumption.
 
 `storage.Store` persists:
 
@@ -422,7 +425,7 @@ Every fact is appended to the event log *before* it is fanned out: graph lifecyc
 
 | Decision | Alternatives | Why | Consequences |
 |---|---|---|---|
-| **Store-tailing SSE.** | Broker-based fan-out; in-memory only. | Multi-instance correctness and exact resume with no extra infrastructure. | One store read per wake-up or second per subscriber. Narration-heavy graphs grow the log. See [storage retention](database-schema.md#retention). |
+| **Store-tailing SSE.** | Broker-based fan-out; in-memory only. | Subscribers can resume reading matching persisted events across instances using the shared store. | One store read per wake-up or second per subscriber. Narration-heavy graphs grow the log. See [storage retention](database-schema.md#retention). |
 | **Recovery by redelivery, not replay.** | Event sourcing with deterministic replay. | LLM turns are non-deterministic; replaying them is meaningless. | The event log explains what happened; the broker and store hold the state needed to continue. |
 | **Best-effort history writes.** | Fail delivery if history fails. | Observability must not stop work. | History can have gaps under store outages, and the duplicate pre-check depends on it (see the limitations). |
 
@@ -477,7 +480,7 @@ Telemetry is optional: without `OTEL_EXPORTER_OTLP_ENDPOINT`, only stdout and `/
 - **Definition:** `spec.environment` in the graph document (base image or inline Dockerfile, setup commands, per-phase network, caches, timeout), validated by `graph.Validate` and versioned with the graph.
 - **Build:** the `environment.Manager` drives the sandbox daemon through the Docker CLI: pull or build the base, add the sandbox-user layer (uid 10001), run setup with the workspace mounted, commit `weft-env/<graph>:<hash>`, create cache volumes, drop older images. Builds run in the background under the store lease `environment/<graph>`; status and a 64 KiB log tail live in the KV namespace `environment`.
 - **Use:** `engine.UsesEnvironment` marks docker-isolated nodes without `isolation.image`; the sandbox factory starts them from the ready image with the cache volumes and the run network, and the start preflight refuses them (422, `spec.environment`) while the environment is absent, building, failed or outdated.
-- **Cleanup:** reset (and graph deletion) removes images and cache volumes by graph label; it is refused while the graph runs.
+- **Cleanup:** [Reset](environments.md#4-reset-it) requires a stopped graph. Reset and graph deletion remove graph-owned images and writable cache volumes. Shared prepared images and immutable cache seeds remain until a separate [shared cleanup](environments.md#cleanup-of-unused-shared-generations).
 - **Observability:** `environment.*` events, `weft_environment_builds_total` / `_build_duration_seconds`, span `environment.build`.
 
 ## 6. Quality attributes

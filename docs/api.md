@@ -284,7 +284,7 @@ saved with the graph. These endpoints manage its build; see
 | `GET /api/v1/graphs/{id}/environment/proxies` | viewer | Read-only `{proxies, lastPreparation?, truncated}`: managed proxy state and sanitized recent request samples. Maximum 32 containers, 100 log lines per proxy within 24h; unavailable items include a warning. Last preparation is a historical snapshot. |
 | `GET /api/v1/graphs/{id}/environment` | viewer | Build state compared with the saved definition: `state` (`absent`, `building`, `ready`, `failed`), `defined`, `currentHash`, `upToDate`, `image`, `caches`, `error`, `log` (last 64 KiB). |
 | `POST /api/v1/graphs/{id}/environment/build` | operator | Body `{"force": bool}` (optional). Starts a background build of the saved definition (`202`); an up-to-date environment without `force` is left alone (`200`). `400` without `spec.environment`; `409` while a build or reset holds the environment lease. The error message identifies the operation in progress. |
-| `POST /api/v1/graphs/{id}/environment/reset` | admin | Deletes the environment’s images, cache volumes and build resources. Returns `409` if the graph is running, another instance is building, another reset is active, or cleanup is incomplete. |
+| `POST /api/v1/graphs/{id}/environment/reset` | admin | Deletes graph-owned images, writable cache volumes and build resources. [Shared images and immutable cache seeds remain](environments.md#4-reset-it). Returns `409` if the graph is running, another instance is building, another reset is active, or cleanup is incomplete. |
 
 `DELETE /api/v1/graphs/{id}` (admin) requires the graph to be stopped. It
 cancels a build owned by this controller and waits up to 30 seconds for
@@ -514,8 +514,8 @@ data: {"seq":4211,"id":"evt_…","type":"execution.completed","graphId":"softwar
 | Behaviour | Detail |
 |---|---|
 | Start position | `?after=<seq>` or `Last-Event-ID: <seq>` resumes after that event; with neither the stream starts at the newest event ("now"). |
-| Ordering | Strictly by `seq`; no gaps, no duplicates within one connection. |
-| Delivery | The handler tails the durable event log (wake-up on local publish, 1 s poll otherwise), so events written by *any* control-plane instance arrive on every connection. |
+| Ordering | Matching persisted events are sent in increasing `seq` order. Filters can skip sequence numbers. |
+| Delivery | The handler tails the shared event log and sends entries that match the subscription. Local appends wake it immediately. Otherwise it polls every second, including for events written by other instances. See [event persistence](events.md) for publication guarantees. |
 | Heartbeat | A `: ping` comment after 15 s without events keeps proxies from closing the stream. |
 | Filters | `graph`, `node`, `types` (comma separated). |
 | Reconnect | Browsers reconnect after `retry` ms and send `Last-Event-ID` automatically. |
@@ -584,6 +584,8 @@ The `weft` CLI wraps these calls (`weft help`).
 | Event `replica` | number | Always present; `-1` means the node as a whole |
 | Error codes | listed | Also `rate_limited`, `llm_error`, `no_answer` (callbacks) |
 
+## Environment blocked-access history
+
 `GET /api/v1/graphs/{id}/environment/blocked-history` (viewer+) returns
 `requests` (newest first; safe proxy request fields plus `proxy` and `phase`),
 `retentionDays` and `limit` (effective installation limits, default 7/1000), and optional `collectedAt` (last successful
@@ -603,7 +605,7 @@ graphs; saving is not a synchronous purge of every history. Storage failures ret
 an error. Lower limits can permanently discard history; higher limits do not
 restore discarded records. Publication: `installation.history_retention.updated`.
 
-### Worktree checkpoints
+## Worktree checkpoints
 
 `GET /api/v1/graphs/{id}/checkpoints` (viewer) lists the graph's
 [worktree checkpoints](native-coding-runtime.md#checkpoints-nat-07), newest
@@ -623,7 +625,7 @@ node, checkpoint or a workspace without Git returns 404; a replica running a
 turn on this instance returns 409. Success and failure are published as
 `checkpoint.restored` / `checkpoint.failed` with the caller as actor.
 
-### Read-only workspace Git inspection
+## Read-only workspace Git inspection
 
 `GET /api/v1/graphs/{id}/git/{view}` accepts `view=status|diff|history`.
 It uses the same viewer/read authorization as Files. Optional `node` selects
