@@ -124,13 +124,26 @@ What happens when a threshold is reached:
 | Interrupt | The running turn is cancelled, work is kept as it is, and the run pauses. |
 
 An administrator raises the budget. The new limit is compared with charged
-and reserved spend. Before resuming a graph, the controller checks the current
+and reserved spend. A limit at or below that total retains the holds without
+scheduling resumptions. The warning state is recalculated at the new
+threshold. Before resuming a graph, the controller checks the current
 task-run, workflow, project, user and installation ledgers that apply to it.
 If a budget is reached, the graph stays paused under that ledger and the
 transition audit records `budget_reached` and the blocking scope and ID.
 When a graph lease is busy, the ledger retains the pending transition for the
 background controller. A resume records an intent ID with the graph state so
 the controller can recognize a successful write after a timeout.
+
+Manual graph Resume, Run all on a paused graph, and node Resume check the
+same budgets. A blocked request returns `409 budget_resume_blocked`, keeps
+the hold and records the operator's attempt with the blocking ledger. The
+console shows where an administrator can raise the budget.
+
+The controller verifies the ledger revisions from its resume check just
+before writing the graph or node state. It retries when a reservation
+changes a ledger during the check. Ledger and lifecycle writes are separate,
+so spend can still change after a ledger's final read. Each priced model
+call must independently reserve capacity before dispatch.
 
 The controller retires holds for deleted, stopped or replaced runs, and for
 runs whose enabled fixed replicas have completed. An individual turn may end
@@ -171,7 +184,8 @@ The cost ledger endpoints identify invalid rows with `invalid: true` and
 their current `revision`. The console shows the scope and ID. The audit
 event `budget.ledger_invalid` identifies the affected revision without
 including the raw value. Other graphs can resume if the invalid ledger
-does not apply to them. Model admission under an invalid applicable ledger
+does not apply to them. Isolated invalid ledgers are reported without
+changing the normal five-second transition sweep. Model admission under an invalid applicable ledger
 fails closed until it is repaired.
 
 1. Record the scope, ID and revision and identify the setting key

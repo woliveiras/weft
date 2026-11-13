@@ -10,6 +10,7 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/eventtest"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"github.com/woliveiras/weft/server/internal/taskrun"
@@ -60,6 +61,7 @@ func TestPriceCatalogueThroughAPI(t *testing.T) {
 	if len(evs) != 2 || evs[0].Actor != "admin" {
 		t.Fatalf("audit = %+v", evs)
 	}
+	eventtest.Capture(t, a.Store, domain.EvPricesChanged)
 }
 
 // A task run that reaches its monetary budget is paused before the model is
@@ -125,6 +127,19 @@ func testBudgetRaise(t *testing.T, state string) {
 		return call(t, srv, "GET", "/api/v1/tasks/"+d.ID+"/progress", viewerTok, "", "", &progress) == 200 &&
 			len(progress.Executions) > 0 && progress.Executions[0].Status.Terminal() && progress.State == "running"
 	})
+	if state == "running" {
+		if err := a.Store.KVPut(t.Context(), "_control/"+gid, "node/reader", []byte(`{"paused":"invalid"}`)); err != nil {
+			t.Fatal(err)
+		}
+		var progress taskrun.View
+		if c := call(t, srv, "GET", "/api/v1/tasks/"+d.ID+"/progress", viewerTok, "", "", &progress); c != 200 || progress.State != "running" {
+			t.Fatalf("invalid node control broke paused task progress: %d %+v", c, progress)
+		}
+		if err := a.Store.KVDelete(t.Context(), "_control/"+gid, "node/reader"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	if v.LimitMicros != 1 || v.ChargedMicros != 0 || v.ReservedMicros != 0 {
 		t.Fatalf("refused call must cost nothing: %+v", v)
 	}
@@ -220,6 +235,7 @@ func testBudgetRaise(t *testing.T, state string) {
 			})
 		})
 	}
+	eventtest.Capture(t, a.Store, domain.EvBudgetChanged, domain.EvBudgetReached, domain.EvBudgetRaised, domain.EvBudgetGraphTransition)
 }
 
 // Monthly budgets: reaching the installation budget pauses the run, refuses
@@ -411,4 +427,84 @@ func TestBudgetHoldClearsAfterGraphStop(t *testing.T) {
 		return call(t, srv, "GET", "/api/v1/cost/budgets/run/"+id, viewerTok, "", "", &view) == 200 &&
 			!view.Paused && view.Reached
 	})
+}
+
+func TestManualBudgetResumeThroughAPI(t *testing.T) {
+	srv, app := setupApp(t, nil)
+	ctx := t.Context()
+	const graph = "budget-manual-fixture"
+	const path = "/api/v1/graphs/" + graph
+	if c, _, body := rawCall(t, "POST", srv.URL+"/api/v1/graphs", adminTok,
+		`{"metadata":{"id":"budget-manual-fixture"},"spec":{"nodes":[{"id":"reader","runtime":{"kind":"echo"}}]}}`, nil); c != 201 {
+		t.Fatal(c, body)
+	}
+	rec, err := app.Store.GetGraphRecord(ctx, graph)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec.DesiredState, rec.State, rec.RunID = domain.GraphPaused, domain.GraphPaused, "run-fixture"
+	if err := app.Store.PutGraphRecord(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	if c := call(t, srv, "POST", path+"/nodes/reader/pause", operatorTok, "", "", nil); c != 200 {
+		t.Fatalf("pause node: %d", c)
+	}
+	raw, err := json.Marshal(cost.Ledger{Scope: cost.TaskRun, ID: graph, Currency: "USD", Limit: 10, Compacted: 30,
+		Reached: true, Entries: map[string]cost.Entry{}, PausedGraphs: []string{graph},
+		GraphActions: map[string]cost.GraphAction{graph: {Action: cost.HoldGraph, RunID: rec.RunID}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Store.PutSetting(ctx, cost.BudgetPrefix+"run/"+graph, raw, 0, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range []string{"resume", "start", "nodes/reader/resume"} {
+		code, _, body := rawCall(t, "POST", srv.URL+path+"/"+action, operatorTok, "", nil)
+		if code != 409 || !strings.Contains(body, `"code":"budget_resume_blocked"`) ||
+			!strings.Contains(body, graph) || !strings.Contains(body, "raise") {
+			t.Fatalf("%s: expected actionable budget conflict, got %d %s", action, code, body)
+		}
+	}
+	var status struct {
+		DesiredState string
+		Nodes        []struct{ Paused bool }
+	}
+	if c := call(t, srv, "GET", path+"/status", viewerTok, "", "", &status); c != 200 ||
+		status.DesiredState != "paused" || len(status.Nodes) != 1 || !status.Nodes[0].Paused {
+		t.Fatalf("blocked resume changed graph or node state: %d %+v", c, status)
+	}
+	audits, err := app.Store.ListEvents(ctx, storage.EventFilter{GraphID: graph, Types: []domain.EventType{domain.EvBudgetGraphTransition}})
+	if err != nil || len(audits) != 3 {
+		t.Fatalf("expected one audit per refusal: %v %v", audits, err)
+	}
+	for _, audit := range audits {
+		if audit.Actor != "operator" || !strings.Contains(string(audit.Data), `"outcome":"budget_reached"`) {
+			t.Fatalf("wrong refusal audit: %+v %s", audit, audit.Data)
+		}
+	}
+	if ok, err := app.Store.AcquireLease(ctx, "graph-transition/"+graph, "fixture", time.Minute); !ok || err != nil {
+		t.Fatalf("hold graph transition: %t %v", ok, err)
+	}
+	budget := "/api/v1/cost/budgets/run/" + graph
+	var view cost.View
+	if c := call(t, srv, "POST", budget+"/raise", adminTok, "application/json", `{"limitMicros":20}`, &view); c != 200 ||
+		!view.Reached || !view.Paused || len(view.NotResumed) != 0 || view.Charged != 30 {
+		t.Fatalf("insufficient raise: %d %+v", c, view)
+	}
+	if err := app.Store.ReleaseLease(ctx, "graph-transition/"+graph, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	if c := call(t, srv, "POST", budget+"/raise", adminTok, "application/json", `{"limitMicros":40}`, &view); c != 200 || view.Paused {
+		t.Fatalf("sufficient raise: %d %+v", c, view)
+	}
+	if saved, err := app.Store.GetGraphRecord(ctx, graph); err != nil || saved.BudgetResumeID == "" {
+		t.Fatalf("missing durable resume receipt: %+v %v", saved, err)
+	}
+	eventtest.Capture(t, app.Store, domain.EvBudgetGraphTransition, domain.EvBudgetRaised)
+	for _, path := range []string{"/api/v1/graphs", path} {
+		if c, _, body := rawCall(t, "GET", srv.URL+path, viewerTok, "", nil); c != 200 ||
+			!strings.Contains(body, graph) || strings.Contains(body, "budgetResumeId") {
+			t.Fatalf("graph API exposed an internal receipt at %s: %d %s", path, c, body)
+		}
+	}
 }

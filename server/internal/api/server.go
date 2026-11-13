@@ -308,6 +308,7 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var ve *engine.ValidationError
 	var pve *llmconfig.ValidationError
 	var cve *cost.ValidationError
+	var budgetResume *engine.BudgetResumeError
 	var sve *scm.ValidationError
 	var tfe *trigger.FieldError
 	switch {
@@ -329,6 +330,8 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErr(w, http.StatusConflict, "secret_key_missing", err.Error(), nil)
 	case errors.Is(err, engine.ErrNotFound), errors.Is(err, storage.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not_found", err.Error(), nil)
+	case errors.As(err, &budgetResume):
+		writeErr(w, http.StatusConflict, "budget_resume_blocked", err.Error(), map[string]string{"scope": budgetResume.Scope, "id": budgetResume.ID})
 	case errors.Is(err, cost.ErrInvalidLedger), errors.Is(err, engine.ErrConflict), errors.Is(err, hitl.ErrNotPending), errors.Is(err, storage.ErrConflict):
 		writeErr(w, http.StatusConflict, "conflict", err.Error(), nil)
 	case errors.Is(err, engine.ErrInvalid), errors.Is(err, errBadRequest):
@@ -512,8 +515,15 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) error {
 // --- graphs ---------------------------------------------------------------
 
 type graphSummary struct {
-	Graph  *domain.Graph       `json:"graph"`
-	Record *domain.GraphRecord `json:"record"`
+	Graph  *domain.Graph      `json:"graph"`
+	Record domain.GraphRecord `json:"record"`
+}
+
+func summarizeGraph(g *domain.Graph, rec *domain.GraphRecord) graphSummary {
+	// The receipt correlates internal ledger and graph writes.
+	public := *rec
+	public.BudgetResumeID = ""
+	return graphSummary{Graph: g, Record: public}
 }
 
 func (s *Server) listGraphs(w http.ResponseWriter, r *http.Request) error {
@@ -527,7 +537,7 @@ func (s *Server) listGraphs(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			rec = &domain.GraphRecord{ID: g.Metadata.ID, State: domain.GraphStopped, DesiredState: domain.GraphStopped}
 		}
-		out = append(out, graphSummary{g, rec})
+		out = append(out, summarizeGraph(g, rec))
 	}
 	writeJSON(w, 200, out)
 	return nil
@@ -586,7 +596,7 @@ func (s *Server) createGraph(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	writeJSON(w, http.StatusCreated, graphSummary{g, rec})
+	writeJSON(w, http.StatusCreated, summarizeGraph(g, rec))
 	return nil
 }
 
@@ -620,7 +630,7 @@ func (s *Server) getGraph(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	writeJSON(w, 200, graphSummary{g, rec})
+	writeJSON(w, 200, summarizeGraph(g, rec))
 	return nil
 }
 
@@ -656,7 +666,7 @@ func (s *Server) updateGraph(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	writeJSON(w, 200, graphSummary{g, rec})
+	writeJSON(w, 200, summarizeGraph(g, rec))
 	return nil
 }
 

@@ -122,7 +122,8 @@
         "action": {"enum": ["pause", "resume", "hold"]},
         "outcome": {"enum": ["paused", "resumed", "stopped", "deleted", "run_changed", "already_running", "another_budget", "budget_reached", "run_finished", "legacy_unbound", "period_ended"]},
         "blockingScope": {"enum": ["run", "installation", "user", "project", "workflow"]},
-        "blockingId": {"type": "string"}
+        "blockingId": {"type": "string"},
+        "requestedAction": {"enum": ["start", "resume"]}
       },
       "allOf": [{"if": {"properties": {"outcome": {"const": "budget_reached"}}}, "then": {"required": ["blockingScope", "blockingId"]}}]
     },

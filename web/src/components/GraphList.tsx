@@ -40,17 +40,24 @@ export function GraphList({
 }) {
   const [creating, setCreating] = useState(false);
   const [actionError, setActionError] = useState<string>();
+  const [budgetError, setBudgetError] = useState<{ graphId: string; message: string }>();
   const [deletion, setDeletion] = useState<{ graph: GraphSummary; reason: string }>();
   const [deletionReason, setDeletionReason] = useState('');
   const [deleting, setDeleting] = useState(false);
 
   const act = async (id: string, a: GraphAction) => {
+    setBudgetError(undefined);
+    setActionError(undefined);
     try {
       await api.graphAction(id, a);
       setActionError(undefined);
       onChanged();
     } catch (e) {
-      setActionError(errorMessage(e));
+      if (e instanceof ApiError && e.code === 'budget_resume_blocked') {
+        setBudgetError({ graphId: id, message: e.message });
+      } else {
+        setActionError(errorMessage(e));
+      }
     }
   };
 
@@ -143,6 +150,7 @@ export function GraphList({
                   Delete
                 </Btn>}
               </div>
+              {budgetError?.graphId === g.metadata.id && <ErrorBox error={budgetError.message} />}
             </article>
           );
         })}

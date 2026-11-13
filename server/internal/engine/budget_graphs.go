@@ -17,6 +17,50 @@ func (e *Engine) monetaryBudgets() cost.Budgets {
 	return cost.Budgets{Store: e.store, Bus: e.bus}
 }
 
+// BudgetResumeError identifies the ledger preventing a manual resume.
+type BudgetResumeError struct {
+	Scope string
+	ID    string
+}
+
+func (e *BudgetResumeError) Error() string {
+	return fmt.Sprintf("Resume blocked by %s budget %s. Ask an administrator to raise it in Models → Costs.", e.Scope, e.ID)
+}
+
+func (e *BudgetResumeError) Unwrap() error { return ErrConflict }
+
+func (e *Engine) checkManualBudgetResume(ctx context.Context, g *domain.Graph, runID, actor, action, node string) error {
+	target := graphBudgetTarget(g)
+	if !strings.HasPrefix(target.Graph, domain.TaskRunGraphPrefix) {
+		// Standalone graphs are not subject to task spending policy. Honor
+		// an explicit run ledger if one exists for this graph.
+		_, err := e.store.GetSetting(ctx, cost.BudgetPrefix+cost.TaskRun+"/"+target.Graph)
+		if errors.Is(err, storage.ErrNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+	now := time.Now()
+	blocker, reason, err := e.monetaryBudgets().ResumeBlocker(ctx, target, cost.BudgetGraph{
+		GraphAction: cost.GraphAction{RunID: runID},
+	}, now)
+	if err != nil || reason == "" {
+		return err
+	}
+	data := map[string]any{
+		"scope": blocker.Scope, "id": blocker.ID, "action": cost.ResumeGraph, "outcome": reason,
+		"blockingScope": blocker.Scope, "blockingId": blocker.ID, "requestedAction": action,
+	}
+	event := domain.NewEvent(domain.EvBudgetGraphTransition, target.Graph, data).WithActor(actor)
+	if node != "" {
+		event.WithNode(node, -1)
+	}
+	e.bus.Publish(ctx, event)
+	return &BudgetResumeError{Scope: blocker.Scope, ID: blocker.ID}
+}
+
 func (e *Engine) RaiseBudget(ctx context.Context, scope, id string, limit int64, actor string) (cost.View, error) {
 	budgets := e.monetaryBudgets()
 	view, previous, actions, err := budgets.Raise(ctx, scope, id, limit, actor)
@@ -47,7 +91,7 @@ func (e *Engine) RaiseBudget(ctx context.Context, scope, id string, limit int64,
 			// A concurrent update superseded this action.
 		default:
 			skipped[target.Graph] = outcome
-			if err == nil && outcome != "budget_reached" {
+			if err == nil && outcome != "budget_reached" && outcome != "another_budget" {
 				_ = e.auditBudgetTransition(work, target, outcome)
 			}
 		}
@@ -62,9 +106,11 @@ func (e *Engine) RaiseBudget(ctx context.Context, scope, id string, limit int64,
 		view.NotResumed = slices.DeleteFunc(view.NotResumed, func(graph string) bool {
 			return slices.Contains(resumed, graph) || skipped[graph] != ""
 		})
-		view.Paused = len(view.NotResumed) != 0 || slices.ContainsFunc(actions, func(target cost.BudgetGraph) bool {
-			return skipped[target.Graph] == "budget_reached" && view.Reached
-		})
+		if len(actions) != 0 {
+			view.Paused = len(view.NotResumed) != 0 || slices.ContainsFunc(actions, func(target cost.BudgetGraph) bool {
+				return skipped[target.Graph] == "budget_reached" && view.Reached
+			})
+		}
 	} else if latest != nil {
 		view = *latest
 	}
@@ -98,11 +144,12 @@ func (e *Engine) applyBudgetGraphTransition(ctx context.Context, target cost.Bud
 	}
 	now := time.Now()
 	expired := cost.ExpiredLedger(target.Scope, target.ID, cost.Period(now))
+	var g *domain.Graph
 	if rec != nil && target.RunID == "" && outcome != "stopped" {
 		outcome = "legacy_unbound"
 	} else if outcome == "" || outcome == "resume" || outcome == "pause" || outcome == "paused" {
 		if rec.DesiredState == domain.GraphPaused {
-			g, err := e.store.GetGraph(ctx, target.Graph, rec.Version)
+			g, err = e.store.GetGraph(ctx, target.Graph, rec.Version)
 			if err != nil {
 				return "", err
 			}
@@ -117,42 +164,56 @@ func (e *Engine) applyBudgetGraphTransition(ctx context.Context, target cost.Bud
 					return "", err
 				}
 				return "period_ended", nil
-			} else if outcome == "resume" {
-				labels := g.Metadata.Labels
-				t := cost.Target{Graph: target.Graph, User: labels[domain.LabelTaskUser],
-					Project: labels[domain.LabelTaskProject], Workflow: labels[domain.LabelTaskWorkflow]}
-				blocker, reason, err := budgets.ResumeBlocker(ctx, t, target, now)
-				if err != nil {
-					return "", err
-				}
-				if reason == "budget_reached" {
-					if err := budgets.HoldForResumeBlocker(ctx, blocker, now); err != nil {
-						return "", err
-					}
-					_ = e.auditBudgetTransition(ctx, target, reason, blocker)
-					if target.Scope == blocker.Scope && target.ID == blocker.ID {
-						return reason, nil // the same ledger now owns the hold
-					}
-				}
-				if reason != "" {
-					outcome = reason
-				}
 			}
 		} else if expired {
 			outcome = "period_ended"
 		}
 	}
+	if outcome == "resume" || outcome == "already_running" {
+		if err := e.checkDeferredDeletion(ctx, target.Graph); err != nil {
+			return "", err
+		}
+		if g == nil {
+			g, err = e.store.GetGraph(ctx, target.Graph, rec.Version)
+			if err != nil {
+				return "", err
+			}
+		}
+		now = time.Now()
+		blocker, reason, err := budgets.ResumeBlocker(ctx, graphBudgetTarget(g), target, now)
+		if err != nil {
+			return "", err
+		}
+		if reason != "" {
+			if reason == "budget_reached" {
+				if err := budgets.HoldForResumeBlocker(ctx, blocker, now); err != nil {
+					return "", err
+				}
+			}
+			if outcome == "already_running" {
+				if err := e.recordGraphAction(ctx, rec, "pause", "system:budget", ""); err != nil {
+					return "", err
+				}
+			}
+			_ = e.auditBudgetTransition(ctx, target, reason, blocker)
+			if reason == "budget_reached" && target.Scope == blocker.Scope && target.ID == blocker.ID {
+				return reason, nil // the same ledger now owns the hold
+			}
+			outcome = reason
+		}
+	}
 	switch outcome {
 	case "pause":
-		if err := e.graphAction(ctx, target.Graph, "pause", target.Actor); err != nil {
+		actor := target.Actor
+		if actor == "" {
+			actor = "system:budget"
+		}
+		if err := e.recordGraphAction(ctx, rec, "pause", actor, ""); err != nil {
 			return "", err
 		}
 		outcome = "paused"
 	case "resume":
-		if err := e.checkDeferredDeletion(ctx, target.Graph); err != nil {
-			return "", err
-		}
-		if err := e.recordGraphAction(ctx, target.Graph, "resume", target.Actor, target.GraphAction.ID); err != nil {
+		if err := e.recordGraphAction(ctx, rec, "resume", target.Actor, target.GraphAction.ID); err != nil {
 			// A write can commit while its caller loses the reply.
 			verify, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 			defer cancel()
@@ -210,7 +271,7 @@ func budgetGraphOutcome(target cost.BudgetGraph, rec *domain.GraphRecord, err er
 		return "resume", nil
 	case cost.HoldGraph:
 		if rec.DesiredState == domain.GraphRunning {
-			return "already_running", nil
+			return "pause", nil
 		}
 		return "", nil
 	default:
@@ -255,20 +316,23 @@ func (e *Engine) reconcileBudgetGraphs(ctx context.Context) bool {
 		}
 		transitionErr := e.WithGraphTransition(work, target.Graph, func(ctx context.Context) error {
 			outcome, err := e.applyBudgetGraphTransition(ctx, target)
-			if err == nil && outcome != "" && outcome != "budget_reached" && outcome != "resumed" {
+			if err == nil && outcome != "" && outcome != "budget_reached" && outcome != "another_budget" && outcome != "resumed" {
 				return e.auditBudgetTransition(ctx, target, outcome)
 			}
 			return err
 		})
-		if transitionErr != nil && !errors.Is(transitionErr, ErrGraphTransitionBusy) {
+		switch {
+		case errors.Is(transitionErr, cost.ErrInvalidLedger):
+			invalid++
+		case transitionErr != nil && !errors.Is(transitionErr, ErrGraphTransitionBusy):
 			failures++
 		}
 	}
 	if err == nil {
 		err = work.Err()
 	}
-	failed := err != nil || failures > 0 || invalid > 0
-	if failed && ctx.Err() == nil {
+	failed := err != nil || failures > 0
+	if (failed || invalid > 0) && ctx.Err() == nil {
 		e.log.Warn("reconcile budget graph transitions", "scan_failed", err != nil,
 			"timed_out", errors.Is(err, context.DeadlineExceeded), "failed_actions", failures, "invalid_ledgers", invalid)
 	}

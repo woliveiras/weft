@@ -100,3 +100,45 @@ test('an invalid ledger stays visible beside usable budgets', async ({ page }) =
   const valid = page.getByRole('listitem', { name: 'Budget Task run task-run-valid' });
   await expect(valid.getByRole('button', { name: 'Raise budget' })).toBeEnabled();
 });
+
+test('an insufficient raise leaves the hold visible without promising a retry', async ({ page }) => {
+  const graph = 'task-run-insufficient-raise';
+  const ledger = {
+    scope: 'run', id: graph, currency: 'USD', limitMicros: 1_000_000, chargedMicros: 3_000_000,
+    estimatedMicros: 0, reservedMicros: 0, remainingMicros: 0, reached: true, paused: true,
+    raisedBy: '',
+  };
+  await page.route('**/api/v1/cost/ledgers', route => route.fulfill({ json: [ledger] }));
+  await page.route(`**/api/v1/cost/budgets/run/${graph}/raise`, route => {
+    expect(route.request().postDataJSON()).toEqual({ limitMicros: 2_000_000 });
+    Object.assign(ledger, { limitMicros: 2_000_000, raisedBy: 'admin' });
+    return route.fulfill({ json: ledger });
+  });
+  await page.goto('/#/models');
+  await page.evaluate(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.reload();
+  const budget = page.getByRole('listitem', { name: `Budget Task run ${graph}` });
+  page.once('dialog', dialog => dialog.accept('2'));
+  await budget.getByRole('button', { name: 'Raise budget' }).click();
+  await expect(budget.getByRole('status')).toHaveText('The raised limit is still at or below current spend and reservations.');
+  await expect(budget).toContainText('Runs paused');
+  await expect(budget.getByText(/Resume pending/)).toHaveCount(0);
+});
+
+test('the graph card shows which budget blocked Resume', async ({ page }) => {
+  const graph = 'budget-resume-fixture';
+  const message = `Resume blocked by run budget ${graph}. Ask an administrator to raise it in Models → Costs.`;
+  await page.route('**/api/v1/graphs', route => route.fulfill({ json: [{
+    graph: { metadata: { id: graph, name: 'Budget resume fixture' }, spec: { nodes: [] } },
+    record: { id: graph, version: 1, desiredState: 'paused', state: 'paused' },
+  }] }));
+  await page.route(`**/api/v1/graphs/${graph}/resume`, route => route.fulfill({
+    status: 409, json: { code: 'budget_resume_blocked', error: message, details: { scope: 'run', id: graph } },
+  }));
+  await page.goto('/#/graphs');
+  await page.evaluate(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.reload();
+  const card = page.getByRole('article').filter({ has: page.getByRole('button', { name: 'Budget resume fixture' }) });
+  await card.getByRole('button', { name: 'Resume', exact: true }).click();
+  await expect(card.getByRole('alert')).toHaveText(message);
+});

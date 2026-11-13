@@ -333,28 +333,32 @@ func (e *Engine) GraphAction(ctx context.Context, id, action, actor string) erro
 				return err
 			}
 		}
-		if action == "start" {
-			g, _, err := e.GetGraph(ctx, id, 0)
-			if err != nil {
+		g, rec, err := e.GetGraph(ctx, id, 0)
+		if err != nil {
+			return err
+		}
+		if rec.DesiredState == domain.GraphPaused && (action == "start" || action == "resume") {
+			if err := e.checkManualBudgetResume(ctx, g, rec.RunID, actor, action, ""); err != nil {
 				return err
 			}
+		}
+		if action == "start" {
 			if rep := e.preflight(ctx, g, ""); !rep.Valid {
 				return &ValidationError{Report: rep}
 			}
+			if rec.DesiredState == domain.GraphPaused {
+				// Preflight can run external checks. Revalidate at the write.
+				if err := e.checkManualBudgetResume(ctx, g, rec.RunID, actor, action, ""); err != nil {
+					return err
+				}
+			}
 		}
-		return e.graphAction(ctx, id, action, actor)
+		return e.recordGraphAction(ctx, rec, action, actor, "")
 	})
 }
 
-func (e *Engine) graphAction(ctx context.Context, id, action, actor string) error {
-	return e.recordGraphAction(ctx, id, action, actor, "")
-}
-
-func (e *Engine) recordGraphAction(ctx context.Context, id, action, actor, budgetResumeID string) error {
-	_, rec, err := e.GetGraph(ctx, id, 0)
-	if err != nil {
-		return err
-	}
+func (e *Engine) recordGraphAction(ctx context.Context, rec *domain.GraphRecord, action, actor, budgetResumeID string) error {
+	id := rec.ID
 	now := time.Now().UTC()
 	var ev domain.EventType
 	switch action {
@@ -479,7 +483,7 @@ func (e *Engine) nodeAction(ctx context.Context, id, node, action, actor string)
 		if rec.DesiredState == domain.GraphStopped {
 			// Starting one node of a stopped graph starts the graph with only
 			// that node running.
-			if err := e.graphAction(ctx, id, "start", actor); err != nil {
+			if err := e.recordGraphAction(ctx, rec, "start", actor, ""); err != nil {
 				return err
 			}
 			for _, other := range g.Spec.Nodes {
@@ -502,6 +506,9 @@ func (e *Engine) nodeAction(ctx context.Context, id, node, action, actor string)
 	case "pause":
 		c.Paused = true
 	case "resume":
+		if err := e.checkManualBudgetResume(ctx, g, rec.RunID, actor, action, node); err != nil {
+			return err
+		}
 		c.Paused = false
 	default:
 		return fmt.Errorf("%w: unknown action %q", ErrInvalid, action)
@@ -655,7 +662,10 @@ func (e *Engine) Status(ctx context.Context, id string) (*GraphStatus, error) {
 	}
 	if rec.DesiredState == domain.GraphPaused {
 		st.RunFinished, err = e.runFinished(ctx, g, rec.RunID)
-		if err != nil {
+		var invalid *invalidNodeControl
+		if errors.As(err, &invalid) {
+			e.log.Warn("check paused run completion", "graph", id, "run", rec.RunID, "err", err)
+		} else if err != nil {
 			return nil, err
 		}
 	}
@@ -737,6 +747,17 @@ func (e *Engine) Status(ctx context.Context, id string) (*GraphStatus, error) {
 	return st, nil
 }
 
+type invalidNodeControl struct {
+	node string
+	err  error
+}
+
+func (e *invalidNodeControl) Error() string {
+	return fmt.Sprintf("decode node control for %s: %v", e.node, e.err)
+}
+
+func (e *invalidNodeControl) Unwrap() error { return e.err }
+
 // runFinished reports whether the fixed replicas of the current run are done.
 // A terminal turn can leave work for the graph to retry.
 // Retire holds only when every enabled fixed replica has a completion
@@ -753,7 +774,7 @@ func (e *Engine) runFinished(ctx context.Context, g *domain.Graph, run string) (
 		raw, err := e.store.KVGet(ctx, controlNS(g.Metadata.ID), "node/"+node.ID)
 		if err == nil {
 			if err := json.Unmarshal(raw, &ctl); err != nil {
-				return false, fmt.Errorf("decode node control for %s: %w", node.ID, err)
+				return false, &invalidNodeControl{node: node.ID, err: err}
 			}
 		} else if !errors.Is(err, storage.ErrNotFound) {
 			return false, err

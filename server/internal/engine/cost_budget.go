@@ -31,7 +31,9 @@ func (t *turnEnv) reserveMoney(ctx context.Context, provider string, req *llm.Ch
 		c, _, err := prices.Get(ctx)
 		return c, err
 	}
-	r, err := budgets.Reserve(ctx, t.budgetTarget(), catalogue, provider, typ, req)
+	target := graphBudgetTarget(t.gr.g)
+	target.Execution = t.x.ID
+	r, err := budgets.Reserve(ctx, target, catalogue, provider, typ, req)
 	var reached *cost.ReachedError
 	if errors.As(err, &reached) {
 		err = errors.Join(err, t.pauseForBudget(ctx, reached.Scope, reached.ID, reached.View.Limit))
@@ -39,11 +41,11 @@ func (t *turnEnv) reserveMoney(ctx context.Context, provider string, req *llm.Ch
 	return r, err
 }
 
-// budgetTarget attributes a task run's calls to its user, project and
+// graphBudgetTarget attributes a task run's calls to its user, project and
 // source workflow (labels set when the run was prepared).
-func (t *turnEnv) budgetTarget() cost.Target {
-	labels := t.gr.g.Metadata.Labels
-	return cost.Target{Graph: t.gr.g.Metadata.ID, Execution: t.x.ID,
+func graphBudgetTarget(g *domain.Graph) cost.Target {
+	labels := g.Metadata.Labels
+	return cost.Target{Graph: g.Metadata.ID,
 		User: labels[domain.LabelTaskUser], Project: labels[domain.LabelTaskProject], Workflow: labels[domain.LabelTaskWorkflow]}
 }
 

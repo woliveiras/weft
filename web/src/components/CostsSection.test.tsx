@@ -62,6 +62,23 @@ describe('CostsSection', () => {
     expect(await within(alice).findByText('Enter an amount higher than the current limit.')).toBeTruthy();
   });
 
+  it('explains a raise that remains below committed and reserved spend', async () => {
+    let ledger = { ...reached, chargedMicros: 7_000_000 };
+    routes({
+      'GET /api/v1/cost/ledgers': () => [ledger],
+      'POST /api/v1/cost/budgets/user/alice%402026-11/raise': () => {
+        ledger = { ...ledger, limitMicros: 6_000_000, raisedBy: 'admin' };
+        return ledger;
+      },
+    });
+    vi.stubGlobal('prompt', () => '6');
+    render(<CostsSection canEdit />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Raise budget' }));
+    expect(await screen.findByText('The raised limit is still at or below current spend and reservations.')).toBeTruthy();
+    expect(screen.getByText('Runs paused')).toBeTruthy();
+    expect(screen.queryByText(/Resume pending/)).toBeNull();
+  });
+
   it('shows pending resumptions from the ledger after reload', async () => {
     let ledger = reached;
     routes({

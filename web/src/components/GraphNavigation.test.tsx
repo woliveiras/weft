@@ -67,3 +67,23 @@ it('shows the cleanup failure and requires administrator confirmation to defer i
    confirm.mockRestore();
  }
 });
+
+it('shows the budget refusal beside the graph resume control', async () => {
+ const {GraphList} = await import('./GraphList');
+ const {api, ApiError} = await import('../api/client');
+ const message = 'Resume blocked by run budget g. Ask an administrator to raise it in Models → Costs.';
+ const resume = vi.spyOn(api, 'graphAction').mockRejectedValueOnce(new ApiError(409, message, 'budget_resume_blocked'));
+ const changed = vi.fn();
+ try {
+   const {container} = render(<GraphList graphs={[{graph, record:{state:'paused', version:1}} as GraphSummary]}
+     onOpen={()=>{}} onChanged={changed}/>);
+   fireEvent.click(screen.getByRole('button', {name:'Resume'}));
+   const alert = await screen.findByRole('alert');
+   expect(alert.textContent).toBe(message);
+   expect(alert.closest('article')).toBe(container.querySelector('article'));
+   expect(resume).toHaveBeenCalledWith('g', 'resume');
+   expect(changed).not.toHaveBeenCalled();
+ } finally {
+   resume.mockRestore();
+ }
+});

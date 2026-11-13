@@ -87,9 +87,17 @@ func (b Budgets) Raise(ctx context.Context, scope, id string, limit int64, actor
 		}
 		now := time.Now().UTC()
 		previous = l.Limit
-		l.Limit, l.Reached, l.Warned, l.RaisedAt, l.RaisedBy = limit, l.used() >= limit, false, &now, actor
-		actions = make([]BudgetGraph, 0, len(l.PausedGraphs))
+		used := l.used()
+		l.Limit, l.Reached, l.RaisedAt, l.RaisedBy = limit, used >= limit, &now, actor
+		l.Warned = used >= l.warningAt()
+		actions = nil
 		for _, graph := range l.PausedGraphs {
+			if l.Reached {
+				if action := l.GraphActions[graph]; action.Action == ResumeGraph {
+					l.setGraphAction(graph, GraphAction{Action: HoldGraph, RunID: action.RunID})
+				}
+				continue
+			}
 			action := GraphAction{ID: domain.NewID("budget-resume"), Action: ResumeGraph, RunID: l.GraphActions[graph].RunID, Actor: actor, Raised: now}
 			l.setGraphAction(graph, action)
 			actions = append(actions, BudgetGraph{scope, id, graph, action})
@@ -137,36 +145,48 @@ func (b Budgets) PendingGraphActions(ctx context.Context) ([]BudgetGraph, int, e
 	return actions, invalid, nil
 }
 
-// ResumeBlocker reads only the applicable ledgers and the ledger initiating
-// the resume. A corrupt applicable ledger prevents this graph from resuming.
+// ResumeBlocker checks the applicable ledgers and, for a scheduled action,
+// its source ledger. Re-read their revisions before allowing a resume so a
+// concurrent reservation during the sweep triggers a fresh evaluation.
 func (b Budgets) ResumeBlocker(ctx context.Context, t Target, source BudgetGraph, now time.Time) (BudgetGraph, string, error) {
-	period := Period(now)
+	for range 3 {
+		blocker, reason, err := b.resumeBlocker(ctx, t, source, now)
+		if !errors.Is(err, storage.ErrConflict) {
+			return blocker, reason, err
+		}
+	}
+	return BudgetGraph{}, "", fmt.Errorf("%w: budgets changed during resume; retry the action", storage.ErrConflict)
+}
+
+func (b Budgets) resumeBlocker(ctx context.Context, t Target, source BudgetGraph, now time.Time) (BudgetGraph, string, error) {
 	apply, err := b.applicable(ctx, t, now)
 	if err != nil {
 		return BudgetGraph{}, "", err
 	}
-	if !ExpiredLedger(source.Scope, source.ID, period) && !slices.ContainsFunc(apply, func(a applicable) bool {
+	if source.Scope != "" && !ExpiredLedger(source.Scope, source.ID, Period(now)) && !slices.ContainsFunc(apply, func(a applicable) bool {
 		return a.scope == source.Scope && a.id == source.ID
 	}) {
 		apply = append(apply, applicable{scope: source.Scope, id: source.ID})
 	}
 	var held BudgetGraph
+	revisions := make([]int64, 0, len(apply))
 	for _, a := range apply {
-		l, _, err := b.read(ctx, a.scope, a.id)
+		l, revision, err := b.read(ctx, a.scope, a.id)
 		if err != nil {
 			return BudgetGraph{}, "", err
 		}
+		revisions = append(revisions, revision)
 		if l == nil {
 			continue
 		}
-		blocker := BudgetGraph{Scope: a.scope, ID: a.id, Graph: source.Graph, GraphAction: GraphAction{Action: HoldGraph, RunID: source.RunID}}
+		blocker := BudgetGraph{Scope: a.scope, ID: a.id, Graph: t.Graph, GraphAction: GraphAction{Action: HoldGraph, RunID: source.RunID}}
 		if a.limit > 0 {
 			a.applyLimit(l)
 		}
 		if l.Reached || l.used() >= l.Limit {
 			return blocker, "budget_reached", nil
 		}
-		action := l.GraphActions[source.Graph]
+		action := l.GraphActions[t.Graph]
 		if (a.scope != source.Scope || a.id != source.ID) && action.RunID != "" && action.RunID == source.RunID &&
 			(action.Action == PauseGraph || action.Action == HoldGraph) {
 			held = blocker
@@ -174,6 +194,19 @@ func (b Budgets) ResumeBlocker(ctx context.Context, t Target, source BudgetGraph
 	}
 	if held.Scope != "" {
 		return held, "another_budget", nil
+	}
+	for i, a := range apply {
+		row, err := b.Store.GetSetting(ctx, ledgerKey(a.scope, a.id))
+		switch {
+		case errors.Is(err, storage.ErrNotFound):
+			if revisions[i] != 0 {
+				return BudgetGraph{}, "", storage.ErrConflict
+			}
+		case err != nil:
+			return BudgetGraph{}, "", err
+		case row.Revision != revisions[i]:
+			return BudgetGraph{}, "", storage.ErrConflict
+		}
 	}
 	return BudgetGraph{}, "", nil
 }

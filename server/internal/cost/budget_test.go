@@ -13,6 +13,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/events"
+	"github.com/woliveiras/weft/server/internal/eventtest"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
@@ -142,7 +143,7 @@ func TestTaskRunBudgetReservesSettlesWarnsAndRefuses(t *testing.T) {
 }
 
 func TestUnpricedCallsFollowThePolicyUnderABudget(t *testing.T) {
-	_, b := budgetEnv(t, 100)
+	st, b := budgetEnv(t, 100)
 	allow := flat
 	if r, err := b.ReserveTaskRun(ctx, "task-run-a", "x1", cat(allow), "claude", "anthropic", request(30)); err != nil || r.Amount() != 0 {
 		t.Fatalf("allowed unpriced: %+v %v", r, err)
@@ -161,6 +162,7 @@ func TestUnpricedCallsFollowThePolicyUnderABudget(t *testing.T) {
 	if _, err := b.ReserveTaskRun(ctx, "task-run-a", "x1", cat(allow), "local", "ollama", req); err != nil || req.MaxTokens != llm.DefaultEstimatedOutput {
 		t.Fatalf("allowance = %d %v", req.MaxTokens, err)
 	}
+	eventtest.Capture(t, st, domain.EvBudgetReservationFailed)
 }
 
 func TestConcurrentReservationsNeverOvershoot(t *testing.T) {
@@ -306,4 +308,49 @@ func TestPendingGraphActionScanSkipsReservationDecoding(t *testing.T) {
 	if ok, err := b.GraphActionCurrent(t.Context(), actions[0]); ok || !errors.Is(err, cost.ErrInvalidLedger) {
 		t.Fatalf("actual transition must validate entries: %t %v", ok, err)
 	}
+}
+
+func TestRaiseRecomputesReachedAndWarning(t *testing.T) {
+	st, b := budgetEnv(t, 100)
+	const graph = "task-run-warning"
+	reservation, err := b.ReserveTaskRun(ctx, graph, "x1", cat(flat), "team", "openai", request(90))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reservation.Settle(ctx, &llm.ChatResponse{Usage: llm.Usage{OutputTokens: 120}}); err != nil {
+		t.Fatal(err)
+	}
+	hold := cost.BudgetGraph{Scope: cost.TaskRun, ID: graph, Graph: graph,
+		GraphAction: cost.GraphAction{Action: cost.PauseGraph, RunID: "run-a"}}
+	if err := b.MarkPaused(ctx, hold, 100); err != nil {
+		t.Fatal(err)
+	}
+	view, _, actions, err := b.Raise(ctx, cost.TaskRun, graph, 120, "admin")
+	if err != nil || !view.Reached || !view.Paused || len(actions) != 0 || len(view.NotResumed) != 0 {
+		t.Fatalf("raise to current spend: %+v %v %v", view, actions, err)
+	}
+	view, _, actions, err = b.Raise(ctx, cost.TaskRun, graph, 150, "admin")
+	if err != nil || view.Reached || len(actions) != 1 {
+		t.Fatalf("sufficient raise at warning threshold: %+v %v %v", view, actions, err)
+	}
+	reservation, err = b.ReserveTaskRun(ctx, graph, "x2", cat(flat), "team", "openai", request(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reservation.Release(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(eventsOf(t, st, domain.EvBudgetWarning)); n != 1 {
+		t.Fatalf("already exceeded threshold emitted a duplicate warning: %d", n)
+	}
+	if _, _, _, err := b.Raise(ctx, cost.TaskRun, graph, 200, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.ReserveTaskRun(ctx, graph, "x3", cat(flat), "team", "openai", request(30)); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(eventsOf(t, st, domain.EvBudgetWarning)); n != 2 {
+		t.Fatalf("crossing the new threshold should warn again: %d", n)
+	}
+	eventtest.Capture(t, st, domain.EvBudgetWarning)
 }

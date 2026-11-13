@@ -54,6 +54,7 @@ Startup fails if no credential is configured and auth is not explicitly disabled
   | 403 | `forbidden` | Role too low; on callbacks: tool denied or rejected by a human |
   | 404 | `not_found` | Unknown graph/node/channel/approval/execution, unknown action segment |
   | 409 | `conflict` | `If-Match` mismatch, graph exists, delete while running, approval already decided, pause when not running, provider in use or default |
+  | 409 | `budget_resume_blocked` | A monetary budget blocks graph resume, starting a paused graph, or node resume. `details` contains the blocking `scope` and `id`. |
   | 409 | `secret_key_missing` | A credential was sent but the server has no installation key to encrypt it |
   | 422 | `invalid` | Graph validation failed, or a graph/node start whose agents cannot reach their model provider — `details` is the full `ValidationReport`; provider input invalid — `details.errors[]` with `path` and `message` |
   | 429 | `rate_limited` | Tool grant rate limit (callbacks) |
@@ -79,7 +80,10 @@ Startup fails if no credential is configured and auth is not explicitly disabled
   Defaults: messages 100, executions 50, events 200, approvals 200.
 * **Asynchronous lifecycle.** Lifecycle actions record the *desired* state and return the current
   `GraphStatus`; replicas converge within one reconcile interval (default 2 s). Poll `/status` or follow
-  the event stream.
+  the event stream. A budget-blocked action keeps the graph or node paused and is audited with the
+  requesting identity. An administrator can raise the blocking ledger in Models → Costs or through the
+  budget raise endpoint. Graph summaries expose the graph lifecycle state and run ID.
+  The budget resume receipt is internal to ledger reconciliation.
 * **Security headers.** Every response carries `X-Content-Type-Options: nosniff`,
   `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`. CORS is closed unless `server.corsOrigins`
   lists the origin (or `*`).
@@ -243,7 +247,7 @@ else is unpriced. Weft ships no vendor prices. See
 | `GET /api/v1/cost/ledgers` | viewer | Monthly ledgers for the requested UTC period (current by default), plus task-run ledgers that reached their limit or hold a graph transition. Invalid rows for this selection remain visible with `invalid: true` and `revision`. |
 | `GET /api/v1/cost/spend?period=YYYY-MM&graph=` | viewer | Spend of a month from `cost.recorded` events: `total` and the top 100 lines by provider/model, task run, user, project and workflow (`costMicros`, `estimatedMicros`, `unpricedCalls`, tokens). Follows the event history retention; `truncated` when more than 100 000 records exist. |
 | `GET /api/v1/cost/budgets/{scope}/{budget}` | viewer | Ledger view `{limitMicros, chargedMicros, estimatedMicros, reservedMicros, remainingMicros, reached, paused, raisedBy, notResumed?, invalid?, revision?}`; scope `run` with the task run's execution graph id, or a monthly scope with `<id>@<YYYY-MM>` (UTC month). Historical monthly views suppress `paused` and `notResumed`. Only scope, ID and revision are meaningful when `invalid` is true. |
-| `POST /api/v1/cost/budgets/{scope}/{budget}/raise` | admin | `{"limitMicros": n}` (must be higher). Audited as `budget.raised`. Attempts resumptions within a shared four-second window. `notResumed` lists graph IDs with pending resumptions and is also available from the ledger GET endpoints. The controller retries pending transitions in the background. The graph stays paused if any applicable ledger is reached, with the blocking scope identified in `budget.graph_transition`. Stopped, deleted and finished runs are cleared and audited. Closed periods return 422 and invalid ledgers return 409. |
+| `POST /api/v1/cost/budgets/{scope}/{budget}/raise` | admin | `{"limitMicros": n}` (must be higher). Audited as `budget.raised`. When charged plus reserved spend is at or above the new limit, the response keeps `reached` true and existing holds remain in place without a pending resume. Otherwise the controller attempts resumptions within a shared four-second window. `notResumed` lists graph IDs with pending resumptions and is also available from the ledger GET endpoints. The controller retries pending transitions in the background. The graph stays paused if any applicable ledger is reached, with the blocking scope identified in `budget.graph_transition`. Stopped, deleted and finished runs are cleared and audited. Closed periods return 422 and invalid ledgers return 409. |
 
 Before each model call of a task run (native turns, external callbacks and
 delegation children), the gateway reserves the call's maximum cost (input

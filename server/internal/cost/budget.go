@@ -64,7 +64,7 @@ type Ledger struct {
 	Compacted int64            `json:"compacted,omitempty"`
 	Entries   map[string]Entry `json:"entries"`
 	// Warned and Reached record that the events were emitted for the
-	// current limit. Raising the limit recomputes Reached from current spend.
+	// current limit. Raising the limit recomputes both from current spend.
 	Warned  bool `json:"warned,omitempty"`
 	Reached bool `json:"reached,omitempty"`
 	// InterruptPercent (> 100) cancels a running call whose settlement

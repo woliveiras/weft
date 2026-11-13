@@ -91,6 +91,8 @@ export function BudgetBar({ budget, currency, canRaise, onRaised, showPause = tr
   const [busy, setBusy] = useState(false);
   const pct = usedPercent(budget);
   const pending = showPause ? budget.notResumed ?? [] : [];
+  const raiseStillReached = showPause && budget.raisedBy && budget.reached && pending.length === 0 &&
+    budget.chargedMicros + budget.reservedMicros >= budget.limitMicros;
   const raise = async () => {
     const text = prompt(`New limit for ${budgetLabel(budget)} (${currency})`, fromMicros(budget.limitMicros * 2));
     if (text === null) return;
@@ -135,6 +137,7 @@ export function BudgetBar({ budget, currency, canRaise, onRaised, showPause = tr
         {budget.estimatedMicros > 0 && ` · ${money(budget.estimatedMicros, currency)} estimated`}
         {budget.raisedBy && ` · raised by ${budget.raisedBy}`}
       </p>
+      {raiseStillReached && <p className="small" role="status">The raised limit is still at or below current spend and reservations.</p>}
       {pending.length > 0 && <p className="small" role="status">Resume pending for {pending.join(', ')}. Weft will retry automatically.</p>}
       {canRaise && showPause && (budget.reached || (budget.paused && pending.length === 0)) && (
         <Btn small tone="primary" disabled={busy} onClick={() => void raise()}>
