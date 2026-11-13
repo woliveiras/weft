@@ -1,27 +1,42 @@
 #!/usr/bin/env sh
 # Use the weftd image and Compose mTLS transport, without a host Docker socket.
-# Use a cached Alpine image as an OCI layout consumed directly by BuildKit.
+# Offline by default. Requires cached Alpine, BuildKit, and the egress proxy.
+# WEFT_TEST_ENV_TLS_ONLINE=1 runs the production Buildx commands against Docker
+# Hub. It can download images and needs registry access through the test proxy.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 project=${COMPOSE_PROJECT_NAME:-weft}
 runner=${WEFT_TEST_WEFTD_IMAGE:-weft/weftd:dev}
 docker network inspect "${project}_sandbox" >/dev/null
 docker volume inspect "${project}_sandbox-certs-client" >/dev/null
-work=$(mktemp -d "$root/server/.weft-test-tls.XXXXXX")
-trap 'rm -rf "$work"' EXIT
-chmod 755 "$work"
-mkdir "$work/base"
-docker image inspect alpine:3.22 >/dev/null
-docker image save alpine:3.22 > "$work/alpine.tar"
-tar -xf "$work/alpine.tar" -C "$work/base"
+work=$(mktemp -d)
+trap 'rm -rf "$work"; rm -f "$work.tar"' EXIT
+online=${WEFT_TEST_ENV_TLS_ONLINE:-0}
+if [ "$online" != 1 ]; then
+  docker image inspect alpine:3.22 >/dev/null 2>&1 || {
+    echo 'Offline TLS integration requires alpine:3.22 in the host Docker image cache.' >&2
+    exit 1
+  }
+  mkdir "$work/base"
+  docker image save alpine:3.22 > "$work/alpine.tar"
+  tar -xf "$work/alpine.tar" -C "$work/base"
+  rm "$work/alpine.tar"
+fi
 docker run --pull=never --rm --network none \
-  -v "$root:/repo:ro" -v "$work:/out" \
+  -v "$root:/repo:ro" \
   -v weft-gomod:/go/pkg/mod -v weft-gocache:/root/.cache/go-build \
   -e CGO_ENABLED=0 -w /repo/server golang:1.26-alpine \
-  go test -c -o /out/environment.test ./internal/environment
-docker run --pull=never --rm --network "${project}_sandbox" --user 10001:10001 \
+  sh -ec 'go test -c -o /tmp/environment.test ./internal/environment >&2; cat /tmp/environment.test' \
+  > "$work/environment.test"
+chmod 755 "$work/environment.test"
+tar -cf "$work.tar" -C "$work" .
+docker run --pull=never --rm -i --network "${project}_sandbox" --user 10001:10001 \
   --tmpfs /var/lib/weft/.docker/contexts:uid=10001,gid=10001,mode=0700 \
-  -v "${project}_sandbox-certs-client:/certs/client:ro" -v "$work:/test:ro" \
+  -v "${project}_sandbox-certs-client:/certs/client:ro" \
   -e DOCKER_TLS_VERIFY=1 -e DOCKER_CERT_PATH=/certs/client -e WEFT_TEST_ENV_TLS=1 \
-  --entrypoint /test/environment.test "$runner" \
-  -test.run '^TestBoundedBuildRealTLS$' -test.v -test.timeout 6m
+  -e WEFT_TEST_ENV_TLS_ONLINE="$online" --entrypoint sh "$runner" -ec '
+    work=$(mktemp -d)
+    tar -xf - -C "$work"
+    export WEFT_TEST_TLS_OCI_LAYOUT="$work/base"
+    exec "$work/environment.test" -test.run "^TestBoundedBuildRealTLS$" -test.v -test.timeout 6m
+  ' < "$work.tar"

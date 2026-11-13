@@ -32,3 +32,6 @@ web/preview-fixture-dist/
 # Native runtime evaluation reports (make eval-local)
 server/eval-report.md
 server/eval-baseline.md
+
+# Artifacts from older Compose TLS test runners.
+/server/.weft-test-tls.*

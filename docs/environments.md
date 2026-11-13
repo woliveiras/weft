@@ -441,7 +441,10 @@ If the build reports a sandbox daemon build connection error, check daemon
 reachability, Docker Buildx, and access to the Docker client TLS files.
 `scripts/test-environment-build-tls.sh` checks this path over Compose mutual TLS
 using a cached Alpine image as a local OCI layout and cached BuildKit worker
-and egress proxy images. The test does not need registry access.
+and egress proxy images. This default mode requires no registry access.
+Set `WEFT_TEST_ENV_TLS_ONLINE=1` to run the same builds with the production
+Buildx commands and registry access. The online mode can download the
+BuildKit worker and Go base image from Docker Hub.
 
 Reservations survive controller restarts. Build again or Reset the same graph
 to reconcile interrupted workers. A cleanup failure is reported and retains
