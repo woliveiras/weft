@@ -444,7 +444,10 @@ using a cached Alpine image as a local OCI layout and cached BuildKit worker
 and egress proxy images. This default mode requires no registry access.
 Set `WEFT_TEST_ENV_TLS_ONLINE=1` to run the same builds with the production
 Buildx commands and registry access. The online mode can download the
-BuildKit worker and Go base image from Docker Hub.
+BuildKit worker and Go base image from Docker Hub. If Docker Hub redirects
+to a CDN hostname denied by the test preparation proxy, read the hostname
+from the proxy diagnostics in the failed build log and pass it in
+`WEFT_TEST_TLS_REGISTRY_HOSTS` (comma-separated).
 
 Reservations survive controller restarts. Build again or Reset the same graph
 to reconcile interrupted workers. A cleanup failure is reported and retains

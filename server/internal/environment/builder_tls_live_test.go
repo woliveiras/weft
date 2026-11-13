@@ -41,7 +41,12 @@ func TestBoundedBuildRealTLS(t *testing.T) {
 	hosts := []string{"example.com"}
 	if online {
 		base = "golang:1.26-alpine"
-		hosts = []string{"registry-1.docker.io", "auth.docker.io", "production.cloudflare.docker.com", "production.cloudfront.docker.com", "docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com"}
+		hosts = []string{"registry-1.docker.io", "auth.docker.io", "production.cloudflare.docker.com", "production.cloudfront.docker.com"}
+		for _, host := range strings.Split(os.Getenv("WEFT_TEST_TLS_REGISTRY_HOSTS"), ",") {
+			if host = strings.TrimSpace(host); host != "" {
+				hosts = append(hosts, host)
+			}
+		}
 	}
 	budget := &sandboxcapacity.Manager{Store: store, Scope: id, Policy: sandboxcapacity.Policy{MaxActive: 3, TotalMemory: "2g", DefaultMemory: "512m", TotalCPU: "4", DefaultCPU: "1"}}
 	m, err := New(Options{Store: store, Workspaces: fakeWorkspaces{dir: t.TempDir()}, DockerHost: host, EgressImage: proxy, Capacity: budget,
@@ -84,10 +89,17 @@ func TestBoundedBuildRealTLS(t *testing.T) {
 			}
 		}
 		checkBuilder(true)
+		if err := m.docker(ctx, nil, io.Discard, "volume", "create", builderStateVolume(graphID)); err != nil {
+			t.Fatal(err)
+		}
 		if err := m.Reset(ctx, graphID, "test"); err != nil {
 			t.Fatal(err)
 		}
 		checkBuilder(false)
+		out.Reset()
+		if err := m.docker(ctx, nil, &out, "volume", "ls", "-q"); err != nil || slices.Contains(strings.Fields(out.String()), builderStateVolume(graphID)) {
+			t.Fatalf("orphan state volume was not removed: %v", err)
+		}
 	})
 	for _, tc := range []struct {
 		name string
@@ -116,6 +128,9 @@ func TestBoundedBuildRealTLS(t *testing.T) {
 				return image, nil, err
 			})
 			if err != nil {
+				if online {
+					t.Log("Online mode requires registry access. If a Docker Hub redirect host was denied, add the hostname from the preparation proxy diagnostics to WEFT_TEST_TLS_REGISTRY_HOSTS.")
+				}
 				t.Fatalf("bounded TLS build: %v\n%s", err, &log)
 			}
 			expected := []string{"Environment capacity: released"}
@@ -141,6 +156,7 @@ func TestBoundedBuildRealTLS(t *testing.T) {
 				{[]string{"context", "ls", "--format", "{{.Name}}"}, builderEndpointName(g.Metadata.ID)},
 				{[]string{"buildx", "ls", "--format", "{{.Name}}"}, builderName(g.Metadata.ID)},
 				{[]string{"ps", "-a", "--format", "{{.Names}}"}, builderContainer(g.Metadata.ID)},
+				{[]string{"volume", "ls", "-q"}, builderStateVolume(g.Metadata.ID)},
 			} {
 				out.Reset()
 				if err := m.docker(ctx, nil, &out, check.args...); err != nil || slices.Contains(strings.Fields(out.String()), check.name) {
@@ -266,5 +282,28 @@ func TestFixtureManifestSelectsDaemonPlatform(t *testing.T) {
 	}
 	if _, err := fixtureManifest(layout, "linux", "s390x"); err == nil {
 		t.Fatal("expected missing platform error")
+	}
+}
+
+func TestFixtureManifestSelectsNestedDockerSaveIndex(t *testing.T) {
+	layout := t.TempDir()
+	hash := strings.Repeat("a", 64)
+	dir := filepath.Join(layout, "blobs", "sha256")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	root := fmt.Sprintf(`{"manifests":[{"digest":"sha256:%s","mediaType":"application/vnd.oci.image.index.v1+json"}]}`, hash)
+	nested := `{"manifests":[
+		{"digest":"sha256:arm","platform":{"os":"linux","architecture":"arm64"}},
+		{"digest":"sha256:amd","platform":{"os":"linux","architecture":"amd64"}},
+		{"digest":"sha256:attestation","platform":{"os":"unknown","architecture":"unknown"}}
+	]}`
+	for path, body := range map[string]string{filepath.Join(layout, "index.json"): root, filepath.Join(dir, hash): nested} {
+		if err := os.WriteFile(path, []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if digest, err := fixtureManifest(layout, "linux", "amd64"); err != nil || digest != "sha256:amd" {
+		t.Fatalf("manifest = %q, %v", digest, err)
 	}
 }

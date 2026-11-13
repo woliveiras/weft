@@ -34,9 +34,11 @@ docker run --pull=never --rm -i --network "${project}_sandbox" --user 10001:1000
   --tmpfs /var/lib/weft/.docker/contexts:uid=10001,gid=10001,mode=0700 \
   -v "${project}_sandbox-certs-client:/certs/client:ro" \
   -e DOCKER_TLS_VERIFY=1 -e DOCKER_CERT_PATH=/certs/client -e WEFT_TEST_ENV_TLS=1 \
-  -e WEFT_TEST_ENV_TLS_ONLINE="$online" --entrypoint sh "$runner" -ec '
+  -e WEFT_TEST_ENV_TLS_ONLINE="$online" -e WEFT_TEST_TLS_REGISTRY_HOSTS --entrypoint sh "$runner" -ec '
     work=$(mktemp -d)
     tar -xf - -C "$work"
-    export WEFT_TEST_TLS_OCI_LAYOUT="$work/base"
+    if [ "$WEFT_TEST_ENV_TLS_ONLINE" != 1 ]; then
+      export WEFT_TEST_TLS_OCI_LAYOUT="$work/base"
+    fi
     exec "$work/environment.test" -test.run "^TestBoundedBuildRealTLS$" -test.v -test.timeout 6m
   ' < "$work.tar"
