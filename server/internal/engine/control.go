@@ -436,6 +436,13 @@ func (e *Engine) recordGraphAction(ctx context.Context, rec *domain.GraphRecord,
 		}
 	}
 	e.bus.Publish(ctx, domain.NewEvent(ev, id, map[string]any{"action": action, "runId": rec.RunID}).WithActor(actor))
+	if rec.DesiredState == domain.GraphRunning && e.opt.ClearProposalStartBlock != nil {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		defer cancel()
+		if err := e.opt.ClearProposalStartBlock(cleanup, id); err != nil {
+			e.log.WarnContext(ctx, "clear environment proposal start block", "graph", id, "err", err)
+		}
+	}
 	e.Nudge()
 	return nil
 }

@@ -114,7 +114,11 @@ build telemetry. After approval saves the definition, reload graph settings to
 view the saved version and build logs. If a budget blocks the requested
 automatic start, the proposal stays `ready` and clears the start request.
 The proposal API and audit event record `startBlocked: {scope, id}`. Graph
-settings show the budget that blocked the attempt.
+settings show the budget that blocked the attempt. A successful graph start
+or resume clears the displayed block. The controller consumes the automatic
+start request before issuing it, so an interrupted attempt requires a manual
+start. The graph transition audit records a blocked attempt even if saving
+its result on the proposal fails.
 
 For a repository using mise, an example **proposal** might use a Dockerfile that
 installs mise, setup commands `mise install` and the project's lockfile-aware
