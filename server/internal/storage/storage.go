@@ -45,6 +45,8 @@ type Store interface {
 	// GraphRecord is the control state (desired/actual/run id).
 	GetGraphRecord(ctx context.Context, id string) (*domain.GraphRecord, error)
 	PutGraphRecord(ctx context.Context, r *domain.GraphRecord) error
+	// PutGraphRecordIf writes the record only if all setting revisions match.
+	PutGraphRecordIf(ctx context.Context, r *domain.GraphRecord, guards []SettingRevision) error
 	// UpdateGraphState changes observed state only if the complete snapshot still matches.
 	UpdateGraphState(ctx context.Context, expected *domain.GraphRecord, state domain.GraphState) error
 	ListGraphRecords(ctx context.Context) ([]*domain.GraphRecord, error)
@@ -121,12 +123,20 @@ type Store interface {
 	// expectedRevision (0 = the key must not exist yet) and returns the new
 	// revision. A mismatch returns ErrConflict.
 	PutSetting(ctx context.Context, key string, value []byte, expectedRevision int64, by string) (int64, error)
+	// PutSettingIf atomically checks the target revision and any additional guards.
+	PutSettingIf(ctx context.Context, key string, value []byte, expectedRevision int64, by string, guards []SettingRevision) (int64, error)
 	// DeleteSetting removes key when its revision equals expectedRevision.
 	// ErrNotFound if absent, ErrConflict on a revision mismatch.
 	DeleteSetting(ctx context.Context, key string, expectedRevision int64) error
 	// ListSettings returns every setting whose key starts with prefix
 	// (literal, case-sensitive), ordered by key.
 	ListSettings(ctx context.Context, prefix string) ([]*Setting, error)
+}
+
+// SettingRevision pins a setting to a revision. Zero requires an absent key.
+type SettingRevision struct {
+	Key      string
+	Revision int64
 }
 
 // Setting is one stored installation setting.

@@ -173,6 +173,19 @@ func (s *Store) GetGraphRecord(ctx context.Context, id string) (*domain.GraphRec
 }
 
 func (s *Store) PutGraphRecord(ctx context.Context, r *domain.GraphRecord) error {
+	return s.putGraphRecord(ctx, s.db, r)
+}
+
+func (s *Store) PutGraphRecordIf(ctx context.Context, r *domain.GraphRecord, guards []storage.SettingRevision) error {
+	if len(guards) == 0 {
+		return s.PutGraphRecord(ctx, r)
+	}
+	return s.withSettingRevisions(ctx, "", guards, func(tx *sql.Tx) error {
+		return s.putGraphRecord(ctx, tx, r)
+	})
+}
+
+func (s *Store) putGraphRecord(ctx context.Context, db statementExecutor, r *domain.GraphRecord) error {
 	if r == nil || r.ID == "" {
 		return fmt.Errorf("sqlstore: graph record id is required")
 	}
@@ -183,7 +196,7 @@ func (s *Store) PutGraphRecord(ctx context.Context, r *domain.GraphRecord) error
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, s.q(`INSERT INTO graph_records (id, version, desired_state, state, run_id, updated_at, doc) VALUES (?, ?, ?, ?, ?, ?, ?)
+	_, err = db.ExecContext(ctx, s.q(`INSERT INTO graph_records (id, version, desired_state, state, run_id, updated_at, doc) VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET version = excluded.version, desired_state = excluded.desired_state, state = excluded.state,
 		run_id = excluded.run_id, updated_at = excluded.updated_at, doc = excluded.doc`),
 		r.ID, r.Version, string(r.DesiredState), string(r.State), r.RunID, s.ts(r.UpdatedAt), string(doc))

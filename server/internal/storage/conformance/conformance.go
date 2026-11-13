@@ -44,6 +44,7 @@ func Run(t *testing.T, newStore func(t *testing.T) storage.Store) {
 		{"LeaseRace", testLeaseRace},
 		{"Settings", testSettings},
 		{"SettingsRace", testSettingsRace},
+		{"GuardedWrites", testGuardedWrites},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1047,4 +1048,55 @@ func testGraphObservedState(t *testing.T, s storage.Store) {
 	if s.UpdateGraphState(ctx, nil, domain.GraphStopped) == nil {
 		t.Fatal("nil snapshot accepted")
 	}
+}
+
+func testGuardedWrites(t *testing.T, s storage.Store) {
+	ctx := t.Context()
+	rec := &domain.GraphRecord{ID: "guarded-graph", DesiredState: domain.GraphRunning}
+	must(t, s.PutGraphRecord(ctx, rec))
+	key := "test/guard"
+	absent := []storage.SettingRevision{{Key: key, Revision: 0}}
+	_, err := s.PutSettingIf(ctx, "test/target", []byte("initial"), 0, "", absent)
+	must(t, err)
+
+	// Both operations read a snapshot before the competing write completes.
+	resume := make(chan struct{})
+	graphErr := make(chan error, 1)
+	settingErr := make(chan error, 1)
+	go func() {
+		<-resume
+		paused := *rec
+		paused.DesiredState = domain.GraphPaused
+		graphErr <- s.PutGraphRecordIf(ctx, &paused, absent)
+	}()
+	go func() {
+		<-resume
+		_, err := s.PutSettingIf(ctx, "test/target", []byte("stale"), 1, "", absent)
+		settingErr <- err
+	}()
+	revision, err := s.PutSetting(ctx, key, []byte("changed"), 0, "")
+	close(resume)
+	must(t, err)
+	if err := <-graphErr; !errors.Is(err, storage.ErrConflict) {
+		t.Fatalf("stale graph write: %v", err)
+	}
+	if err := <-settingErr; !errors.Is(err, storage.ErrConflict) {
+		t.Fatalf("stale setting write: %v", err)
+	}
+	found, err := s.GetGraphRecord(ctx, rec.ID)
+	must(t, err)
+	if found.DesiredState != domain.GraphRunning {
+		t.Fatalf("stale pause committed: %+v", found)
+	}
+	target, err := s.GetSetting(ctx, "test/target")
+	must(t, err)
+	if target.Revision != 1 || string(target.Value) != "initial" {
+		t.Fatalf("stale setting committed: %+v", target)
+	}
+
+	current := []storage.SettingRevision{{Key: key, Revision: revision}}
+	rec.DesiredState = domain.GraphPaused
+	must(t, s.PutGraphRecordIf(ctx, rec, current))
+	_, err = s.PutSettingIf(ctx, "test/target", []byte("current"), target.Revision, "", current)
+	must(t, err)
 }

@@ -38,6 +38,10 @@ func (s *Store) GetSetting(ctx context.Context, key string) (*storage.Setting, e
 }
 
 func (s *Store) PutSetting(ctx context.Context, key string, value []byte, expectedRevision int64, by string) (int64, error) {
+	return s.PutSettingIf(ctx, key, value, expectedRevision, by, nil)
+}
+
+func (s *Store) PutSettingIf(ctx context.Context, key string, value []byte, expectedRevision int64, by string, guards []storage.SettingRevision) (int64, error) {
 	if key == "" {
 		return 0, fmt.Errorf("fsstore: setting key is required")
 	}
@@ -46,10 +50,10 @@ func (s *Store) PutSetting(ctx context.Context, key string, value []byte, expect
 	if err := s.check(); err != nil {
 		return 0, err
 	}
-	var cur int64
-	if st, ok := s.settings[key]; ok {
-		cur = st.Revision
+	if err := s.checkSettingRevisions(guards); err != nil {
+		return 0, err
 	}
+	cur := s.settingRevision(key)
 	if cur != expectedRevision {
 		if expectedRevision == 0 {
 			return 0, fmt.Errorf("%w: setting %q already exists", storage.ErrConflict, key)
@@ -98,4 +102,21 @@ func (s *Store) ListSettings(ctx context.Context, prefix string) ([]*storage.Set
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 	return out, nil
+}
+
+// checkSettingRevisions runs with the store mutex held.
+func (s *Store) checkSettingRevisions(guards []storage.SettingRevision) error {
+	for _, guard := range guards {
+		if s.settingRevision(guard.Key) != guard.Revision {
+			return fmt.Errorf("%w: setting %q changed", storage.ErrConflict, guard.Key)
+		}
+	}
+	return nil
+}
+
+func (s *Store) settingRevision(key string) int64 {
+	if setting := s.settings[key]; setting != nil {
+		return setting.Revision
+	}
+	return 0
 }

@@ -173,6 +173,10 @@ func (s *Store) GetGraphRecord(ctx context.Context, id string) (*domain.GraphRec
 }
 
 func (s *Store) PutGraphRecord(ctx context.Context, r *domain.GraphRecord) error {
+	return s.PutGraphRecordIf(ctx, r, nil)
+}
+
+func (s *Store) PutGraphRecordIf(ctx context.Context, r *domain.GraphRecord, guards []storage.SettingRevision) error {
 	if r == nil || r.ID == "" {
 		return fmt.Errorf("fsstore: graph record id is required")
 	}
@@ -182,6 +186,9 @@ func (s *Store) PutGraphRecord(ctx context.Context, r *domain.GraphRecord) error
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.check(); err != nil {
+		return err
+	}
+	if err := s.checkSettingRevisions(guards); err != nil {
 		return err
 	}
 	c := clone(r)
