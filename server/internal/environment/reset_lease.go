@@ -18,8 +18,14 @@ func (m *Manager) environmentLeaseConflict(ctx context.Context, graphID string) 
 		return fmt.Errorf("inspect environment lease for graph %s: %w", graphID, err)
 	}
 	for _, lease := range leases {
-		if lease.Key == key && lease.ExpiresAt.After(time.Now()) && strings.HasPrefix(lease.Holder, resetLeaseHolderPrefix) {
+		if lease.Key != key || !lease.ExpiresAt.After(time.Now()) {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(lease.Holder, resetLeaseHolderPrefix):
 			return fmt.Errorf("%w for graph %s", ErrResetRunning, graphID)
+		case strings.HasPrefix(lease.Holder, "environment-recovery_"):
+			return fmt.Errorf("%w for graph %s", ErrEnvironmentRecovering, graphID)
 		}
 	}
 	return fmt.Errorf("%w for graph %s", ErrBuildRunning, graphID)
@@ -59,7 +65,7 @@ func (m *Manager) renewResetLease(ctx context.Context, cancel context.CancelCaus
 	// Fence work before the last known expiry, even if a store call is slow.
 	watchdog := time.AfterFunc(time.Until(acquired.Add(2*ttl/3)), func() { cancel(ErrResetLeaseLost) })
 	defer watchdog.Stop()
-	tick := time.NewTicker(ttl / 3)
+	tick := time.NewTicker(ttl / 6)
 	defer tick.Stop()
 	for {
 		select {
@@ -69,10 +75,9 @@ func (m *Manager) renewResetLease(ctx context.Context, cancel context.CancelCaus
 			started := time.Now()
 			ok, err := m.opt.Store.AcquireLease(ctx, key, holder, ttl)
 			if err != nil {
-				if ctx.Err() == nil {
-					cancel(fmt.Errorf("%w: %v", ErrResetLeaseLost, err))
-				}
-				return
+				// Retry within the watchdog window. The last confirmed
+				// renewal still protects the work from a competing holder.
+				continue
 			}
 			if !ok {
 				cancel(ErrResetLeaseLost)

@@ -152,6 +152,25 @@ func (e *Engine) SaveGraph(ctx context.Context, g *domain.Graph, expectedVersion
 	keepIdentity(authored, g)
 	effective := g
 	g = authored
+	var saved *domain.Graph
+	var record *domain.GraphRecord
+	err = e.WithGraphTransition(ctx, g.Metadata.ID, func(ctx context.Context) error {
+		var err error
+		saved, record, err = e.saveGraph(ctx, g, effective, expectedVersion, actor)
+		return err
+	})
+	return saved, record, err
+}
+
+func (e *Engine) saveGraph(ctx context.Context, g, effective *domain.Graph, expectedVersion int, actor string) (*domain.Graph, *domain.GraphRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	if _, err := e.store.KVGet(ctx, domain.DeferredEnvironmentCleanup, g.Metadata.ID); err == nil {
+		return nil, nil, fmt.Errorf("%w: finish deferred environment cleanup for graph %s", ErrConflict, g.Metadata.ID)
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		return nil, nil, err
+	}
 	_, existsErr := e.store.GetGraph(ctx, g.Metadata.ID, 0)
 	isNew := errors.Is(existsErr, storage.ErrNotFound)
 	now := time.Now().UTC()
@@ -175,6 +194,9 @@ func (e *Engine) SaveGraph(ctx context.Context, g *domain.Graph, expectedVersion
 	}
 	rec.Version = v
 	rec.UpdatedAt = now
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	if err := e.store.PutGraphRecord(ctx, rec); err != nil {
 		return nil, nil, err
 	}
@@ -259,10 +281,13 @@ func (e *Engine) DeleteGraph(ctx context.Context, id, actor string) error {
 	if rec.DesiredState != domain.GraphStopped || (rec.State != domain.GraphStopped && rec.State != "") {
 		return fmt.Errorf("%w: stop the graph before deleting it", ErrConflict)
 	}
+	type brokerGroup struct{ subject, group string }
+	var groups []brokerGroup
+	replicas := e.replicasFor(ctx, g)
 	for i := range g.Spec.Channels {
 		c := &g.Spec.Channels[i]
-		for _, grp := range graph.SubjectGroups(g, c, e.replicasFor(ctx, g)) {
-			_ = e.opt.Broker.DeleteGroup(ctx, subjectOf(g, c), grp)
+		for _, group := range graph.SubjectGroups(g, c, replicas) {
+			groups = append(groups, brokerGroup{subjectOf(g, c), group})
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -271,7 +296,15 @@ func (e *Engine) DeleteGraph(ctx context.Context, id, actor string) error {
 	if err := e.store.DeleteGraph(ctx, id); err != nil {
 		return notFound(err)
 	}
-	e.bus.Publish(ctx, domain.NewEvent(domain.EvGraphDeleted, id, nil).WithActor(actor))
+	// Once graph deletion commits, finish broker cleanup even if the request ends.
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	for _, group := range groups {
+		if err := e.opt.Broker.DeleteGroup(cleanup, group.subject, group.group); err != nil {
+			e.log.Warn("delete graph broker group failed", "graph", id, "subject", group.subject, "err", err)
+		}
+	}
+	e.bus.Publish(cleanup, domain.NewEvent(domain.EvGraphDeleted, id, nil).WithActor(actor))
 	e.Nudge()
 	return nil
 }
@@ -280,16 +313,18 @@ func subjectOf(g *domain.Graph, c *domain.Channel) string { return g.Metadata.ID
 
 // GraphAction is start|stop|pause|resume|kill.
 func (e *Engine) GraphAction(ctx context.Context, id, action, actor string) error {
-	if action == "start" {
-		g, _, err := e.GetGraph(ctx, id, 0)
-		if err != nil {
-			return err
+	return e.WithGraphTransition(ctx, id, func(ctx context.Context) error {
+		if action == "start" {
+			g, _, err := e.GetGraph(ctx, id, 0)
+			if err != nil {
+				return err
+			}
+			if rep := e.preflight(ctx, g, ""); !rep.Valid {
+				return &ValidationError{Report: rep}
+			}
 		}
-		if rep := e.preflight(ctx, g, ""); !rep.Valid {
-			return &ValidationError{Report: rep}
-		}
-	}
-	return e.graphAction(ctx, id, action, actor)
+		return e.graphAction(ctx, id, action, actor)
+	})
 }
 
 func (e *Engine) graphAction(ctx context.Context, id, action, actor string) error {
@@ -345,6 +380,9 @@ func (e *Engine) graphAction(ctx context.Context, id, action, actor string) erro
 		return fmt.Errorf("%w: unknown action %q", ErrInvalid, action)
 	}
 	rec.UpdatedAt = now
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := e.store.PutGraphRecord(ctx, rec); err != nil {
 		return err
 	}
@@ -378,6 +416,12 @@ func (e *Engine) clearNodeStops(ctx context.Context, id string) error {
 
 // NodeAction is start|stop|pause|resume|kill for one node.
 func (e *Engine) NodeAction(ctx context.Context, id, node, action, actor string) error {
+	return e.WithGraphTransition(ctx, id, func(ctx context.Context) error {
+		return e.nodeAction(ctx, id, node, action, actor)
+	})
+}
+
+func (e *Engine) nodeAction(ctx context.Context, id, node, action, actor string) error {
 	g, rec, err := e.GetGraph(ctx, id, 0)
 	if err != nil {
 		return err

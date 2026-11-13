@@ -143,6 +143,9 @@ func (m *Manager) cleanBuildResources(ctx context.Context, id string) error {
 			return err
 		}
 	}
+	if err := m.removeBuilderState(ctx, id); err != nil {
+		return err
+	}
 	var networks bytes.Buffer
 	if err := m.docker(ctx, nil, &networks, "network", "ls", "--filter", "name=^"+preparationNetworkName(id)+"$", "--format", "{{.Name}}"); err != nil {
 		return fmt.Errorf("list preparation networks: %w", err)
@@ -162,9 +165,37 @@ func (m *Manager) removeBuildWorker(ctx context.Context, name string) error {
 	if err := m.docker(ctx, nil, &out, "ps", "-aq", "--filter", "name=^/"+regexp.QuoteMeta(name)+"$"); err != nil {
 		return fmt.Errorf("list build workers: %w", err)
 	}
-	if ids := strings.Fields(out.String()); len(ids) > 0 {
-		if err := m.docker(ctx, nil, io.Discard, append([]string{"rm", "-f"}, ids...)...); err != nil {
-			return fmt.Errorf("remove build worker: %w", err)
+	ids := strings.Fields(out.String())
+	if len(ids) == 0 {
+		return nil
+	}
+	if err := m.docker(ctx, nil, io.Discard, append([]string{"rm", "-f"}, ids...)...); err != nil {
+		return fmt.Errorf("remove build worker: %w", err)
+	}
+	out.Reset()
+	if err := m.docker(ctx, nil, &out, "ps", "-aq", "--filter", "name=^/"+regexp.QuoteMeta(name)+"$"); err != nil {
+		return fmt.Errorf("confirm build worker removal: %w", err)
+	}
+	if strings.TrimSpace(out.String()) != "" {
+		return fmt.Errorf("build worker %s still exists after removal", name)
+	}
+	return nil
+}
+
+func builderStateVolume(id string) string { return builderContainer(id) + "_state" }
+
+func (m *Manager) removeBuilderState(ctx context.Context, id string) error {
+	name := builderStateVolume(id)
+	var out bytes.Buffer
+	if err := m.docker(ctx, nil, &out, "volume", "ls", "-q", "--filter", "name=^"+regexp.QuoteMeta(name)+"$"); err != nil {
+		return fmt.Errorf("list builder state volume: %w", err)
+	}
+	for _, volume := range strings.Fields(out.String()) {
+		if volume == name {
+			if err := m.docker(ctx, nil, io.Discard, "volume", "rm", name); err != nil {
+				return fmt.Errorf("remove builder state volume: %w", err)
+			}
+			break
 		}
 	}
 	return nil
@@ -350,6 +381,8 @@ func (m *Manager) prepareBoundedImage(ctx context.Context, g *domain.Graph, fina
 			// could not clean up its local record.
 			if workerErr := m.removeBuildWorker(cleanup, builderContainer(b.id)); workerErr != nil {
 				err = errors.Join(err, workerErr)
+			} else if volumeErr := m.removeBuilderState(cleanup, b.id); volumeErr != nil {
+				err = errors.Join(err, volumeErr)
 			}
 		} else {
 			fmt.Fprintf(log, "%s removed\n", builderName(b.id))

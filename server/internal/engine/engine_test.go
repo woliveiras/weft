@@ -448,3 +448,33 @@ func TestOnceModeReportsFailedTurns(t *testing.T) {
 		t.Fatalf("log event: %+v", evs)
 	}
 }
+
+type rejectGraphDeletion struct{ storage.Store }
+
+func (s rejectGraphDeletion) DeleteGraph(context.Context, string) error {
+	return context.Canceled
+}
+
+func TestCanceledDeletePreservesPendingBrokerMessages(t *testing.T) {
+	dir := t.TempDir()
+	broker := memory.New()
+	r := newRig(t, rejectGraphDeletion{openStore(t, dir)}, broker, dir, "test")
+	var g domain.Graph
+	if err := yaml.Unmarshal([]byte(pipeline), &g); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.eng.SaveGraph(t.Context(), &g, 0, "test"); err != nil {
+		t.Fatal(err)
+	}
+	r.inject("pipe", "in", "job", map[string]int{"test": 1})
+	if err := r.eng.DeleteGraph(t.Context(), "pipe", "test"); err == nil {
+		t.Fatal("canceled deletion succeeded")
+	}
+	if _, _, err := r.eng.GetGraph(t.Context(), "pipe", 0); err != nil {
+		t.Fatal(err)
+	}
+	stats, err := broker.Stats(t.Context(), "pipe.in", "in")
+	if err != nil || stats.Pending != 1 {
+		t.Fatalf("pending work lost: %+v, %v", stats, err)
+	}
+}

@@ -37,9 +37,33 @@ it('lists draft agents without inventing runtime state and delegates selection a
 it('exposes graph agents and keeps navigation separate from graph actions',async()=>{
  const {GraphList}=await import('./GraphList');
  const open=vi.fn(), configure=vi.fn();
- render(<GraphList graphs={[{graph,record:{state:'running',version:1}} as GraphSummary]} onOpen={open} onAgent={configure} onChanged={()=>{}}/>);
+ render(<GraphList canDelete graphs={[{graph,record:{state:'running',version:1}} as GraphSummary]} onOpen={open} onAgent={configure} onChanged={()=>{}}/>);
  fireEvent.click(screen.getByRole('button',{name:'Configure Draft reviewer'}));
  expect(configure).toHaveBeenCalledWith('g','reviewer');expect(open).not.toHaveBeenCalled();
  fireEvent.click(screen.getByRole('button',{name:'Factory'}));expect(open).toHaveBeenCalledWith('g');
  expect(screen.getByRole('button',{name:'Delete'})).toHaveProperty('disabled',true);
+});
+
+it('shows the cleanup failure and requires administrator confirmation to defer it', async () => {
+ const {GraphList} = await import('./GraphList');
+ const {api, ApiError} = await import('../api/client');
+ const changed = vi.fn();
+ const deleteGraph = vi.spyOn(api, 'deleteGraph')
+   .mockRejectedValueOnce(new ApiError(409, 'Sandbox daemon unavailable', 'environment_cleanup_incomplete'))
+   .mockResolvedValueOnce(undefined);
+ const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+ try {
+   render(<GraphList canDelete graphs={[{graph, record:{state:'stopped', version:1}} as GraphSummary]}
+     onOpen={vi.fn()} onChanged={changed} />);
+   fireEvent.click(screen.getByRole('button', {name:/^Delete$/}));
+   expect((await screen.findByRole('alert')).textContent).toContain('Sandbox daemon unavailable');
+   expect(deleteGraph).toHaveBeenCalledOnce();
+   expect(deleteGraph).toHaveBeenCalledWith('g', false);
+   fireEvent.click(screen.getByRole('button', {name:'Delete and defer cleanup'}));
+   expect(deleteGraph).toHaveBeenLastCalledWith('g', true);
+   await vi.waitFor(() => expect(changed).toHaveBeenCalledOnce());
+ } finally {
+   deleteGraph.mockRestore();
+   confirm.mockRestore();
+ }
 });

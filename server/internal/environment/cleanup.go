@@ -42,8 +42,9 @@ type CleanupItem struct {
 	Error    string       `json:"error,omitempty"`
 }
 type CleanupResult struct {
-	DryRun      bool          `json:"dryRun"`
-	Generations []CleanupItem `json:"generations"`
+	DryRun         bool              `json:"dryRun"`
+	Generations    []CleanupItem     `json:"generations"`
+	DeferredGraphs []DeferredCleanup `json:"deferredGraphs,omitempty"`
 }
 
 func (m *Manager) cleanupDaemon() string {

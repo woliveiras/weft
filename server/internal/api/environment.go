@@ -249,8 +249,9 @@ func (s *Server) cleanupEnvironments(w http.ResponseWriter, r *http.Request) err
 		return engine.ErrNotFound
 	}
 	var body struct {
-		DryRun      *bool    `json:"dryRun"`
-		Generations []string `json:"generations"`
+		DryRun         *bool    `json:"dryRun"`
+		Generations    []string `json:"generations"`
+		DeferredGraphs []string `json:"deferredGraphs"`
 	}
 	d := json.NewDecoder(io.LimitReader(r.Body, 16385))
 	d.DisallowUnknownFields()
@@ -264,12 +265,24 @@ func (s *Server) cleanupEnvironments(w http.ResponseWriter, r *http.Request) err
 	dryRun := body.DryRun == nil || *body.DryRun
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
+	if len(body.DeferredGraphs) != 0 && (dryRun || len(body.Generations) != 0) {
+		return badRequest("deferredGraphs requires dryRun=false and cannot be combined with generations")
+	}
+	if len(body.DeferredGraphs) > 0 {
+		return s.cleanupDeferredGraphs(ctx, w, body.DeferredGraphs)
+	}
 	result, err := s.Environments.CleanupShared(ctx, body.Generations, dryRun, identityFrom(r.Context()).Name)
 	if errors.Is(err, environment.ErrInvalidCleanup) {
 		return badRequest("%v", err)
 	}
 	if err != nil {
 		return err
+	}
+	if dryRun && len(body.Generations) == 0 {
+		result.DeferredGraphs, err = s.Environments.ListDeferredCleanup(ctx)
+		if err != nil {
+			return err
+		}
 	}
 	writeJSON(w, http.StatusOK, result)
 	return nil
@@ -302,5 +315,20 @@ func (s *Server) environmentBlockedHistory(w http.ResponseWriter, r *http.Reques
 		return err
 	}
 	writeJSON(w, http.StatusOK, result)
+	return nil
+}
+
+// Each request selects one graph so a failed retry has an unambiguous result.
+func (s *Server) cleanupDeferredGraphs(ctx context.Context, w http.ResponseWriter, ids []string) error {
+	if len(ids) != 1 {
+		return badRequest("select one deferred graph per cleanup request")
+	}
+	id := ids[0]
+	if err := s.Engine.WithGraphTransition(ctx, id, func(ctx context.Context) error {
+		return s.Environments.RetryDeferredCleanup(ctx, id, identityFrom(ctx).Name)
+	}); err != nil {
+		return err
+	}
+	w.WriteHeader(http.StatusNoContent)
 	return nil
 }

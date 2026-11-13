@@ -300,3 +300,23 @@ func TestBuildWaitsForExecutionCPUBudget(t *testing.T) {
 		t.Fatal("oversized CPU reached Docker")
 	}
 }
+
+func TestWorkerRemovalRequiresConfirmedAbsence(t *testing.T) {
+	h := capacityHarness(t)
+	h.docker.set(t, "containers", "worker-still-present\n")
+	err := h.m.removeBuildWorker(t.Context(), builderContainer("bookaneer"))
+	if err == nil || !strings.Contains(err.Error(), "still exists after removal") {
+		t.Fatalf("worker removal without confirmation: %v", err)
+	}
+}
+
+func TestResetRemovesOnlyGraphBuildxStateVolume(t *testing.T) {
+	h := capacityHarness(t)
+	owned := builderStateVolume("bookaneer")
+	other := builderStateVolume("unrelated")
+	h.docker.set(t, "builder-volumes", owned+"\n"+other+"\n")
+	if err := h.m.Reset(t.Context(), "bookaneer", "test"); err != nil {
+		t.Fatal(err)
+	}
+	assertBuilderFixture(t, h.docker, "builder-volumes", other)
+}

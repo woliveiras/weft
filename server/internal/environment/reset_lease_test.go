@@ -14,9 +14,10 @@ import (
 
 type renewalFailureStore struct {
 	storage.Store
+	remaining int
 }
 
-func (s renewalFailureStore) AcquireLease(ctx context.Context, key, holder string, ttl time.Duration) (bool, error) {
+func (s *renewalFailureStore) AcquireLease(ctx context.Context, key, holder string, ttl time.Duration) (bool, error) {
 	if strings.HasPrefix(holder, resetLeaseHolderPrefix) {
 		leases, err := s.Store.ListLeases(ctx, key)
 		if err != nil {
@@ -24,7 +25,10 @@ func (s renewalFailureStore) AcquireLease(ctx context.Context, key, holder strin
 		}
 		for _, lease := range leases {
 			if lease.Key == key && lease.Holder == holder {
-				return false, errors.New("test store unavailable")
+				if s.remaining != 0 {
+					s.remaining--
+					return false, errors.New("test store unavailable")
+				}
 			}
 		}
 	}
@@ -32,17 +36,18 @@ func (s renewalFailureStore) AcquireLease(ctx context.Context, key, holder strin
 }
 
 func TestResetLeaseRenewalAndLossIntegration(t *testing.T) {
-	for _, lose := range []bool{false, true} {
-		name := "renew"
-		if lose {
-			name = "lose"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		failures int
+	}{
+		{"renew", 0},
+		{"transient", 1},
+		{"lose", -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			h := capacityHarness(t)
 			h.m.resetLeaseTTL = 450 * time.Millisecond
-			if lose {
-				h.m.opt.Store = renewalFailureStore{h.store}
-			}
+			h.m.opt.Store = &renewalFailureStore{Store: h.store, remaining: tc.failures}
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 			g := graphWith(goNodeEnv())
@@ -74,10 +79,10 @@ func TestResetLeaseRenewalAndLossIntegration(t *testing.T) {
 				case <-time.After(10 * time.Millisecond):
 				}
 			}
-			if lose {
+			if tc.failures < 0 {
 				<-done
 				err := resetErr
-				if !errors.Is(err, ErrResetLeaseLost) || !strings.Contains(err.Error(), "test store unavailable") {
+				if !errors.Is(err, ErrResetLeaseLost) {
 					t.Fatalf("reset after renewal error: %v", err)
 				}
 				status, err := h.m.load(ctx, id)
@@ -123,5 +128,45 @@ func TestBuildSavedRejectsDeletedGraph(t *testing.T) {
 	}
 	if calls := h.docker.calls(t); len(calls) != 0 {
 		t.Fatalf("stale graph build touched Docker: %v", calls)
+	}
+}
+
+func TestEnvironmentLeaseDistinguishesLegacyRecoveryAndBuildHolders(t *testing.T) {
+	for _, tc := range []struct {
+		holder string
+		want   error
+	}{
+		{"environment-recovery_legacy", ErrEnvironmentRecovering},
+		{"environment-reset_current", ErrResetRunning},
+		{"weftd", ErrBuildRunning},
+	} {
+		t.Run(tc.holder, func(t *testing.T) {
+			h := capacityHarness(t)
+			key := leasePrefix + "bookaneer"
+			if ok, err := h.store.AcquireLease(t.Context(), key, tc.holder, time.Minute); err != nil || !ok {
+				t.Fatalf("seed lease: %v, %v", ok, err)
+			}
+			if _, err := h.m.Build(t.Context(), graphWith(goNodeEnv()), true, "test"); !errors.Is(err, tc.want) {
+				t.Fatalf("conflict = %v, want %v", err, tc.want)
+			}
+			if err := h.m.Reset(t.Context(), "bookaneer", "test"); !errors.Is(err, tc.want) {
+				t.Fatalf("reset conflict = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+type releaseFailureStore struct{ storage.Store }
+
+func (s releaseFailureStore) KVPut(context.Context, string, string, []byte) error {
+	return errors.New("capacity store unavailable")
+}
+
+func TestResetCapacityStoreFailureIsNotDockerCleanupConflict(t *testing.T) {
+	h := capacityHarness(t)
+	h.m.opt.Capacity.Store = releaseFailureStore{h.store}
+	err := h.m.Reset(t.Context(), "bookaneer", "test")
+	if err == nil || errors.Is(err, ErrResetIncomplete) || !strings.Contains(err.Error(), "capacity store unavailable") {
+		t.Fatalf("capacity storage error = %v", err)
 	}
 }

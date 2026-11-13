@@ -242,7 +242,7 @@ export const api = {
       ...graphBody(g),
       headers: ifMatch ? { 'If-Match': String(ifMatch) } : undefined,
     }),
-  deleteGraph: (id: string) => request<void>(`${V1}/graphs/${enc(id)}`, { method: 'DELETE' }),
+  deleteGraph: (id: string, force = false) => request<void>(`${V1}/graphs/${enc(id)}`, { method: 'DELETE', query: force ? { force: "true" } : undefined }),
   validateGraph: (g: GraphInput) =>
     request<ValidationResult>(`${V1}/graphs/validate`, { method: 'POST', ...graphBody(g) }),
   graphVersions: (id: string) => request<GraphVersion[]>(`${V1}/graphs/${enc(id)}/versions`),
@@ -254,6 +254,7 @@ export const api = {
     request<GraphStatus>(`${V1}/graphs/${enc(id)}/${action}`, { method: 'POST' }),
   status: (id: string) => request<GraphStatus>(`${V1}/graphs/${enc(id)}/status`),
   previewEnvironmentCleanup: () => request<EnvironmentCleanupResult>(`${V1}/environments/cleanup`, { method: 'POST', body: { dryRun: true } }),
+  retryDeferredEnvironmentCleanup: (graph: string) => request<void>(`${V1}/environments/cleanup`, { method: 'POST', body: { dryRun: false, deferredGraphs: [graph] } }),
   cleanupEnvironments: (generations: string[]) => request<EnvironmentCleanupResult>(`${V1}/environments/cleanup`, { method: 'POST', body: { dryRun: false, generations } }),
   environmentProposal: (id: string) => request<EnvironmentProposal | null>(`${V1}/graphs/${enc(id)}/environment/proposal`),
   proposeEnvironment: (id: string, resume: boolean) => request<EnvironmentProposal>(`${V1}/graphs/${enc(id)}/environment/proposal`, { method: 'POST', body: { resume } }),

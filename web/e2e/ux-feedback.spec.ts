@@ -66,3 +66,35 @@ test('failed automatic discovery preserves the connection and supports retry',as
  await page.getByRole('button',{name:'Save MCP connection'}).click();
  await expect(page.getByRole('region',{name:'Connection readiness'})).toContainText('tools discovered');
 });
+
+test('an administrator can keep a graph or confirm deletion after cleanup fails', async ({page}) => {
+ const id = 'delete-deferred-browser';
+ const path = `/api/v1/graphs/${id}`;
+ expect((await page.request.post('/api/v1/graphs', {headers, data:{metadata:{id,name:'Deferred deletion'},spec:{nodes:[{id:'reader',runtime:{kind:'echo'}}]}}})).status()).toBe(201);
+ let forceRequests = 0;
+ await page.route(`**${path}*`, async route => {
+   if (route.request().method() !== 'DELETE') return route.continue();
+   if (new URL(route.request().url()).searchParams.get('force') === 'true') {
+     forceRequests++;
+     return route.continue();
+   }
+   await route.fulfill({status:409, json:{code:'environment_cleanup_incomplete',error:'Sandbox daemon unavailable'}});
+ });
+ await page.addInitScript(() => localStorage.setItem('weftToken','e2e-admin-token'));
+ await page.goto('/#/graphs');
+ const card = page.locator('.graph-card').filter({has:page.getByRole('button',{name:'Deferred deletion',exact:true})});
+ const openDelete = async () => {
+   page.once('dialog', dialog => dialog.accept());
+   await card.getByRole('button', {name:'Delete',exact:true}).click();
+   await expect(page.getByText('Sandbox daemon unavailable')).toBeVisible();
+ };
+ await openDelete();
+ await page.getByRole('button',{name:'Keep graph'}).click();
+ await expect(card).toBeVisible();
+ expect(forceRequests).toBe(0);
+ await openDelete();
+ await page.getByRole('button',{name:'Delete and defer cleanup'}).click();
+ await expect(card).toHaveCount(0);
+ expect(forceRequests).toBe(1);
+ expect((await page.request.get(path,{headers})).status()).toBe(404);
+});

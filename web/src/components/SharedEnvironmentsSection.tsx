@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
-import type { EnvironmentCleanupItem } from '../api/types';
+import type { EnvironmentCleanupItem, EnvironmentCleanupResult } from '../api/types';
 import { Btn, ErrorBox } from './common';
 import { canClean, CLEANUP_LIMIT, cleanupOutcome } from './sharedEnvironmentCleanup';
 
@@ -22,6 +22,7 @@ export function SharedEnvironmentsSection({ canManage }: { canManage: boolean })
 
 function CleanupControls() {
   const [items, setItems] = useState<EnvironmentCleanupItem[]>();
+  const [deferred, setDeferred] = useState<EnvironmentCleanupResult["deferredGraphs"]>();
   const [selected, setSelected] = useState<string[]>([]);
   const [confirmation, setConfirmation] = useState<EnvironmentCleanupItem[]>();
   const [report, setReport] = useState<EnvironmentCleanupItem[]>();
@@ -32,10 +33,12 @@ function CleanupControls() {
 
   async function preview() {
     setItems(undefined);
+    setDeferred(undefined);
     setSelected([]);
     try {
       const result = await api.previewEnvironmentCleanup();
       setItems(result.generations ?? []);
+      setDeferred(result.deferredGraphs);
     } catch (e) {
       setError(previous => [previous, `Preview failed: ${errorMessage(e)}`].filter(Boolean).join(' '));
     }
@@ -72,6 +75,22 @@ function CleanupControls() {
     }
   }
 
+  async function retryDeferred(graph: string) {
+    if (locked.current || !confirm(`Remove the remaining environment resources for “${graph}”?`)) return;
+    locked.current = true;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await api.retryDeferredEnvironmentCleanup(graph);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      await preview();
+      setBusy(false);
+      locked.current = false;
+    }
+  }
+
   return <>
     <p className="muted small">Resources referenced by tasks, builds or containers are retained, including stopped and suspended sandboxes. Reset or replace an environment when it is no longer needed. Historical unregistered resources are not listed.</p>
     <Btn onClick={() => void refresh()} disabled={busy || !!confirmation}>{busy ? 'Checking resources…' : 'Refresh preview'}</Btn>
@@ -80,6 +99,15 @@ function CleanupControls() {
       <h3>Last cleanup result</h3>
       <ul>{report.map(item => <li key={item.id}><code>{item.id}</code>: {cleanupOutcome(item)}</li>)}</ul>
     </div>}
+    {!!deferred?.length && <section aria-label="Deferred graph cleanup">
+      <h3>Deferred graph cleanup</h3>
+      <ul>{deferred.map(item => <li key={item.graph}>
+        <code>{item.graph}</code>{' '}
+        <Btn disabled={busy || !!confirmation} onClick={() => void retryDeferred(item.graph)}>
+          Clean up {item.graph}
+        </Btn>
+      </li>)}</ul>
+    </section>}
     {items && <>
       <p>{items.length} registered generations. Select up to {CLEANUP_LIMIT} unused generations.</p>
       {!items.length && <p>No registered shared resources found.</p>}

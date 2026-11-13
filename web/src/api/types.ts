@@ -806,6 +806,7 @@ export interface EnvironmentCleanupItem {
 export interface EnvironmentCleanupResult {
   dryRun: boolean;
   generations: EnvironmentCleanupItem[];
+  deferredGraphs?: { graph: string; actor: string; since: string }[];
 }
 
 export type EnvironmentNetworkMode = 'none' | 'bridge' | 'egress';

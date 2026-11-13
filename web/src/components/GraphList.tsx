@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { parse } from 'yaml';
-import { api, errorMessage } from '../api/client';
+import { ApiError, api, errorMessage } from '../api/client';
 import type { Graph, GraphAction, GraphSummary } from '../api/types';
 import { Badge, Btn, Empty, ErrorBox, Icon, Modal, StateDot, fmtDateTime } from './common';
 
@@ -25,12 +25,14 @@ spec:
 
 export function GraphList({
   graphs,
+  canDelete = false,
   error,
   onOpen,
   onChanged,
   onAgent,
 }: {
   graphs: GraphSummary[];
+  canDelete?: boolean;
   error?: string;
   onOpen: (id: string) => void;
   onChanged: () => void;
@@ -38,6 +40,8 @@ export function GraphList({
 }) {
   const [creating, setCreating] = useState(false);
   const [actionError, setActionError] = useState<string>();
+  const [deletion, setDeletion] = useState<{ graph: GraphSummary; reason: string }>();
+  const [deleting, setDeleting] = useState(false);
 
   const act = async (id: string, a: GraphAction) => {
     try {
@@ -49,13 +53,24 @@ export function GraphList({
     }
   };
 
-  const del = async (s: GraphSummary) => {
-    if (!confirm(`Delete graph “${s.graph.metadata.name || s.graph.metadata.id}”? Its history stays in the event log.`)) return;
+  const del = async (s: GraphSummary, force = false) => {
+    if (!canDelete || deleting) return;
+    if (!force && !confirm(`Delete graph “${s.graph.metadata.name || s.graph.metadata.id}”? Its history stays in the event log.`)) return;
+    setDeleting(true);
+    setActionError(undefined);
     try {
-      await api.deleteGraph(s.graph.metadata.id);
+      await api.deleteGraph(s.graph.metadata.id, force);
+      setDeletion(undefined);
       onChanged();
     } catch (e) {
-      setActionError(errorMessage(e));
+      if (e instanceof ApiError && e.code === 'environment_cleanup_incomplete') {
+        setDeletion({ graph: s, reason: errorMessage(e) });
+      } else {
+        setDeletion(undefined);
+        setActionError(errorMessage(e));
+      }
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -118,14 +133,27 @@ export function GraphList({
                 <Btn small tone="ghost" onClick={() => onOpen(g.metadata.id)}>
                   Open
                 </Btn>
-                <Btn small tone="ghost" onClick={() => del(s)} disabled={st === 'running'} title="Delete">
+                {canDelete && <Btn small tone="ghost" onClick={() => void del(s)} disabled={st === 'running' || deleting} title="Delete">
                   Delete
-                </Btn>
+                </Btn>}
               </div>
             </article>
           );
         })}
       </div>
+      {canDelete && deletion && (
+        <Modal title={`Delete graph “${deletion.graph.graph.metadata.name || deletion.graph.graph.metadata.id}”?`}
+          onClose={() => { if (!deleting) setDeletion(undefined); }}>
+          <ErrorBox error={deletion.reason} />
+          <p>Deleting now records the remaining environment resources for cleanup in Administration → Shared images and caches.</p>
+          <div className="btn-row">
+            <Btn autoFocus disabled={deleting} onClick={() => setDeletion(undefined)}>Keep graph</Btn>
+            <Btn tone="danger" disabled={deleting} onClick={() => void del(deletion.graph, true)}>
+              {deleting ? 'Deleting…' : 'Delete and defer cleanup'}
+            </Btn>
+          </div>
+        </Modal>
+      )}
       {creating && (
         <CreateDialog
           initial={TEMPLATE}

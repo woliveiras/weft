@@ -366,3 +366,6 @@ type Lease struct {
 func ReplicaKey(graph, node string, replica int) string {
 	return fmt.Sprintf("%s/%s#%d", graph, node, replica)
 }
+
+// DeferredEnvironmentCleanup is the KV namespace for graph cleanup after forced deletion.
+const DeferredEnvironmentCleanup = "environment-deferred-cleanup-v1"

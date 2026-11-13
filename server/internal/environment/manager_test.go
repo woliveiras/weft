@@ -91,7 +91,12 @@ case "$sub" in
   run) echo "setup ran: $*" ;;
   ps) [ -f "$d/containers" ] && cat "$d/containers" ;;
   image-ls) [ -f "$d/images" ] && cat "$d/images" ;;
-  volume-ls) [ -f "$d/volumes" ] && cat "$d/volumes" ;;
+  volume-ls)
+    case "$*" in
+      *buildx_buildkit*) [ ! -f "$d/builder-volumes" ] || cat "$d/builder-volumes" ;;
+      *) [ ! -f "$d/volumes" ] || cat "$d/volumes" ;;
+    esac ;;
+  volume-rm) remove_name "$d/builder-volumes" "$3" ;;
 esac
 exit 0
 `
@@ -457,6 +462,14 @@ func TestInterruptedBuildIsReportedAsFailed(t *testing.T) {
 	v, err := h.m.Get(ctx, graphWith(goNodeEnv()))
 	if err != nil || v.State != StateFailed || !strings.Contains(v.Error, "interrupted") {
 		t.Fatalf("interrupted: %+v %v", v, err)
+	}
+	st, err := h.m.load(ctx, "bookaneer")
+	if err != nil || st.State != StateBuilding {
+		t.Fatalf("read modified stored state: %+v, %v", st, err)
+	}
+	leases, err := h.store.ListLeases(ctx, leasePrefix+"bookaneer")
+	if err != nil || len(leases) != 0 {
+		t.Fatalf("read changed leases: %+v, %v", leases, err)
 	}
 }
 

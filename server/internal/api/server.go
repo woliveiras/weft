@@ -335,8 +335,10 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErr(w, http.StatusBadRequest, "invalid", err.Error(), nil)
 	case errors.Is(err, tools.ErrDenied), errors.Is(err, tools.ErrRejected):
 		writeErr(w, http.StatusForbidden, "forbidden", err.Error(), nil)
-	case errors.Is(err, environment.ErrBuildRunning), errors.Is(err, environment.ErrResetRunning), errors.Is(err, environment.ErrResetLeaseLost), errors.Is(err, environment.ErrResetIncomplete):
+	case errors.Is(err, environment.ErrBuildRunning), errors.Is(err, environment.ErrResetRunning), errors.Is(err, environment.ErrResetLeaseLost), errors.Is(err, environment.ErrEnvironmentRecovering):
 		writeErr(w, http.StatusConflict, "conflict", err.Error(), nil)
+	case errors.Is(err, environment.ErrResetIncomplete):
+		writeErr(w, http.StatusConflict, "environment_cleanup_incomplete", err.Error(), nil)
 	case errors.Is(err, environment.ErrNotDefined), errors.Is(err, environment.ErrInvalidDefinition):
 		writeErr(w, http.StatusBadRequest, "invalid", err.Error(), nil)
 	case errors.Is(err, tools.ErrUnknownTool):
@@ -661,23 +663,21 @@ func (s *Server) updateGraph(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) deleteGraph(w http.ResponseWriter, r *http.Request) error {
 	id := r.PathValue("id")
 	actor := identityFrom(r.Context()).Name
+	force := r.URL.Query().Get("force")
+	if force != "" && force != "true" && force != "false" {
+		return badRequest("force must be true or false")
+	}
 	ctx := r.Context()
+	if err := s.Engine.CheckGraphStopped(ctx, id); err != nil {
+		return err
+	}
 	deleteGraph := func(ctx context.Context) error { return s.Engine.DeleteGraph(ctx, id, actor) }
 	if s.Environments == nil {
-		if err := deleteGraph(ctx); err != nil {
+		if err := s.Engine.WithGraphTransition(ctx, id, deleteGraph); err != nil {
 			return err
 		}
-	} else {
-		_, rec, err := s.Engine.GetGraph(ctx, id, 0)
-		if err != nil {
-			return err
-		}
-		if rec.DesiredState != domain.GraphStopped || (rec.State != domain.GraphStopped && rec.State != "") {
-			return fmt.Errorf("%w: stop the graph before deleting it", engine.ErrConflict)
-		}
-		if err := s.deleteGraphEnvironment(ctx, id, actor, deleteGraph); err != nil {
-			return err
-		}
+	} else if err := s.deleteGraphEnvironment(ctx, id, actor, force == "true", deleteGraph); err != nil {
+		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
@@ -685,17 +685,24 @@ func (s *Server) deleteGraph(w http.ResponseWriter, r *http.Request) error {
 
 // Retry contention briefly, but keep the graph available for an operator retry
 // if cleanup fails or exceeds the request budget.
-func (s *Server) deleteGraphEnvironment(ctx context.Context, id, actor string, deleteGraph func(context.Context) error) error {
+func (s *Server) deleteGraphEnvironment(ctx context.Context, id, actor string, force bool, deleteGraph func(context.Context) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	tick := time.NewTicker(100 * time.Millisecond)
 	defer tick.Stop()
 	for {
-		err := s.Environments.ResetBeforeDelete(ctx, id, actor, deleteGraph)
+		err := s.Engine.WithGraphTransition(ctx, id, func(ctx context.Context) error {
+			if err := s.Engine.CheckGraphStopped(ctx, id); err != nil {
+				return err
+			}
+			return s.Environments.ResetBeforeDelete(ctx, id, actor, force, func(ctx context.Context) error {
+				return s.Engine.CheckGraphStopped(ctx, id)
+			}, deleteGraph)
+		})
 		if errors.Is(err, context.DeadlineExceeded) {
 			return fmt.Errorf("%w: environment cleanup timed out; retry graph deletion", engine.ErrConflict)
 		}
-		if !errors.Is(err, environment.ErrBuildRunning) && !errors.Is(err, environment.ErrResetRunning) {
+		if !errors.Is(err, environment.ErrBuildRunning) && !errors.Is(err, environment.ErrResetRunning) && !errors.Is(err, environment.ErrEnvironmentRecovering) {
 			if errors.Is(err, environment.ErrResetIncomplete) {
 				return fmt.Errorf("%w; retry graph deletion after resolving the environment cleanup failure", err)
 			}

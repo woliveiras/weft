@@ -291,10 +291,21 @@ saved with the graph. These endpoints manage its build; see
 | `POST /api/v1/graphs/{id}/environment/build` | operator | Body `{"force": bool}` (optional). Starts a background build of the saved definition (`202`); an up-to-date environment without `force` is left alone (`200`). `400` without `spec.environment`; `409` while a build or reset holds the environment lease. The error message identifies the operation in progress. |
 | `POST /api/v1/graphs/{id}/environment/reset` | admin | Deletes the environment’s images, cache volumes and build resources. Returns `409` if the graph is running, another instance is building, another reset is active, or cleanup is incomplete. |
 
-`DELETE /api/v1/graphs/{id}` cleans up the environment before deleting the
-stopped graph. It waits up to 30 seconds for contention and cleanup. If cleanup
-fails or cannot finish in time, the graph remains available and the API returns
-a conflict. Resolve the reported problem and retry deletion.
+`DELETE /api/v1/graphs/{id}` (admin) requires the graph to be stopped. It
+cancels a build owned by this controller and waits up to 30 seconds for
+contention and cleanup. Graph and node starts are blocked during deletion
+cleanup. A graph with no environment resource record can be deleted without
+contacting Docker.
+
+If Docker cleanup fails, deletion returns `409` with
+`code: "environment_cleanup_incomplete"` and the reason. The graph remains
+available for retry. Internal and storage failures return `500`.
+An administrator can use `DELETE /api/v1/graphs/{id}?force=true` to defer
+environment cleanup and delete a stopped graph. This operation is audited.
+The shared environment cleanup preview includes `deferredGraphs`. Retry one
+deferred graph by posting `{"dryRun":false,"deferredGraphs":["graph-id"]}`
+to `/api/v1/environments/cleanup` (admin). A successful retry returns `204`.
+The graph ID remains reserved until that cleanup succeeds.
 
 Starting a graph or node whose docker-isolated agents (without an image of
 their own) need an environment that is not ready returns `422` with an issue

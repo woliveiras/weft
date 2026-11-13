@@ -217,7 +217,19 @@ context on disk. Retrying the build refreshes that graph's context, and Reset
 removes the graph’s stale context and Buildx record. Deleting a graph runs the
 same cleanup before removing the graph. If cleanup fails or exceeds the
 request deadline, the graph stays available. Resolve the reported error and
-retry deletion.
+retry deletion, or use the administrator's **Delete and defer cleanup**
+option. Forced deletion records the graph's pending resources in the store.
+Retry them from **Administration → Shared images and caches** when the
+original daemon is available. The graph ID remains reserved until cleanup
+succeeds. Registered shared generations still use their own cleanup checks.
+
+For upgrades, drain environment builds and stop all old controllers before
+starting the new version against the same store and daemon. Build leases
+still use the same graph key. A controller using a unique build holder and
+one using an instance name cannot acquire each other's unexpired lease.
+Controllers using the same legacy instance name can renew each other's
+lease, and older versions do not observe the graph lifecycle lease or
+deferred cleanup records. Mixed-version graph operations are unsupported.
 
 ## Limitations
 

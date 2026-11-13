@@ -203,6 +203,7 @@ function Shell() {
           {route.view === 'graphs' && (
             <GraphList
               graphs={list}
+              canDelete={info.data?.identity?.role === 'admin'}
               error={graphs.error}
               onOpen={(id) => go({ view: 'graph', id, tab: 'canvas' })}
               onAgent={(id, agentId) => go({ view: 'graph', id, tab: 'agent', agentId, agentSection: 'general' })}
