@@ -1,7 +1,10 @@
 package cost_test
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -130,5 +133,55 @@ func TestInterruptLevelStopsARunawayCall(t *testing.T) {
 	r2, _ := b2.Reserve(ctx, cost.Target{Execution: "x1"}, cat(flat), "team", "openai", request(30))
 	if err := r2.Settle(ctx, &llm.ChatResponse{Usage: llm.Usage{InputTokens: 90, OutputTokens: 10}}); err != nil {
 		t.Fatalf("no interrupt level: %v", err)
+	}
+}
+
+type admissionReadFailure struct {
+	storage.Store
+	key string
+	err error
+}
+
+func (s admissionReadFailure) GetSetting(ctx context.Context, key string) (*storage.Setting, error) {
+	if key == s.key {
+		return nil, s.err
+	}
+	return s.Store.GetSetting(ctx, key)
+}
+
+func TestCheckAdmissionUsesEffectiveLimitAndPropagatesLedgerErrors(t *testing.T) {
+	st, budgets := budgetEnv(t, 0)
+	ctx := t.Context()
+	id := cost.MonthlyID("alice", cost.Period(time.Now()))
+	key := cost.BudgetPrefix + cost.User + "/" + id
+	raw := []byte(fmt.Sprintf(`{"scope":"user","id":%q,"limit":20,"compacted":8,"entries":{"pending":{"amount":2}}}`, id))
+	rev, err := st.PutSetting(ctx, key, raw, 0, "fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	setLimit := func(limit int64) {
+		t.Helper()
+		if _, err := budgets.SetDefinitions(ctx, []cost.Definition{{Scope: cost.User, ID: "alice", LimitMicros: limit}}, "admin", 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setLimit(10)
+	target := cost.Target{User: "alice"}
+	var reached *cost.ReachedError
+	if err := budgets.CheckAdmission(ctx, target); !errors.As(err, &reached) ||
+		reached.ID != id || reached.View.Limit != 10 || reached.View.Remaining != 0 {
+		t.Fatalf("expected the reached monthly ledger: %+v %v", reached, err)
+	}
+	setLimit(11)
+	if err := budgets.CheckAdmission(ctx, target); err != nil {
+		t.Fatalf("expected headroom: %v", err)
+	}
+	if row, err := st.GetSetting(ctx, key); err != nil || row.Revision != rev || !bytes.Equal(row.Value, raw) {
+		t.Fatalf("admission changed ledger: %+v %v", row, err)
+	}
+	unavailable := errors.New("ledger unavailable")
+	budgets.Store = admissionReadFailure{Store: st, key: key, err: unavailable}
+	if err := budgets.CheckAdmission(ctx, target); !errors.Is(err, unavailable) {
+		t.Fatalf("expected dependency failure: %v", err)
 	}
 }
