@@ -3,6 +3,8 @@ package engine_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -476,5 +478,78 @@ func TestCanceledDeletePreservesPendingBrokerMessages(t *testing.T) {
 	stats, err := broker.Stats(t.Context(), "pipe.in", "in")
 	if err != nil || stats.Pending != 1 {
 		t.Fatalf("pending work lost: %+v, %v", stats, err)
+	}
+}
+
+type unavailableDeleteBroker struct {
+	queue.Broker
+	unavailable bool
+}
+
+func (b *unavailableDeleteBroker) DeleteGroup(ctx context.Context, subject, group string) error {
+	if b.unavailable {
+		return fmt.Errorf("broker unavailable")
+	}
+	return b.Broker.DeleteGroup(ctx, subject, group)
+}
+
+func TestGraphIDReuseWaitsForBrokerCleanup(t *testing.T) {
+	dir := t.TempDir()
+	broker := &unavailableDeleteBroker{Broker: memory.New()}
+	r := newRig(t, openStore(t, dir), broker, dir, "test")
+	var g domain.Graph
+	if err := yaml.Unmarshal([]byte(pipeline), &g); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.eng.SaveGraph(t.Context(), &g, 0, "test"); err != nil {
+		t.Fatal(err)
+	}
+	r.inject("pipe", "in", "job", map[string]int{"test": 1})
+	broker.unavailable = true
+	if err := r.eng.DeleteGraph(t.Context(), "pipe", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.eng.SaveGraph(t.Context(), &g, 0, "test"); !errors.Is(err, engine.ErrConflict) {
+		t.Fatalf("recreate with pending broker cleanup: %v", err)
+	}
+	broker.unavailable = false
+	if _, _, err := r.eng.SaveGraph(t.Context(), &g, 0, "test"); err != nil {
+		t.Fatal(err)
+	}
+	stats, err := broker.Stats(t.Context(), "pipe.in", "in")
+	if err != nil || stats.Pending != 0 {
+		t.Fatalf("recreated graph inherited pending work: %+v, %v", stats, err)
+	}
+}
+
+func TestStopWaitsForConcurrentGraphTransition(t *testing.T) {
+	dir := t.TempDir()
+	r := newRig(t, openStore(t, dir), memory.New(), dir, "test")
+	r.deploy(pipeline)
+	key := "graph-transition/pipe"
+	if ok, err := r.store.AcquireLease(t.Context(), key, "test-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("hold graph transition: %t %v", ok, err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- r.eng.GraphAction(t.Context(), "pipe", "stop", "test") }()
+	select {
+	case err := <-done:
+		t.Fatalf("stop did not wait for lease: %v", err)
+	case <-time.After(150 * time.Millisecond):
+	}
+	if err := r.store.ReleaseLease(t.Context(), key, "test-holder"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("stop did not finish")
+	}
+	rec, err := r.store.GetGraphRecord(t.Context(), "pipe")
+	if err != nil || rec.DesiredState != domain.GraphStopped {
+		t.Fatalf("graph after stop: %+v, %v", rec, err)
 	}
 }

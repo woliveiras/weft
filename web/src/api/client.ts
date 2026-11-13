@@ -242,7 +242,9 @@ export const api = {
       ...graphBody(g),
       headers: ifMatch ? { 'If-Match': String(ifMatch) } : undefined,
     }),
-  deleteGraph: (id: string, force = false) => request<void>(`${V1}/graphs/${enc(id)}`, { method: 'DELETE', query: force ? { force: "true" } : undefined }),
+  deleteGraph: (id: string, force = false, reason?: string) => request<void>(`${V1}/graphs/${enc(id)}`, {
+    method: 'DELETE', query: force ? { force: 'true' } : undefined, body: force && reason ? { reason } : undefined,
+  }),
   validateGraph: (g: GraphInput) =>
     request<ValidationResult>(`${V1}/graphs/validate`, { method: 'POST', ...graphBody(g) }),
   graphVersions: (id: string) => request<GraphVersion[]>(`${V1}/graphs/${enc(id)}/versions`),
@@ -254,6 +256,7 @@ export const api = {
     request<GraphStatus>(`${V1}/graphs/${enc(id)}/${action}`, { method: 'POST' }),
   status: (id: string) => request<GraphStatus>(`${V1}/graphs/${enc(id)}/status`),
   previewEnvironmentCleanup: () => request<EnvironmentCleanupResult>(`${V1}/environments/cleanup`, { method: 'POST', body: { dryRun: true } }),
+  abandonDeferredEnvironmentCleanup: (graph: string, reason: string) => request<void>(`${V1}/environments/cleanup`, { method: 'POST', body: { dryRun: false, abandonDeferred: { graph, reason } } }),
   retryDeferredEnvironmentCleanup: (graph: string) => request<void>(`${V1}/environments/cleanup`, { method: 'POST', body: { dryRun: false, deferredGraphs: [graph] } }),
   cleanupEnvironments: (generations: string[]) => request<EnvironmentCleanupResult>(`${V1}/environments/cleanup`, { method: 'POST', body: { dryRun: false, generations } }),
   environmentProposal: (id: string) => request<EnvironmentProposal | null>(`${V1}/graphs/${enc(id)}/environment/proposal`),
@@ -339,7 +342,7 @@ export const api = {
   budgetLedgers: () => request<BudgetView[]>(`${V1}/cost/ledgers`),
   budget: (scope: string, id: string) => request<BudgetView>(`${V1}/cost/budgets/${enc(scope)}/${enc(id)}`),
   raiseBudget: (scope: string, id: string, limitMicros: number) =>
-    request<BudgetView>(`${V1}/cost/budgets/${enc(scope)}/${enc(id)}/raise`, { method: 'POST', body: { limitMicros } }),
+    request<BudgetView & { notResumed?: string[] }>(`${V1}/cost/budgets/${enc(scope)}/${enc(id)}/raise`, { method: 'POST', body: { limitMicros } }),
   budgetPreview: (workflow: string, project?: string) =>
     request<{ taskRunBudgetMicros: number; currency: string; budgets: BudgetView[] }>(`${V1}/cost/budgets/preview`, { query: { workflow, project: project ?? '' } }),
   spend: (graph?: string) => request<SpendReport>(`${V1}/cost/spend`, { query: graph ? { graph } : undefined }),

@@ -220,8 +220,14 @@ request deadline, the graph stays available. Resolve the reported error and
 retry deletion, or use the administrator's **Delete and defer cleanup**
 option. Forced deletion records the graph's pending resources in the store.
 Retry them from **Administration → Shared images and caches** when the
-original daemon is available. The graph ID remains reserved until cleanup
-succeeds. Registered shared generations still use their own cleanup checks.
+original daemon is available. The daemon check protects identically named
+resources on another daemon. If the original daemon was retired or the
+resources are already gone, select **Abandon cleanup** and enter a reason to
+release the ID. The audit lists the names and selectors that may still need
+manual cleanup. If the graph still exists after an interrupted forced
+deletion, finish the deletion or select **Cancel reservation** to keep the
+graph and its environment. Registered shared generations use their own
+cleanup checks.
 
 For upgrades, drain environment builds and stop all old controllers before
 starting the new version against the same store and daemon. Build leases

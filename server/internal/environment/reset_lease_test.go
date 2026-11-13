@@ -1,14 +1,17 @@
 package environment
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
@@ -46,6 +49,8 @@ func TestResetLeaseRenewalAndLossIntegration(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := capacityHarness(t)
+			var log bytes.Buffer
+			h.m.opt.Log = slog.New(slog.NewTextHandler(&log, nil))
 			h.m.resetLeaseTTL = 450 * time.Millisecond
 			h.m.opt.Store = &renewalFailureStore{Store: h.store, remaining: tc.failures}
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -62,6 +67,17 @@ func TestResetLeaseRenewalAndLossIntegration(t *testing.T) {
 				defer close(done)
 				resetErr = h.m.Reset(ctx, id, "test")
 			}()
+			assertRenewalWarning := func() {
+				t.Helper()
+				want := 0
+				if tc.failures != 0 {
+					want = 1
+				}
+				if count := strings.Count(log.String(), "environment reset lease renewal failed"); count != want ||
+					(want == 1 && !strings.Contains(log.String(), "graph="+id)) {
+					t.Fatalf("expected %d renewal warnings for %s, got %s", want, id, log.String())
+				}
+			}
 			defer func() {
 				cancel()
 				select {
@@ -81,6 +97,7 @@ func TestResetLeaseRenewalAndLossIntegration(t *testing.T) {
 			}
 			if tc.failures < 0 {
 				<-done
+				assertRenewalWarning()
 				err := resetErr
 				if !errors.Is(err, ErrResetLeaseLost) {
 					t.Fatalf("reset after renewal error: %v", err)
@@ -107,6 +124,7 @@ func TestResetLeaseRenewalAndLossIntegration(t *testing.T) {
 				t.Fatal(err)
 			}
 			<-done
+			assertRenewalWarning()
 			if resetErr != nil {
 				t.Fatal(resetErr)
 			}
@@ -168,5 +186,61 @@ func TestResetCapacityStoreFailureIsNotDockerCleanupConflict(t *testing.T) {
 	err := h.m.Reset(t.Context(), "bookaneer", "test")
 	if err == nil || errors.Is(err, ErrResetIncomplete) || !strings.Contains(err.Error(), "capacity store unavailable") {
 		t.Fatalf("capacity storage error = %v", err)
+	}
+}
+
+func TestForcedDeletionFailureRollsBackReservation(t *testing.T) {
+	h := capacityHarness(t)
+	ctx := t.Context()
+	g := graphWith(goNodeEnv())
+	id := g.Metadata.ID
+	if _, err := h.store.SaveGraph(ctx, g, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.m.save(ctx, &Status{Graph: id, State: StateReady}); err != nil {
+		t.Fatal(err)
+	}
+	injected := errors.New("delete failed")
+	for _, failure := range []error{injected, context.DeadlineExceeded} {
+		err := h.m.ResetBeforeDelete(ctx, id, "admin", true, "Daemon unavailable", func(context.Context) error { return nil }, func(context.Context) error { return failure })
+		if !errors.Is(err, failure) {
+			t.Fatalf("delete error: %v", err)
+		}
+		if _, err := h.store.KVGet(ctx, domain.DeferredEnvironmentCleanup, id); !errors.Is(err, storage.ErrNotFound) {
+			t.Fatalf("reservation still present: %v", err)
+		}
+	}
+	events, err := h.store.ListEvents(ctx, storage.EventFilter{GraphID: id, Types: []domain.EventType{"environment.graph_delete_force_started", "environment.graph_delete_forced"}})
+	if err != nil || len(events) != 4 {
+		t.Fatalf("attempt and result audit: %v, %v", events, err)
+	}
+	for _, event := range events {
+		if event.Type == "environment.graph_delete_forced" && !strings.Contains(string(event.Data), `"outcome":"failed"`) {
+			t.Fatalf("unexpected result: %s", event.Data)
+		}
+	}
+}
+
+func TestRecoveryPersistsLastObservedBuildTime(t *testing.T) {
+	h := setup(t)
+	ctx := t.Context()
+	g := graphWith(goNodeEnv())
+	id := g.Metadata.ID
+	started, progress := time.Now().UTC().Add(-2*time.Minute), time.Now().UTC().Add(-time.Minute)
+	if err := h.m.save(ctx, &Status{Graph: id, State: StateBuilding, StartedAt: &started, LastProgressAt: &progress}); err != nil {
+		t.Fatal(err)
+	}
+	view, err := h.m.Get(ctx, g)
+	if err != nil || view.State != StateFailed || view.FinishedAt == nil || !view.FinishedAt.Equal(progress) {
+		t.Fatalf("interrupted view: %+v, %v", view, err)
+	}
+	if st, err := h.m.load(ctx, id); err != nil || st.State != StateBuilding {
+		t.Fatalf("GET changed state: %+v, %v", st, err)
+	}
+	if err := h.m.recoverBuilds(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := h.m.load(ctx, id); err != nil || st.State != StateFailed || st.FinishedAt == nil || !st.FinishedAt.Equal(progress) {
+		t.Fatalf("persisted recovery: %+v, %v", st, err)
 	}
 }

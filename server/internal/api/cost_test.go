@@ -61,6 +61,15 @@ func TestPriceCatalogueThroughAPI(t *testing.T) {
 // A task run that reaches its monetary budget is paused before the model is
 // called; only a person can raise the budget, which resumes the run.
 func TestTaskRunBudgetPausesAndAHumanRaiseResumes(t *testing.T) {
+	testBudgetRaise(t, false)
+}
+
+func TestBudgetRaiseReportsGraphStillPausedAfterLeaseWait(t *testing.T) {
+	testBudgetRaise(t, true)
+}
+
+func testBudgetRaise(t *testing.T, blocked bool) {
+	t.Helper()
 	srv, a := setupApp(t, nil)
 	nativeGraph := `{"metadata":{"id":"priced-fixture","name":"Priced fixture"},"spec":{"nodes":[{"id":"reader","prompt":"Summarise the request in one line.","runtime":{"kind":"native"},"model":{"provider":"mock"},"loop":{"mode":"once"},"tools":[]}]}}`
 	if c, _, b := rawCall(t, "POST", srv.URL+"/api/v1/graphs", adminTok, nativeGraph, nil); c != 201 {
@@ -92,6 +101,7 @@ func TestTaskRunBudgetPausesAndAHumanRaiseResumes(t *testing.T) {
 		LimitMicros, ChargedMicros, ReservedMicros int64
 		Reached, Paused                            bool
 		RaisedBy                                   string
+		NotResumed                                 []string
 	}
 	var v view
 	waitFor(t, 10*time.Second, "budget reached and run paused", func() bool {
@@ -120,11 +130,27 @@ func TestTaskRunBudgetPausesAndAHumanRaiseResumes(t *testing.T) {
 	if c := call(t, srv, "POST", "/api/v1/cost/budgets/run/nope/raise", adminTok, "application/json", `{"limitMicros":5}`, nil); c != 404 {
 		t.Fatalf("missing budget: %d", c)
 	}
+	if blocked {
+		key := "graph-transition/" + gid
+		if ok, err := a.Store.AcquireLease(t.Context(), key, "test-transition", time.Minute); err != nil || !ok {
+			t.Fatalf("hold graph transition: %t %v", ok, err)
+		}
+		defer a.Store.ReleaseLease(t.Context(), key, "test-transition")
+	}
 	if c := call(t, srv, "POST", "/api/v1/cost/budgets/run/"+gid+"/raise", adminTok, "application/json", `{"limitMicros":10000000}`, &v); c != 200 || v.Reached || v.Paused || v.LimitMicros != 10_000_000 || v.RaisedBy != "admin" {
 		t.Fatalf("raise: %d %+v", c, v)
 	}
-	if _, rec, err := a.Engine.GetGraph(t.Context(), gid, 0); err != nil || rec.DesiredState != domain.GraphRunning {
-		t.Fatalf("raise must resume the run: %+v %v", rec, err)
+	want := domain.GraphRunning
+	if blocked {
+		want = domain.GraphPaused
+		if len(v.NotResumed) != 1 || v.NotResumed[0] != gid {
+			t.Fatalf("blocked graph missing from response: %+v", v)
+		}
+	} else if len(v.NotResumed) != 0 {
+		t.Fatalf("unexpected resume failure: %+v", v)
+	}
+	if _, rec, err := a.Engine.GetGraph(t.Context(), gid, 0); err != nil || rec.DesiredState != want {
+		t.Fatalf("state after raise: %+v %v", rec, err)
 	}
 	if evs, _ := a.Store.ListEvents(t.Context(), storage.EventFilter{GraphID: gid, Types: []domain.EventType{domain.EvBudgetRaised}}); len(evs) != 1 || evs[0].Actor != "admin" {
 		t.Fatalf("budget.raised audit: %+v", evs)

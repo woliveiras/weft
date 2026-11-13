@@ -51,7 +51,7 @@ func (t *turnEnv) pauseForBudget(ctx context.Context, scope, id string) error {
 	e := t.gr.e
 	graph := t.gr.g.Metadata.ID
 	pause := context.WithoutCancel(ctx)
-	if err := e.graphAction(pause, graph, "pause", "system:budget"); err != nil && !errors.Is(err, ErrConflict) {
+	if err := e.BudgetGraphAction(pause, graph, "pause", "system:budget"); err != nil {
 		return err
 	}
 	return (cost.Budgets{Store: e.store, Bus: e.bus}).MarkPaused(pause, scope, id, graph)

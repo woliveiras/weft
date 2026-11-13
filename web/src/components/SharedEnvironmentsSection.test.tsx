@@ -115,3 +115,24 @@ describe('shared resource cleanup API integration', () => {
     await screen.findByText(/: Removed/);
   });
 });
+
+it('shows interrupted deletion and lets an admin release a reservation with an audit reason', async () => {
+  const graph = { graph: 'factory', actor: 'admin-one', since: '2026-11-13T10:00:00Z', reason: 'Cleanup was deferred', graphExists: true, daemonMatches: false };
+  const backend = fakeApi({ [path]: ({ body }) => (body as { dryRun: boolean }).dryRun
+    ? { dryRun: true, generations: [], deferredGraphs: [graph] }
+    : undefined });
+  render(<SharedEnvironmentsSection canManage />);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'Refresh preview' }));
+  expect(await screen.findByText(/Requested by admin-one/)).toBeTruthy();
+  expect(screen.getByText(graph.reason)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Finish deletion of factory' })).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Cancel reservation for factory' }));
+  const release = screen.getByRole('button', { name: 'Release reservation' }) as HTMLButtonElement;
+  expect(release.disabled).toBe(true);
+  await user.type(screen.getByRole('textbox', { name: 'Reason' }), 'Keep the original graph');
+  await user.click(release);
+  expect(backend.calls[1]?.body).toEqual({
+    dryRun: false, abandonDeferred: { graph: 'factory', reason: 'Keep the original graph' },
+  });
+});

@@ -335,7 +335,7 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErr(w, http.StatusBadRequest, "invalid", err.Error(), nil)
 	case errors.Is(err, tools.ErrDenied), errors.Is(err, tools.ErrRejected):
 		writeErr(w, http.StatusForbidden, "forbidden", err.Error(), nil)
-	case errors.Is(err, environment.ErrBuildRunning), errors.Is(err, environment.ErrResetRunning), errors.Is(err, environment.ErrResetLeaseLost), errors.Is(err, environment.ErrEnvironmentRecovering):
+	case errors.Is(err, environment.ErrBuildRunning), errors.Is(err, environment.ErrResetRunning), errors.Is(err, environment.ErrResetLeaseLost), errors.Is(err, environment.ErrEnvironmentRecovering), errors.Is(err, environment.ErrDeferredDeletion):
 		writeErr(w, http.StatusConflict, "conflict", err.Error(), nil)
 	case errors.Is(err, environment.ErrResetIncomplete):
 		writeErr(w, http.StatusConflict, "environment_cleanup_incomplete", err.Error(), nil)
@@ -667,6 +667,24 @@ func (s *Server) deleteGraph(w http.ResponseWriter, r *http.Request) error {
 	if force != "" && force != "true" && force != "false" {
 		return badRequest("force must be true or false")
 	}
+	var decision struct {
+		Reason string `json:"reason"`
+	}
+	if force == "true" && r.Body != nil {
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&decision); err != nil && !errors.Is(err, io.EOF) {
+			return badRequest("expected an optional deletion reason")
+		}
+		var extra any
+		if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+			return badRequest("expected one deletion request")
+		}
+		decision.Reason = strings.TrimSpace(decision.Reason)
+		if len([]rune(decision.Reason)) > 500 {
+			return badRequest("deletion reason cannot exceed 500 characters")
+		}
+	}
 	ctx := r.Context()
 	if err := s.Engine.CheckGraphStopped(ctx, id); err != nil {
 		return err
@@ -676,7 +694,7 @@ func (s *Server) deleteGraph(w http.ResponseWriter, r *http.Request) error {
 		if err := s.Engine.WithGraphTransition(ctx, id, deleteGraph); err != nil {
 			return err
 		}
-	} else if err := s.deleteGraphEnvironment(ctx, id, actor, force == "true", deleteGraph); err != nil {
+	} else if err := s.deleteGraphEnvironment(ctx, id, actor, force == "true", decision.Reason, deleteGraph); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -685,7 +703,7 @@ func (s *Server) deleteGraph(w http.ResponseWriter, r *http.Request) error {
 
 // Retry contention briefly, but keep the graph available for an operator retry
 // if cleanup fails or exceeds the request budget.
-func (s *Server) deleteGraphEnvironment(ctx context.Context, id, actor string, force bool, deleteGraph func(context.Context) error) error {
+func (s *Server) deleteGraphEnvironment(ctx context.Context, id, actor string, force bool, reason string, deleteGraph func(context.Context) error) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	tick := time.NewTicker(100 * time.Millisecond)
@@ -695,12 +713,12 @@ func (s *Server) deleteGraphEnvironment(ctx context.Context, id, actor string, f
 			if err := s.Engine.CheckGraphStopped(ctx, id); err != nil {
 				return err
 			}
-			return s.Environments.ResetBeforeDelete(ctx, id, actor, force, func(ctx context.Context) error {
+			return s.Environments.ResetBeforeDelete(ctx, id, actor, force, reason, func(ctx context.Context) error {
 				return s.Engine.CheckGraphStopped(ctx, id)
 			}, deleteGraph)
 		})
 		if errors.Is(err, context.DeadlineExceeded) {
-			return fmt.Errorf("%w: environment cleanup timed out; retry graph deletion", engine.ErrConflict)
+			return fmt.Errorf("%w: timed out waiting for graph deletion to finish; retry after the active operation ends", engine.ErrConflict)
 		}
 		if !errors.Is(err, environment.ErrBuildRunning) && !errors.Is(err, environment.ErrResetRunning) && !errors.Is(err, environment.ErrEnvironmentRecovering) {
 			if errors.Is(err, environment.ErrResetIncomplete) {

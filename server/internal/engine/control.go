@@ -166,13 +166,19 @@ func (e *Engine) saveGraph(ctx context.Context, g, effective *domain.Graph, expe
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
-	if _, err := e.store.KVGet(ctx, domain.DeferredEnvironmentCleanup, g.Metadata.ID); err == nil {
-		return nil, nil, fmt.Errorf("%w: finish deferred environment cleanup for graph %s", ErrConflict, g.Metadata.ID)
-	} else if !errors.Is(err, storage.ErrNotFound) {
+	if err := e.checkDeferredDeletion(ctx, g.Metadata.ID); err != nil {
 		return nil, nil, err
 	}
 	_, existsErr := e.store.GetGraph(ctx, g.Metadata.ID, 0)
 	isNew := errors.Is(existsErr, storage.ErrNotFound)
+	if existsErr != nil && !isNew {
+		return nil, nil, existsErr
+	}
+	if isNew {
+		if err := e.retryBrokerCleanup(ctx, g.Metadata.ID); err != nil {
+			return nil, nil, err
+		}
+	}
 	now := time.Now().UTC()
 	if isNew {
 		g.Metadata.CreatedAt = now
@@ -281,7 +287,6 @@ func (e *Engine) DeleteGraph(ctx context.Context, id, actor string) error {
 	if rec.DesiredState != domain.GraphStopped || (rec.State != domain.GraphStopped && rec.State != "") {
 		return fmt.Errorf("%w: stop the graph before deleting it", ErrConflict)
 	}
-	type brokerGroup struct{ subject, group string }
 	var groups []brokerGroup
 	replicas := e.replicasFor(ctx, g)
 	for i := range g.Spec.Channels {
@@ -293,16 +298,25 @@ func (e *Engine) DeleteGraph(ctx context.Context, id, actor string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if len(groups) != 0 {
+		data, err := json.Marshal(groups)
+		if err != nil {
+			return err
+		}
+		if err := e.store.KVPut(ctx, brokerCleanupNamespace, id, data); err != nil {
+			return fmt.Errorf("record pending broker cleanup: %w", err)
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := e.store.DeleteGraph(ctx, id); err != nil {
 		return notFound(err)
 	}
-	// Once graph deletion commits, finish broker cleanup even if the request ends.
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	for _, group := range groups {
-		if err := e.opt.Broker.DeleteGroup(cleanup, group.subject, group.group); err != nil {
-			e.log.Warn("delete graph broker group failed", "graph", id, "subject", group.subject, "err", err)
-		}
+	if err := e.retryBrokerCleanup(cleanup, id); err != nil {
+		e.log.Warn("graph broker cleanup deferred", "graph", id, "err", err)
 	}
 	e.bus.Publish(cleanup, domain.NewEvent(domain.EvGraphDeleted, id, nil).WithActor(actor))
 	e.Nudge()
@@ -313,7 +327,12 @@ func subjectOf(g *domain.Graph, c *domain.Channel) string { return g.Metadata.ID
 
 // GraphAction is start|stop|pause|resume|kill.
 func (e *Engine) GraphAction(ctx context.Context, id, action, actor string) error {
-	return e.WithGraphTransition(ctx, id, func(ctx context.Context) error {
+	return e.withGraphActionTransition(ctx, id, action, func(ctx context.Context) error {
+		if action == "start" || action == "resume" {
+			if err := e.checkDeferredDeletion(ctx, id); err != nil {
+				return err
+			}
+		}
 		if action == "start" {
 			g, _, err := e.GetGraph(ctx, id, 0)
 			if err != nil {
@@ -416,7 +435,12 @@ func (e *Engine) clearNodeStops(ctx context.Context, id string) error {
 
 // NodeAction is start|stop|pause|resume|kill for one node.
 func (e *Engine) NodeAction(ctx context.Context, id, node, action, actor string) error {
-	return e.WithGraphTransition(ctx, id, func(ctx context.Context) error {
+	return e.withGraphActionTransition(ctx, id, action, func(ctx context.Context) error {
+		if action == "start" || action == "resume" {
+			if err := e.checkDeferredDeletion(ctx, id); err != nil {
+				return err
+			}
+		}
 		return e.nodeAction(ctx, id, node, action, actor)
 	})
 }

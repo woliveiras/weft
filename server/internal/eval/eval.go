@@ -10,6 +10,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/app"
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
@@ -149,7 +151,13 @@ func RunWorkflow(ctx context.Context, a *app.App, workspaces string, w Workflow,
 	start := time.Now()
 	defer func() { res.Duration = time.Since(start) }()
 	id := fmt.Sprintf("eval-%s-%d", c.ID, n)
-	defer func() { _ = a.Engine.GraphAction(context.WithoutCancel(ctx), id, "kill", "eval") }()
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if err := a.Engine.GraphAction(cleanup, id, "kill", "eval"); err != nil && !errors.Is(err, engine.ErrNotFound) {
+			res.Error = strings.TrimPrefix(res.Error+"; stop evaluation graph: "+err.Error(), "; ")
+		}
+	}()
 	var dir string
 	var err error
 	if w == Factory {

@@ -41,6 +41,7 @@ export function GraphList({
   const [creating, setCreating] = useState(false);
   const [actionError, setActionError] = useState<string>();
   const [deletion, setDeletion] = useState<{ graph: GraphSummary; reason: string }>();
+  const [deletionReason, setDeletionReason] = useState('');
   const [deleting, setDeleting] = useState(false);
 
   const act = async (id: string, a: GraphAction) => {
@@ -59,11 +60,16 @@ export function GraphList({
     setDeleting(true);
     setActionError(undefined);
     try {
-      await api.deleteGraph(s.graph.metadata.id, force);
+      if (force && deletionReason.trim()) {
+        await api.deleteGraph(s.graph.metadata.id, true, deletionReason.trim());
+      } else {
+        await api.deleteGraph(s.graph.metadata.id, force);
+      }
       setDeletion(undefined);
       onChanged();
     } catch (e) {
       if (e instanceof ApiError && e.code === 'environment_cleanup_incomplete') {
+        setDeletionReason('');
         setDeletion({ graph: s, reason: errorMessage(e) });
       } else {
         setDeletion(undefined);
@@ -145,7 +151,10 @@ export function GraphList({
         <Modal title={`Delete graph “${deletion.graph.graph.metadata.name || deletion.graph.graph.metadata.id}”?`}
           onClose={() => { if (!deleting) setDeletion(undefined); }}>
           <ErrorBox error={deletion.reason} />
-          <p>Deleting now records the remaining environment resources for cleanup in Administration → Shared images and caches.</p>
+          <p>The graph ID stays reserved until cleanup or an administrator releases it. Cleanup requires the original sandbox daemon. Manage the reservation in Administration → Shared images and caches.</p>
+          <label>Reason for deferring cleanup (optional)
+            <input maxLength={500} value={deletionReason} disabled={deleting} onChange={event => setDeletionReason(event.target.value)} />
+          </label>
           <div className="btn-row">
             <Btn autoFocus disabled={deleting} onClick={() => setDeletion(undefined)}>Keep graph</Btn>
             <Btn tone="danger" disabled={deleting} onClick={() => void del(deletion.graph, true)}>

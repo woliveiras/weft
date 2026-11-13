@@ -43,6 +43,7 @@ var (
 	ErrResetRunning          = errors.New("an environment reset is already running")
 	ErrResetIncomplete       = errors.New("environment reset incomplete")
 	ErrResetLeaseLost        = errors.New("environment reset lost its lease; retry the operation")
+	ErrDeferredDeletion      = errors.New("resolve deferred environment deletion first")
 	// ErrNotReady: agents cannot start because the environment is not built.
 	ErrNotReady = errors.New("environment not ready")
 )
@@ -63,25 +64,26 @@ type CacheMount struct {
 
 // Status is the persisted state of a graph's environment.
 type Status struct {
-	Phase         string       `json:"phase,omitempty"`
-	ReuseDecision string       `json:"reuseDecision,omitempty"`
-	BuildReasons  []string     `json:"buildReasons,omitempty"`
-	SharedImage   string       `json:"sharedImage,omitempty"`
-	Scope         string       `json:"scope,omitempty"`
-	ReuseKey      string       `json:"reuseKey,omitempty"`
-	Reused        bool         `json:"reused,omitempty"`
-	Inputs        string       `json:"inputs,omitempty"`
-	Graph         string       `json:"graph"`
-	State         State        `json:"state"`
-	Hash          string       `json:"hash,omitempty"`  // definition hash of the last build
-	Image         string       `json:"image,omitempty"` // set when ready
-	Caches        []CacheMount `json:"caches,omitempty"`
-	StartedAt     *time.Time   `json:"startedAt,omitempty"`
-	FinishedAt    *time.Time   `json:"finishedAt,omitempty"`
-	Error         string       `json:"error,omitempty"`
-	Log           string       `json:"log,omitempty"` // tail of the build output
-	Actor         string       `json:"actor,omitempty"`
-	Instance      string       `json:"instance,omitempty"`
+	Phase          string       `json:"phase,omitempty"`
+	ReuseDecision  string       `json:"reuseDecision,omitempty"`
+	BuildReasons   []string     `json:"buildReasons,omitempty"`
+	SharedImage    string       `json:"sharedImage,omitempty"`
+	Scope          string       `json:"scope,omitempty"`
+	ReuseKey       string       `json:"reuseKey,omitempty"`
+	Reused         bool         `json:"reused,omitempty"`
+	Inputs         string       `json:"inputs,omitempty"`
+	Graph          string       `json:"graph"`
+	State          State        `json:"state"`
+	Hash           string       `json:"hash,omitempty"`  // definition hash of the last build
+	Image          string       `json:"image,omitempty"` // set when ready
+	Caches         []CacheMount `json:"caches,omitempty"`
+	LastProgressAt *time.Time   `json:"lastProgressAt,omitempty"`
+	StartedAt      *time.Time   `json:"startedAt,omitempty"`
+	FinishedAt     *time.Time   `json:"finishedAt,omitempty"`
+	Error          string       `json:"error,omitempty"`
+	Log            string       `json:"log,omitempty"` // tail of the build output
+	Actor          string       `json:"actor,omitempty"`
+	Instance       string       `json:"instance,omitempty"`
 }
 
 // View is a Status compared with the graph's current definition.
@@ -172,14 +174,14 @@ func (m *Manager) Get(ctx context.Context, g *domain.Graph) (*View, error) {
 		return nil, err
 	}
 	if st.State == StateBuilding && !m.leaseAlive(ctx, g.Metadata.ID) {
-		// The builder may have saved its result just before releasing the lease.
+		// Reload because the builder may have published its result before
+		// releasing the lease. The reconciler persists interrupted states.
 		st, err = m.load(ctx, g.Metadata.ID)
 		if err != nil {
 			return nil, err
 		}
 		if st.State == StateBuilding && !m.leaseAlive(ctx, g.Metadata.ID) {
-			st.Phase = ""
-			st.State, st.Error = StateFailed, "build interrupted: the Weft instance running it stopped; build again"
+			markInterrupted(st)
 		}
 	}
 	v := m.view(g, st)
@@ -279,6 +281,13 @@ func (m *Manager) buildEnvironment(ctx context.Context, g *domain.Graph, force b
 		return nil, m.environmentLeaseConflict(ctx, id)
 	}
 	release := func() { _ = m.opt.Store.ReleaseLease(context.WithoutCancel(ctx), key, holder) }
+	if _, err := m.opt.Store.KVGet(ctx, domain.DeferredEnvironmentCleanup, id); !errors.Is(err, storage.ErrNotFound) {
+		release()
+		if err != nil {
+			return nil, err
+		}
+		return nil, ErrDeferredDeletion
+	}
 	if saved {
 		if _, err := m.opt.Store.GetGraph(ctx, id, 0); err != nil {
 			release()
@@ -433,6 +442,8 @@ func (m *Manager) flushWhileRunning(ctx context.Context, st *Status, holder stri
 				return
 			case <-t.C:
 				snap := *st
+				now := time.Now().UTC()
+				snap.LastProgressAt = &now
 				snap.Log = logBuf.String()
 				snapshotProgress(ctx, &snap)
 				if err := m.save(context.Background(), &snap); err != nil {
@@ -607,52 +618,111 @@ func (m *Manager) CancelBuild(ctx context.Context, graphID, actor string) error 
 
 // Reset removes the environment of a graph. The next build starts from scratch.
 func (m *Manager) Reset(ctx context.Context, graphID, actor string) error {
-	return m.resetWithLease(ctx, graphID, actor, nil)
+	return m.resetWithLease(ctx, graphID, actor, func(ctx context.Context) error {
+		if _, err := m.opt.Store.KVGet(ctx, domain.DeferredEnvironmentCleanup, graphID); err == nil {
+			return ErrDeferredDeletion
+		} else if !errors.Is(err, storage.ErrNotFound) {
+			return err
+		}
+		return m.resetResources(ctx, graphID, actor)
+	})
 }
 
 // ResetBeforeDelete holds the environment lease until deletion completes.
-func (m *Manager) ResetBeforeDelete(ctx context.Context, graphID, actor string, force bool, checkStopped, deleteGraph func(context.Context) error) error {
+func (m *Manager) ResetBeforeDelete(ctx context.Context, graphID, actor string, force bool, reason string, checkStopped, deleteGraph func(context.Context) error) error {
 	return m.resetWithLease(ctx, graphID, actor, func(ctx context.Context) error {
 		if err := checkStopped(ctx); err != nil {
 			return err
 		}
-		exists, err := m.Exists(ctx, graphID)
+		if !force {
+			return m.deleteWithCleanup(ctx, graphID, actor, deleteGraph)
+		}
+		attempt := domain.NewID("force-delete")
+		event := domain.NewEvent("environment.graph_delete_force_started", graphID, map[string]any{"attempt": attempt, "reason": reason}).WithActor(actor)
+		if err := m.opt.Store.AppendEvent(ctx, event); err != nil {
+			return fmt.Errorf("audit forced deletion: %w", err)
+		}
+		deferred, err := m.deleteWithDeferredCleanup(ctx, graphID, actor, reason, deleteGraph)
+		outcome := "deleted"
+		if err != nil {
+			outcome = "failed"
+		}
+		m.publish(context.WithoutCancel(ctx), "environment.graph_delete_forced", graphID, actor, map[string]any{
+			"attempt": attempt, "outcome": outcome, "cleanupDeferred": deferred,
+		})
+		return err
+	})
+}
+
+func (m *Manager) deleteWithCleanup(ctx context.Context, graphID, actor string, deleteGraph func(context.Context) error) error {
+	row, err := m.opt.Store.KVGet(ctx, domain.DeferredEnvironmentCleanup, graphID)
+	if err == nil {
+		item, err := decodeDeferredCleanup(graphID, row)
 		if err != nil {
 			return err
 		}
-		// Builds persist their status before creating Docker resources. Reset
-		// deletes that record only after cleaning the graph's resources.
-		if exists {
-			if force {
-				if err := m.recordDeferredCleanup(ctx, graphID, actor); err != nil {
-					return err
-				}
-			} else {
-				if err := m.resetResources(ctx, graphID, actor); err != nil {
-					if errors.Is(context.Cause(ctx), context.DeadlineExceeded) &&
-						(errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrResetIncomplete)) {
-						return resetDockerError("cleanup timed out")
-					}
-					return err
-				}
+		if item.Daemon != m.cleanupDaemon() {
+			return fmt.Errorf("%w: deferred cleanup belongs to a different sandbox daemon", storage.ErrConflict)
+		}
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		return err
+	}
+	exists, err := m.Exists(ctx, graphID)
+	if err != nil {
+		return err
+	}
+	// Builds persist their status before creating Docker resources. Reset
+	// deletes that record only after cleaning the graph's resources.
+	if exists {
+		if err := m.resetResources(ctx, graphID, actor); err != nil {
+			if errors.Is(context.Cause(ctx), context.DeadlineExceeded) &&
+				(errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrResetIncomplete)) {
+				return resetDockerError("cleanup timed out")
 			}
-		}
-		if cause := context.Cause(ctx); cause != nil {
-			return cause
-		}
-		if !force {
-			if err := m.opt.Store.KVDelete(ctx, domain.DeferredEnvironmentCleanup, graphID); err != nil && !errors.Is(err, storage.ErrNotFound) {
-				return err
-			}
-		}
-		if err := deleteGraph(ctx); err != nil {
 			return err
 		}
-		if force {
-			m.publish(context.WithoutCancel(ctx), "environment.graph_delete_forced", graphID, actor, map[string]any{"cleanupDeferred": exists})
+	}
+	if cause := context.Cause(ctx); cause != nil {
+		return cause
+	}
+	if err := m.opt.Store.KVDelete(ctx, domain.DeferredEnvironmentCleanup, graphID); err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return err
+	}
+	return deleteGraph(ctx)
+}
+
+func (m *Manager) deleteWithDeferredCleanup(ctx context.Context, graphID, actor, reason string, deleteGraph func(context.Context) error) (bool, error) {
+	exists, err := m.Exists(ctx, graphID)
+	if err != nil {
+		return false, err
+	}
+	var created bool
+	if exists {
+		created, err = m.recordDeferredCleanup(ctx, graphID, actor, reason)
+		if err != nil {
+			return false, err
 		}
-		return nil
-	})
+	}
+	err = context.Cause(ctx)
+	if err == nil {
+		err = deleteGraph(ctx)
+	}
+	if err != nil && created {
+		// If the graph is demonstrably still present, undo our reservation.
+		// An uncertain result is recoverable through the cleanup preview.
+		recovery, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if !errors.Is(context.Cause(ctx), ErrResetLeaseLost) {
+			if _, lookupErr := m.opt.Store.GetGraph(recovery, graphID, 0); lookupErr == nil {
+				if rollbackErr := m.opt.Store.KVDelete(recovery, domain.DeferredEnvironmentCleanup, graphID); rollbackErr != nil {
+					err = errors.Join(err, fmt.Errorf("release failed deletion reservation: %w", rollbackErr))
+				} else {
+					exists = false
+				}
+			}
+		}
+	}
+	return exists, err
 }
 
 func (m *Manager) resetWithLease(ctx context.Context, graphID, actor string, operation func(context.Context) error) error {
@@ -672,9 +742,6 @@ func (m *Manager) resetWithLease(ctx context.Context, graphID, actor string, ope
 		return err
 	}
 	defer release()
-	if operation == nil {
-		operation = func(ctx context.Context) error { return m.resetResources(ctx, graphID, actor) }
-	}
 	err = operation(ctx)
 	if cause := context.Cause(ctx); cause != nil && err != nil {
 		if errors.Is(cause, context.DeadlineExceeded) && errors.Is(err, ErrResetIncomplete) {

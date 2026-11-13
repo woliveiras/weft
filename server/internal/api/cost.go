@@ -1,15 +1,14 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/cost"
-	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
@@ -115,16 +114,19 @@ func (s *Server) raiseBudget(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	var errs []error
+	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
+	defer cancel()
+	result := struct {
+		cost.View
+		NotResumed []string `json:"notResumed,omitempty"`
+	}{View: v}
 	for _, graph := range resume {
-		if err := s.Engine.GraphAction(r.Context(), graph, "resume", actor); err != nil && !errors.Is(err, engine.ErrConflict) && !errors.Is(err, engine.ErrNotFound) {
-			errs = append(errs, fmt.Errorf("%s: %w", graph, err))
+		if err := s.Engine.BudgetGraphAction(ctx, graph, "resume", actor); err != nil {
+			result.NotResumed = append(result.NotResumed, graph)
+			s.Log.Warn("budget raised but graph was not resumed", "graph", graph, "err", err)
 		}
 	}
-	if err := errors.Join(errs...); err != nil {
-		return fmt.Errorf("budget raised, but paused runs could not be resumed: %w", err)
-	}
-	writeJSON(w, 200, v)
+	writeJSON(w, 200, result)
 	return nil
 }
 

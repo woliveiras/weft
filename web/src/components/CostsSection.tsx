@@ -98,7 +98,10 @@ export function BudgetBar({ budget, currency, canRaise, onRaised }: { budget: Bu
     setBusy(true);
     setError(undefined);
     try {
-      await api.raiseBudget(budget.scope, budget.id, micros);
+      const result = await api.raiseBudget(budget.scope, budget.id, micros);
+      if (result?.notResumed?.length) {
+        setError(`Budget raised. Resume these graphs manually: ${result.notResumed.join(', ')}.`);
+      }
       await onRaised();
     } catch (e) {
       setError(errorMessage(e));

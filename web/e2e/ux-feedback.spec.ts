@@ -70,7 +70,12 @@ test('failed automatic discovery preserves the connection and supports retry',as
 test('an administrator can keep a graph or confirm deletion after cleanup fails', async ({page}) => {
  const id = 'delete-deferred-browser';
  const path = `/api/v1/graphs/${id}`;
- expect((await page.request.post('/api/v1/graphs', {headers, data:{metadata:{id,name:'Deferred deletion'},spec:{nodes:[{id:'reader',runtime:{kind:'echo'}}]}}})).status()).toBe(201);
+ expect((await page.request.post('/api/v1/graphs', {headers, data:{
+   metadata:{id,name:'Deferred deletion'},
+   spec:{environment:{image:'alpine:3.22'},nodes:[{id:'reader',runtime:{kind:'echo'}}]},
+ }})).status()).toBe(201);
+ expect((await page.request.post(`${path}/environment/build`, {headers,data:{}})).status()).toBe(202);
+ await expect.poll(async () => (await (await page.request.get(`${path}/environment`, {headers})).json()).state).toBe('ready');
  let forceRequests = 0;
  await page.route(`**${path}*`, async route => {
    if (route.request().method() !== 'DELETE') return route.continue();
@@ -89,12 +94,28 @@ test('an administrator can keep a graph or confirm deletion after cleanup fails'
    await expect(page.getByText('Sandbox daemon unavailable')).toBeVisible();
  };
  await openDelete();
+ await expect(page.getByText('Cleanup requires the original sandbox daemon.', {exact:false})).toBeVisible();
  await page.getByRole('button',{name:'Keep graph'}).click();
  await expect(card).toBeVisible();
  expect(forceRequests).toBe(0);
  await openDelete();
+ await page.getByLabel('Reason for deferring cleanup (optional)').fill('Sandbox daemon is being replaced');
  await page.getByRole('button',{name:'Delete and defer cleanup'}).click();
  await expect(card).toHaveCount(0);
  expect(forceRequests).toBe(1);
  expect((await page.request.get(path,{headers})).status()).toBe(404);
+
+ await page.goto('/#/administration/resources');
+ await page.getByRole('button',{name:'Refresh preview'}).click();
+ const pending = page.getByRole('region',{name:'Deferred graph cleanup'});
+ await expect(pending).toContainText('Requested by e2e-admin');
+ await expect(pending).toContainText('Sandbox daemon is being replaced');
+ await pending.getByText('Resources that may remain').click();
+ await expect(pending).toContainText(`buildx_buildkit_weft-builder-${id}0_state`);
+ await pending.getByRole('button',{name:`Abandon cleanup for ${id}`}).click();
+ const release = page.getByRole('form',{name:'Release cleanup reservation'});
+ await expect(release.getByRole('button',{name:'Release reservation'})).toBeDisabled();
+ await release.getByLabel('Reason').fill('Verified cleanup on the original daemon');
+ await release.getByRole('button',{name:'Release reservation'}).click();
+ await expect(pending).toHaveCount(0);
 });

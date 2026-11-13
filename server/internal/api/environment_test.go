@@ -551,3 +551,92 @@ func TestGraphDeletionRechecksStoppedStateAfterWaiting(t *testing.T) {
 		t.Fatalf("delete cleaned a running graph: %s", data)
 	}
 }
+
+func TestDeferredCleanupResolvesDifferentDaemonAndInterruptedDeletion(t *testing.T) {
+	for _, name := range []string{"different-daemon", "cancel-interrupted", "finish-interrupted"} {
+		t.Run(name, func(t *testing.T) {
+			interrupted := name != "different-daemon"
+			bin, _ := fakeDaemonCLI(t)
+			srv, app := setupApp(t, func(c *config.Config) { c.Isolation.Docker.Bin = bin })
+			const graph, cleanup = "/api/v1/graphs/env-demo", "/api/v1/environments/cleanup"
+			const create = "/api/v1/graphs"
+			if interrupted {
+				if code := call(t, srv, "POST", create, adminTok, "application/yaml", envGraph, nil); code != 201 {
+					t.Fatalf("create: %d", code)
+				}
+			}
+			if err := app.Store.KVPut(t.Context(), domain.DeferredEnvironmentCleanup, "env-demo", []byte(`{"graph":"env-demo","actor":"original-admin","daemon":"previous-daemon","reason":"Fixture cleanup deferred"}`)); err != nil {
+				t.Fatal(err)
+			}
+			if err := app.Store.KVPut(t.Context(), "environment", "env-demo", []byte(`{"graph":"env-demo","state":"ready"}`)); err != nil {
+				t.Fatal(err)
+			}
+			var preview environment.CleanupResult
+			if code := call(t, srv, "POST", cleanup, adminTok, "application/json", "{}", &preview); code != 200 || len(preview.DeferredGraphs) != 1 {
+				t.Fatalf("preview: %d %+v", code, preview)
+			}
+			entry := preview.DeferredGraphs[0]
+			if entry.GraphExists != interrupted || entry.DaemonMatches || len(entry.PossibleResources) == 0 {
+				t.Fatalf("preview state: %+v", entry)
+			}
+			retry := `{"dryRun":false,"deferredGraphs":["env-demo"]}`
+			if code := call(t, srv, "POST", cleanup, adminTok, "application/json", retry, nil); code != 409 {
+				t.Fatalf("cleanup on wrong daemon or existing graph: %d", code)
+			}
+			if interrupted {
+				for _, action := range []string{"/start", "/nodes/other/start", "/environment/build", "/environment/reset"} {
+					if code := call(t, srv, "POST", graph+action, adminTok, "", "", nil); code != 409 {
+						t.Fatalf("start during interrupted deletion %s: %d", action, code)
+					}
+				}
+				if code := call(t, srv, "DELETE", graph, adminTok, "", "", nil); code != 409 {
+					t.Fatalf("immediate delete on wrong daemon: %d", code)
+				}
+			}
+			if name == "finish-interrupted" {
+				if code := call(t, srv, "DELETE", graph+"?force=true", adminTok, "", "", nil); code != 204 {
+					t.Fatalf("finish interrupted deletion: %d", code)
+				}
+				if code := call(t, srv, "GET", graph, adminTok, "", "", nil); code != 404 {
+					t.Fatalf("graph still exists: %d", code)
+				}
+				if code := call(t, srv, "POST", create, adminTok, "application/yaml", envGraph, nil); code != 409 {
+					t.Fatalf("ID lost its reservation: %d", code)
+				}
+				return
+			}
+			abandon := `{"dryRun":false,"abandonDeferred":{"graph":"env-demo","reason":"Verified the original daemon separately"}}`
+			if code := call(t, srv, "POST", cleanup, operatorTok, "application/json", abandon, nil); code != 403 {
+				t.Fatalf("non-admin abandon: %d", code)
+			}
+			if code := call(t, srv, "POST", cleanup, adminTok, "application/json", strings.Replace(abandon, "Verified the original daemon separately", " ", 1), nil); code != 400 {
+				t.Fatalf("blank reason: %d", code)
+			}
+			if code := call(t, srv, "POST", cleanup, adminTok, "application/json", abandon, nil); code != 204 {
+				t.Fatalf("release reservation: %d", code)
+			}
+			kind := domain.EventType("environment.deferred_cleanup_abandon_requested")
+			if interrupted {
+				kind = "environment.deferred_cleanup_cancel_requested"
+				if code := call(t, srv, "PUT", graph, adminTok, "application/yaml", envGraph, nil); code != 200 {
+					t.Fatalf("edit after cancellation: %d", code)
+				}
+				if _, err := app.Store.KVGet(t.Context(), "environment", "env-demo"); err != nil {
+					t.Fatalf("cancel removed live environment: %v", err)
+				}
+			} else {
+				if code := call(t, srv, "POST", create, adminTok, "application/yaml", envGraph, nil); code != 201 {
+					t.Fatalf("recreate after abandonment: %d", code)
+				}
+				if _, err := app.Store.KVGet(t.Context(), "environment", "env-demo"); !errors.Is(err, storage.ErrNotFound) {
+					t.Fatalf("abandon left stale environment: %v", err)
+				}
+			}
+			events, err := app.Store.ListEvents(t.Context(), storage.EventFilter{GraphID: "env-demo", Types: []domain.EventType{kind}})
+			if err != nil || len(events) != 1 || events[0].Actor != "admin" || !strings.Contains(string(events[0].Data), "Verified the original daemon separately") ||
+				!strings.Contains(string(events[0].Data), "buildx_buildkit_weft-builder-env-demo0_state") {
+				t.Fatalf("audit: %+v, %v", events, err)
+			}
+		})
+	}
+}

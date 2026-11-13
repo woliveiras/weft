@@ -243,7 +243,7 @@ else is unpriced. Weft ships no vendor prices. See
 | `GET /api/v1/cost/ledgers` | viewer | This month's monthly ledgers and the task runs a budget refused or paused. |
 | `GET /api/v1/cost/spend?period=YYYY-MM&graph=` | viewer | Spend of a month from `cost.recorded` events: `total` and the top 100 lines by provider/model, task run, user, project and workflow (`costMicros`, `estimatedMicros`, `unpricedCalls`, tokens). Follows the event history retention; `truncated` when more than 100 000 records exist. |
 | `GET /api/v1/cost/budgets/{scope}/{budget}` | viewer | Ledger view `{limitMicros, chargedMicros, estimatedMicros, reservedMicros, remainingMicros, reached, paused, raisedBy}`; scope `run` with the task run's execution graph id, or a monthly scope with `<id>@<YYYY-MM>` (UTC month). |
-| `POST /api/v1/cost/budgets/{scope}/{budget}/raise` | admin | `{"limitMicros": n}` (must be higher). Audited as `budget.raised`; resumes every run the budget paused. |
+| `POST /api/v1/cost/budgets/{scope}/{budget}/raise` | admin | `{"limitMicros": n}` (must be higher). Audited as `budget.raised`. Tries to resume paused runs with a shared four-second request budget. The response adds `notResumed` with graph IDs that did not resume. Resume those runs manually after the blocking operation ends. |
 
 Before each model call of a task run (native turns, external callbacks and
 delegation children), the gateway reserves the call's maximum cost (input
@@ -301,11 +301,41 @@ If Docker cleanup fails, deletion returns `409` with
 `code: "environment_cleanup_incomplete"` and the reason. The graph remains
 available for retry. Internal and storage failures return `500`.
 An administrator can use `DELETE /api/v1/graphs/{id}?force=true` to defer
-environment cleanup and delete a stopped graph. This operation is audited.
+environment cleanup and delete a stopped graph. The optional JSON body
+`{"reason":"..."}` records the operator's reason (up to 500 characters) in
+the preview and audit. Avoid entering credentials or other secrets.
 The shared environment cleanup preview includes `deferredGraphs`. Retry one
 deferred graph by posting `{"dryRun":false,"deferredGraphs":["graph-id"]}`
 to `/api/v1/environments/cleanup` (admin). A successful retry returns `204`.
-The graph ID remains reserved until that cleanup succeeds.
+The preview reports `graphExists`, `actor`, `since`, `reason` when available,
+and `daemon` (SHA-256 of the configured Docker endpoint). `daemonMatches`
+compares it with this controller's endpoint. `possibleResources` lists names
+and label selectors, including when Docker is unavailable.
+
+A deleted graph's ID stays reserved until cleanup succeeds or an administrator
+releases it. To release it, POST
+`{"dryRun":false,"abandonDeferred":{"graph":"graph-id","reason":"verified on the original daemon"}}`
+to `/api/v1/environments/cleanup`. The reason is required (1–500 characters).
+A successful request returns `204` and audits the actor, reason, and possible
+remaining resources. It makes no Docker calls. If the graph still exists
+after an interrupted force deletion, the same request cancels the reservation
+and preserves its environment. Alternatively, repeat the forced DELETE to
+finish deleting it. A pending deletion blocks PUT, start, resume, and
+environment builds and resets.
+
+Graph create/update, deletion, graph and node lifecycle actions (start, stop,
+pause, resume, kill), autoscale edits, budget pause/resume, and deferred
+cleanup use the graph transition lease. Contention returns `409` with
+`code: "conflict"`. Stop and kill (including task-run kill) wait up to three
+seconds for the lease. Operations under the lease have a two-minute work
+limit, and a crashed controller can leave a lease for up to three minutes.
+A Docker cleanup timeout offers deferred deletion once the required leases
+can be acquired. A timeout waiting for an active lease asks the caller to
+retry after the active operation ends.
+
+Graph deletion records pending broker groups before deleting the graph.
+Recreating the same ID retries that cleanup and returns `409` while the
+broker cannot confirm removal.
 
 Starting a graph or node whose docker-isolated agents (without an image of
 their own) need an environment that is not ready returns `422` with an issue

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import type { EnvironmentCleanupItem, EnvironmentCleanupResult } from '../api/types';
-import { Btn, ErrorBox } from './common';
+import { Btn, ErrorBox, fmtDateTime } from './common';
 import { canClean, CLEANUP_LIMIT, cleanupOutcome } from './sharedEnvironmentCleanup';
 
 function Resources({ item }: { item: EnvironmentCleanupItem }) {
@@ -22,6 +22,8 @@ export function SharedEnvironmentsSection({ canManage }: { canManage: boolean })
 
 function CleanupControls() {
   const [items, setItems] = useState<EnvironmentCleanupItem[]>();
+  const [decision, setDecision] = useState<{ graph: string; graphExists: boolean }>();
+  const [reason, setReason] = useState('');
   const [deferred, setDeferred] = useState<EnvironmentCleanupResult["deferredGraphs"]>();
   const [selected, setSelected] = useState<string[]>([]);
   const [confirmation, setConfirmation] = useState<EnvironmentCleanupItem[]>();
@@ -75,13 +77,14 @@ function CleanupControls() {
     }
   }
 
-  async function retryDeferred(graph: string) {
-    if (locked.current || !confirm(`Remove the remaining environment resources for “${graph}”?`)) return;
+  async function deferredAction(action: () => Promise<void>) {
+    if (locked.current) return;
     locked.current = true;
     setBusy(true);
     setError(undefined);
     try {
-      await api.retryDeferredEnvironmentCleanup(graph);
+      await action();
+      setDecision(undefined);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -102,12 +105,44 @@ function CleanupControls() {
     {!!deferred?.length && <section aria-label="Deferred graph cleanup">
       <h3>Deferred graph cleanup</h3>
       <ul>{deferred.map(item => <li key={item.graph}>
-        <code>{item.graph}</code>{' '}
-        <Btn disabled={busy || !!confirmation} onClick={() => void retryDeferred(item.graph)}>
-          Clean up {item.graph}
+        <strong>{item.graph}</strong>
+        <p>Requested by {item.actor || 'Unknown'} · {fmtDateTime(item.since)}</p>
+        <p>{item.reason || 'Deletion was requested with environment cleanup deferred.'}</p>
+        {item.graphExists && <p>Deletion was interrupted. Finish deleting the graph or cancel the reservation to keep it.</p>}
+        {!item.daemonMatches && <p>Cleanup requires the original sandbox daemon.</p>}
+        {item.possibleResources?.length ? <details>
+          <summary>Resources that may remain</summary>
+          <ul>{item.possibleResources.map(resource => <li key={resource}>{resource}</li>)}</ul>
+        </details> : null}
+        <Btn disabled={busy || !!confirmation || (!item.graphExists && !item.daemonMatches)} onClick={() => {
+          const message = item.graphExists
+            ? `Finish deleting “${item.graph}” and keep its cleanup deferred?`
+            : `Remove the remaining environment resources for “${item.graph}”?`;
+          if (confirm(message)) void deferredAction(() => item.graphExists
+            ? api.deleteGraph(item.graph, true)
+            : api.retryDeferredEnvironmentCleanup(item.graph));
+        }}>
+          {item.graphExists ? 'Finish deletion of' : 'Clean up'} {item.graph}
+        </Btn>{' '}
+        <Btn disabled={busy || !!confirmation} onClick={() => {
+          setReason('');
+          setDecision({ graph: item.graph, graphExists: item.graphExists });
+        }}>
+          {item.graphExists ? 'Cancel reservation for' : 'Abandon cleanup for'} {item.graph}
         </Btn>
       </li>)}</ul>
     </section>}
+    {decision && <form aria-label="Release cleanup reservation" onSubmit={event => {
+      event.preventDefault();
+      if (reason.trim()) void deferredAction(() => api.abandonDeferredEnvironmentCleanup(decision.graph, reason));
+    }}>
+      <p>{decision.graphExists
+        ? `Keep “${decision.graph}” and release its deletion reservation.`
+        : `Release the ID “${decision.graph}”. Any remaining Docker resources will need manual cleanup.`}</p>
+      <label>Reason <input required maxLength={500} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></label>{' '}
+      <Btn type="button" disabled={busy} onClick={() => setDecision(undefined)}>Back</Btn>{' '}
+      <Btn type="submit" tone="danger" disabled={busy || !reason.trim()}>Release reservation</Btn>
+    </form>}
     {items && <>
       <p>{items.length} registered generations. Select up to {CLEANUP_LIMIT} unused generations.</p>
       {!items.length && <p>No registered shared resources found.</p>}

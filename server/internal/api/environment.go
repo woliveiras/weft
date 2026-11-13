@@ -249,9 +249,13 @@ func (s *Server) cleanupEnvironments(w http.ResponseWriter, r *http.Request) err
 		return engine.ErrNotFound
 	}
 	var body struct {
-		DryRun         *bool    `json:"dryRun"`
-		Generations    []string `json:"generations"`
-		DeferredGraphs []string `json:"deferredGraphs"`
+		DryRun          *bool    `json:"dryRun"`
+		Generations     []string `json:"generations"`
+		DeferredGraphs  []string `json:"deferredGraphs"`
+		AbandonDeferred *struct {
+			Graph  string `json:"graph"`
+			Reason string `json:"reason"`
+		} `json:"abandonDeferred"`
 	}
 	d := json.NewDecoder(io.LimitReader(r.Body, 16385))
 	d.DisallowUnknownFields()
@@ -265,6 +269,23 @@ func (s *Server) cleanupEnvironments(w http.ResponseWriter, r *http.Request) err
 	dryRun := body.DryRun == nil || *body.DryRun
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
 	defer cancel()
+	if body.AbandonDeferred != nil {
+		if dryRun || len(body.Generations) != 0 || len(body.DeferredGraphs) != 0 || body.AbandonDeferred.Graph == "" {
+			return badRequest("abandonDeferred requires a graph and dryRun=false, with no other selections")
+		}
+		item := body.AbandonDeferred
+		err := s.Engine.WithGraphTransition(ctx, item.Graph, func(ctx context.Context) error {
+			return s.Environments.AbandonDeferredCleanup(ctx, item.Graph, identityFrom(ctx).Name, item.Reason)
+		})
+		if errors.Is(err, environment.ErrInvalidDeferredReason) {
+			return badRequest("%v", err)
+		}
+		if err != nil {
+			return err
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
 	if len(body.DeferredGraphs) != 0 && (dryRun || len(body.Generations) != 0) {
 		return badRequest("deferredGraphs requires dryRun=false and cannot be combined with generations")
 	}

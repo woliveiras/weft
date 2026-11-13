@@ -32,8 +32,12 @@ func (m *Manager) environmentLeaseConflict(ctx context.Context, graphID string) 
 }
 
 func (m *Manager) holdResetLease(ctx context.Context, graphID string) (context.Context, func(), error) {
+	return m.holdEnvironmentLease(ctx, graphID, "environment-reset")
+}
+
+func (m *Manager) holdEnvironmentLease(ctx context.Context, graphID, operation string) (context.Context, func(), error) {
 	key := leasePrefix + graphID
-	holder := domain.NewID("environment-reset")
+	holder := domain.NewID(operation)
 	ttl := m.resetLeaseTTL
 	started := time.Now()
 	ok, err := m.opt.Store.AcquireLease(ctx, key, holder, ttl)
@@ -67,6 +71,7 @@ func (m *Manager) renewResetLease(ctx context.Context, cancel context.CancelCaus
 	defer watchdog.Stop()
 	tick := time.NewTicker(ttl / 6)
 	defer tick.Stop()
+	warned := false
 	for {
 		select {
 		case <-ctx.Done():
@@ -77,6 +82,10 @@ func (m *Manager) renewResetLease(ctx context.Context, cancel context.CancelCaus
 			if err != nil {
 				// Retry within the watchdog window. The last confirmed
 				// renewal still protects the work from a competing holder.
+				if !warned && ctx.Err() == nil {
+					m.opt.Log.Warn("environment reset lease renewal failed; retrying", "graph", strings.TrimPrefix(key, leasePrefix), "err", err)
+					warned = true
+				}
 				continue
 			}
 			if !ok {
