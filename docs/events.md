@@ -5,6 +5,11 @@ to live subscribers. The log is the audit trail, the source of the console's liv
 `/api/v1/events/stream` SSE feed, and the thing to read when asking "what happened?" after a restart.
 Schema: [`schemas/event.schema.json`](../schemas/event.schema.json); Go: `server/internal/domain/event.go`.
 
+The event envelope and the schema's budget-transition, proposal, and
+deletion/cleanup payloads have closed fields. Other payloads follow the
+constraints for their event type in `schemas/event.schema.json`. For example,
+approval detail and tool arguments carry kind-specific data.
+
 ## Envelope
 
 | Field | Notes |

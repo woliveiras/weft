@@ -282,7 +282,7 @@ func TestMCPQuotaAndSafeHistoryAPI(t *testing.T) {
 	if _, err := a.Gateway.Invoke(t.Context(), p, "mcp.quota.search", json.RawMessage(`{}`)); !errors.Is(err, tools.ErrRateLimited) {
 		t.Fatal(err)
 	}
-	approval := domain.NewEvent(domain.EvApprovalDone, p.GraphID, map[string]any{"id": "approval-one", "status": "approved", "detail": map[string]any{"tool": "mcp.quota.search", "args": "private-argument"}, "comment": "private-comment"}).WithNode(p.NodeID, 0)
+	approval := domain.NewEvent(domain.EvApprovalDone, p.GraphID, map[string]any{"id": "approval-one", "kind": "tool", "status": "approved", "detail": map[string]any{"tool": "mcp.quota.search", "args": "private-argument"}, "comment": "private-comment"}).WithNode(p.NodeID, 0)
 	if err := a.Store.AppendEvent(t.Context(), approval); err != nil {
 		t.Fatal(err)
 	}

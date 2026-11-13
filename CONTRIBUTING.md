@@ -116,9 +116,12 @@ binaries and startup instructions. `make test-python` and `make test-web` run
 locally and do not require Docker. The Python tests use the standard library and
 the SDK source tree; no optional agent framework installation is required.
 
-The Go integration suite validates persisted event payloads against
-`schemas/event.schema.json`, including dynamically named events. The Go suite
-also checks event names against the schema and the documentation. For an
+The shared SQLite API integration fixture validates its entire persisted log
+against `schemas/event.schema.json` at teardown, including dynamically named
+events. Other fixtures validate their logs when they use `eventtest.Capture`
+or `eventtest.ValidateStored`. Store conformance tests may use synthetic event
+types. The Go suite also checks event names against the schema and the
+documentation. For an
 optional capture to inspect or validate separately, use the native Go toolchain
 and Python with `jsonschema` installed. From the repository root:
 
