@@ -24,6 +24,7 @@ type DeferredCleanup struct {
 	GraphExists       bool      `json:"graphExists"`
 	DaemonMatches     bool      `json:"daemonMatches"`
 	PossibleResources []string  `json:"possibleResources,omitempty"`
+	Invalid           bool      `json:"invalid,omitempty"`
 }
 
 func (m *Manager) recordDeferredCleanup(ctx context.Context, id, actor, reason string) (bool, error) {
@@ -52,7 +53,7 @@ func (m *Manager) ListDeferredCleanup(ctx context.Context) ([]DeferredCleanup, e
 	for id, row := range rows {
 		item, err := decodeDeferredCleanup(id, row)
 		if err != nil {
-			return nil, err
+			item = DeferredCleanup{Graph: id, Invalid: true}
 		}
 		if _, err := m.opt.Store.GetGraph(ctx, id, 0); err == nil {
 			item.GraphExists = true
@@ -92,7 +93,7 @@ func (m *Manager) RetryDeferredCleanup(ctx context.Context, id, actor string) er
 		}
 		item, err := decodeDeferredCleanup(id, row)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: invalid deferred cleanup record for graph %s; abandon the reservation after reviewing its resources", storage.ErrConflict, id)
 		}
 		if item.Daemon != m.cleanupDaemon() {
 			return fmt.Errorf("%w: deferred cleanup belongs to a different sandbox daemon", storage.ErrConflict)
@@ -143,10 +144,7 @@ func (m *Manager) AbandonDeferredCleanup(ctx context.Context, id, actor, reason 
 	if err != nil {
 		return err
 	}
-	item, err := decodeDeferredCleanup(id, row)
-	if err != nil {
-		return err
-	}
+	item, decodeErr := decodeDeferredCleanup(id, row)
 	kind := domain.EventType("environment.deferred_cleanup_abandon_requested")
 	exists := false
 	if _, err := m.opt.Store.GetGraph(work, id, 0); err == nil {
@@ -155,9 +153,13 @@ func (m *Manager) AbandonDeferredCleanup(ctx context.Context, id, actor, reason 
 	} else if !errors.Is(err, storage.ErrNotFound) {
 		return err
 	}
-	event := domain.NewEvent(kind, id, map[string]any{
-		"reason": reason, "daemon": item.Daemon, "possibleResources": deferredResourceSelectors(id),
-	}).WithActor(actor)
+	data := map[string]any{"reason": reason, "possibleResources": deferredResourceSelectors(id)}
+	if decodeErr != nil {
+		data["invalid"] = true
+	} else {
+		data["daemon"] = item.Daemon
+	}
+	event := domain.NewEvent(kind, id, data).WithActor(actor)
 	// Persist the audit before releasing the reservation. A store failure
 	// leaves the reservation available for retry.
 	if err := m.opt.Store.AppendEvent(work, event); err != nil {

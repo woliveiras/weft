@@ -136,3 +136,16 @@ it('shows interrupted deletion and lets an admin release a reservation with an a
     dryRun: false, abandonDeferred: { graph: 'factory', reason: 'Keep the original graph' },
   });
 });
+
+it('identifies a corrupt reservation and keeps the audited release available', async () => {
+  fakeApi({ [path]: () => ({
+    dryRun: true, generations: [],
+    deferredGraphs: [{ graph: 'broken', invalid: true, graphExists: false, daemonMatches: false, possibleResources: ['Volumes labeled weft.graph=broken'] }],
+  }) });
+  render(<SharedEnvironmentsSection canManage />);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'Refresh preview' }));
+  expect(await screen.findByText(/The cleanup record is invalid/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Clean up broken' })).toHaveProperty('disabled', true);
+  expect(screen.getByRole('button', { name: 'Abandon cleanup for broken' })).toHaveProperty('disabled', false);
+});

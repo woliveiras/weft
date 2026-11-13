@@ -106,15 +106,17 @@ function CleanupControls() {
       <h3>Deferred graph cleanup</h3>
       <ul>{deferred.map(item => <li key={item.graph}>
         <strong>{item.graph}</strong>
-        <p>Requested by {item.actor || 'Unknown'} · {fmtDateTime(item.since)}</p>
-        <p>{item.reason || 'Deletion was requested with environment cleanup deferred.'}</p>
-        {item.graphExists && <p>Deletion was interrupted. Finish deleting the graph or cancel the reservation to keep it.</p>}
-        {!item.daemonMatches && <p>Cleanup requires the original sandbox daemon.</p>}
+        {item.invalid ? <p>The cleanup record is invalid. Review the possible resources before releasing the reservation.</p> : <>
+          <p>Requested by {item.actor || 'Unknown'} · {fmtDateTime(item.since)}</p>
+          <p>{item.reason || 'Deletion was requested with environment cleanup deferred.'}</p>
+          {item.graphExists && <p>Deletion was interrupted. Finish deleting the graph or cancel the reservation to keep it.</p>}
+          {!item.daemonMatches && <p>Cleanup requires the original sandbox daemon.</p>}
+        </>}
         {item.possibleResources?.length ? <details>
           <summary>Resources that may remain</summary>
           <ul>{item.possibleResources.map(resource => <li key={resource}>{resource}</li>)}</ul>
         </details> : null}
-        <Btn disabled={busy || !!confirmation || (!item.graphExists && !item.daemonMatches)} onClick={() => {
+        <Btn disabled={busy || !!confirmation || item.invalid || (!item.graphExists && !item.daemonMatches)} onClick={() => {
           const message = item.graphExists
             ? `Finish deleting “${item.graph}” and keep its cleanup deferred?`
             : `Remove the remaining environment resources for “${item.graph}”?`;

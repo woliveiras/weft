@@ -640,3 +640,63 @@ func TestDeferredCleanupResolvesDifferentDaemonAndInterruptedDeletion(t *testing
 		})
 	}
 }
+
+func TestInvalidDeferredCleanupCanBeAbandonedThroughAPI(t *testing.T) {
+	bin, _ := fakeDaemonCLI(t)
+	srv, app := setupApp(t, func(c *config.Config) { c.Isolation.Docker.Bin = bin })
+	const cleanup = "/api/v1/environments/cleanup"
+	ctx := t.Context()
+	for id, data := range map[string]string{"invalid": "broken-private-bytes", "valid": `{"graph":"valid","daemon":"other-daemon"}`} {
+		if err := app.Store.KVPut(ctx, domain.DeferredEnvironmentCleanup, id, []byte(data)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var preview struct {
+		DeferredGraphs []struct {
+			Graph             string
+			Invalid           bool
+			PossibleResources []string
+		}
+	}
+	if code := call(t, srv, "POST", cleanup, adminTok, "application/json", "{}", &preview); code != 200 || len(preview.DeferredGraphs) != 2 {
+		t.Fatalf("preview: %d %+v", code, preview)
+	}
+	invalid, valid := preview.DeferredGraphs[0], preview.DeferredGraphs[1]
+	if invalid.Graph != "invalid" || !invalid.Invalid || len(invalid.PossibleResources) == 0 || valid.Graph != "valid" || valid.Invalid {
+		t.Fatalf("preview entries: %+v", preview)
+	}
+	for _, body := range []string{
+		`{"dryRun":false,"abandonDeferred":{"graph":"","reason":"verified"}}`,
+		`{"dryRun":false,"deferredGraphs":["valid"],"abandonDeferred":{"graph":"invalid","reason":"verified"}}`,
+		`{"dryRun":false,"generations":["valid"],"abandonDeferred":{"graph":"invalid","reason":"verified"}}`,
+	} {
+		if code := call(t, srv, "POST", cleanup, adminTok, "application/json", body, nil); code != 400 {
+			t.Fatalf("invalid selection: %d", code)
+		}
+	}
+	retry := `{"dryRun":false,"deferredGraphs":["invalid"]}`
+	if code := call(t, srv, "POST", cleanup, adminTok, "application/json", retry, nil); code != 409 {
+		t.Fatalf("retry of corrupt record: %d", code)
+	}
+	abandon := `{"dryRun":false,"abandonDeferred":{"graph":"invalid","reason":"verified resources"}}`
+	key := "graph-transition/invalid"
+	if ok, err := app.Store.AcquireLease(ctx, key, "test-holder", time.Minute); err != nil || !ok {
+		t.Fatalf("hold transition: %t %v", ok, err)
+	}
+	if code := call(t, srv, "POST", cleanup, adminTok, "application/json", abandon, nil); code != 409 {
+		t.Fatalf("abandon with held lease: %d", code)
+	}
+	if err := app.Store.ReleaseLease(ctx, key, "test-holder"); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []int{204, 404} {
+		if code := call(t, srv, "POST", cleanup, adminTok, "application/json", abandon, nil); code != want {
+			t.Fatalf("abandon: %d, want %d", code, want)
+		}
+	}
+	events, err := app.Store.ListEvents(ctx, storage.EventFilter{GraphID: "invalid", Types: []domain.EventType{"environment.deferred_cleanup_abandon_requested"}})
+	if err != nil || len(events) != 1 || events[0].Actor != "admin" || !strings.Contains(string(events[0].Data), `"invalid":true`) ||
+		!strings.Contains(string(events[0].Data), "verified resources") || strings.Contains(string(events[0].Data), "broken-private-bytes") {
+		t.Fatalf("audit: %+v, %v", events, err)
+	}
+}

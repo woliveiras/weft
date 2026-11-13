@@ -244,3 +244,32 @@ func TestRecoveryPersistsLastObservedBuildTime(t *testing.T) {
 		t.Fatalf("persisted recovery: %+v, %v", st, err)
 	}
 }
+
+func TestBuildRecoverySkipsLiveControllerLease(t *testing.T) {
+	h := setup(t)
+	ctx := t.Context()
+	id := "live-build"
+	progress := time.Now().UTC().Add(-time.Minute)
+	if err := h.m.save(ctx, &Status{Graph: id, State: StateBuilding, Phase: "build", LastProgressAt: &progress}); err != nil {
+		t.Fatal(err)
+	}
+	key := leasePrefix + id
+	if ok, err := h.store.AcquireLease(ctx, key, "other-controller", time.Minute); err != nil || !ok {
+		t.Fatalf("acquire live build lease: %t %v", ok, err)
+	}
+	if err := h.m.recoverBuilds(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := h.m.load(ctx, id); err != nil || st.State != StateBuilding || st.Phase != "build" || st.FinishedAt != nil {
+		t.Fatalf("recovery touched a live build: %+v, %v", st, err)
+	}
+	if err := h.store.ReleaseLease(ctx, key, "other-controller"); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.m.recoverBuilds(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := h.m.load(ctx, id); err != nil || st.State != StateFailed || st.FinishedAt == nil || !st.FinishedAt.Equal(progress) {
+		t.Fatalf("unleased build was not recovered: %+v, %v", st, err)
+	}
+}
