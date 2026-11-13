@@ -1,15 +1,19 @@
 #!/usr/bin/env sh
 # Use the weftd image and Compose mTLS transport, without a host Docker socket.
-# The integration checks that the base, proxy, and BuildKit images are cached.
+# Use a cached Alpine image as an OCI layout consumed directly by BuildKit.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 project=${COMPOSE_PROJECT_NAME:-weft}
 runner=${WEFT_TEST_WEFTD_IMAGE:-weft/weftd:dev}
 docker network inspect "${project}_sandbox" >/dev/null
 docker volume inspect "${project}_sandbox-certs-client" >/dev/null
-work=$(mktemp -d)
-trap 'rm -f "$work/environment.test"; rmdir "$work"' EXIT
+work=$(mktemp -d "$root/server/.weft-test-tls.XXXXXX")
+trap 'rm -rf "$work"' EXIT
 chmod 755 "$work"
+mkdir "$work/base"
+docker image inspect alpine:3.22 >/dev/null
+docker image save alpine:3.22 > "$work/alpine.tar"
+tar -xf "$work/alpine.tar" -C "$work/base"
 docker run --pull=never --rm --network none \
   -v "$root:/repo:ro" -v "$work:/out" \
   -v weft-gomod:/go/pkg/mod -v weft-gocache:/root/.cache/go-build \

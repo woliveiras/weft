@@ -44,18 +44,41 @@ if [ "$1" = --tlscert ]; then
 fi
 sub="$1"; [ "$1" = image ] || [ "$1" = volume ] || [ "$1" = buildx ] || [ "$1" = network ] || [ "$1" = context ] && sub="$1-$2"
 [ -f "$d/slow-$sub" ] && sleep 30
-if [ -f "$d/fail-$sub" ]; then echo "step output"; echo "boom: $sub failed" >&2; exit 1; fi
+if [ -f "$d/fail-$sub" ]; then
+  echo "step output"
+  cat "$d/fail-$sub" >&2
+  [ ! -s "$d/fail-$sub" ] || echo >&2
+  echo "boom: $sub failed" >&2
+  exit 1
+fi
+remove_name() {
+  [ -f "$1" ] || return 0
+  awk -v name="$2" '$0 != name && $0 != name "*"' "$1" > "$1.new" && mv "$1.new" "$1"
+}
 case "$sub" in
   inspect) [ -f "$d/proxy-address" ] && cat "$d/proxy-address" ;;
   context-ls) [ ! -f "$d/contexts" ] || cat "$d/contexts" ;;
+  context-create) echo "$5" >> "$d/contexts" ;;
+  context-rm)
+    if [ -f "$d/fail-final-context-rm" ] && [ -f "$d/buildx-built" ]; then
+      echo 'final context removal failed' >&2
+      exit 1
+    fi
+    remove_name "$d/contexts" "$3" ;;
+  buildx-ls) [ ! -f "$d/builders" ] || cat "$d/builders" ;;
+  buildx-rm) remove_name "$d/builders" "$4" ;;
   buildx-create)
+    name=$4
     while [ "$#" -gt 1 ]; do
       if [ "$1" = --buildkitd-config ]; then cat "$2" > "$d/buildkitd-config" || exit 1; fi
       shift
     done
-    cat > /dev/null ;;
+    cat > /dev/null
+    echo "$name" >> "$d/builders"
+    echo "$name"
+    [ ! -f "$d/buildx-create-output" ] || cat "$d/buildx-create-output" ;;
   pull) echo "Pulling from library"; echo "Status: Downloaded" ;;
-  build|buildx-build) cat > /dev/null; echo "Successfully built" ;;
+  build|buildx-build) cat > /dev/null; touch "$d/buildx-built"; echo "Successfully built" ;;
   run) echo "setup ran: $*" ;;
   ps) [ -f "$d/containers" ] && cat "$d/containers" ;;
   image-ls) [ -f "$d/images" ] && cat "$d/images" ;;

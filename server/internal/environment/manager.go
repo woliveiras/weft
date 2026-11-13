@@ -333,12 +333,17 @@ func (m *Manager) run(ctx context.Context, b *build, g *domain.Graph, st *Status
 	now := time.Now().UTC()
 	st.FinishedAt, st.Log = &now, logBuf.String()
 	outcome := "ready"
+	var connection *builderConnectionError
 	if err != nil {
 		outcome = "failed"
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			err = fmt.Errorf("build timed out after %s", time.Since(start).Round(time.Second))
 		} else if errors.Is(ctx.Err(), context.Canceled) {
 			err = errors.New("build cancelled")
+		}
+		if errors.As(err, &connection) {
+			fmt.Fprintf(logBuf, "==> %v\n", err)
+			st.Log = logBuf.String()
 		}
 		st.State, st.Error, st.Image, st.Caches = StateFailed, err.Error(), "", nil
 	} else {
@@ -360,7 +365,11 @@ func (m *Manager) run(ctx context.Context, b *build, g *domain.Graph, st *Status
 	data := map[string]any{"hash": st.Hash, "durationMs": time.Since(start).Milliseconds(), "buildReasons": st.BuildReasons, "reuseDecision": st.ReuseDecision}
 	if err != nil {
 		data["error"] = st.Error
-		m.opt.Log.Warn("environment build failed", "graph", id, "hash", st.Hash, "err", err)
+		attrs := []any{"graph", id, "hash", st.Hash, "err", err}
+		if connection != nil {
+			attrs = append(attrs, "operation", connection.operation, "diagnostic", connection.diagnostic)
+		}
+		m.opt.Log.Warn("environment build failed", attrs...)
 		m.publish(context.Background(), domain.EvEnvFailed, id, st.Actor, data)
 		return
 	}
@@ -575,12 +584,26 @@ func (m *Manager) Reset(ctx context.Context, graphID, actor string) error {
 		return fmt.Errorf("%w for graph %s on another instance; reset it after the build ends", ErrBuildRunning, graphID)
 	}
 	if m.opt.Capacity != nil {
+		// Use a distinct holder so a concurrent build cannot renew this lease.
+		holder := domain.NewID("reset")
+		ok, err := m.opt.Store.AcquireLease(ctx, leasePrefix+graphID, holder, leaseTTL)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("%w for graph %s; retry reset after the build ends", ErrBuildRunning, graphID)
+		}
+		defer func() { _ = m.opt.Store.ReleaseLease(context.WithoutCancel(ctx), leasePrefix+graphID, holder) }()
 		if err := m.cleanBuildResources(ctx, graphID); err != nil {
 			return err
 		}
 		if err := m.opt.Capacity.Release(ctx, buildContainer(graphID)); err != nil {
 			return err
 		}
+		// Workers are gone. Reconcile the graph's local Buildx record and TLS
+		// context even when a restart has already cleared the context store.
+		m.warnBuilderCleanup(graphID, io.Discard, m.removeStaleBuilder(ctx, graphID, "", io.Discard))
+		m.warnBuilderCleanup(graphID, io.Discard, m.removeStaleBuilderContext(ctx, builderEndpointName(graphID)))
 	}
 	// Mark absent first so an interrupted build does not record a result.
 	if err := m.save(ctx, &Status{Graph: graphID, State: StateAbsent}); err != nil {

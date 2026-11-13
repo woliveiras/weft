@@ -201,6 +201,23 @@ paths, set `WEFT_WORKSPACES_HOST` to the daemon's path. Apply equivalent
 egress rules to that daemon's bridges: they are what keeps sandboxes away from
 your services.
 
+For a TCP endpoint configured with Docker TLS environment variables, bounded
+builds create a temporary Docker context for each graph. Docker copies the
+client TLS material, including the private key, into `contexts/tls` under
+`$DOCKER_CONFIG` or `$HOME/.docker`. Keep the Docker config directory private
+(`0700`) and writable by the account running `weftd`. To keep these copies in
+memory on Linux, mount a tmpfs at the Docker config directory's `contexts`
+subdirectory with mode `0700` and the `weftd` UID and GID. You can also set
+`DOCKER_CONFIG` to a private, writable directory on an existing tmpfs. If you
+change `DOCKER_CONFIG`, set `DOCKER_CERT_PATH` to the original client TLS
+directory explicitly and ensure the Buildx plugin is still discoverable.
+
+Weft removes the temporary context after the build. A crash can leave the
+context on disk. Retrying the build refreshes that graph's context, and Reset
+attempts to remove the graph's stale context and Buildx record. Run Reset
+before deleting the graph if its build was interrupted and its Docker config
+is stored on disk.
+
 ## Limitations
 
 - **External runtimes launched from `runtime.image`** are not started on the

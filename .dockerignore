@@ -1,4 +1,5 @@
 .git
+server/.weft-test-tls.*
 **/node_modules
 **/.npmrc
 web/dist

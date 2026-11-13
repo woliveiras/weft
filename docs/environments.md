@@ -440,7 +440,8 @@ the `weftd` Docker context store in memory, separate from Buildx builder metadat
 If the build reports a sandbox daemon build connection error, check daemon
 reachability, Docker Buildx, and access to the Docker client TLS files.
 `scripts/test-environment-build-tls.sh` checks this path over Compose mutual TLS
-using the cached Go base, BuildKit worker, and egress proxy images.
+using a cached Alpine image as a local OCI layout and cached BuildKit worker
+and egress proxy images. The test does not need registry access.
 
 Reservations survive controller restarts. Build again or Reset the same graph
 to reconcile interrupted workers. A cleanup failure is reported and retains

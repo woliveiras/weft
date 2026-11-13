@@ -20,6 +20,9 @@ import (
 )
 
 type buildBudgetKey struct{}
+
+const builderCleanupTimeout = time.Minute
+
 type buildBudget struct {
 	id     string
 	memory int64
@@ -28,6 +31,25 @@ type buildBudget struct {
 
 func builderName(id string) string      { return "weft-builder-" + id }
 func builderContainer(id string) string { return "buildx_buildkit_" + builderName(id) + "0" }
+
+// Only the graph's reserved builder name is eligible for reconciliation.
+func (m *Manager) removeStaleBuilder(ctx context.Context, id, endpoint string, log io.Writer) error {
+	var flags []string
+	if endpoint != "" {
+		flags = []string{"--context", endpoint}
+	}
+	tls := m.usesBuilderTLSContext()
+	var builders bytes.Buffer
+	if err := m.builderDocker(ctx, tls, &builders, "list bounded builders", append(flags, "buildx", "ls", "--format", "{{.Name}}")...); err != nil {
+		return err
+	}
+	for _, name := range strings.Fields(builders.String()) {
+		if strings.TrimSuffix(name, "*") == builderName(id) {
+			return m.builderDocker(ctx, tls, log, "remove stale bounded builder", append(flags, "buildx", "rm", "--force", builderName(id))...)
+		}
+	}
+	return nil
+}
 
 // One reservation covers sequential build, cache copies and setup. It survives
 // crashes until this graph's next build/reset confirms all workers are gone.
@@ -81,7 +103,7 @@ func (m *Manager) withBuildCapacity(ctx context.Context, g *domain.Graph, log io
 		return "", nil, err
 	}
 	defer func() {
-		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), builderCleanupTimeout)
 		defer cancel()
 		if g.Spec.Environment.Network.Setup == "egress" {
 			if captureErr := m.capturePreparationProxy(cleanup, g.Metadata.ID); captureErr != nil {
@@ -259,7 +281,7 @@ func (m *Manager) prepareBoundedImage(ctx context.Context, g *domain.Graph, fina
 		input = f
 		args = append(args, "--file", contextDockerfile)
 	}
-	endpoint, err := m.builderContext(ctx, b.id)
+	endpoint, err := m.builderContext(ctx, b.id, log)
 	if err != nil {
 		return "", err
 	}
@@ -267,26 +289,14 @@ func (m *Manager) prepareBoundedImage(ctx context.Context, g *domain.Graph, fina
 	if endpoint != "" {
 		dockerFlags = []string{"--context", endpoint}
 		defer func() {
-			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), builderCleanupTimeout)
 			defer cancel()
-			err = errors.Join(err, m.removeBuilderContext(cleanup, endpoint))
+			m.warnBuilderCleanup(b.id, log, m.removeBuilderContext(cleanup, endpoint))
 		}()
 	}
-	buildx := func(ctx context.Context, stdin io.Reader, out io.Writer, args ...string) error {
-		return m.docker(ctx, stdin, out, append(dockerFlags, args...)...)
-	}
-	// Remove only our generated Buildx configuration. Physical workers were
-	// already reconciled before admission; an absent local builder is harmless.
-	var builders bytes.Buffer
-	if err = buildx(ctx, nil, &builders, "buildx", "ls", "--format", "{{.Name}}"); err != nil {
-		return "", builderConnectionError(ctx, "list bounded builders")
-	}
-	for _, name := range strings.Fields(builders.String()) {
-		if strings.TrimSuffix(name, "*") == builderName(b.id) {
-			if err = buildx(ctx, nil, io.Discard, "buildx", "rm", "--force", builderName(b.id)); err != nil {
-				return "", builderConnectionError(ctx, "remove stale bounded builder")
-			}
-		}
+	// Physical workers were already reconciled before admission.
+	if err := m.removeStaleBuilder(ctx, b.id, endpoint, log); err != nil {
+		return "", err
 	}
 	memory := strconv.FormatInt(b.memory, 10)
 	create := []string{"buildx", "create", "--name", builderName(b.id), "--driver", "docker-container", "--driver-opt", "memory=" + memory + ",memory-swap=" + memory + ",restart-policy=no,cpu-period=100000,cpu-quota=" + strconv.FormatInt(b.cpu*100, 10)}
@@ -317,19 +327,22 @@ func (m *Manager) prepareBoundedImage(ctx context.Context, g *domain.Graph, fina
 	if endpoint != "" {
 		create = append(create, endpoint)
 	}
-	if err = buildx(ctx, nil, io.Discard, create...); err != nil {
-		return "", builderConnectionError(ctx, "create bounded builder (check sandbox daemon connectivity and Docker Buildx)")
+	if err = m.builderDocker(ctx, endpoint != "", log, "create bounded builder", append(dockerFlags, create...)...); err != nil {
+		if endpoint != "" {
+			return "", err
+		}
+		return "", fmt.Errorf("create bounded builder: %w", err)
 	}
 	defer func() {
-		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), builderCleanupTimeout)
 		defer cancel()
-		e := buildx(cleanup, nil, log, "buildx", "rm", "--force", builderName(b.id))
+		e := m.builderDocker(cleanup, endpoint != "", log, "remove bounded builder", append(dockerFlags, "buildx", "rm", "--force", builderName(b.id))...)
 		if e != nil {
 			err = errors.Join(err, fmt.Errorf("remove bounded builder: %w", e))
 		}
 	}()
 	fmt.Fprintf(log, "==> Building with a %d-byte worker memory cap\n", b.memory)
-	if err = buildx(ctx, input, log, append(args, "-")...); err != nil {
+	if err = m.docker(ctx, input, log, append(dockerFlags, append(args, "-")...)...); err != nil {
 		return "", fmt.Errorf("bounded Dockerfile build: %w", err)
 	}
 	return final + "-user", nil
