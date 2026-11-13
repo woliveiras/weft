@@ -335,7 +335,7 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErr(w, http.StatusBadRequest, "invalid", err.Error(), nil)
 	case errors.Is(err, tools.ErrDenied), errors.Is(err, tools.ErrRejected):
 		writeErr(w, http.StatusForbidden, "forbidden", err.Error(), nil)
-	case errors.Is(err, environment.ErrBuildRunning):
+	case errors.Is(err, environment.ErrBuildRunning), errors.Is(err, environment.ErrResetRunning), errors.Is(err, environment.ErrResetLeaseLost), errors.Is(err, environment.ErrResetIncomplete):
 		writeErr(w, http.StatusConflict, "conflict", err.Error(), nil)
 	case errors.Is(err, environment.ErrNotDefined), errors.Is(err, environment.ErrInvalidDefinition):
 		writeErr(w, http.StatusBadRequest, "invalid", err.Error(), nil)
@@ -661,22 +661,55 @@ func (s *Server) updateGraph(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) deleteGraph(w http.ResponseWriter, r *http.Request) error {
 	id := r.PathValue("id")
 	actor := identityFrom(r.Context()).Name
-	hadEnv := false
-	if s.Environments != nil {
-		hadEnv, _ = s.Environments.Exists(r.Context(), id)
-	}
-	if err := s.Engine.DeleteGraph(r.Context(), id, actor); err != nil {
-		return err
-	}
-	// The graph is gone; its environment images and caches go too. Failures
-	// leave orphans in the sandbox daemon only, so they are logged.
-	if hadEnv {
-		if err := s.Environments.Reset(r.Context(), id, actor); err != nil {
-			s.Log.Warn("environment cleanup after graph deletion", "graph", id, "err", err)
+	ctx := r.Context()
+	deleteGraph := func(ctx context.Context) error { return s.Engine.DeleteGraph(ctx, id, actor) }
+	if s.Environments == nil {
+		if err := deleteGraph(ctx); err != nil {
+			return err
+		}
+	} else {
+		_, rec, err := s.Engine.GetGraph(ctx, id, 0)
+		if err != nil {
+			return err
+		}
+		if rec.DesiredState != domain.GraphStopped || (rec.State != domain.GraphStopped && rec.State != "") {
+			return fmt.Errorf("%w: stop the graph before deleting it", engine.ErrConflict)
+		}
+		if err := s.deleteGraphEnvironment(ctx, id, actor, deleteGraph); err != nil {
+			return err
 		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil
+}
+
+// Retry contention briefly, but keep the graph available for an operator retry
+// if cleanup fails or exceeds the request budget.
+func (s *Server) deleteGraphEnvironment(ctx context.Context, id, actor string, deleteGraph func(context.Context) error) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		err := s.Environments.ResetBeforeDelete(ctx, id, actor, deleteGraph)
+		if errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("%w: environment cleanup timed out; retry graph deletion", engine.ErrConflict)
+		}
+		if !errors.Is(err, environment.ErrBuildRunning) && !errors.Is(err, environment.ErrResetRunning) {
+			if errors.Is(err, environment.ErrResetIncomplete) {
+				return fmt.Errorf("%w; retry graph deletion after resolving the environment cleanup failure", err)
+			}
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.Canceled) {
+				return ctx.Err()
+			}
+			return fmt.Errorf("%w; retry graph deletion", err)
+		case <-tick.C:
+		}
+	}
 }
 
 func (s *Server) graphVersions(w http.ResponseWriter, r *http.Request) error {

@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -189,4 +190,100 @@ func waitState(t *testing.T, srv *httptest.Server, graph, state string) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Fatalf("graph %s did not reach %s (now %s)", graph, state, st.State)
+}
+
+func TestGraphDeletionWaitsForEnvironmentLease(t *testing.T) {
+	bin, log := fakeDaemonCLI(t)
+	srv, app := setupApp(t, func(c *config.Config) { c.Isolation.Docker.Bin = bin })
+	const path = "/api/v1/graphs/env-demo"
+	if code := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/yaml", envGraph, nil); code != 201 {
+		t.Fatalf("create = %d", code)
+	}
+	const key = "environment/env-demo"
+	const holder = "environment-reset_api-fixture"
+	if ok, err := app.Store.AcquireLease(t.Context(), key, holder, time.Minute); err != nil || !ok {
+		t.Fatalf("acquire lease: %v %v", ok, err)
+	}
+	var conflict struct{ Error string }
+	for _, endpoint := range []string{"/build", "/reset"} {
+		if code := call(t, srv, "POST", path+"/environment"+endpoint, adminTok, "application/json", `{"force":true}`, &conflict); code != 409 || !strings.Contains(conflict.Error, "reset is already running") {
+			t.Fatalf("%s = %d, %+v", endpoint, code, conflict)
+		}
+	}
+	req, err := http.NewRequestWithContext(t.Context(), "DELETE", srv.URL+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+adminTok)
+	type result struct {
+		code int
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		response, err := srv.Client().Do(req)
+		if err != nil {
+			done <- result{err: err}
+			return
+		}
+		response.Body.Close()
+		done <- result{code: response.StatusCode}
+	}()
+	select {
+	case got := <-done:
+		t.Fatalf("delete completed under another reset's lease: %+v", got)
+	case <-time.After(150 * time.Millisecond):
+	}
+	if code := call(t, srv, "GET", path, viewerTok, "", "", nil); code != 200 {
+		t.Fatalf("graph disappeared before cleanup: %d", code)
+	}
+	if err := app.Store.ReleaseLease(t.Context(), key, holder); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-done:
+		if got.err != nil || got.code != 204 {
+			t.Fatalf("delete after reset: %+v", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("delete did not retry after reset")
+	}
+	calls, err := os.ReadFile(log)
+	if err != nil || !strings.Contains(string(calls), "volume ls -q --filter label=weft.graph=env-demo") {
+		t.Fatalf("missing cleanup: %v\n%s", err, calls)
+	}
+	if code := call(t, srv, "POST", path+"/environment/build", operatorTok, "", "", nil); code != 404 {
+		t.Fatalf("build after delete: %d", code)
+	}
+}
+
+func TestGraphDeletionKeepsGraphOnEnvironmentCleanupFailure(t *testing.T) {
+	bin, log := fakeDaemonCLI(t)
+	fail := filepath.Join(filepath.Dir(bin), "fail-cleanup")
+	script := "#!/bin/sh\necho \"$*\" >> " + log + "\n" +
+		"if [ \"$1 $2\" = 'volume ls' ] && [ -f " + fail + " ]; then echo 'daemon unavailable' >&2; exit 1; fi\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	srv, _ := setupApp(t, func(c *config.Config) { c.Isolation.Docker.Bin = bin })
+	const path = "/api/v1/graphs/env-demo"
+	if code := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/yaml", envGraph, nil); code != 201 {
+		t.Fatalf("create = %d", code)
+	}
+	if err := os.WriteFile(fail, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	var conflict struct{ Error string }
+	if code := call(t, srv, "DELETE", path, adminTok, "", "", &conflict); code != 409 || !strings.Contains(conflict.Error, "retry graph deletion") {
+		t.Fatalf("delete with failed cleanup: %d %+v", code, conflict)
+	}
+	if code := call(t, srv, "GET", path, viewerTok, "", "", nil); code != 200 {
+		t.Fatalf("graph unavailable for retry: %d", code)
+	}
+	if err := os.Remove(fail); err != nil {
+		t.Fatal(err)
+	}
+	if code := call(t, srv, "DELETE", path, adminTok, "", "", nil); code != 204 {
+		t.Fatalf("retry delete: %d", code)
+	}
 }

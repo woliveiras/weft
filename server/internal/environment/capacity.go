@@ -139,14 +139,8 @@ func (m *Manager) withBuildCapacity(ctx context.Context, g *domain.Graph, log io
 // Names are deterministic so a new control-plane process can recover workers.
 func (m *Manager) cleanBuildResources(ctx context.Context, id string) error {
 	for _, name := range []string{builderContainer(id), buildContainer(id), buildContainer(id) + "-copy", preparationProxy(id)} {
-		var out bytes.Buffer
-		if err := m.docker(ctx, nil, &out, "ps", "-aq", "--filter", "name=^/"+regexp.QuoteMeta(name)+"$"); err != nil {
-			return fmt.Errorf("list build workers: %w", err)
-		}
-		if ids := strings.Fields(out.String()); len(ids) > 0 {
-			if err := m.docker(ctx, nil, io.Discard, append([]string{"rm", "-f"}, ids...)...); err != nil {
-				return fmt.Errorf("remove build worker: %w", err)
-			}
+		if err := m.removeBuildWorker(ctx, name); err != nil {
+			return err
 		}
 	}
 	var networks bytes.Buffer
@@ -158,6 +152,19 @@ func (m *Manager) cleanBuildResources(ctx context.Context, id string) error {
 			if err := m.docker(ctx, nil, io.Discard, "network", "rm", name); err != nil {
 				return fmt.Errorf("remove preparation network: %w", err)
 			}
+		}
+	}
+	return nil
+}
+
+func (m *Manager) removeBuildWorker(ctx context.Context, name string) error {
+	var out bytes.Buffer
+	if err := m.docker(ctx, nil, &out, "ps", "-aq", "--filter", "name=^/"+regexp.QuoteMeta(name)+"$"); err != nil {
+		return fmt.Errorf("list build workers: %w", err)
+	}
+	if ids := strings.Fields(out.String()); len(ids) > 0 {
+		if err := m.docker(ctx, nil, io.Discard, append([]string{"rm", "-f"}, ids...)...); err != nil {
+			return fmt.Errorf("remove build worker: %w", err)
 		}
 	}
 	return nil
@@ -291,7 +298,7 @@ func (m *Manager) prepareBoundedImage(ctx context.Context, g *domain.Graph, fina
 		defer func() {
 			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), builderCleanupTimeout)
 			defer cancel()
-			m.warnBuilderCleanup(b.id, log, m.removeBuilderContext(cleanup, endpoint))
+			m.warnBuilderCleanup(b.id, log, "remove Docker TLS context", m.removeBuilderContext(cleanup, endpoint))
 		}()
 	}
 	// Physical workers were already reconciled before admission.
@@ -336,9 +343,16 @@ func (m *Manager) prepareBoundedImage(ctx context.Context, g *domain.Graph, fina
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), builderCleanupTimeout)
 		defer cancel()
-		e := m.builderDocker(cleanup, endpoint != "", log, "remove bounded builder", append(dockerFlags, "buildx", "rm", "--force", builderName(b.id))...)
+		e := m.builderDocker(cleanup, endpoint != "", io.Discard, "remove bounded builder", append(dockerFlags, "buildx", "rm", "--force", builderName(b.id))...)
 		if e != nil {
-			err = errors.Join(err, fmt.Errorf("remove bounded builder: %w", e))
+			m.warnBuilderCleanup(b.id, log, "remove bounded builder", e)
+			// Reconcile the physical worker before setup starts, even when Buildx
+			// could not clean up its local record.
+			if workerErr := m.removeBuildWorker(cleanup, builderContainer(b.id)); workerErr != nil {
+				err = errors.Join(err, workerErr)
+			}
+		} else {
+			fmt.Fprintf(log, "%s removed\n", builderName(b.id))
 		}
 	}()
 	fmt.Fprintf(log, "==> Building with a %d-byte worker memory cap\n", b.memory)

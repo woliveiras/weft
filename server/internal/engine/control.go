@@ -265,6 +265,9 @@ func (e *Engine) DeleteGraph(ctx context.Context, id, actor string) error {
 			_ = e.opt.Broker.DeleteGroup(ctx, subjectOf(g, c), grp)
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := e.store.DeleteGraph(ctx, id); err != nil {
 		return notFound(err)
 	}

@@ -187,6 +187,7 @@ func TestBuilderConnectionAndCleanupIntegration(t *testing.T) {
 		{failure: "buildx-create", operation: "create bounded builder", tls: true},
 		{failure: "buildx-build", tls: true},
 		{failure: "final-context-rm", operation: "remove Docker TLS context", tls: true, ready: true},
+		{failure: "final-buildx-rm", operation: "remove bounded builder", tls: true, ready: true},
 		{failure: "buildx-ls"},
 		{failure: "buildx-create"},
 	} {
@@ -212,6 +213,13 @@ func TestBuilderConnectionAndCleanupIntegration(t *testing.T) {
 			diagnostic := ""
 			if tc.operation != "" {
 				diagnostic = "cannot access /outside/private/key.pem"
+				if tc.failure == "buildx-create" {
+					t.Setenv("DOCKER_CERT_PATH", h.docker.dir+"/")
+					for _, name := range []string{"ca.pem", "cert.pem", "key.pem"} {
+						h.docker.set(t, name, "fixture")
+					}
+					diagnostic = strings.Repeat("earlier Docker output\n", 700) + "cannot access " + h.docker.dir + ": permission denied; " + diagnostic
+				}
 			}
 			h.docker.set(t, "fail-"+tc.failure, diagnostic)
 			if _, err := h.m.Build(context.Background(), g, true, "test"); err != nil {
@@ -225,7 +233,7 @@ func TestBuilderConnectionAndCleanupIntegration(t *testing.T) {
 				<-b.done
 			}
 			if tc.ready {
-				if v.State != StateReady || v.Image == "" || !strings.Contains(v.Log, "Warning: sandbox daemon build connection: could not remove Docker TLS context") {
+				if v.State != StateReady || v.Image == "" || !strings.Contains(v.Log, "Warning: could not "+tc.operation) {
 					t.Fatalf("expected ready image with cleanup warning: %+v", v)
 				}
 			} else if v.State != StateFailed {
@@ -243,7 +251,11 @@ func TestBuilderConnectionAndCleanupIntegration(t *testing.T) {
 					!strings.Contains(logged, `"diagnostic":`) {
 					t.Fatalf("unexpected diagnostic: %+v\n%s", v, logged)
 				}
-				if tc.failure != "final-context-rm" && !strings.Contains(logged, "[PEM file]") {
+				if tc.failure == "buildx-create" && (!strings.Contains(logged, "[earlier Docker output truncated]") ||
+					!strings.Contains(logged, "[TLS directory]: permission denied") || strings.Contains(logged, h.docker.dir)) {
+					t.Fatalf("truncated diagnostic lost its sanitized cause: %s", logged)
+				}
+				if !tc.ready && !strings.Contains(logged, "[PEM file]") {
 					t.Fatalf("sanitized cause missing: %s", logged)
 				}
 			} else if !strings.Contains(v.Error, "boom: "+tc.failure+" failed") {
@@ -256,8 +268,13 @@ func TestBuilderConnectionAndCleanupIntegration(t *testing.T) {
 				assertBuilderFixture(t, h.docker, "builders", "")
 			}
 			if tc.ready {
-				assertBuilderFixture(t, h.docker, "builders", "")
-				assertBuilderFixture(t, h.docker, "contexts", "default\n"+endpoint)
+				if tc.failure == "final-context-rm" {
+					assertBuilderFixture(t, h.docker, "builders", "")
+					assertBuilderFixture(t, h.docker, "contexts", "default\n"+endpoint)
+				} else {
+					assertBuilderFixture(t, h.docker, "builders", builderName(g.Metadata.ID))
+					assertBuilderFixture(t, h.docker, "contexts", "default")
+				}
 				if err := os.Remove(filepath.Join(h.docker.dir, "fail-"+tc.failure)); err != nil {
 					t.Fatal(err)
 				}
@@ -268,6 +285,7 @@ func TestBuilderConnectionAndCleanupIntegration(t *testing.T) {
 					t.Fatalf("retry did not recover the stale context: %+v", v)
 				}
 				assertBuilderFixture(t, h.docker, "contexts", "default")
+				assertBuilderFixture(t, h.docker, "builders", "")
 			}
 		})
 	}
@@ -291,6 +309,43 @@ func TestResetReconcilesOnlyGraphBuilderIntegration(t *testing.T) {
 			}
 			assertBuilderFixture(t, h.docker, "builders", "default\n"+builderName("other")+"\nexternal")
 			assertBuilderFixture(t, h.docker, "contexts", strings.TrimSpace(contexts))
+		})
+	}
+}
+
+func TestBuilderDiagnosticTail(t *testing.T) {
+	raw := strings.Repeat("earlier output\n", 1000) + "cannot open /private/client: permission denied"
+	for _, dir := range []string{"/private/client/", "/private//nested/../client/"} {
+		got := builderDiagnosticTail(raw, dir)
+		if !strings.HasPrefix(got, "[earlier Docker output truncated]") ||
+			!strings.HasSuffix(got, "cannot open [TLS directory]: permission denied") ||
+			strings.Contains(got, "/private/") {
+			t.Fatalf("diagnostic tail lost its safe cause: %q", got)
+		}
+	}
+	got := builderDiagnosticTail("open /private//client without a filename", "/private//client/")
+	if strings.Contains(got, "/private/") {
+		t.Fatalf("unnormalized path leaked: %q", got)
+	}
+}
+
+func TestResetContextLookupOnlyWithTLS(t *testing.T) {
+	for _, tls := range []bool{false, true} {
+		t.Run(fmt.Sprint(tls), func(t *testing.T) {
+			h := capacityHarness(t)
+			t.Setenv("DOCKER_TLS", "")
+			t.Setenv("DOCKER_TLS_VERIFY", "")
+			if tls {
+				t.Setenv("DOCKER_TLS_VERIFY", "1")
+			}
+			h.docker.set(t, "fail-context-ls", "open /private/client/key.pem")
+			err := h.m.Reset(t.Context(), "bookaneer", "test")
+			if tls && (err == nil || !strings.Contains(err.Error(), "clean up Docker TLS context") || strings.Contains(err.Error(), "build connection") || strings.Contains(err.Error(), "/private/")) {
+				t.Fatalf("unexpected cleanup error: %v", err)
+			}
+			if !tls && (err != nil || slices.ContainsFunc(h.docker.calls(t), func(call string) bool { return strings.HasPrefix(call, "context ") })) {
+				t.Fatalf("plain reset called Docker contexts: %v, %v", err, h.docker.calls(t))
+			}
 		})
 	}
 }

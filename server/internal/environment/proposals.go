@@ -375,7 +375,7 @@ func (p *Proposals) apply(ctx context.Context, id string) error {
 	if err = p.ValidateAccepted(ctx, g); err != nil {
 		return err
 	}
-	if _, err = p.Manager.Build(ctx, g, false, a.DecidedBy); err != nil {
+	if _, err = p.Manager.BuildSaved(ctx, g, false, a.DecidedBy); err != nil {
 		return err
 	}
 	v.State = "building"

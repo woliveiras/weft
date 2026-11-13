@@ -158,7 +158,7 @@ func TestBoundedBuildPipelineIntegration(t *testing.T) {
 				t.Fatal(err)
 			}
 			v := h.wait(t, g)
-			if fail != "" {
+			if fail != "" && fail != "buildx-rm" {
 				if v.State != StateFailed || v.Error == "" {
 					t.Fatalf("%+v", v)
 				}
@@ -166,6 +166,9 @@ func TestBoundedBuildPipelineIntegration(t *testing.T) {
 			}
 			if v.State != StateReady {
 				t.Fatalf("%+v", v)
+			}
+			if fail == "buildx-rm" && !strings.Contains(v.Log, "Warning: could not remove bounded builder") {
+				t.Fatalf("missing cleanup warning: %+v", v)
 			}
 			calls := strings.Join(h.docker.calls(t), "\n")
 			for _, want := range []string{"cpu-period=100000,cpu-quota=100000", "--cpus 1.000", "buildx create", "memory=67108864,memory-swap=67108864,restart-policy=no", "buildx build", "--load", "run --memory 67108864 --memory-swap 67108864", "buildx rm --force"} {

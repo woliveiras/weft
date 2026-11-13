@@ -288,8 +288,13 @@ saved with the graph. These endpoints manage its build; see
 |---|---|---|
 | `GET /api/v1/graphs/{id}/environment/proxies` | viewer | Read-only `{proxies, lastPreparation?, truncated}`: managed proxy state and sanitized recent request samples. Maximum 32 containers, 100 log lines per proxy within 24h; unavailable items include a warning. Last preparation is a historical snapshot. |
 | `GET /api/v1/graphs/{id}/environment` | viewer | Build state compared with the saved definition: `state` (`absent`, `building`, `ready`, `failed`), `defined`, `currentHash`, `upToDate`, `image`, `caches`, `error`, `log` (last 64 KiB). |
-| `POST /api/v1/graphs/{id}/environment/build` | operator | Body `{"force": bool}` (optional). Starts a background build of the saved definition (`202`); an up-to-date environment without `force` is left alone (`200`). `400` without `spec.environment`; `409` while a build runs. |
-| `POST /api/v1/graphs/{id}/environment/reset` | admin | Deletes the environment's images and cache volumes; `409` while the graph is running. |
+| `POST /api/v1/graphs/{id}/environment/build` | operator | Body `{"force": bool}` (optional). Starts a background build of the saved definition (`202`); an up-to-date environment without `force` is left alone (`200`). `400` without `spec.environment`; `409` while a build or reset holds the environment lease. The error message identifies the operation in progress. |
+| `POST /api/v1/graphs/{id}/environment/reset` | admin | Deletes the environment’s images, cache volumes and build resources. Returns `409` if the graph is running, another instance is building, another reset is active, or cleanup is incomplete. |
+
+`DELETE /api/v1/graphs/{id}` cleans up the environment before deleting the
+stopped graph. It waits up to 30 seconds for contention and cleanup. If cleanup
+fails or cannot finish in time, the graph remains available and the API returns
+a conflict. Resolve the reported problem and retry deletion.
 
 Starting a graph or node whose docker-isolated agents (without an image of
 their own) need an environment that is not ready returns `422` with an issue

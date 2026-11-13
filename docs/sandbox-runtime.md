@@ -214,9 +214,10 @@ directory explicitly and ensure the Buildx plugin is still discoverable.
 
 Weft removes the temporary context after the build. A crash can leave the
 context on disk. Retrying the build refreshes that graph's context, and Reset
-attempts to remove the graph's stale context and Buildx record. Run Reset
-before deleting the graph if its build was interrupted and its Docker config
-is stored on disk.
+removes the graph’s stale context and Buildx record. Deleting a graph runs the
+same cleanup before removing the graph. If cleanup fails or exceeds the
+request deadline, the graph stays available. Resolve the reported error and
+retry deletion.
 
 ## Limitations
 

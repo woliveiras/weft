@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -37,7 +38,10 @@ var (
 	// ErrNotDefined: the graph has no spec.environment.
 	ErrNotDefined = errors.New("the graph defines no environment (spec.environment)")
 	// ErrBuildRunning: a build of this graph's environment is in progress.
-	ErrBuildRunning = errors.New("an environment build is already running")
+	ErrBuildRunning    = errors.New("an environment build is already running")
+	ErrResetRunning    = errors.New("an environment reset is already running")
+	ErrResetIncomplete = errors.New("environment reset incomplete")
+	ErrResetLeaseLost  = errors.New("environment reset lost its lease; retry the operation")
 	// ErrNotReady: agents cannot start because the environment is not built.
 	ErrNotReady = errors.New("environment not ready")
 )
@@ -118,7 +122,8 @@ type Workspaces interface {
 
 // Manager builds environments and answers which image a sandbox uses.
 type Manager struct {
-	opt Options
+	opt           Options
+	resetLeaseTTL time.Duration
 
 	mu      sync.Mutex
 	running map[string]*build // builds owned by this instance, by graph
@@ -126,6 +131,7 @@ type Manager struct {
 
 type build struct {
 	cancel context.CancelFunc
+	holder string
 	done   chan struct{}
 	force  bool
 }
@@ -155,7 +161,7 @@ func New(opt Options) (*Manager, error) {
 	if opt.Instance == "" {
 		opt.Instance = "weftd"
 	}
-	return &Manager{opt: opt, running: map[string]*build{}}, nil
+	return &Manager{opt: opt, resetLeaseTTL: leaseTTL, running: map[string]*build{}}, nil
 }
 
 // Get reports the environment of g. A build whose owner stopped renewing its
@@ -167,11 +173,28 @@ func (m *Manager) Get(ctx context.Context, g *domain.Graph) (*View, error) {
 		return nil, err
 	}
 	if st.State == StateBuilding && !m.leaseAlive(ctx, g.Metadata.ID) {
-		now := time.Now().UTC()
-		st.Phase = ""
-		st.State, st.Error, st.FinishedAt = StateFailed, "build interrupted: the Weft instance running it stopped; build again", &now
-		if err := m.save(ctx, st); err != nil {
+		// Recheck the record while holding the lease. The previous build may
+		// have saved its result just before releasing it, or Reset may be next.
+		key := leasePrefix + g.Metadata.ID
+		holder := domain.NewID("environment-recovery")
+		ok, err := m.opt.Store.AcquireLease(ctx, key, holder, leaseTTL)
+		if err != nil {
 			return nil, err
+		}
+		if ok {
+			defer func() { _ = m.opt.Store.ReleaseLease(context.WithoutCancel(ctx), key, holder) }()
+			st, err = m.load(ctx, g.Metadata.ID)
+			if err != nil {
+				return nil, err
+			}
+			if st.State == StateBuilding {
+				now := time.Now().UTC()
+				st.Phase = ""
+				st.State, st.Error, st.FinishedAt = StateFailed, "build interrupted: the Weft instance running it stopped; build again", &now
+				if err := m.save(ctx, st); err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
 	v := m.view(g, st)
@@ -218,6 +241,15 @@ func (m *Manager) view(g *domain.Graph, st *Status) *View {
 // Build starts building g's environment in the background and returns the
 // building status. Without force, an up-to-date environment is left alone.
 func (m *Manager) Build(ctx context.Context, g *domain.Graph, force bool, actor string) (*View, error) {
+	return m.buildEnvironment(ctx, g, force, actor, false)
+}
+
+// BuildSaved checks that the graph still exists while holding its environment lease.
+func (m *Manager) BuildSaved(ctx context.Context, g *domain.Graph, force bool, actor string) (*View, error) {
+	return m.buildEnvironment(ctx, g, force, actor, true)
+}
+
+func (m *Manager) buildEnvironment(ctx context.Context, g *domain.Graph, force bool, actor string, saved bool) (*View, error) {
 	env := g.Spec.Environment
 	if env == nil {
 		return nil, ErrNotDefined
@@ -239,9 +271,6 @@ func (m *Manager) Build(ctx context.Context, g *domain.Graph, force bool, actor 
 	if err != nil {
 		return nil, err
 	}
-	if !force && cur.UpToDate {
-		return cur, nil
-	}
 	// A local build that already recorded its result is only releasing its
 	// lease; wait for it instead of reporting a conflict.
 	m.mu.Lock()
@@ -255,16 +284,36 @@ func (m *Manager) Build(ctx context.Context, g *domain.Graph, force bool, actor 
 			return nil, ctx.Err()
 		}
 	}
-	ok, err := m.opt.Store.AcquireLease(ctx, leasePrefix+id, m.opt.Instance, leaseTTL)
+	holder := domain.NewID("environment-build")
+	key := leasePrefix + id
+	ok, err := m.opt.Store.AcquireLease(ctx, key, holder, leaseTTL)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		return nil, fmt.Errorf("%w for graph %s", ErrBuildRunning, id)
+		return nil, m.environmentLeaseConflict(ctx, id)
+	}
+	release := func() { _ = m.opt.Store.ReleaseLease(context.WithoutCancel(ctx), key, holder) }
+	if saved {
+		if _, err := m.opt.Store.GetGraph(ctx, id, 0); err != nil {
+			release()
+			return nil, err
+		}
+	}
+	// A reset may have completed since the first read. Refresh under the lease.
+	cur, err = m.Get(ctx, g)
+	if err != nil {
+		release()
+		return nil, err
+	}
+	if !force && cur.UpToDate {
+		release()
+		return cur, nil
 	}
 	m.mu.Lock()
 	if _, busy := m.running[id]; busy {
 		m.mu.Unlock()
+		release()
 		return nil, fmt.Errorf("%w for graph %s", ErrBuildRunning, id)
 	}
 	timeout := env.Timeout.D()
@@ -272,7 +321,7 @@ func (m *Manager) Build(ctx context.Context, g *domain.Graph, force bool, actor 
 		timeout = m.opt.DefaultTimeout
 	}
 	bctx, cancel := context.WithTimeout(context.Background(), timeout)
-	b := &build{cancel: cancel, done: make(chan struct{}), force: force}
+	b := &build{cancel: cancel, holder: holder, done: make(chan struct{}), force: force}
 	m.running[id] = b
 	m.mu.Unlock()
 
@@ -280,7 +329,7 @@ func (m *Manager) Build(ctx context.Context, g *domain.Graph, force bool, actor 
 	st := &Status{Phase: "preparing", BuildReasons: buildReasons(cur, force), Graph: id, State: StateBuilding, Hash: Hash(env), StartedAt: &now, Actor: actor, Instance: m.opt.Instance}
 	if err := m.save(ctx, st); err != nil {
 		m.finish(id, b)
-		_ = m.opt.Store.ReleaseLease(context.Background(), leasePrefix+id, m.opt.Instance)
+		release()
 		return nil, err
 	}
 	m.publish(ctx, domain.EvEnvBuildStarted, id, actor, map[string]any{"hash": st.Hash, "force": force, "buildReasons": st.BuildReasons})
@@ -304,13 +353,13 @@ func (m *Manager) finish(id string, b *build) {
 func (m *Manager) run(ctx context.Context, b *build, g *domain.Graph, st *Status) {
 	id := g.Metadata.ID
 	defer m.finish(id, b)
-	defer func() { _ = m.opt.Store.ReleaseLease(context.Background(), leasePrefix+id, m.opt.Instance) }()
+	defer func() { _ = m.opt.Store.ReleaseLease(context.Background(), leasePrefix+id, b.holder) }()
 
 	ctx, span := observability.Start(ctx, "environment.build",
 		attribute.String("weft.graph", id), attribute.String("weft.environment.hash", st.Hash))
 	ctx = progressContext(ctx)
 	logBuf := &tailBuffer{limit: m.opt.LogLimit}
-	stopFlush := m.flushWhileRunning(ctx, st, logBuf)
+	stopFlush := m.flushWhileRunning(ctx, st, b.holder, logBuf)
 
 	start := time.Now()
 	result := *st
@@ -383,7 +432,7 @@ func (m *Manager) run(ctx context.Context, b *build, g *domain.Graph, st *Status
 // flushWhileRunning stores the log tail periodically and renews the build
 // lease, so the console can follow a long build and other instances know it
 // is alive.
-func (m *Manager) flushWhileRunning(ctx context.Context, st *Status, logBuf *tailBuffer) func() {
+func (m *Manager) flushWhileRunning(ctx context.Context, st *Status, holder string, logBuf *tailBuffer) func() {
 	stop := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
@@ -405,7 +454,7 @@ func (m *Manager) flushWhileRunning(ctx context.Context, st *Status, logBuf *tai
 					m.opt.Log.Error("environment progress not saved", "graph", st.Graph, "err", err)
 				}
 				if time.Since(renew) > leaseTTL/3 {
-					_, _ = m.opt.Store.AcquireLease(context.Background(), leasePrefix+st.Graph, m.opt.Instance, leaseTTL)
+					_, _ = m.opt.Store.AcquireLease(context.Background(), leasePrefix+st.Graph, holder, leaseTTL)
 					renew = time.Now()
 				}
 			}
@@ -557,7 +606,7 @@ func (m *Manager) CancelBuild(ctx context.Context, graphID, actor string) error 
 	m.mu.Unlock()
 	if b == nil {
 		if m.leaseAlive(ctx, graphID) {
-			return fmt.Errorf("%w: build belongs to another instance", ErrBuildRunning)
+			return m.environmentLeaseConflict(ctx, graphID)
 		}
 		return nil
 	}
@@ -571,45 +620,91 @@ func (m *Manager) CancelBuild(ctx context.Context, graphID, actor string) error 
 	}
 }
 
-// Reset removes the environment of a graph: a running build, its images,
-// cache volumes and status. The next build starts from scratch.
+// Reset removes the environment of a graph. The next build starts from scratch.
 func (m *Manager) Reset(ctx context.Context, graphID, actor string) error {
+	return m.resetWithLease(ctx, graphID, actor, nil)
+}
+
+// ResetBeforeDelete keeps cleanup and graph deletion under the same lease.
+// The caller may retry a conflict within its request deadline.
+func (m *Manager) ResetBeforeDelete(ctx context.Context, graphID, actor string, deleteGraph func(context.Context) error) error {
+	return m.resetWithLease(ctx, graphID, actor, deleteGraph)
+}
+
+func (m *Manager) resetWithLease(ctx context.Context, graphID, actor string, deleteGraph func(context.Context) error) error {
 	m.mu.Lock()
 	b := m.running[graphID]
 	m.mu.Unlock()
 	if b != nil {
 		b.cancel()
-		<-b.done
-	} else if m.leaseAlive(ctx, graphID) {
-		return fmt.Errorf("%w for graph %s on another instance; reset it after the build ends", ErrBuildRunning, graphID)
+		select {
+		case <-b.done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-	if m.opt.Capacity != nil {
-		// Use a distinct holder so a concurrent build cannot renew this lease.
-		holder := domain.NewID("reset")
-		ok, err := m.opt.Store.AcquireLease(ctx, leasePrefix+graphID, holder, leaseTTL)
+	ctx, release, err := m.holdResetLease(ctx, graphID)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if deleteGraph != nil {
+		g, err := m.opt.Store.GetGraph(ctx, graphID, 0)
 		if err != nil {
 			return err
 		}
-		if !ok {
-			return fmt.Errorf("%w for graph %s; retry reset after the build ends", ErrBuildRunning, graphID)
+		exists, err := m.Exists(ctx, graphID)
+		if err != nil {
+			return err
 		}
-		defer func() { _ = m.opt.Store.ReleaseLease(context.WithoutCancel(ctx), leasePrefix+graphID, holder) }()
+		if g.Spec.Environment == nil && !exists {
+			return deleteGraph(ctx)
+		}
+	}
+	err = m.resetResources(ctx, graphID, actor)
+	if err != nil && deleteGraph != nil && context.Cause(ctx) == nil && !errors.Is(err, ErrResetIncomplete) {
+		err = fmt.Errorf("%w: %s", ErrResetIncomplete, builderDiagnosticTail(err.Error(), os.Getenv("DOCKER_CERT_PATH")))
+	}
+	if cause := context.Cause(ctx); cause != nil {
+		return cause
+	}
+	if err != nil || deleteGraph == nil {
+		return err
+	}
+	return deleteGraph(ctx)
+}
+
+func (m *Manager) resetResources(ctx context.Context, graphID, actor string) error {
+	var errs []string
+	if m.opt.Capacity != nil {
 		if err := m.cleanBuildResources(ctx, graphID); err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if err := m.opt.Capacity.Release(ctx, buildContainer(graphID)); err != nil {
 			return err
 		}
-		// Workers are gone. Reconcile the graph's local Buildx record and TLS
-		// context even when a restart has already cleared the context store.
-		m.warnBuilderCleanup(graphID, io.Discard, m.removeStaleBuilder(ctx, graphID, "", io.Discard))
-		m.warnBuilderCleanup(graphID, io.Discard, m.removeStaleBuilderContext(ctx, builderEndpointName(graphID)))
+		err := m.removeStaleBuilder(ctx, graphID, "", io.Discard)
+		if err != nil {
+			m.warnBuilderCleanup(graphID, io.Discard, "remove stale builder", err)
+			errs = append(errs, "could not remove stale builder metadata")
+		}
+		if m.usesBuilderTLSContext() {
+			if err := m.removeStaleBuilderContext(ctx, builderEndpointName(graphID)); err != nil {
+				m.warnBuilderCleanup(graphID, io.Discard, "clean up Docker TLS context", err)
+				errs = append(errs, "could not clean up Docker TLS context")
+			}
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	// Mark absent first so an interrupted build does not record a result.
 	if err := m.save(ctx, &Status{Graph: graphID, State: StateAbsent}); err != nil {
 		return err
 	}
-	var errs []string
 	var out bytes.Buffer
 	filter := "label=weft.graph=" + graphID
 	// Only the setup container, by name: agents' sandbox containers carry
@@ -632,27 +727,37 @@ func (m *Manager) Reset(ctx context.Context, graphID, actor string) error {
 			errs = append(errs, "remove cache "+v+": "+err.Error()+" (stop the graph's agents first)")
 		}
 	}
-	if err := m.opt.Store.KVDelete(ctx, kvNamespace, graphID); err != nil && !errors.Is(err, storage.ErrNotFound) {
-		errs = append(errs, err.Error())
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	if err := m.opt.Store.KVDelete(ctx, proxyHistoryNamespace, graphID); err != nil && !errors.Is(err, storage.ErrNotFound) {
-		errs = append(errs, "remove proxy diagnostics: "+err.Error())
+	if len(errs) == 0 {
+		if err := m.opt.Store.KVDelete(ctx, proxyHistoryNamespace, graphID); err != nil && !errors.Is(err, storage.ErrNotFound) {
+			errs = append(errs, "remove proxy diagnostics: "+err.Error())
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(errs) == 0 {
+		if err := m.opt.Store.KVDelete(ctx, kvNamespace, graphID); err != nil && !errors.Is(err, storage.ErrNotFound) {
+			errs = append(errs, err.Error())
+		}
 	}
 	m.publish(ctx, domain.EvEnvReset, graphID, actor, map[string]any{"errors": len(errs)})
 	if len(errs) > 0 {
-		return fmt.Errorf("environment reset incomplete: %s", strings.Join(errs, "; "))
+		return fmt.Errorf("%w: %s", ErrResetIncomplete, builderDiagnosticTail(strings.Join(errs, "; "), os.Getenv("DOCKER_CERT_PATH")))
 	}
 	return nil
 }
 
-// Exists reports whether the graph has an environment record (built,
-// building, failed), i.e. whether Reset has anything to clean up.
+// Exists reports whether the graph has an environment record, including an
+// incomplete reset that still needs cleanup.
 func (m *Manager) Exists(ctx context.Context, graphID string) (bool, error) {
-	st, err := m.load(ctx, graphID)
-	if err != nil {
-		return false, err
+	_, err := m.opt.Store.KVGet(ctx, kvNamespace, graphID)
+	if errors.Is(err, storage.ErrNotFound) {
+		return false, nil
 	}
-	return st.State != StateAbsent, nil
+	return err == nil, err
 }
 
 // Sandbox is what a docker sandbox needs from a ready environment.
@@ -766,6 +871,9 @@ func (m *Manager) publish(ctx context.Context, t domain.EventType, graphID, acto
 
 // docker runs one CLI call against the sandbox daemon, streaming output.
 func (m *Manager) docker(ctx context.Context, stdin io.Reader, out io.Writer, args ...string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	var err error
 	args, err = preparationArgs(ctx, args)
 	if err != nil {

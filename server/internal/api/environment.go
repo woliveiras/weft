@@ -52,7 +52,7 @@ func (s *Server) buildEnvironment(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return err
 	}
-	v, err := s.Environments.Build(r.Context(), g, req.Force, identityFrom(r.Context()).Name)
+	v, err := s.Environments.BuildSaved(r.Context(), g, req.Force, identityFrom(r.Context()).Name)
 	if err != nil {
 		return err
 	}

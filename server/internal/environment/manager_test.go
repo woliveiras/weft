@@ -44,6 +44,10 @@ if [ "$1" = --tlscert ]; then
 fi
 sub="$1"; [ "$1" = image ] || [ "$1" = volume ] || [ "$1" = buildx ] || [ "$1" = network ] || [ "$1" = context ] && sub="$1-$2"
 [ -f "$d/slow-$sub" ] && sleep 30
+if [ -f "$d/hold-$sub" ]; then
+  touch "$d/held-$sub"
+  while [ -f "$d/hold-$sub" ]; do sleep 0.02; done
+fi
 if [ -f "$d/fail-$sub" ]; then
   echo "step output"
   cat "$d/fail-$sub" >&2
@@ -66,7 +70,12 @@ case "$sub" in
     fi
     remove_name "$d/contexts" "$3" ;;
   buildx-ls) [ ! -f "$d/builders" ] || cat "$d/builders" ;;
-  buildx-rm) remove_name "$d/builders" "$4" ;;
+  buildx-rm)
+    if [ -f "$d/fail-final-buildx-rm" ] && [ -f "$d/buildx-built" ]; then
+      echo 'final builder removal failed' >&2
+      exit 1
+    fi
+    remove_name "$d/builders" "$4" ;;
   buildx-create)
     name=$4
     while [ "$#" -gt 1 ]; do
