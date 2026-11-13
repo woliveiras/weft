@@ -133,3 +133,13 @@ describe('CostsSection', () => {
     expect(await screen.findByText('Could not load spend: events unavailable')).toBeTruthy();
   });
 });
+
+it('identifies an invalid ledger and preserves valid budget controls', async () => {
+  routes({ 'GET /api/v1/cost/ledgers': () => [{ ...healthy, invalid: true, revision: 7 }, reached] });
+  render(<CostsSection canEdit />);
+  const invalid = await screen.findByRole('listitem', { name: 'Budget Installation · 2026-11' });
+  expect(within(invalid).getByRole('alert').textContent).toContain('Invalid budget ledger (revision 7)');
+  expect(within(invalid).queryByRole('meter')).toBeNull();
+  expect(within(invalid).queryByRole('button', { name: 'Raise budget' })).toBeNull();
+  expect(within(screen.getByRole('listitem', { name: 'Budget User alice · 2026-11' })).getByRole('button', { name: 'Raise budget' })).toBeTruthy();
+});

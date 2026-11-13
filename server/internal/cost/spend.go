@@ -3,7 +3,6 @@ package cost
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -188,29 +187,37 @@ func (b Budgets) Preview(ctx context.Context, t Target) ([]View, error) {
 	return out, nil
 }
 
-// Ledgers lists the ledgers of the given month and task-run ledgers that
-// reached their limit. Runs held by earlier budgets remain visible.
+// Ledgers lists monthly ledgers from the requested period and reached or
+// paused task-run ledgers. Invalid rows stay visible for diagnosis.
 func (b Budgets) Ledgers(ctx context.Context, period string) ([]View, error) {
 	rows, err := b.Store.ListSettings(ctx, BudgetPrefix)
 	if err != nil {
 		return nil, err
 	}
 	out := []View{}
-	var errs []error
+	current := Period(time.Now())
 	for _, row := range rows {
-		var l Ledger
-		if err := json.Unmarshal(row.Value, &l); err != nil {
-			errs = append(errs, fmt.Errorf("%s: corrupt", row.Key))
+		scope, id, ok := strings.Cut(strings.TrimPrefix(row.Key, BudgetPrefix), "/")
+		if !ok {
 			continue
 		}
-		if l.Scope == TaskRun && !l.Reached && len(l.PausedGraphs) == 0 {
+		if scope != TaskRun && !strings.HasSuffix(id, "@"+period) {
 			continue
 		}
-		if l.Scope != TaskRun && !strings.HasSuffix(l.ID, "@"+period) && len(l.PausedGraphs) == 0 {
+		l, err := decodeLedger(row.Value, scope, id)
+		if err != nil {
+			b.auditInvalidLedger(ctx, scope, id, row.Revision)
+			out = append(out, invalidLedgerView(scope, id, row.Revision))
 			continue
 		}
-		out = append(out, l.View())
+		if scope != TaskRun || l.Reached || len(l.PausedGraphs) != 0 {
+			view, err := b.visibleView(ctx, l, current)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, view)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Scope+out[i].ID < out[j].Scope+out[j].ID })
-	return out, errors.Join(errs...)
+	return out, nil
 }

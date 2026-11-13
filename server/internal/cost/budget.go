@@ -64,7 +64,7 @@ type Ledger struct {
 	Compacted int64            `json:"compacted,omitempty"`
 	Entries   map[string]Entry `json:"entries"`
 	// Warned and Reached record that the events were emitted for the
-	// current limit; raising the limit clears them.
+	// current limit. Raising the limit recomputes Reached from current spend.
 	Warned  bool `json:"warned,omitempty"`
 	Reached bool `json:"reached,omitempty"`
 	// InterruptPercent (> 100) cancels a running call whose settlement
@@ -92,6 +92,8 @@ type View struct {
 	Paused     bool     `json:"paused"`
 	RaisedBy   string   `json:"raisedBy,omitempty"`
 	NotResumed []string `json:"notResumed,omitempty"`
+	Invalid    bool     `json:"invalid,omitempty"`
+	Revision   int64    `json:"revision,omitempty"`
 }
 
 // Warning is the warning threshold in micro-units.
@@ -192,26 +194,56 @@ func (b Budgets) read(ctx context.Context, scope, id string) (*Ledger, int64, er
 	if err != nil {
 		return nil, 0, err
 	}
+	l, err := decodeLedger(st.Value, scope, id)
+	if errors.Is(err, ErrInvalidLedger) {
+		b.auditInvalidLedger(ctx, scope, id, st.Revision)
+	}
+	return l, st.Revision, err
+}
+
+// ErrInvalidLedger identifies a ledger that needs an administrator's repair.
+var ErrInvalidLedger = errors.New("cost: invalid budget ledger")
+
+func decodeLedger(raw []byte, scope, id string) (*Ledger, error) {
 	var l Ledger
-	if err := json.Unmarshal(st.Value, &l); err != nil || l.Limit < 0 || l.Limit > MaxBudgetMicros || l.Entries == nil || len(l.Entries) > maxEntries {
-		return nil, 0, errors.New("cost: a stored budget ledger is corrupt")
+	if err := json.Unmarshal(raw, &l); err != nil || l.Scope != scope || l.ID != id ||
+		l.Limit < 0 || l.Limit > MaxBudgetMicros || l.Compacted < 0 || l.Entries == nil ||
+		len(l.Entries) > maxEntries || !validGraphActions(l.GraphActions) {
+		return nil, ErrInvalidLedger
 	}
 	for id, e := range l.Entries {
 		if id == "" || e.Amount < 0 || e.Charged < 0 || (!e.Settled && e.Charged != 0) {
-			return nil, 0, errors.New("cost: a stored budget reservation is corrupt")
+			return nil, ErrInvalidLedger
 		}
 	}
-	return &l, st.Revision, nil
+	return &l, nil
+}
+
+func validGraphActions(actions map[string]GraphAction) bool {
+	for graph, action := range actions {
+		if graph == "" || (action.Action != PauseGraph && action.Action != ResumeGraph && action.Action != HoldGraph) {
+			return false
+		}
+	}
+	return true
+}
+
+func invalidLedgerView(scope, id string, revision int64) View {
+	return View{Scope: scope, ID: id, Invalid: true, Revision: revision}
 }
 
 // Ledger returns a budget's view, or nil when it does not exist.
 func (b Budgets) Ledger(ctx context.Context, scope, id string) (*View, error) {
-	l, _, err := b.read(ctx, scope, id)
+	l, revision, err := b.read(ctx, scope, id)
+	if errors.Is(err, ErrInvalidLedger) {
+		v := invalidLedgerView(scope, id, revision)
+		return &v, nil
+	}
 	if err != nil || l == nil {
 		return nil, err
 	}
-	v := l.View()
-	return &v, nil
+	v, err := b.visibleView(ctx, l, Period(time.Now()))
+	return &v, err
 }
 
 // update applies change with compare-and-set so concurrent reservations
@@ -329,11 +361,11 @@ func (b Budgets) applicable(ctx context.Context, t Target, now time.Time) ([]app
 	}
 	var out []applicable
 	if t.Graph != "" {
-		existing, _, err := b.read(ctx, TaskRun, t.Graph)
-		if err != nil {
+		_, err := b.Store.GetSetting(ctx, ledgerKey(TaskRun, t.Graph))
+		if err != nil && !errors.Is(err, storage.ErrNotFound) {
 			return nil, err
 		}
-		if existing != nil || policy.TaskRunBudgetMicros > 0 {
+		if err == nil || policy.TaskRunBudgetMicros > 0 {
 			out = append(out, applicable{scope: TaskRun, id: t.Graph, limit: policy.TaskRunBudgetMicros, warning: policy.WarningPercent})
 		}
 	}
@@ -364,6 +396,13 @@ func (b Budgets) applicable(ctx context.Context, t Target, now time.Time) ([]app
 		out = append(out, applicable{scope: d.Scope, id: MonthlyID(d.ID, period), limit: d.LimitMicros, warning: warning, interrupt: d.InterruptPercent})
 	}
 	return out, nil
+}
+
+// applyLimit applies the same monthly definition precedence at admission and resumption.
+func (a applicable) applyLimit(l *Ledger) {
+	if a.scope != TaskRun && (l.RaisedBy == "" || a.limit > l.Limit) && l.Limit != a.limit {
+		l.Limit, l.Reached = a.limit, false
+	}
 }
 
 // Reserve holds the maximum cost of req against every budget that applies
@@ -418,9 +457,7 @@ func (b Budgets) reservePart(ctx context.Context, a applicable, t Target, curren
 		}
 		// A definition change applies to the current period unless a
 		// person raised this ledger above it.
-		if a.scope != TaskRun && (l.RaisedBy == "" || a.limit > l.Limit) && l.Limit != a.limit {
-			l.Limit, l.Reached = a.limit, false
-		}
+		a.applyLimit(l)
 		l.WarningPercent, l.InterruptPercent = a.warning, a.interrupt
 		warn, refused, firstReach = false, false, false
 		// Free calls (local or allowed unpriced models) pass even at the limit.

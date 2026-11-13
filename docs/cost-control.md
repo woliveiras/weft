@@ -123,12 +123,26 @@ What happens when a threshold is reached:
 | Hard | New calls under that budget are refused. A task-run budget **pauses** the run in a visible waiting state until a human raises the budget or stops it. Other scopes refuse new tasks and pause running ones. |
 | Interrupt | The running turn is cancelled, work is kept as it is, and the run pauses. |
 
-An administrator raises the budget. If a graph transition lease is busy,
-the controller records the pause or resume in the ledger and retries after
-the lease becomes available. Model calls remain subject to reservation checks
-while the pause is pending. A raise clears its budget hold after the graph
-resumes or when the graph has already stopped, been deleted, or is held by
-another budget. The audit records those outcomes.
+An administrator raises the budget. The new limit is compared with charged
+and reserved spend. Before resuming a graph, the controller checks the current
+task-run, workflow, project, user and installation ledgers that apply to it.
+If a budget is reached, the graph stays paused under that ledger and the
+transition audit records `budget_reached` and the blocking scope and ID.
+When a graph lease is busy, the ledger retains the pending transition for the
+background controller. A resume records an intent ID with the graph state so
+the controller can recognize a successful write after a timeout.
+
+The controller retires holds for deleted, stopped or replaced runs, and for
+runs whose enabled fixed replicas have completed. An individual turn may end
+while the graph still has work. Holds written by older versions without a
+run ID are retired as `legacy_unbound`. An administrator can review and
+resume a graph that remains paused after such a hold is retired.
+
+Monthly ledgers close at the UTC month boundary. Their spend stays available
+in history. A closed ledger cannot be raised and its historical view suppresses
+pause and resume-pending flags. A still-paused run enters a durable resume
+attempt against the new month's budgets. If a current budget is reached,
+that budget takes over the hold.
 
 ## Visibility
 
@@ -150,6 +164,33 @@ another budget. The audit records those outcomes.
   already reserved.
 - Startup recovery and periodic reconciliation close reservations of terminal
   executions, as the delegation ledger does today.
+
+### Ledger recovery
+
+The cost ledger endpoints identify invalid rows with `invalid: true` and
+their current `revision`. The console shows the scope and ID. The audit
+event `budget.ledger_invalid` identifies the affected revision without
+including the raw value. Other graphs can resume if the invalid ledger
+does not apply to them. Model admission under an invalid applicable ledger
+fails closed until it is repaired.
+
+1. Record the scope, ID and revision and identify the setting key
+   `cost/budget/<scope>/<id>`. Use the [backup and restore procedure](operations.md)
+   to take a consistent backup before repair.
+2. In an isolated copy, recover the setting value using a verified backup and
+   reconcile any later charges and outstanding reservations against the
+   execution records. Preserve unresolved reservations. Escalate to the
+   installation's datastore operator if the ledger cannot be reconstructed.
+3. With controllers quiesced, have the datastore operator replace only the
+   affected setting using the observed revision as a precondition and
+   increment its revision. The SQL stores use the `settings` table. The
+   filesystem store uses the corresponding record under `settings/` with
+   the value encoded as Base64 in the JSON wrapper. Preserve the backup and
+   audit history.
+4. Verify the repaired view and its totals with
+   `GET /api/v1/cost/budgets/{scope}/{budget}`, then confirm the controller
+   processes any retained transition. A regular raise cannot repair a corrupt
+   value.
 
 ## Tests required
 

@@ -207,3 +207,16 @@ it('chooses a source control hand-off and shows what it delivered',async()=>{
  expect(within(delivery).getByRole('link',{name:'#4'}).getAttribute('href')).toBe('https://github.example/pr/4');
  expect(within(delivery).getByRole('alert',{name:'Delivery failures'}).textContent).toContain('not approved');
 });
+
+it('shows historical spend without an active budget pause on a cancelled task',async()=>{
+ const task={id:'tsk_r',revision:2,status:'cancel_requested',title:'Task',request:'Explain',outcome:'freeform',graphId:'factory',graphVersion:1,nodeId:'worker',resultNodeId:'worker',executionGraphId:'task-run-r'};
+ const staleLedger={scope:'run',id:'task-run-r',currency:'USD',limitMicros:1_000_000,chargedMicros:1_000_000,estimatedMicros:0,reservedMicros:0,remainingMicros:0,reached:true,paused:true,notResumed:['task-run-r']};
+ fakeApi({'GET /api/v1/projects':()=>[],'GET /api/v1/tasks/tsk_r':()=>task,
+  'GET /api/v1/tasks/tsk_r/progress':()=>({task,state:'cancelled',blockers:[],executions:[],pendingApprovals:[]}),
+  'GET /api/v1/cost/budgets/run/task-run-r':()=>staleLedger});
+ render(<TasksPage id="tsk_r" info={{identity:{role:'admin'}} as Info} graphs={graphs}/>);
+ await screen.findByText('Task status: cancelled');
+ expect(await screen.findByText(/\$1.00 spent/)).toBeTruthy();
+ expect(screen.queryByText(/paused because|Runs paused|Resume pending/)).toBeNull();
+ expect(screen.queryByRole('button',{name:'Raise budget'})).toBeNull();
+});

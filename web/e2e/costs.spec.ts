@@ -80,3 +80,23 @@ test('pending budget resumes survive a page reload and clear after recovery', as
   await expect(page.getByText('No budget has been used this month.')).toBeVisible();
   await expect(budget).toHaveCount(0);
 });
+
+test('an invalid ledger stays visible beside usable budgets', async ({ page }) => {
+  const ledger = {
+    scope: 'run', currency: 'USD', limitMicros: 1_000_000, chargedMicros: 1_000_000,
+    estimatedMicros: 0, reservedMicros: 0, remainingMicros: 0, reached: true, paused: true,
+  };
+  await page.route('**/api/v1/cost/ledgers', route => route.fulfill({ json: [
+    { ...ledger, id: 'task-run-invalid', invalid: true, revision: 7 },
+    { ...ledger, id: 'task-run-valid' },
+  ] }));
+  await page.goto('/#/models');
+  await page.evaluate(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.reload();
+
+  const invalid = page.getByRole('listitem', { name: 'Budget Task run task-run-invalid' });
+  await expect(invalid.getByRole('alert')).toContainText('Invalid budget ledger (revision 7)');
+  await expect(invalid.getByRole('button', { name: 'Raise budget' })).toHaveCount(0);
+  const valid = page.getByRole('listitem', { name: 'Budget Task run task-run-valid' });
+  await expect(valid.getByRole('button', { name: 'Raise budget' })).toBeEnabled();
+});

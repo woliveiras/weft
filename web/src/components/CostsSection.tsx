@@ -11,7 +11,7 @@ export function CostsSection({ canEdit }: { canEdit: boolean }) {
   const spend = useAsync(() => api.spend(), []);
   const ledgers = useAsync(api.budgetLedgers, []);
   const refreshLedgers = useThrottled(() => void ledgers.reload(), 300);
-  useOptionalEventStream({ types: ['budget.raised', 'budget.graph_transition'] }, refreshLedgers);
+  useOptionalEventStream({ types: ['budget.raised', 'budget.graph_transition', 'budget.ledger_invalid'] }, refreshLedgers);
   const currency = spend.data?.currency ?? 'USD';
   const reload = async () => {
     await Promise.all([spend.reload(), ledgers.reload()]);
@@ -86,11 +86,11 @@ function SpendTable({ title, lines, currency, model }: { title: string; lines: S
 }
 
 /** One budget as a bar with its warning and hard levels. */
-export function BudgetBar({ budget, currency, canRaise, onRaised }: { budget: BudgetView; currency: string; canRaise: boolean; onRaised: () => Promise<void> | void }) {
+export function BudgetBar({ budget, currency, canRaise, onRaised, showPause = true }: { budget: BudgetView; currency: string; canRaise: boolean; showPause?: boolean; onRaised: () => Promise<void> | void }) {
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const pct = usedPercent(budget);
-  const pending = budget.notResumed ?? [];
+  const pending = showPause ? budget.notResumed ?? [] : [];
   const raise = async () => {
     const text = prompt(`New limit for ${budgetLabel(budget)} (${currency})`, fromMicros(budget.limitMicros * 2));
     if (text === null) return;
@@ -110,13 +110,21 @@ export function BudgetBar({ budget, currency, canRaise, onRaised }: { budget: Bu
       setBusy(false);
     }
   };
+  if (budget.invalid) {
+    return (
+      <li className="budget-bar" aria-label={`Budget ${budgetLabel(budget)}`}>
+        <strong>{budgetLabel(budget)}</strong>
+        <ErrorBox error={`Invalid budget ledger (revision ${budget.revision}). ${canRaise ? 'See the ledger recovery section in docs/cost-control.md.' : 'Contact an administrator.'}`} />
+      </li>
+    );
+  }
   return (
     <li className="budget-bar" aria-label={`Budget ${budgetLabel(budget)}`}>
       <div className="integration-card-head">
         <strong>{budgetLabel(budget)}</strong>
         <span className="integration-card-status">
           {budget.reached ? <Badge tone="bad">Reached</Badge> : pct >= 80 ? <Badge tone="warn">Warning</Badge> : <Badge tone="ok">Within budget</Badge>}
-          {budget.paused && <Badge tone="warn">Runs paused</Badge>}
+          {showPause && budget.paused && <Badge tone="warn">Runs paused</Badge>}
         </span>
       </div>
       <meter min={0} max={100} low={80} high={99} optimum={0} value={Math.min(pct, 100)} aria-label={`${pct}% used`} />
@@ -128,7 +136,7 @@ export function BudgetBar({ budget, currency, canRaise, onRaised }: { budget: Bu
         {budget.raisedBy && ` · raised by ${budget.raisedBy}`}
       </p>
       {pending.length > 0 && <p className="small" role="status">Resume pending for {pending.join(', ')}. Weft will retry automatically.</p>}
-      {canRaise && (budget.reached || (budget.paused && pending.length === 0)) && (
+      {canRaise && showPause && (budget.reached || (budget.paused && pending.length === 0)) && (
         <Btn small tone="primary" disabled={busy} onClick={() => void raise()}>
           Raise budget
         </Btn>

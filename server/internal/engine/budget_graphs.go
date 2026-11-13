@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/cost"
@@ -38,7 +39,6 @@ func (e *Engine) RaiseBudget(ctx context.Context, scope, id string, limit int64,
 			if !errors.Is(err, ErrGraphTransitionBusy) && work.Err() == nil {
 				e.log.Warn("budget resume deferred", "graph", target.Graph, "scope", scope, "budget", id, "err", err)
 			}
-			continue
 		}
 		switch outcome {
 		case "resumed":
@@ -47,6 +47,9 @@ func (e *Engine) RaiseBudget(ctx context.Context, scope, id string, limit int64,
 			// A concurrent update superseded this action.
 		default:
 			skipped[target.Graph] = outcome
+			if err == nil && outcome != "budget_reached" {
+				_ = e.auditBudgetTransition(work, target, outcome)
+			}
 		}
 	}
 	audit, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
@@ -56,13 +59,12 @@ func (e *Engine) RaiseBudget(ctx context.Context, scope, id string, limit int64,
 		// The limit still changed. Use the recorded attempt results when
 		// the store cannot return the current view.
 		e.log.Warn("reload raised budget", "scope", scope, "budget", id, "err", err)
-		pending := view.NotResumed[:0]
-		for _, graph := range view.NotResumed {
-			if !slices.Contains(resumed, graph) && skipped[graph] == "" {
-				pending = append(pending, graph)
-			}
-		}
-		view.NotResumed, view.Paused = pending, len(pending) != 0
+		view.NotResumed = slices.DeleteFunc(view.NotResumed, func(graph string) bool {
+			return slices.Contains(resumed, graph) || skipped[graph] != ""
+		})
+		view.Paused = len(view.NotResumed) != 0 || slices.ContainsFunc(actions, func(target cost.BudgetGraph) bool {
+			return skipped[target.Graph] == "budget_reached" && view.Reached
+		})
 	} else if latest != nil {
 		view = *latest
 	}
@@ -94,6 +96,52 @@ func (e *Engine) applyBudgetGraphTransition(ctx context.Context, target cost.Bud
 	if err != nil {
 		return "", err
 	}
+	now := time.Now()
+	expired := cost.ExpiredLedger(target.Scope, target.ID, cost.Period(now))
+	if rec != nil && target.RunID == "" && outcome != "stopped" {
+		outcome = "legacy_unbound"
+	} else if outcome == "" || outcome == "resume" || outcome == "pause" || outcome == "paused" {
+		if rec.DesiredState == domain.GraphPaused {
+			g, err := e.store.GetGraph(ctx, target.Graph, rec.Version)
+			if err != nil {
+				return "", err
+			}
+			finished, err := e.runFinished(ctx, g, rec.RunID)
+			if err != nil {
+				return "", err
+			}
+			if finished {
+				outcome = "run_finished"
+			} else if expired && target.Action != cost.ResumeGraph {
+				if err := budgets.ScheduleRollover(ctx, target); err != nil {
+					return "", err
+				}
+				return "period_ended", nil
+			} else if outcome == "resume" {
+				labels := g.Metadata.Labels
+				t := cost.Target{Graph: target.Graph, User: labels[domain.LabelTaskUser],
+					Project: labels[domain.LabelTaskProject], Workflow: labels[domain.LabelTaskWorkflow]}
+				blocker, reason, err := budgets.ResumeBlocker(ctx, t, target, now)
+				if err != nil {
+					return "", err
+				}
+				if reason == "budget_reached" {
+					if err := budgets.HoldForResumeBlocker(ctx, blocker, now); err != nil {
+						return "", err
+					}
+					_ = e.auditBudgetTransition(ctx, target, reason, blocker)
+					if target.Scope == blocker.Scope && target.ID == blocker.ID {
+						return reason, nil // the same ledger now owns the hold
+					}
+				}
+				if reason != "" {
+					outcome = reason
+				}
+			}
+		} else if expired {
+			outcome = "period_ended"
+		}
+	}
 	switch outcome {
 	case "pause":
 		if err := e.graphAction(ctx, target.Graph, "pause", target.Actor); err != nil {
@@ -101,28 +149,36 @@ func (e *Engine) applyBudgetGraphTransition(ctx context.Context, target cost.Bud
 		}
 		outcome = "paused"
 	case "resume":
-		blocked, err := e.heldByAnotherBudget(ctx, target)
-		if err != nil {
-			return "", err
-		}
-		if blocked {
-			outcome = "another_budget"
-			break
-		}
 		if err := e.checkDeferredDeletion(ctx, target.Graph); err != nil {
 			return "", err
 		}
-		if err := e.graphAction(ctx, target.Graph, "resume", target.Actor); err != nil {
-			return "", err
+		if err := e.recordGraphAction(ctx, target.Graph, "resume", target.Actor, target.GraphAction.ID); err != nil {
+			// A write can commit while its caller loses the reply.
+			verify, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+			defer cancel()
+			applied, readErr := e.store.GetGraphRecord(verify, target.Graph)
+			if readErr != nil || applied.RunID != target.RunID || target.GraphAction.ID == "" ||
+				applied.BudgetResumeID != target.GraphAction.ID {
+				return "", errors.Join(err, readErr)
+			}
 		}
 		outcome = "resumed"
 	case "":
 		return "", nil
 	}
-	if _, err := budgets.ResolveGraphAction(ctx, target, outcome == "paused"); err != nil {
-		return "", err
+	if outcome == "resumed" {
+		// The command has committed. Finalize under the same lease even if
+		// its request expired. The graph receipt covers process loss as well.
+		finalize, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		defer cancel()
+		if err := e.auditBudgetTransition(finalize, target, outcome); err != nil {
+			return outcome, err
+		}
+		_, err := budgets.ResolveGraphAction(finalize, target, false)
+		return outcome, err
 	}
-	return outcome, nil
+	_, err = budgets.ResolveGraphAction(ctx, target, outcome == "paused")
+	return outcome, err
 }
 
 func budgetGraphOutcome(target cost.BudgetGraph, rec *domain.GraphRecord, err error) (string, error) {
@@ -134,6 +190,9 @@ func budgetGraphOutcome(target cost.BudgetGraph, rec *domain.GraphRecord, err er
 	}
 	if target.RunID != "" && target.RunID != rec.RunID {
 		return "run_changed", nil
+	}
+	if target.Action == cost.ResumeGraph && target.GraphAction.ID != "" && target.GraphAction.ID == rec.BudgetResumeID {
+		return "resumed", nil
 	}
 	if rec.DesiredState == domain.GraphStopped || rec.DesiredState == domain.GraphStopping || rec.DesiredState == "" {
 		return "stopped", nil
@@ -159,57 +218,73 @@ func budgetGraphOutcome(target cost.BudgetGraph, rec *domain.GraphRecord, err er
 	}
 }
 
-func (e *Engine) heldByAnotherBudget(ctx context.Context, target cost.BudgetGraph) (bool, error) {
-	actions, err := e.monetaryBudgets().PendingGraphActions(ctx)
-	for _, other := range actions {
-		if other.Graph == target.Graph && (other.Scope != target.Scope || other.ID != target.ID) &&
-			(other.RunID == "" || target.RunID == "" || other.RunID == target.RunID) &&
-			(other.Action == cost.HoldGraph || other.Action == cost.PauseGraph) {
-			return true, nil
+func (e *Engine) budgetGraphLoop(ctx context.Context) {
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+	delay := 5 * time.Second
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
 		}
+		if e.reconcileBudgetGraphs(ctx) {
+			delay = min(2*delay, time.Minute)
+		} else {
+			delay = 5 * time.Second
+		}
+		timer.Reset(delay)
 	}
-	return false, err
 }
 
-func (e *Engine) reconcileBudgetGraphs(ctx context.Context) {
+// reconcileBudgetGraphs returns whether a sweep found an error and should back off.
+func (e *Engine) reconcileBudgetGraphs(ctx context.Context) bool {
 	now := time.Now()
-	if now.Sub(e.monetaryBudgetSweepAt) < 5*time.Second {
-		return
-	}
-	e.monetaryBudgetSweepAt = now
 	work, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	actions, err := e.monetaryBudgets().PendingGraphActions(work)
-	var failures []error
-	failures = append(failures, err)
+	actions, invalid, err := e.monetaryBudgets().PendingGraphActions(work)
+	failures := 0
 	for _, target := range actions {
 		if work.Err() != nil {
 			break
 		}
 		// Give the raise request its four-second window before competing
 		// with it for the lease.
-		if target.Action == cost.HoldGraph || (target.Action == cost.ResumeGraph && now.Sub(target.Raised) < 4*time.Second) {
+		if target.Action == cost.ResumeGraph && now.Sub(target.Raised) < 4*time.Second {
 			continue
 		}
-		err := e.WithGraphTransition(work, target.Graph, func(ctx context.Context) error {
+		transitionErr := e.WithGraphTransition(work, target.Graph, func(ctx context.Context) error {
 			outcome, err := e.applyBudgetGraphTransition(ctx, target)
-			if err != nil || outcome == "" {
-				return err
+			if err == nil && outcome != "" && outcome != "budget_reached" && outcome != "resumed" {
+				return e.auditBudgetTransition(ctx, target, outcome)
 			}
-			e.auditBudgetTransition(ctx, target, outcome)
-			return nil
+			return err
 		})
-		if err != nil && !errors.Is(err, ErrGraphTransitionBusy) {
-			failures = append(failures, fmt.Errorf("graph %s: %w", target.Graph, err))
+		if transitionErr != nil && !errors.Is(transitionErr, ErrGraphTransitionBusy) {
+			failures++
 		}
 	}
-	if err := errors.Join(failures...); err != nil && ctx.Err() == nil {
-		e.log.Warn("reconcile budget graph transitions", "err", err)
+	if err == nil {
+		err = work.Err()
 	}
+	failed := err != nil || failures > 0 || invalid > 0
+	if failed && ctx.Err() == nil {
+		e.log.Warn("reconcile budget graph transitions", "scan_failed", err != nil,
+			"timed_out", errors.Is(err, context.DeadlineExceeded), "failed_actions", failures, "invalid_ledgers", invalid)
+	}
+	return failed
 }
 
-func (e *Engine) auditBudgetTransition(ctx context.Context, target cost.BudgetGraph, outcome string) {
-	e.bus.Publish(ctx, domain.NewEvent(domain.EvBudgetGraphTransition, target.Graph, map[string]any{
-		"scope": target.Scope, "id": target.ID, "action": target.Action, "outcome": outcome,
-	}).WithActor("system:budget"))
+func (e *Engine) auditBudgetTransition(ctx context.Context, target cost.BudgetGraph, outcome string, blockers ...cost.BudgetGraph) error {
+	data := map[string]any{"scope": target.Scope, "id": target.ID, "action": target.Action, "outcome": outcome}
+	if len(blockers) != 0 {
+		data["blockingScope"], data["blockingId"] = blockers[0].Scope, blockers[0].ID
+	}
+	if outcome == "resumed" && target.GraphAction.ID != "" {
+		ev := domain.NewEvent(domain.EvBudgetGraphTransition, target.Graph, data).WithActor("system:budget")
+		ev.ID = "evt_" + strings.ReplaceAll(target.GraphAction.ID, "-", "_")
+		return e.bus.PublishOnce(ctx, ev)
+	}
+	e.bus.Publish(ctx, domain.NewEvent(domain.EvBudgetGraphTransition, target.Graph, data).WithActor("system:budget"))
+	return nil
 }

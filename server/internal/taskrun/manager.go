@@ -520,6 +520,9 @@ func (m Manager) View(ctx context.Context, id string) (*View, error) {
 		v.Blockers = append(v.Blockers, "An agent failed during preparation. No execution was recorded. Open Activity and diagnostics to inspect the failure; stop this task before preparing a replacement.")
 		return v, nil
 	}
+	// A budget refusal ends the turn while the paused graph can still
+	// resume. Only infer a terminal task if its replicas have finished.
+	active = active || (st.DesiredState == domain.GraphPaused && !st.RunFinished)
 	if !active && (len(xs) > 0 || failed) {
 		if failed {
 			v.State = "failed"

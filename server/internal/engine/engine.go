@@ -138,14 +138,13 @@ type Engine struct {
 	execs *execRegistry
 	turns chan struct{} // global turn semaphore (nil = unlimited)
 
-	// Only the reconcile loop writes sweep state.
-	budgetSweepAt         time.Time
-	monetaryBudgetSweepAt time.Time
-	brokerCleanupSweepAt  time.Time
-	brokerCleanupRetries  map[string]brokerCleanupRetry
-	wake                  chan struct{}
-	stop                  context.CancelFunc
-	done                  chan struct{}
+	// Only the graph reconcile loop writes sweep state.
+	budgetSweepAt        time.Time
+	brokerCleanupSweepAt time.Time
+	brokerCleanupRetries map[string]brokerCleanupRetry
+	wake                 chan struct{}
+	stop                 context.CancelFunc
+	done                 chan struct{}
 }
 
 func New(opt Options) (*Engine, error) {
@@ -235,6 +234,12 @@ func (e *Engine) Nudge() {
 
 func (e *Engine) loop(ctx context.Context) {
 	defer close(e.done)
+	budgetDone := make(chan struct{})
+	go func() {
+		defer close(budgetDone)
+		e.budgetGraphLoop(ctx)
+	}()
+	defer func() { <-budgetDone }()
 	t := time.NewTicker(e.opt.ReconcileInterval)
 	defer t.Stop()
 	for {
@@ -307,7 +312,6 @@ func (e *Engine) reconcile(ctx context.Context) {
 			e.log.Error("reconcile tree token budgets", "err", err)
 		}
 	}
-	e.reconcileBudgetGraphs(ctx)
 	recs, err := e.store.ListGraphRecords(ctx)
 	if err != nil {
 		e.log.Warn("reconcile: list graphs", "err", err)

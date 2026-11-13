@@ -93,6 +93,7 @@ const (
 	EvBudgetWarning           EventType = "budget.warning"
 	EvBudgetReached           EventType = "budget.reached"
 	EvBudgetRaised            EventType = "budget.raised"
+	EvBudgetLedgerInvalid     EventType = "budget.ledger_invalid"
 	EvBudgetGraphTransition   EventType = "budget.graph_transition"
 	EvBudgetChanged           EventType = "budget.changed"
 	EvBudgetReservationFailed EventType = "budget.reservation_failed"

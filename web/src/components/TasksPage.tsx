@@ -104,14 +104,14 @@ function TaskBudgetPreview({workflow,project}:{workflow:string;project?:string})
 }
 
 /** The run's own budget, with a raise when it paused the run. */
-function TaskRunBudget({graph,canRaise}:{graph:string;canRaise:boolean}) {
+function TaskRunBudget({graph,canRaise,active}:{graph:string;canRaise:boolean;active:boolean}) {
   const budget=useAsync(()=>api.budget('run',graph).catch(()=>undefined),[graph]);
   const reload=useThrottled(()=>void budget.reload(),300);
-  useOptionalEventStream({graph,types:['budget.raised','budget.graph_transition']},reload);
+  useOptionalEventStream({graph,types:['budget.raised','budget.graph_transition','budget.ledger_invalid']},reload);
   if(!budget.data)return null;
   return <section aria-label="Task run budget">
-    {budget.data.paused&&!budget.data.notResumed?.length&&<p role="alert">This run is paused because it reached its budget. {canRaise?'Raise the budget to continue, or stop the task.':'Ask an administrator to raise the budget, or stop the task.'}</p>}
-    <ul className="integration-grid"><BudgetBar budget={budget.data} currency={budget.data.currency||'USD'} canRaise={canRaise} onRaised={()=>budget.reload()}/></ul>
+    {active&&budget.data.paused&&!budget.data.notResumed?.length&&<p role="alert">This run is paused because it reached its budget. {canRaise?'Raise the budget to continue, or stop the task.':'Ask an administrator to raise the budget, or stop the task.'}</p>}
+    <ul className="integration-grid"><BudgetBar budget={budget.data} currency={budget.data.currency||'USD'} canRaise={canRaise} showPause={active} onRaised={()=>budget.reload()}/></ul>
   </section>;
 }
 
@@ -287,7 +287,7 @@ function TaskTracking({task,canControl,canDecide,nativeProfile}:{task:TaskDraft;
       <TaskAuthorization taskId={task.id} canEdit={canControl&&["running","starting","environment_pending"].includes(current.status)} running={current.status!=="environment_pending"} onChanged={()=>setRefresh(x=>x+1)}/>
       {current.launchError&&<p>{current.launchError}</p>}
       {progress?.blockers.map(b=><p key={b}>{b}</p>)}
-      {graph&&<TaskRunBudget graph={graph} canRaise={canControl}/>}
+      {graph&&<TaskRunBudget graph={graph} canRaise={canControl} active={progress?.state==='running'}/>}
       {progress?.delivery&&<TaskDeliveryView delivery={progress.delivery}/>}
       {graph&&<TaskDecisions graphId={graph} approvals={error?undefined:progress?.pendingApprovals} canDecide={canDecide} canAdmin={canControl} onChanged={()=>setRefresh(x=>x+1)}/>}
       {progress?.workspacePath&&<WorkspaceHandoff path={progress.workspacePath} nativeProfile={nativeProfile}/>}

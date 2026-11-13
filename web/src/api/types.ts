@@ -635,6 +635,8 @@ export interface BudgetView {
   paused: boolean;
   raisedBy?: string;
   notResumed?: string[];
+  invalid?: boolean;
+  revision?: number;
 }
 
 export interface SpendLine {

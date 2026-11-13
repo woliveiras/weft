@@ -329,7 +329,7 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErr(w, http.StatusConflict, "secret_key_missing", err.Error(), nil)
 	case errors.Is(err, engine.ErrNotFound), errors.Is(err, storage.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not_found", err.Error(), nil)
-	case errors.Is(err, engine.ErrConflict), errors.Is(err, hitl.ErrNotPending), errors.Is(err, storage.ErrConflict):
+	case errors.Is(err, cost.ErrInvalidLedger), errors.Is(err, engine.ErrConflict), errors.Is(err, hitl.ErrNotPending), errors.Is(err, storage.ErrConflict):
 		writeErr(w, http.StatusConflict, "conflict", err.Error(), nil)
 	case errors.Is(err, engine.ErrInvalid), errors.Is(err, errBadRequest):
 		writeErr(w, http.StatusBadRequest, "invalid", err.Error(), nil)

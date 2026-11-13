@@ -3,6 +3,7 @@ package cost_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -269,5 +270,40 @@ func TestPolicyValidation(t *testing.T) {
 	}
 	if _, _, err := b.Policy(ctx); err == nil {
 		t.Fatal("corrupt policy must fail")
+	}
+}
+
+func TestRaiseRecomputesReachedFromChargedAndReservedSpend(t *testing.T) {
+	for _, limit := range []int64{80, 85, 86} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			st, b := budgetEnv(t, 50)
+			const graph = "task-run-raise"
+			if _, err := st.PutSetting(t.Context(), cost.BudgetPrefix+"run/"+graph,
+				[]byte(`{"scope":"run","id":"task-run-raise","limit":50,"reached":true,"compacted":65,"entries":{"open":{"amount":20}}}`),
+				0, "fixture"); err != nil {
+				t.Fatal(err)
+			}
+			v, _, _, err := b.Raise(t.Context(), cost.TaskRun, graph, limit, "admin")
+			if err != nil || v.Reached != (limit <= 85) || v.Remaining != max(limit-85, 0) {
+				t.Fatalf("raise against actual spend: %+v %v", v, err)
+			}
+		})
+	}
+}
+
+func TestPendingGraphActionScanSkipsReservationDecoding(t *testing.T) {
+	st, b := budgetEnv(t, 0)
+	const graph = "task-run-projection"
+	if _, err := st.PutSetting(t.Context(), cost.BudgetPrefix+"run/"+graph,
+		[]byte(`{"scope":"run","id":"task-run-projection","limit":50,"pausedGraphs":["task-run-projection"],"entries":{"bad":"invalid"}}`),
+		0, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	actions, invalid, err := b.PendingGraphActions(t.Context())
+	if err != nil || invalid != 0 || len(actions) != 1 {
+		t.Fatalf("graph projection: %+v %d %v", actions, invalid, err)
+	}
+	if ok, err := b.GraphActionCurrent(t.Context(), actions[0]); ok || !errors.Is(err, cost.ErrInvalidLedger) {
+		t.Fatalf("actual transition must validate entries: %t %v", ok, err)
 	}
 }

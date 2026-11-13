@@ -185,13 +185,14 @@ func (e *TransitionError) Error() string {
 
 // GraphRecord is the persisted control state of a graph.
 type GraphRecord struct {
-	ID           string     `json:"id"`
-	Version      int        `json:"version"`
-	DesiredState GraphState `json:"desiredState"`
-	State        GraphState `json:"state"`
-	RunID        string     `json:"runId,omitempty"`
-	StartedAt    *time.Time `json:"startedAt,omitempty"`
-	UpdatedAt    time.Time  `json:"updatedAt"`
+	ID             string     `json:"id"`
+	Version        int        `json:"version"`
+	DesiredState   GraphState `json:"desiredState"`
+	State          GraphState `json:"state"`
+	RunID          string     `json:"runId,omitempty"`
+	BudgetResumeID string     `json:"budgetResumeId,omitempty"`
+	StartedAt      *time.Time `json:"startedAt,omitempty"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
 }
 
 // Execution is one turn of one replica.

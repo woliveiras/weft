@@ -347,6 +347,10 @@ func (e *Engine) GraphAction(ctx context.Context, id, action, actor string) erro
 }
 
 func (e *Engine) graphAction(ctx context.Context, id, action, actor string) error {
+	return e.recordGraphAction(ctx, id, action, actor, "")
+}
+
+func (e *Engine) recordGraphAction(ctx context.Context, id, action, actor, budgetResumeID string) error {
 	_, rec, err := e.GetGraph(ctx, id, 0)
 	if err != nil {
 		return err
@@ -362,6 +366,7 @@ func (e *Engine) graphAction(ctx context.Context, id, action, actor string) erro
 			// A start is a new run: clear per-node stops so "run all" means all
 			// (disabled nodes stay out - that is what disabled means).
 			rec.RunID = domain.NewID("run")
+			rec.BudgetResumeID = ""
 			rec.StartedAt = &now
 			if err := e.clearNodeStops(ctx, id); err != nil {
 				return err
@@ -394,6 +399,9 @@ func (e *Engine) graphAction(ctx context.Context, id, action, actor string) erro
 			return fmt.Errorf("%w: graph is not paused", ErrConflict)
 		}
 		rec.DesiredState = domain.GraphRunning
+		if budgetResumeID != "" {
+			rec.BudgetResumeID = budgetResumeID
+		}
 		ev = domain.EvGraphResumed
 	default:
 		return fmt.Errorf("%w: unknown action %q", ErrInvalid, action)
@@ -626,6 +634,7 @@ type GraphStatus struct {
 	Nodes            []NodeStatus      `json:"nodes"`
 	Channels         []ChannelStatus   `json:"channels"`
 	ApprovalsPending int               `json:"approvalsPending"`
+	RunFinished      bool              `json:"-"`
 }
 
 var liveness = map[domain.ReplicaState]int{
@@ -643,6 +652,12 @@ func (e *Engine) Status(ctx context.Context, id string) (*GraphStatus, error) {
 	st := &GraphStatus{GraphID: id, State: rec.State, DesiredState: rec.DesiredState, RunID: rec.RunID, Version: rec.Version}
 	if st.State == "" {
 		st.State = domain.GraphStopped
+	}
+	if rec.DesiredState == domain.GraphPaused {
+		st.RunFinished, err = e.runFinished(ctx, g, rec.RunID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	reps, err := e.store.ListReplicaStatus(ctx, id)
 	if err != nil {
@@ -720,6 +735,50 @@ func (e *Engine) Status(ctx context.Context, id string) (*GraphStatus, error) {
 		st.ApprovalsPending = len(aps)
 	}
 	return st, nil
+}
+
+// runFinished reports whether the fixed replicas of the current run are done.
+// A terminal turn can leave work for the graph to retry.
+// Retire holds only when every enabled fixed replica has a completion
+// marker for this run. Autoscaled replicas do not define a finite run.
+func (e *Engine) runFinished(ctx context.Context, g *domain.Graph, run string) (bool, error) {
+	if len(g.Spec.Nodes) == 0 {
+		return false, nil
+	}
+	for _, node := range g.Spec.Nodes {
+		if node.Disabled {
+			continue
+		}
+		var ctl nodeControl
+		raw, err := e.store.KVGet(ctx, controlNS(g.Metadata.ID), "node/"+node.ID)
+		if err == nil {
+			if err := json.Unmarshal(raw, &ctl); err != nil {
+				return false, fmt.Errorf("decode node control for %s: %w", node.ID, err)
+			}
+		} else if !errors.Is(err, storage.ErrNotFound) {
+			return false, err
+		}
+		if ctl.Stopped {
+			continue
+		}
+		if node.Cluster.Mode == domain.ClusterAutoscale {
+			return false, nil
+		}
+		count := node.Cluster.Replicas
+		if ctl.Replicas > 0 {
+			count = ctl.Replicas
+		}
+		for replica := range max(1, count) {
+			marker, err := e.store.KVGet(ctx, controlNS(g.Metadata.ID), doneKey(node.ID, replica))
+			if errors.Is(err, storage.ErrNotFound) {
+				return false, nil
+			}
+			if err != nil || string(marker) != run {
+				return false, err
+			}
+		}
+	}
+	return true, nil
 }
 
 func (e *Engine) groupStatus(ctx context.Context, g *domain.Graph, c *domain.Channel, node, subject, group string, replica *int, pending map[string]int64) GroupStatus {

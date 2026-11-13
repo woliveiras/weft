@@ -14,6 +14,7 @@ package events
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -38,20 +39,34 @@ func NewBus(store storage.Store, log *slog.Logger) *Bus {
 // persist are logged, not returned: losing an observability event must
 // never fail the operation it describes.
 func (b *Bus) Publish(ctx context.Context, ev *domain.Event) {
+	// Detach from request cancellation: the event describes something that happened.
+	pctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := b.append(pctx, ev); err != nil {
+		b.log.Warn("event not persisted", "type", ev.Type, "err", err)
+	}
+}
+
+// PublishOnce appends a stable event ID at most once, including across controllers.
+func (b *Bus) PublishOnce(ctx context.Context, ev *domain.Event) error {
+	if err := b.append(ctx, ev); err != nil && !errors.Is(err, storage.ErrConflict) {
+		return err
+	}
+	return nil
+}
+
+func (b *Bus) append(ctx context.Context, ev *domain.Event) error {
 	if ev.ID == "" {
 		ev.ID = domain.NewID("evt")
 	}
 	if ev.Time.IsZero() {
 		ev.Time = time.Now().UTC()
 	}
-	// Detach from request cancellation: the event describes something that happened.
-	pctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-	defer cancel()
-	if err := b.store.AppendEvent(pctx, ev); err != nil {
-		b.log.Warn("event not persisted", "type", ev.Type, "err", err)
-		return
+	if err := b.store.AppendEvent(ctx, ev); err != nil {
+		return err
 	}
 	b.wake()
+	return nil
 }
 
 // Audit implements tools.Auditor.

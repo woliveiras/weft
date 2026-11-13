@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
@@ -118,6 +119,11 @@ func testBudgetRaise(t *testing.T, state string) {
 		_, rec, err := a.Engine.GetGraph(t.Context(), gid, 0)
 		return err == nil && rec.DesiredState == domain.GraphPaused &&
 			call(t, srv, "GET", path, viewerTok, "", "", &v) == 200 && v.Reached && v.Paused
+	})
+	waitFor(t, 5*time.Second, "refused turn ends without ending the paused task", func() bool {
+		var progress taskrun.View
+		return call(t, srv, "GET", "/api/v1/tasks/"+d.ID+"/progress", viewerTok, "", "", &progress) == 200 &&
+			len(progress.Executions) > 0 && progress.Executions[0].Status.Terminal() && progress.State == "running"
 	})
 	if v.LimitMicros != 1 || v.ChargedMicros != 0 || v.ReservedMicros != 0 {
 		t.Fatalf("refused call must cost nothing: %+v", v)
@@ -316,4 +322,93 @@ func TestCostReportingEndpoints(t *testing.T) {
 	if c := call(t, srv, "GET", "/api/v1/cost/budgets/preview", viewerTok, "", "", &preview); c != 200 || len(preview.Budgets) != 0 {
 		t.Fatalf("viewer preview: %d %+v", c, preview)
 	}
+}
+
+func TestInvalidBudgetLedgerDoesNotHideValidLedgersOrBlockUnrelatedResume(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	ctx := t.Context()
+	const invalidID = "task-run-invalid"
+	const validID = "task-run-valid"
+	if _, err := a.Store.PutSetting(ctx, cost.BudgetPrefix+"run/"+invalidID, []byte("{"), 0, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	g := &domain.Graph{Metadata: domain.GraphMetadata{ID: validID}}
+	if _, err := a.Store.SaveGraph(ctx, g, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Store.PutGraphRecord(ctx, &domain.GraphRecord{ID: validID, Version: 1, RunID: "current",
+		DesiredState: domain.GraphPaused, State: domain.GraphPaused}); err != nil {
+		t.Fatal(err)
+	}
+	const valid = `{"scope":"run","id":"task-run-valid","currency":"USD","limit":10,"reached":true,"entries":{},"pausedGraphs":["task-run-valid"],"graphActions":{"task-run-valid":{"action":"hold","runId":"current"}}}`
+	if _, err := a.Store.PutSetting(ctx, cost.BudgetPrefix+"run/"+validID, []byte(valid), 0, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	var all []cost.View
+	if c := call(t, srv, "GET", "/api/v1/cost/ledgers", viewerTok, "", "", &all); c != 200 || len(all) != 2 ||
+		all[0].ID != invalidID || !all[0].Invalid || all[0].Revision != 1 || all[1].ID != validID || all[1].Invalid {
+		t.Fatalf("individual ledger status: %d %+v", c, all)
+	}
+	path := "/api/v1/cost/budgets/run/"
+	var invalid, raised cost.View
+	if c := call(t, srv, "GET", path+invalidID, viewerTok, "", "", &invalid); c != 200 || !invalid.Invalid || invalid.Revision != 1 {
+		t.Fatalf("invalid ledger: %d %+v", c, invalid)
+	}
+	if c := call(t, srv, "POST", path+invalidID+"/raise", adminTok, "application/json", `{"limitMicros":20}`, nil); c != 409 {
+		t.Fatalf("invalid ledger accepted a raise: %d", c)
+	}
+	if c := call(t, srv, "POST", path+validID+"/raise", adminTok, "application/json", `{"limitMicros":20}`, &raised); c != 200 ||
+		raised.Paused || len(raised.NotResumed) != 0 {
+		t.Fatalf("unrelated raise: %d %+v", c, raised)
+	}
+	rec, err := a.Store.GetGraphRecord(ctx, validID)
+	if err != nil || rec.DesiredState != domain.GraphRunning {
+		t.Fatalf("unrelated graph could not resume: %+v %v", rec, err)
+	}
+	evs, err := a.Store.ListEvents(ctx, storage.EventFilter{Types: []domain.EventType{domain.EvBudgetLedgerInvalid}})
+	if err != nil || len(evs) != 1 || evs[0].GraphID != invalidID {
+		t.Fatalf("expected one invalid revision audit: %+v %v", evs, err)
+	}
+}
+
+func TestClosedBudgetPeriodIsReadOnlyAndDoesNotShowPausedRuns(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	const ledger = `{"scope":"installation","id":"*@2000-01","limit":10,"reached":true,"entries":{},"pausedGraphs":["old-run"]}`
+	if _, err := a.Store.PutSetting(t.Context(), cost.BudgetPrefix+"installation/*@2000-01", []byte(ledger), 0, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	var all []cost.View
+	if c := call(t, srv, "GET", "/api/v1/cost/ledgers", viewerTok, "", "", &all); c != 200 || len(all) != 0 {
+		t.Fatalf("historical ledger in current list: %d %+v", c, all)
+	}
+	if c := call(t, srv, "GET", "/api/v1/cost/ledgers?period=2000-01", viewerTok, "", "", &all); c != 200 ||
+		len(all) != 1 || all[0].Paused || len(all[0].NotResumed) != 0 {
+		t.Fatalf("historical ledger: %d %+v", c, all)
+	}
+	if c := call(t, srv, "POST", "/api/v1/cost/budgets/installation/*@2000-01/raise", adminTok, "application/json", `{"limitMicros":20}`, nil); c != 422 {
+		t.Fatalf("closed period accepted a raise: %d", c)
+	}
+}
+
+func TestBudgetHoldClearsAfterGraphStop(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	const id = "task-run-stop-fixture"
+	ctx := t.Context()
+	g := &domain.Graph{Metadata: domain.GraphMetadata{ID: id}}
+	if _, err := a.Store.SaveGraph(ctx, g, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Store.PutGraphRecord(ctx, &domain.GraphRecord{ID: id, Version: 1, RunID: "run-a",
+		DesiredState: domain.GraphStopped, State: domain.GraphStopped}); err != nil {
+		t.Fatal(err)
+	}
+	const raw = `{"scope":"run","id":"task-run-stop-fixture","limit":10,"entries":{},"reached":true,"pausedGraphs":["task-run-stop-fixture"],"graphActions":{"task-run-stop-fixture":{"action":"hold","runId":"run-a"}}}`
+	if _, err := a.Store.PutSetting(ctx, cost.BudgetPrefix+"run/"+id, []byte(raw), 0, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, 10*time.Second, "automatic hold cleanup", func() bool {
+		var view cost.View
+		return call(t, srv, "GET", "/api/v1/cost/budgets/run/"+id, viewerTok, "", "", &view) == 200 &&
+			!view.Paused && view.Reached
+	})
 }
