@@ -3,7 +3,7 @@
 ```
 weft/
 ├── README.md, LICENSE, NOTICE, CONTRIBUTING.md, Makefile
-├── docker-compose.yml          whole platform + observability (+ profiles: ollama, hf, sandbox)
+├── docker-compose.yml          whole platform + observability (+ profiles: ollama, hf)
 ├── Dockerfile                  weftd + weft + web console (multi-stage, non-root)
 ├── Dockerfile.sandbox          default image for docker-isolated tool sandboxes
 ├── api/                        OpenAPI specification of the public API
@@ -67,13 +67,15 @@ weft/
 │   ├── observability/          otel-collector, prometheus (+ alerts), tempo, loki, grafana provisioning + dashboard
 │   └── kubernetes/             kustomize manifests (+ optional ServiceMonitor/PrometheusRule)
 │
+├── specs/                     acceptance criteria, status and historical evidence
+│
 └── docs/
     ├── architecture.md, security.md, …     design documentation
     ├── getting-started.md, configuration.md, deployment.md, production-hardening.md
     ├── extensibility.md, folder-structure.md
     ├── adr/                    architecture decision records
     ├── diagrams/               diagram sources
-    └── dev/contracts.md        cross-component contracts (API, Runtime Protocol, turn semantics)
+    └── README.md               documentation index and topic ownership
 ```
 
 ## Dependency rules

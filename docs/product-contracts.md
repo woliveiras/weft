@@ -68,151 +68,29 @@ and [gateway operations](sandbox-runtime.md#human-review-and-application-preview
 ### MCP connections
 
 An installation can configure multiple connections for one MCP service. The
-[MCP guide](mcp.md) covers the connection lifecycle and tool authorization.
-
-| Method and path | Minimum role | Contract |
-|---|---|---|
-| `GET /api/v1/mcp/history` | viewer | Filter persisted tool/approval metadata and safe outcomes; bounded scan and exclusive sequence pagination. No raw arguments/results/comments. |
-| `GET /api/v1/mcp/connections` | viewer | List connection metadata and current status; never return credentials or ciphertext. |
-| `POST /api/v1/mcp/connections` | admin | Create a connection; credential fields are write-only. Return `201` and the safe connection view. |
-| `GET /api/v1/mcp/connections/{connectionId}` | viewer | Read the safe connection view. |
-| `PUT /api/v1/mcp/connections/{connectionId}` | admin | Update settings/credential with `If-Match`; omitted credential keeps the stored value, explicit clear removes it. |
-| `DELETE /api/v1/mcp/connections/{connectionId}` | admin | Remove a disabled connection after OAuth revocation, with current `If-Match`; return `204`. Retain a minimal reserved-ID tombstone and audit history. Old grants remain in graph documents but fail closed. No remote registration deletion. |
-| `POST /api/v1/mcp/connections/{connectionId}/test` | operator | Test reachability/authentication and report a redacted result. |
-| `POST /api/v1/mcp/connections/{connectionId}/tools/refresh` | operator | Discover and persist the current tool catalogue; return the new catalogue revision. |
-
-Connection metadata includes `id`, `service`, display name, endpoint and transport
-metadata, `status`, `credentialConfigured`, `lastTest`, `toolsRevision`,
-`createdAt`, `updatedAt`, `updatedBy`, and `callsPerMinute`. See the
-[quota rules](mcp.md#connection-quotas-and-call-history) for `callsPerMinute`.
-Read models exclude credential values, authorization headers, refresh tokens and
-ciphertext. The installation secret key encrypts secrets before storage. Each
-connection has its own revisioned setting, `mcp/connections/{connectionId}`, so
-updates to different connections are independent.
-
-**Implemented invocation contract:** The platform owns MCP transport sessions. Agent runtimes never receive MCP
-credentials or connect directly to MCP servers. Discovered tools are exposed
-only through the tool gateway under a stable connection-qualified name
-`mcp.{connectionId}.{toolName}`. A node must have an explicit matching grant
-in `spec.nodes[].tools`; existing constraints, rate limits, approvals, and
-gateway checks apply to every invocation. Removing a connection invalidates
-its grants and makes further calls fail closed. Already dispatched operations cannot be rolled back.
-
-Transport support is selected from transports reachable by `weftd` inside
-Docker and implemented without executing arbitrary user commands in the
-control-plane process. Connection-level network restrictions, TLS validation,
-timeouts, response-size limits, cancellation, and redirect/endpoint
-validation are mandatory. No endpoint or tool name supplied by an agent may
-cause the gateway to select a different connection.
+[MCP guide](mcp.md) owns lifecycle, credential handling, transport restrictions
+and exact connection-qualified grants. The
+[registration API](api.md#mcp-registration-and-discovery) and
+[quotas and history API](api.md#mcp-quotas-and-history) define roles, revisions,
+safe read models and failure responses. Runtimes invoke discovered tools through
+the gateway; they do not receive managed connection credentials.
 
 ### Skills and project steering
 
-Implemented contracts and explicit bounds are documented in [Skills and steering](instructions.md).
-The API/schema/runtime references are updated with the implementation.
-
-- Application-managed skills are installation resources with stable IDs,
-  immutable revision history, a title/description, an enabled flag, and a
-  versioned Markdown body. API: `GET/POST /api/v1/skills`,
-  `GET/PUT/DELETE /api/v1/skills/{skillId}`. Reads require `viewer`; writes
-  require `admin`; updates/deletion use `If-Match`. `DELETE` disables a skill rather than
-  erasing revisions; it returns `409` while a latest or active graph version selects
-  that skill. Existing execution manifests remain resolvable.
-- Graphs opt into skills by ID through a graph-level instruction reference;
-  nodes may narrow the selected set but may not add unapproved privileges.
-- The graph field is `spec.instructions: {skillIds: string[],
-  projectSteering: boolean, installationDefaults: boolean}`; omission means no application skill or project
-  steering is loaded. Nodes may optionally name a subset of the graph's
-  selected skill IDs. A node cannot reference a skill that its graph did not
-  select. Omitted/null node selection inherits; an explicit empty array selects
-  no graph skills. Installation defaults require their own graph opt-in.
-- Project steering is read only from the authorized graph workspace under
-  `.weft/steering/`, from immediate `*.md` files whose resolved paths remain
-  inside that workspace. The graph must explicitly enable project steering.
-  Observed symlinks and special files are rejected; rooted reads prevent escape.
-- The effective instruction precedence is platform security policy (not
-  overrideable) → installation defaults → graph-selected skills → authorized
-  project steering → node prompt/instructions → current task. This is
-  precedence for context composition only: no instruction source can alter
-  authorization, limits, credentials, or approval policy.
-- Each execution records an immutable instruction manifest: source type,
-  stable ID/path, revision or content hash, and whether content was included
-  or omitted due to a size/token limit. The runtime receives the composed
-  instruction content and non-secret manifest only. Repository content is
-  untrusted input and must be bounded and isolated by workspace.
+[Skills and project steering](instructions.md) owns source selection, opt-in,
+precedence, bounds and immutable execution manifests. See its
+[persistence and API contract](instructions.md#persistence-api-and-audit) for
+revisioned skill administration and [Runtime Protocol](runtime-protocol.md#instruction-snapshots)
+for the runtime representation. Guidance contributes context, never authority;
+installation policy, grants and approval requirements remain independent.
 
 ### Project environments
 
-**Delivered** (see [environments.md](environments.md)):
-
-- `spec.environment` in the graph document is the single effective
-  definition: `image` or `dockerfile`, `setup[]`, `network.setup`/`network.run`
-  (`none`/`bridge`/`egress`, with separate `network.setupAllowedHosts` and `network.allowedHosts`),
-  `caches[]`, `timeout`, `cpu`, `memory`, and optional
-  `origin` for accepted repository definitions. It is versioned
-  with the graph and saved through the graph `PUT`.
-- Build state per graph: `absent`, `building`, `ready`, `failed`, with the hash
-  of the built definition, image reference, cache volumes, timestamps, actor and
-  a 64 KiB log tail. `upToDate` compares it with the saved definition.
-- `GET /graphs/{id}/environment` (viewer), `POST …/environment/build`
-  (operator, `{force}`), `POST …/environment/reset` (admin, refused while the
-  graph runs). Starting nodes that need an environment that is not up to date
-  returns `422` at `spec.environment`.
-- Events `environment.build_started|ready|failed|reset`; metrics
-  `weft_environment_builds_total{outcome}` and
-  `weft_environment_build_duration_seconds{outcome}`; span
-  `environment.build`.
-
-**Delivered discovery API:** `GET /graphs/{id}/environment/discovery` (viewer)
-reads an existing checkout without mutation. Explicit `spec.environment` returns
-`source: interface`, `status: configured`; otherwise discovery follows Weft,
-devcontainer, Dockerfile, Compose precedence. Results contain `source`, `status`
-(`review_required`, `invalid`, or `proposal_required`) and `candidates` with
-`path`, `sha256`, optional `services` and `error`. No source contents are returned.
-Discovery performs bounded structural inspection. `POST …/environment/resolve`
-(viewer) accepts `{source, path, sha256, service?, target?}`, verifies the selected candidate,
-normalizes supported fields and returns an environment with
-`origin: {source, path, sha256, service?, files: {path: sha256}, dockerfilePath?, contextSHA256?, target?}` for review.
-The console requires explicit selection, review and acceptance into the draft.
-Persistence uses the existing **admin-only** graph PUT and optimistic concurrency;
-acceptance never starts a build. Source and referenced-file hashes and normalized
-settings are checked again on graph save and before build (including cache hits).
-Stale files/settings and unsupported fields return `400` without starting Docker;
-graph version conflicts retain the existing `409` behavior.
-
-Supported input subsets and limits are documented in [environments.md](environments.md).
-Repository definitions cannot set origin, CPU/memory overrides or execution
-networking beyond `none`; unhandled Compose settings and unsupported Dockerfile
-features fail explicitly. Local COPY/ADD contexts are confined to the workspace,
-filtered by ignore rules, bounded, hashed on acceptance, and revalidated before
-save and build. The validated tar snapshot is sent to the dedicated daemon.
-Named build targets are selectable for standalone Dockerfiles and supported via
-Weft `target` and Compose `build.target`. The accepted target contributes to
-the image hash. COPY --from supports local stage names/indices with cycle
-validation and syntactically validated external image names, tags and digests.
-Local stages take precedence; unmatched names resolve as images during build.
-Acceptance tracks literal references, not mutable registry tag contents. External
-named build contexts and other COPY flags remain unsupported. These are conservative input restrictions, not a
-new installation-wide policy configuration. Missing/unreadable checkouts or scan
-limits return an error, never a fallback. Discovery does not clone a repository.
-
-When discovery returns `proposal_required`, an admin can request a bounded,
-tool-free model analysis of allowlisted manifests/lockfiles. A durable
-`environment` approval includes the full suggested definition, rationale and
-input fingerprint. Admin acceptance revalidates the graph version and input
-hashes, saves the exact approved definition and triggers the build. The engine
-blocks starts until ready; a graph starts automatically only when the requester
-explicitly selected that option. Rejection, expiration and cancellation do not
-build. Approved work survives restart, and failed builds can be retried. This
-workflow is available through the console and environment proposal API; invoking
-it through `environment.propose`/`environment.status` agent tools is implemented
-for the own-graph, initially unconfigured environment (see tool contracts).
-See [proposal limits and behavior](environments.md#agent-proposal-and-developer-approval).
-
-**Delivered scope and limits:** discovery, initial proposals, prepared-image/cache-seed
-reuse, global CPU/memory/count admission, idle suspension and explicit shared
-cleanup are implemented. Full Compose/devcontainer compatibility, replacement
-proposals with diffs, registry-wide egress controls and exact queue ETAs are
-outside this release. See [sandbox acceptance evidence](sandbox-acceptance.md).
+[Project environments](environments.md) owns the effective graph definition,
+supported repository formats, discovery/resolve workflow, build state and
+recovery. [Environment APIs](api.md#project-environments) define the wire
+contract. The cross-component acceptance boundary is summarized below; see
+[sandbox acceptance](sandbox-acceptance.md) for qualification and exclusions.
 
 <a id="planned-discovery-and-acceptance"></a>
 #### Discovery and acceptance
@@ -329,31 +207,13 @@ A risk-based **Approve for me** mode remains deferred.
 
 ### Dynamic child execution
 
-**Implemented foundation:** Native and external parents with the exact `delegation.request`
-grant can request an installation analysis profile, follow its installation
-approval policy and receive the result. Children use the parent's model; the default
-analysis profile has no tools or workspace. Profiles may select an exact subset of
-parent grants with all constraints preserved, using the parent's workspace and
-gateway. Children have no parent conversation history or memory/emit. Further delegation
-requires an inherited explicit capability and available configured depth (default one). Execution records, approval context,
-bounded shared-store capacity limits and parent links in Runs are implemented.
-See [delegation](delegation.md) for the precise contract and limitations.
-
-**Implemented configuration:** Policy GET/PUT and profile list/create/read/update
-APIs support native profiles with optional inherited capabilities, required/automatic approval and bounded
-limits. The console provides reviewed admin-only saves with revision conflicts.
-Execution snapshots pin policy/profile revisions; pending requests revalidate them.
-See [delegation](delegation.md) for the supported fields and hard bounds.
-
-**Implemented execution controls:** Runs provides a bounded persisted execution
-tree, including historical parent relationships, status, duration and inclusive
-usage. Viewer reads and operator/admin interruption use separate API roles.
-Child-only cancellation returns an error to the parent; whole-tree cancellation
-stops the current root and descendants cooperatively. Confirmation, durable
-request state, pending approval cleanup and unchanged graph/grants are covered.
-Native child recursion is bounded to the configured depth (1–4), with a shared
-root token ledger and recovery. Hard process kills and monetary ceilings are not
-implemented. External parents use the active execution callback and native children.
+The implemented [delegation contract](delegation.md) owns profile/policy
+configuration, inherited grants, approvals, bounded native children and execution
+trees. It supports native and external parents through the active execution
+callback. See [tree token admission](delegation.md#cumulative-tree-token-budget)
+for accounting and recovery, and the
+[capability specification](../specs/runtime-and-delivery/dynamic-delegation-and-execution-trees/spec.md)
+for remaining qualification and exclusions.
 
 **Planned extended contract (not the current API):** The broader profile fields,
 profile deletion, `agent.delegate` name and alternate `/delegations` request
@@ -587,15 +447,7 @@ continues to apply to every read and mutation. Workspace inspection remains read
 
 ### Gateway delegation tree token admission — implemented
 
-A native or external parent explicitly granted `delegation.request` shares a persistent token
-ledger with its analysis children. Administration configures `maxTreeTokens`;
-the tighter parent limit applies. Reservation precedes dispatch and child approval.
-Settlement is idempotent per model call and never sums inclusive execution totals.
-Pre-dispatch failure/cancellation releases the reservation; unknown post-dispatch
-usage becomes an estimated charge, and storage failures cannot replenish budget.
-Runs exposes charges, reservations and estimates under existing read permissions.
-Terminal-root recovery releases undispatched holds and estimates unknown dispatched
-usage, without modifying active trees. After 30 days, terminal per-call detail is
-compacted into a durable closed summary preserving totals and blocking late calls.
-This does not establish a provider billing guarantee, unconditional crash refunds,
-accounting for runtime-local inference outside the gateway or a monetary ceiling. See [delegation](delegation.md#cumulative-tree-token-budget).
+The [delegation ledger contract](delegation.md#cumulative-tree-token-budget)
+defines shared reservations, settlement, estimates, recovery and compaction.
+It distinguishes gateway token accounting from runtime-local inference and
+provider billing; it does not establish a monetary ceiling for the tree.

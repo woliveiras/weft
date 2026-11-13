@@ -9,8 +9,9 @@ merged into core — put them behind one of the extension interfaces instead
 
 Install Git and Make. Docker with Compose is required for the container workflow:
 Go runs in a container through `scripts/go.sh`, and Compose starts the full stack.
-`make test` also requires local Python and Node.js/pnpm for the SDK, example agents
-and console tests; these targets do not skip when the tools are missing.
+`make test` also requires local Python for the SDK, example agents and script
+tests. Console tests use the Dockerfile's Node.js/pnpm toolchain. These targets
+do not skip when their required tools are missing.
 
 ### Local toolchain versions
 
@@ -112,9 +113,11 @@ must remain Alpine-based. Git is installed inside that development image, not
 on the host or in a project sandbox. For native Go development, run `go test ./...`, `go vet ./...`
 and `go build ./...` from `server/`; see
 [running without Docker](docs/getting-started.md#5-run-without-docker) for native
-binaries and startup instructions. `make test-python` and `make test-web` run
-locally and do not require Docker. The Python tests use the standard library and
-the SDK source tree; no optional agent framework installation is required.
+binaries and startup instructions. `make test-python` runs locally without
+Docker; `make test-web` builds and runs the `web-source` Docker image. For local
+console checks, use the commands in the [web console guide](web/README.md).
+The Python tests use the standard library and the SDK source tree; no optional
+agent framework installation is required.
 
 The shared SQLite API integration fixture validates its entire persisted log
 against `schemas/event.schema.json` at teardown, including dynamically named
@@ -147,8 +150,9 @@ set: `WEFT_TEST_NATS_URL`, `WEFT_TEST_REDIS_URL`,
 
 ## Ground rules
 
-- **Contracts first.** The wire contracts (`docs/dev/contracts.md`, the JSON
-  tags in `server/internal/domain`, `runtime`, `llm`, `tools`) are public API.
+- **Contracts first.** [OpenAPI](api/openapi.yaml), [JSON Schemas](schemas/),
+  [Runtime Protocol](docs/runtime-protocol.md), and the JSON tags in
+  `server/internal/domain`, `runtime`, `llm`, `tools` define the wire contracts.
   Additive changes only; anything else needs an ADR in `docs/adr/`.
 - **Adapters pass conformance.** A new broker must pass
   `queue/conformance`; a new store must pass `storage/conformance`.

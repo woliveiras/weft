@@ -1,13 +1,13 @@
 # Weft HTTP API
 
-The control plane (`weftd`) exposes one HTTP listener (default `:8080`) with four surfaces:
+The control plane (`weftd`) exposes one HTTP listener (default `:8080`) with these surfaces:
 
 | Surface | Prefix | Auth | Purpose |
 |---|---|---|---|
 | Public API | `/api/v1` | bearer (token or OIDC JWT) + role | Graphs, lifecycle, messages, approvals, history |
 | Event stream | `/api/v1/events/stream` | bearer or `?access_token=` | Server-Sent Events tail of the event log |
 | Runtime callbacks | `/internal/v1/executions/{id}` | per-execution bearer token | Runtime Protocol v1 (see [runtime-protocol.md](runtime-protocol.md)) |
-| Operations | `/healthz`, `/readyz`, `/metrics` | none | Probes and Prometheus scrape |
+| Operations | `/healthz`, `/readyz`, `/metrics` | Probes: none; metrics: viewer when `server.protectMetrics` is enabled | Probes and Prometheus scrape |
 | Console | `/` | (the SPA authenticates against the API) | Static web UI when `server.webDir` is set |
 
 The machine-readable contract is [`api/openapi.yaml`](../api/openapi.yaml) (OpenAPI 3.1). JSON Schemas for
@@ -573,16 +573,16 @@ curl -N -H "$H" "$WEFT/api/v1/events/stream?graph=software-factory"
 
 The `weft` CLI wraps these calls (`weft help`).
 
-## Differences from the early working reference (`docs/dev/contracts.md`)
+## History and identity details
 
-| Topic | contracts.md | Implemented |
-|---|---|---|
-| `GET /graphs/{id}/events` without `after` | not specified | Returns the latest page, ascending |
-| SSE without resume point | not specified | Starts at "now" |
-| `GET /graphs/{id}/nodes/{node}/chat` | all messages | Latest 200, oldest first |
-| `/info.identity` | not specified | `{"name","role"}` of the caller |
-| Event `replica` | number | Always present; `-1` means the node as a whole |
-| Error codes | listed | Also `rate_limited`, `llm_error`, `no_answer` (callbacks) |
+| Surface | Behavior |
+|---|---|
+| `GET /graphs/{id}/events` without `after` | Returns the latest page, ascending |
+| SSE without resume point | Starts at "now"; see [event stream](#event-stream-sse) |
+| `GET /graphs/{id}/nodes/{node}/chat` | Latest 200 messages, oldest first |
+| `/info.identity` | `{"name","role"}` of the caller |
+| Event `replica` | Always present; `-1` means the node as a whole |
+| Callback error codes | Also include `llm_error` and `no_answer`; see [Runtime Protocol](runtime-protocol.md) |
 
 ## Environment blocked-access history
 

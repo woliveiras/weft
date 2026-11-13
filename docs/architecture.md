@@ -1,6 +1,7 @@
 # Weft Architecture
 
-Weft is a self-hosted, vendor-neutral **agent factory**. Autonomous AI agents run as a graph of continuously running loops that exchange work through durable, observable channels. This document is the master reference. The detail lives in:
+Weft is a self-hosted, vendor-neutral **agent factory**. Autonomous AI agents run as a graph of continuously running loops that exchange work through durable, observable channels. This page explains component responsibilities and trade-offs. See the
+[documentation index](README.md) for all guides. The detail lives in:
 
 | Document | Contents |
 |---|---|
@@ -38,7 +39,8 @@ Weft is a self-hosted, vendor-neutral **agent factory**. Autonomous AI agents ru
 **Hard constraints.**
 
 - No cloud services, no proprietary runtimes, no vendor APIs on the critical path.
-- The whole platform runs with `docker compose up` on Linux, macOS or Windows.
+- Compose runs the platform on a Linux Docker host; macOS uses a Linux VM.
+  See [supported platforms](deployment.md#supported-platforms).
 - After images are pulled, it runs without Internet access: the `mock` provider stands in for a model, and Ollama or TGI serve local weights.
 
 ## 2. Core concepts
@@ -59,7 +61,8 @@ access is enforced by a default-deny gateway; model credentials and broker
 access remain in the control plane. Human approvals can gate turns, tool calls,
 and message publication.
 
-| Workflow concept | Weft implementation |
+| Workflow concept | Weft implementation | Source |
+|---|---|---|
 | `queue`, `topic`, `fanout`, `broadcast` channel types | Consumer groups | `graph.ConsumerGroups` |
 | Fixed and autoscaled clusters | `cluster.mode: fixed / autoscale` | `engine/graphrun.go` |
 | Ring communication | Durable broadcast lines in the store | `engine/turn.go` (`putBroadcast`, `neighbours`) |
@@ -70,7 +73,6 @@ and message publication.
 | Own checkout (worktree per session) | `workspace.mode: worktree`, one git worktree and branch per replica | `workspace/workspace.go` |
 | Operator chat to a loop | Operator messages that wake a replica | `engine/control.go` |
 | Human approvals | Approval gates on tools, turns, channels and node emits; `human.ask` | `hitl/`, `engine/publish.go` |
-| `LOOP_DRIVER=echo` | `runtime.kind: echo` | `runtime/echo` |
 | Loopback-only server with a per-start token | Bearer tokens with roles, optional OIDC | `api/auth.go` |
 | Output log per loop | Event log (durable, SSE), OTel traces, Prometheus metrics, message history | `events/`, `observability/` |
 
@@ -79,29 +81,17 @@ Deliveries are leased and redelivered when a turn fails before acknowledgement.
 
 ### Release 1 capability status
 
-Release 1 is in progress. The main paths for task-oriented workflows,
-standalone operation, and issue-to-pull-request delivery are available.
-
-- **Implemented.** Installation-managed MCP connections and gateway tool
-  invocation, MCP templates and browser OAuth, managed skills and project
-  steering, prompt-first tasks and drafts, task consent, and reviewed task
-  execution admission and recovery.
-- **In progress.** Dynamic delegation and execution trees, MCP vendor profiles
-  and qualification, standalone installation and recovery, and gateway-mediated
-  source control delivery.
-- **Planned.** Managed MCP server hosting and final Release 1 acceptance,
-  including the consolidated clean-install exercise and developer walkthrough.
-
-See the [specification index](../specs/README.md) for the full status list and
-[product contracts](product-contracts.md#6-planned-component-boundaries) for
-the target component view.
+The [specification index](../specs/README.md) tracks delivered capabilities,
+remaining work and production blockers. The
+[product contracts](product-contracts.md#6-planned-component-boundaries)
+describe the target component view and distinguish proposals from implemented APIs.
 
 ## 3. Architectural principles and how they are enforced
 
 | Principle | Enforcement |
 |---|---|
 | **Vendor neutral** | Each external dependency is reached through one interface: `queue.Broker`, `storage.Store`, `llm.Provider`, `runtime.Runtime`, `tools.Sandbox`. Concrete adapters are wired only in the composition root `internal/app`. No package outside an adapter imports a vendor SDK. |
-| **Local first** | `config.Default()` uses SQLite, filesystem queues and the `mock` provider: no services at all. The compose stack adds NATS, PostgreSQL and the observability stack, all as open-source images. Telemetry failures never stop startup (`app.New` falls back to stdout logging). |
+| **Local first** | `config.Default()` uses SQLite and filesystem queues. The development mock is explicitly enabled with `WEFT_DEV_MOCK=true`; see [model setup](getting-started.md#3-use-a-real-model). The compose stack adds NATS, PostgreSQL and the observability stack, all as open-source images. Telemetry failures never stop startup (`app.New` falls back to stdout logging). |
 | **LLM provider agnostic** | `llm.Provider` has three methods (`Name`, `Chat`, `Models`). A new backend is one `RegisterPlugin` call with its manifest; administrators then enable the plugin and configure instances in the console. Agents never hold model credentials; external agents call the platform's `/llm/chat` callback. |
 | **Storage independent** | One `storage.Store` interface with filesystem, SQLite and PostgreSQL adapters. All three pass the same conformance suite (`storage/conformance`). |
 | **Queue independent** | One `queue.Broker` interface with memory, filesystem, NATS JetStream (default), Redis Streams, RabbitMQ and Kafka adapters. All pass `queue/conformance`, and the four networked adapters were run live against real servers. |
@@ -164,13 +154,8 @@ There is one binary, `weftd` (`cmd/weftd`), which contains the API, the engine a
 - Parse schedules (`ParseSchedule`, cron and `@every`).
 - Substitute parameters into prompts (`Substitute`).
 
-```go
-func Validate(g *domain.Graph, knownRuntimes map[domain.RuntimeKind]bool) *Report
-func ConsumerGroups(g *domain.Graph, nodeID string, replica int) []Group
-func SubjectGroups(g *domain.Graph, c *domain.Channel, replicas func(node string) int) []string
-func NewRouter(g *domain.Graph) (*Router, error)
-func (r *Router) Route(node string, m *domain.Message, channel string) RouteResult
-```
+Current declarations: [graph validation](../server/internal/graph/graph.go) and
+[routing](../server/internal/graph/route.go).
 
 **Trade-offs and decisions**
 
@@ -197,22 +182,8 @@ Every `ReconcileInterval` (default `LeaseTTL/4`) each instance performs these st
 4. Stop surplus replicas. Autoscaled replicas are stopped only after being idle for `scaleDownAfter`.
 5. Sweep expired approvals.
 
-```go
-type Options struct {
-    Instance string; Store storage.Store; Broker queue.Broker; Bus *events.Bus
-    Approvals *hitl.Service; Models Models; Tools ToolGateway
-    Runtimes map[domain.RuntimeKind]runtime.Runtime; Workspaces *workspace.Manager
-    Sandboxes SandboxFactory; CallbackURL string
-    LeaseTTL, ReconcileInterval, RetryBackoff time.Duration; MaxConcurrentTurns int
-}
-func (e *Engine) SaveGraph(ctx, g *domain.Graph, expectedVersion int, actor string) (*domain.Graph, *domain.GraphRecord, error)
-func (e *Engine) GraphAction(ctx, id, action, actor string) error // start|stop|pause|resume|kill
-func (e *Engine) NodeAction(ctx, id, node, action, actor string) error
-func (e *Engine) Scale(ctx, id, node string, replicas int, actor string) error
-func (e *Engine) Inject(ctx, graphID, channel, typ string, payload json.RawMessage, target string, meta map[string]any, actor string) (*domain.Message, error)
-func (e *Engine) SendOperatorMessage(ctx, id, node string, replica int, text, actor string) (*domain.OperatorMessage, error)
-func (e *Engine) Status(ctx, id string) (*GraphStatus, error)
-```
+Current declarations: [engine options](../server/internal/engine/engine.go) and
+[operator controls](../server/internal/engine/control.go).
 
 Per-node operator overrides (stopped, paused, replica count) and per-run completion markers are stored in KV namespace `_control/<graph>`, so they survive restarts and are shared by all instances.
 
@@ -257,22 +228,8 @@ See [execution-model.md](execution-model.md).
 
 ### 5.4 Runtimes (`internal/runtime`)
 
-```go
-type Runtime interface {
-    Kind() domain.RuntimeKind
-    Turn(ctx context.Context, in *TurnInput, env TurnEnv) (*TurnResult, error)
-    Prepare(ctx context.Context, rc ReplicaContext) error
-    Release(ctx context.Context, rc ReplicaContext) error
-}
-type TurnEnv interface { // the only doors out of an agent
-    InvokeTool(ctx, name string, args json.RawMessage) (*tools.Result, error)
-    Chat(ctx, req *llm.ChatRequest) (*llm.ChatResponse, error)
-    Emit(ctx, e Emit) error
-    StateGet(ctx, key string) ([]byte, error); StatePut(ctx, key string, value []byte) error
-    Output(ctx, text string)
-    AskHuman(ctx, question string) (string, error)
-}
-```
+The [runtime interfaces](../server/internal/runtime/runtime.go) define the Go
+boundary. [Runtime Protocol v1](runtime-protocol.md) defines the external wire contract.
 
 | Kind | Implementation | Notes |
 |---|---|---|
@@ -291,17 +248,9 @@ The Python SDK (`sdk/python/weft`) implements the server side of the protocol us
 
 ### 5.5 LLM gateway (`internal/llm`)
 
-```go
-type Provider interface {
-    Name() string
-    Chat(ctx context.Context, req *ChatRequest) (*ChatResponse, error)
-    Models(ctx context.Context) ([]ModelInfo, error)
-}
-func RegisterPlugin(m Manifest, f Factory)
-func NewRegistry(cfgs []ProviderConfig, defaultName string) (*Registry, error)
-func (r *Registry) Resolve(ref domain.ModelRef) (Provider, string, error)
-func (r *Registry) Chat(ctx context.Context, providerName string, req *ChatRequest) (*ChatResponse, error)
-```
+The [provider interface](../server/internal/llm/llm.go) and
+[registry](../server/internal/llm/registry.go) define model integration. See
+[adding a provider](extensibility.md#add-a-model-provider) for implementation guidance.
 
 **Provider types:** `openai`, `vllm`, `lmstudio`, `anthropic`, `ollama`, `openrouter`, `huggingface`/`tgi`, `mock`.
 
@@ -325,12 +274,9 @@ Tool names travel to vendors as `filesystem__read` (`WireToolName`), because ven
 
 There is one enforcement point for native and external agents alike:
 
-```go
-func Builtin(cfg BuiltinConfig) *Registry
-func NewGateway(reg *Registry, approver Approver, auditor Auditor) *Gateway
-func (g *Gateway) Invoke(ctx context.Context, p *Principal, name string, args json.RawMessage) (*Result, error)
-func (r *Registry) Schemas(p *Principal) []llm.ToolSchema // only granted tools are shown to the model
-```
+Current declarations: [tool registry](../server/internal/tools/registry.go) and
+[gateway](../server/internal/tools/gateway.go). See the
+[permission model](tool-permissions.md) for grant matching and enforcement.
 
 **How a call is handled:**
 
@@ -364,19 +310,15 @@ The **sandboxes** are:
 
 | Decision | Alternatives | Why | Consequences |
 |---|---|---|---|
-| **Gateway-side execution.** Agents never touch the host. | Agent-side tools with advisory permissions. | A single audit and enforcement point, independent of the agent framework. | Every tool call is a function call inside `weftd` (native) or an HTTP callback (external). |
+| **Gateway-side execution.** Runtime tool requests pass through the gateway. | Agent-side tools with advisory permissions. | A single audit and enforcement point, independent of the agent framework. | Every tool call is a function call inside `weftd` (native) or an HTTP callback (external). |
 | **Capability grants** instead of per-tool lists. | Tool lists only. | A grant survives new tools being added within a capability, and is readable by humans. | `filesystem.read` grants list, search and stat as well. |
 | **Process sandbox by default.** | Docker by default. | Works everywhere without the Docker socket. | The process sandbox does **not** confine syscalls: an unrestricted `shell.exec` can read outside the workspace. Use docker isolation or constrained `commands` for untrusted work. Docker isolation runs on a daemon dedicated to Weft (`sandbox-daemon`, privileged Docker-in-Docker) rather than the host socket. |
 | **MCP** | — | — | MCP tool connections are managed by the user and exposed through the tool registry. |
 
 ### 5.7 Human in the loop (`internal/hitl`)
 
-```go
-func (s *Service) Create(ctx, a *domain.Approval) (*domain.Approval, error)            // non-blocking (held messages)
-func (s *Service) RequestApproval(ctx, a *domain.Approval) (*domain.Approval, error)   // blocking (tools, turns, questions)
-func (s *Service) Decide(ctx, id string, approve bool, by, comment, answer string) (*domain.Approval, error)
-func (s *Service) OnDecision(h DecisionHook)
-```
+The [approval service](../server/internal/hitl/approvals.go) owns creation,
+blocking requests, decisions and decision hooks.
 
 The gates are:
 
@@ -440,7 +382,8 @@ subscribers and polling picks up writes from other instances. See the
 - The middleware adds panic recovery, security headers, CORS allowlist, body limit (8 MiB), and a request span with metrics.
 - Workspace files are served as `text/plain` with a CSP of `default-src 'none'`, so HTML written by an agent can never execute in the console's origin.
 
-The full endpoint list is in [dev/contracts.md](dev/contracts.md).
+The endpoint contract is in [OpenAPI](../api/openapi.yaml); see the
+[HTTP API guide](api.md) for usage and conventions.
 
 ### 5.10 Web console (`web/`)
 

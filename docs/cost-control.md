@@ -1,8 +1,9 @@
 # Cost control
 
-Status: **partly delivered.** This page records the target contract for
-monetary cost visibility and enforcement. Only what the
-[current state](#current-state) section lists is shipped.
+This page describes monetary usage, prices and budget enforcement. See the
+[capability specification](../specs/providers-and-integrations/monetary-usage-and-budget-controls/spec.md)
+for acceptance criteria and [production qualification](../specs/production-readiness/prod-03/spec.md)
+for outstanding deployment-specific decisions.
 
 ## Goals
 
@@ -27,16 +28,9 @@ time, or billing users.
 | Per-node `limits.maxTokens` | graph spec |
 | Cumulative token admission for delegation trees: a CAS ledger with reservation before dispatch, settlement after, and recovery | [delegation.md](delegation.md#cumulative-tree-token-budget) |
 | Usage reported by external runtimes for work outside the LLM callback | [runtime-protocol.md](runtime-protocol.md) (`TurnResult.usage`) |
-
 | Task-run budget: policy default, CAS reservation before dispatch (native, callback, delegation), settlement, pause at the hard level, audited human raise that resumes the run, warning event, startup reconciliation of open reservations | `server/internal/cost/budget.go`, `server/internal/engine/cost_budget.go`, [API](api.md#monetary-budgets) |
-
 | Monthly installation, user, project and workflow budgets (UTC calendar month), warning level, optional interrupt level, refusal of new task starts at the hard level, multi-budget reservation with rollback | `server/internal/cost/definitions.go`, [API](api.md#monetary-budgets) |
-
 | Console: monthly spend (by provider/model, user, project, workflow, task run), budget bars with warning and hard levels and a raise for administrators, price and budget editing, the budgets a new task is held to, and a paused run's budget with its raise on the task | **Models → Costs**, Tasks |
-
-Everything in the design is delivered except reconciling against vendor
-invoices (a non-goal). Spend views read `cost.recorded` events, so they follow
-the event history retention.
 
 Cost records are events, so they follow the event history retention. A call
 the provider rejected (HTTP 4xx other than 408/429) was not served and is not

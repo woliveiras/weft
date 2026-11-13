@@ -5,17 +5,15 @@ models, your own graph, and running without Docker.
 
 ## Console navigation
 
-After signing in, use **Graphs** to create or open a graph, **Models** to configure
-providers, **Connections** to connect MCPs, and **Administration** to inspect
-installation health. Configure agents and their explicit tool grants, review and
-save the graph, then start it and inspect **Runs**. Contextual help is available
-within the relevant screens. There is no global onboarding panel.
+Use the [console navigation guide](interface-navigation.md) to find Tasks,
+Projects, Workflows, Models, Connections and Administration. Configure agents
+and their explicit grants, save the workflow, then start it and inspect Runs.
 
 ## 1. Start the platform
 
 Requirements: Docker Engine (or Docker Desktop / Colima / Rancher Desktop /
 Podman with the compose plugin) and about 3 GB of free memory for the full
-stack.
+stack. On macOS, see [Colima setup](#macos-setup-with-colima).
 
 For a **new installation only**, create private bootstrap credentials. The
 no-clobber subshell refuses to overwrite an existing `.env`; reuse the existing
@@ -86,12 +84,18 @@ other tasks. See [environments and troubleshooting](environments.md), the
 
 ## 2. Watch work move
 
+Configure a [real model or the explicit development mock](#3-use-a-real-model)
+before starting Software Factory. Bootstrap imports workflows in a stopped state.
+The echo workflow needs no model.
+
 ```bash
 set -a; . ./.env; set +a
 alias weft='docker compose exec -e WEFT_TOKEN="$WEFT_ADMIN_TOKEN" weftd weft'
 
 weft graphs
+weft start hello-echo
 weft status hello-echo
+weft start software-factory
 weft inject software-factory requests feature.request \
   '{"title":"slugify","description":"Add a slugify(text) helper. It lowercases text and joins words with dashes."}'
 weft events software-factory --follow        # Ctrl-C to stop
@@ -127,7 +131,7 @@ offline `mock` plugin with a read-only `mock` provider. Every agent handles it
 
 ### From the browser
 
-1. Open **Integrations → Model providers** (admin token required). The
+1. Open **Models** (admin token required). The
    **Inference plugins** list shows each plugin, whether it is local or
    hosted, what it supports (tool calls, JSON mode, usage, model listing) and
    which providers use it. **Enable** the plugin you want.
@@ -433,6 +437,57 @@ change `spec.defaults.runtime.endpoint` to `http://127.0.0.1:8000` (or add
 
 `scripts/go.sh` runs the Go toolchain in a container if you prefer not to
 install Go (it produces Linux binaries, suitable for containers and CI).
+
+## macOS setup with Colima
+
+If you already have Docker with Compose working, skip to the
+[platform startup](#1-start-the-platform). Otherwise, Colima can run the Docker
+engine in a Linux VM on your Mac, without Docker Desktop.
+
+With [Homebrew](https://brew.sh/) installed, install Colima and the Docker
+client and plugins:
+
+```bash
+brew install colima docker docker-compose docker-buildx
+
+mkdir -p ~/.docker/cli-plugins
+ln -s "$(brew --prefix)/opt/docker-compose/bin/docker-compose" \
+  ~/.docker/cli-plugins/docker-compose
+ln -s "$(brew --prefix)/opt/docker-buildx/bin/docker-buildx" \
+  ~/.docker/cli-plugins/docker-buildx
+```
+
+If a plugin link already exists, check it before replacing it.
+
+On Apple Silicon with macOS 13 or newer, start the VM with Apple's
+virtualization framework and VirtioFS file sharing:
+
+```bash
+colima start --runtime docker --vm-type vz --mount-type virtiofs \
+  --cpus 4 --memory 8 --disk 100
+```
+
+The 4 CPUs, 8 GiB of RAM and 100 GiB virtual disk are suggested starting
+settings for Weft, not minimum requirements. Adjust them to your machine;
+local models need additional resources. On other supported Macs, use
+`colima start --runtime docker --cpus 4 --memory 8 --disk 100`.
+
+Verify the engine, plugins and a test container:
+
+```bash
+colima status
+docker info
+docker compose version
+docker buildx version
+docker run --rm hello-world
+```
+
+Initial setup and image downloads need internet access. Use `colima stop`
+to stop the VM and `colima start` to restart it with its saved settings.
+Then follow [platform startup](#1-start-the-platform) to create Weft's `.env`
+and start the platform.
+See the official [installation](https://colima.run/docs/installation/) and
+[configuration](https://colima.run/docs/configuration/) guides for details.
 
 ## Next steps
 

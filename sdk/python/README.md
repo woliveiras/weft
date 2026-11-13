@@ -1,7 +1,7 @@
 # weft — Python Agent SDK
 
 Write Weft agents in Python. The SDK implements **Runtime Protocol v1**
-(see `docs/dev/contracts.md`): the platform's engine owns the loop (claiming
+(see [Runtime Protocol v1](../../docs/runtime-protocol.md)): the platform's engine owns the loop (claiming
 messages, acking, retries, stop conditions) and calls your agent once per
 turn over HTTP. Your agent reaches tools, models, state and humans only
 through the per-turn callback, so the platform's grants, approvals, audit

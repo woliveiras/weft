@@ -22,47 +22,22 @@ JSON mode and usage. Platform tool names contain dots (`filesystem.read`):
 convert with `llm.WireToolName` / `llm.PlatformToolName` for vendors that
 restrict function names.
 
-```go
-package acme // server/internal/llm/acme
+Use the [provider interface](../server/internal/llm/llm.go) and the
+[OpenAI adapter](../server/internal/llm/openai/openai.go) as implementation
+references. Register a manifest and factory with `llm.RegisterPlugin`, then
+implement `Name`, `Chat` and `Models`:
 
-import (
-	"context"
+1. Resolve the configured credential through `ProviderConfig.APIKey` and
+   propagate configuration errors.
+2. Map requests, tool calls/results and JSON mode to the provider's wire format.
+3. Honor cancellation, timeouts and HTTP failures; use the existing
+   [HTTP helpers](../server/internal/llm/httpx.go).
+4. Map content, tool calls, stop reason and usage back to the shared types.
+   An unfinished or failed adapter must return an error, not an empty success.
 
-	"github.com/woliveiras/weft/server/internal/llm"
-)
-
-func init() {
-	llm.RegisterPlugin(llm.Manifest{
-		ID: "acme", Label: "Acme", DefaultBaseURL: "https://api.acme.example", Key: llm.KeyRequired,
-		Capabilities: llm.Capabilities{Tools: true, JSON: llm.JSONNative, Usage: true, ModelListing: true},
-	}, func(cfg llm.ProviderConfig) (llm.Provider, error) {
-		key, err := cfg.APIKey() // from apiKeyEnv / apiKeyFile
-		if err != nil {
-			return nil, err
-		}
-		return &provider{cfg: cfg, key: key}, nil
-	})
-}
-
-type provider struct {
-	cfg llm.ProviderConfig
-	key string
-}
-
-func (p *provider) Name() string { return p.cfg.Name }
-
-func (p *provider) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	// 1. map req.System, req.Messages (incl. ToolCalls / RoleTool results), req.Tools, req.JSON
-	// 2. POST to the vendor (reuse the retrying JSON helper in llm/httpx.go)
-	// 3. map back: Message{Role: assistant, Content, ToolCalls}, StopReason, Usage
-	return &llm.ChatResponse{}, nil
-}
-
-func (p *provider) Models(ctx context.Context) ([]llm.ModelInfo, error) { return nil, nil }
-```
-
-Add `_ ".../llm/acme"` to `server/internal/llm/providers/providers.go`; an
-administrator then enables the Acme plugin and adds a provider in the console.
+Add a blank import for the new package to the
+[provider imports](../server/internal/llm/providers/providers.go). An
+administrator then enables the plugin and adds a provider in the console.
 The registry
 adds metrics, tracing (`gen_ai.*` attributes) and the per-provider
 concurrency limit for free. OpenAI-compatible backends need no code at all:
@@ -115,38 +90,13 @@ when the lease (`AckWait`) expires, and dead-lettered after `MaxDeliver`.
 All channel types (queue, topic, fanout, broadcast) are expressed with that
 primitive by the engine — a broker never needs to know about them.
 
-```go
-package mq // server/internal/queue/mq
-
-type Broker struct{ /* client */ }
-
-func New(ctx context.Context, url string) (*Broker, error) { /* connect */ }
-
-func (b *Broker) Name() string { return "mq" }
-func (b *Broker) Declare(ctx context.Context, cfg queue.SubjectConfig) error { cfg = cfg.WithDefaults(); /* create stream + groups idempotently */ return nil }
-func (b *Broker) Publish(ctx context.Context, subject string, m *domain.Message) error { /* durable append; queue.ErrNoGroups if undeclared */ return nil }
-func (b *Broker) Subscribe(ctx context.Context, subject, group, consumer string) (queue.Subscription, error) { ... }
-// DeleteGroup, Stats, Ping, Close ...
-```
-
-Register it in `queue/brokers/brokers.go`:
-
-```go
-case "mq":
-	return mq.New(ctx, cfg.URL)
-```
-
-and prove it with the shared suite:
-
-```go
-func TestConformance(t *testing.T) {
-	url := os.Getenv("WEFT_TEST_MQ_URL")
-	if url == "" {
-		t.Skip("set WEFT_TEST_MQ_URL")
-	}
-	conformance.Run(t, func(t *testing.T) queue.Broker { b, _ := mq.New(context.Background(), url); return b })
-}
-```
+Use the [NATS adapter](../server/internal/queue/natsq/natsq.go) as a concrete
+example and register the backend in
+[broker construction](../server/internal/queue/brokers/brokers.go).
+The [NATS conformance test](../server/internal/queue/natsq/natsq_test.go)
+shows connection error handling and the shared suite setup. Run
+[queue conformance](../server/internal/queue/conformance) against the real
+backend, including lease expiry, redelivery and dead-letter behavior.
 
 `conformance.RunWith` relaxes checks a broker genuinely cannot meet (document
 them in the package comment).
@@ -167,14 +117,7 @@ engine's correctness depends on.
 A runtime turns one `TurnInput` into one `TurnResult`; the engine owns
 everything else (claiming, acking, retries, routing, stop policies).
 
-```go
-type Runtime interface {
-	Kind() domain.RuntimeKind
-	Turn(ctx context.Context, in *runtime.TurnInput, env runtime.TurnEnv) (*runtime.TurnResult, error)
-	Prepare(ctx context.Context, rc runtime.ReplicaContext) error // replica start
-	Release(ctx context.Context, rc runtime.ReplicaContext) error // replica stop
-}
-```
+Implement the [runtime interfaces](../server/internal/runtime/runtime.go).
 
 `TurnEnv` is the only door out: `InvokeTool` (gateway, under the node's
 grants), `Chat` (LLM gateway, node's model), `Emit`, `StateGet/StatePut`,
@@ -243,52 +186,13 @@ nodes:
 Implement [Runtime Protocol v1](runtime-protocol.md): `GET /v1/health`
 and `POST /v1/turn`. During the turn, call back `input.callback.url` with
 `Authorization: Bearer <input.callback.token>` for tools, the model, emits and
-state. Example in TypeScript (Node 20+, no dependencies):
-
-```ts
-import { createServer } from "node:http";
-
-const cb = async (input: any, path: string, body?: unknown) => {
-  const r = await fetch(input.callback.url + path, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${input.callback.token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
-  });
-  if (r.status === 403) throw new Error("permission denied");
-  return r.json();
-};
-
-createServer(async (req, res) => {
-  if (req.method === "GET" && req.url === "/v1/health") {
-    res.end(JSON.stringify({ status: "ok", agents: ["translator"], framework: "custom" }));
-    return;
-  }
-  let raw = ""; for await (const c of req) raw += c;
-  const input = JSON.parse(raw);                      // TurnInput
-  const emits = [];
-  for (const m of input.inputs) {
-    const out = await cb(input, "/llm/chat", { messages: [{ role: "user", content: `Translate to French: ${JSON.stringify(m.payload)}` }] });
-    emits.push({ type: "translation.ready", payload: { source: m.id, text: out.message.content } });
-  }
-  res.setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify({ emits, summary: `translated ${input.inputs.length}` })); // TurnResult
-}).listen(Number(process.env.PORT ?? 8000));
-```
-
-If `WEFT_RUNTIME_SECRET` is configured, reject `/v1/turn` requests whose
-`X-Weft-Runtime-Secret` header does not match.
+state. See the [minimal Node.js agent](runtime-protocol.md#minimal-agent-without-the-sdk-nodejs-no-dependencies)
+for the example and graph wiring. The protocol guide owns callback errors,
+runtime authentication and retry semantics.
 
 ## Add a tool
 
-```go
-type Tool interface {
-	Name() string            // invocation name, e.g. "jira.create_issue"
-	Capability() string      // permission, e.g. "jira.write"
-	Description() string     // shown to models
-	Schema() json.RawMessage // JSON Schema of the arguments object
-	Invoke(ctx context.Context, inv *tools.Invocation) (*tools.Result, error)
-}
-```
+Implement the [tool interface](../server/internal/tools/tools.go).
 
 Register it on the registry built in `app.New`
 (`a.Tools.Register(myTool)`). The gateway already authorises by capability
@@ -306,13 +210,7 @@ apply to ordinary tool grants.
 
 ## Add a sandbox
 
-```go
-type Sandbox interface {
-	Kind() string
-	Exec(ctx context.Context, req tools.ExecRequest) (*tools.ExecResult, error)
-	Close() error
-}
-```
+Implement the [sandbox interface](../server/internal/tools/tools.go).
 
 Return it from the `engine.SandboxFactory` in `app.go`, keyed on
 `spec.Node.Isolation.Mode`. A Kubernetes sandbox would create one pod per

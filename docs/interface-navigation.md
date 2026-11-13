@@ -6,8 +6,8 @@ introduce roles or change API permissions.
 | Group | Destination | Scope |
 | --- | --- | --- |
 | Work | Activity (`#/activity`) | What is running, what needs a person and recent executions across all workflows, and per agent/workflow health; see below |
-| Work | Tasks (`#/tasks`) | Persisted request drafts and requirements preview; execution admission is pending. Existing Runs remains agent execution history. |
-| Work | Projects | Disabled until project registration is implemented. |
+| Work | Tasks (`#/tasks`) | Request drafts, requirements review, authorized execution and task progress; see [task workflows](task-workflows.md). Runs remains agent execution history. |
+| Work | Projects (`#/projects`) | Registered repositories and task worktrees; see [registered projects](task-workflows.md#registered-project-worktrees-2026-10-19). |
 | Work | Approvals | Existing approval and application-review flows, including pending count |
 | Configuration | Workflows (`#/graphs`) | Existing graph editor, activity, files, messages and advanced YAML |
 | Configuration | Connections (`#/connections`) | Installation MCP connections, OAuth setup, discovered tools and call history |

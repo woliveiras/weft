@@ -18,9 +18,10 @@ for native setup and qualification.
 The default `docker-compose.yml`: one `weftd`, PostgreSQL, NATS JetStream,
 the example agents, `sandbox-daemon` (a Docker daemon dedicated to agent
 command sandboxes, see [sandbox-runtime.md](sandbox-runtime.md)), and the
-observability stack. Suitable for teams,
-evaluation and small production workloads where minutes of downtime during a
-host failure are acceptable.
+observability stack. This is the local evaluation topology; a host failure
+interrupts the installation. Before production use, review
+[production readiness](../specs/README.md#production-readiness) and
+[hardening](production-hardening.md).
 
 ```mermaid
 flowchart LR

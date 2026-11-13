@@ -44,10 +44,12 @@ sign-in dialog; enter the `WEFT_ADMIN_TOKEN` configured for the server.
 
 ## Layout of the code
 
+API contracts: [HTTP reference](../docs/api.md) and [OpenAPI](../api/openapi.yaml).
+
 ```
 src/
   api/types.ts        TS mirrors of the Go domain types (JSON tags verbatim)
-  api/client.ts       typed client for every endpoint in docs/dev/contracts.md
+  api/client.ts       typed client for the public HTTP API
   hooks/useEventStream.tsx  ONE shared SSE connection for the app (provider + hook)
   hooks/useData.ts    useAsync, useThrottled, useGraphStatus (2s poll + SSE nudges)
   components/

@@ -1,5 +1,5 @@
 // Package external runs turns in agent processes that speak Runtime
-// Protocol v1 over HTTP (docs/dev/contracts.md §2). This is how LangGraph,
+// Protocol v1 over HTTP (docs/runtime-protocol.md). This is how LangGraph,
 // AutoGen, CrewAI or hand-written agents in any language join a graph.
 //
 // The protocol is deliberately request/response per turn and stateless:

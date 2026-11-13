@@ -47,15 +47,7 @@ exercise comment replay and bounded history. The
 records the individual cases. Live account qualification remains in PROD-14.
 
 
-| Verification command | Result |
-| --- | --- |
-| `./scripts/go.sh test ./... -count=1` | The offline Docker build stopped at `apk add --no-cache git git-daemon`. The tests below used the cached Git-enabled image without downloading anything. |
-| `go test ./... -count=1` and `go test -count=1 ./internal/trigger ./internal/api ./internal/activity ./internal/engine` | Full and affected-package suites passed in the cached `weft-review-go:git-http-backend` image with `--pull=never`. |
-| `go test -tags e2e -count=1 ./cmd/weft-e2e` | Passed in the same image. |
-| `./scripts/go.sh vet ./...` and `docker run --pull=never --rm -v "$PWD:/repo" -w /repo/server golang:1.26-alpine gofmt -l internal` | Vet passed and gofmt reported no files. |
-| `GOOS=linux go build ./...` and `GOOS=darwin go build ./...` | Both arm64 builds passed. |
-| `pnpm -C web test`, `pnpm -C web exec tsc --noEmit` and `pnpm -C web exec tsc --project tsconfig.e2e.json` | All 444 Vitest tests and both type checks passed. |
-| `pnpm -C web exec playwright test e2e/activity.spec.ts e2e/triggers.spec.ts` and `pnpm -C web exec playwright test --config playwright.activity.config.ts` | Six Activity and trigger scenarios plus three work Activity scenarios passed. |
+Shared verification commands and results: [RUN-007 — Operational rehearsal follow-up on 2026-11-12](../issue-readiness-before-work/evidence.md#operational-rehearsal-follow-up-on-2026-11-12).
 
 ## Independent review of 944a581 through 7d54912
 
@@ -66,15 +58,7 @@ pending rollback and the current hold generation before recording the actor
 and issue key. See the
 [RUN-007 fixture cases](../issue-readiness-before-work/evidence.md#independent-review-of-944a581-through-7d54912).
 
-| Verification command | Result |
-| --- | --- |
-| `go test ./... -count=1` | Full Go suite passed. |
-| `go test -count=1 ./internal/trigger ./internal/api ./internal/activity ./internal/engine ./internal/review` and `go test -tags e2e -count=1 ./cmd/weft-e2e` | Changed packages and the fixture server passed. |
-| `go test -count=20 ./internal/engine -run '^TestDurableReviewBlocksAndResumesEngine$'` | Passed all 20 runs after synchronizing fixture startup, including approval and rejection. |
-| `./scripts/go.sh vet ./...` and `docker run --pull=never --rm -v "$PWD:/repo" -w /repo/server golang:1.26-alpine gofmt -l internal` | Vet passed and gofmt listed no files. |
-| `GOOS=linux go build ./...` and `GOOS=darwin go build ./...` | Both builds passed. |
-| `pnpm -C web test`, `pnpm -C web exec tsc --noEmit`, `pnpm -C web exec tsc --project tsconfig.e2e.json` and `pnpm -C web build` | All 444 Vitest tests, both type checks and the production web build passed. |
-| `pnpm -C web exec playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` and `pnpm -C web exec playwright test --config playwright.activity.config.ts` | Nine Chromium scenarios passed. |
+Shared verification commands and results: [RUN-007 — Independent review of 944a581 through 7d54912](../issue-readiness-before-work/evidence.md#independent-review-of-944a581-through-7d54912).
 
 Go tests and cross-builds used the cached `weft-review-go:git-http-backend`
 image with `--pull=never`. Tracker calls used fixtures. Live account
@@ -95,17 +79,7 @@ search error and zero claims. The scope edit fixture verified cleanup of
 20-entry history, with an automatic `trigger.hold_resolved` event from
 `system:trigger`.
 
-| Command | Result |
-| --- | --- |
-| `go test -count=1 ./internal/trigger ./internal/api ./internal/activity` | Passed all three changed packages. |
-| `go test -count=1 ./...` and `go test -count=1 -p 1 ./...` | The final serial full suite passed. Earlier runs failed in `TestActivityAPIWithEngine` and `TestBoundedBuildPipelineIntegration`. Both passed on the final run. |
-| `go test -count=1 ./internal/engine` twice | Both runs passed (31.079 s and 29.551 s). |
-| `./scripts/go.sh vet ./...` and `gofmt -l .` in `server/` | Vet passed. Gofmt listed no files. |
-| `GOOS=linux CGO_ENABLED=0 go build ./...` and `GOOS=darwin CGO_ENABLED=0 go build ./...` | Both arm64 builds passed. |
-| `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed the disposable backend tests. |
-| `./node_modules/.bin/vitest run` in `web/` | 444 tests passed in 88 files. |
-| `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/tsc --project tsconfig.e2e.json` in `web/` | Both type checks passed. |
-| `./node_modules/.bin/playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` and `./node_modules/.bin/playwright test --config playwright.activity.config.ts` in `web/` | Six trigger and Activity scenarios plus three Work Activity scenarios passed. Both browser runs built the production web bundle and disposable Darwin fixture. |
+Shared verification commands and results: [RUN-007 — Independent review of 7d54912 through 30bbaa1](../issue-readiness-before-work/evidence.md#independent-review-of-7d54912-through-30bbaa1).
 
 Go used the cached toolchain images with Docker pulls disabled. The pnpm
 bootstrap and dependency verification attempted registry access and failed.
@@ -129,17 +103,7 @@ budget.
 The filter and timestamp contract still needs separate live qualification.
 See the [GitHub rehearsal checklist in RUN-007](../issue-readiness-before-work/evidence.md#live-tracker-rehearsal-checklist).
 
-| Command | Result |
-| --- | --- |
-| `go test -count=1 ./internal/trigger ./internal/observability ./internal/api ./internal/activity ./internal/mcpconfig` | All five packages passed. |
-| `go test -count=1 -p 1 ./...` | The full Go suite passed. |
-| `go test -count=1 ./internal/engine` twice | Both runs passed (30.622 s and 30.262 s). |
-| `./scripts/go.sh vet ./...` and `gofmt -l .` in `server/` | Vet passed. Gofmt listed no files. |
-| `GOOS=linux CGO_ENABLED=0 go build ./...` and `GOOS=darwin CGO_ENABLED=0 go build ./...` | Both arm64 builds passed. |
-| `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed the disposable browser fixture tests. |
-| `./node_modules/.bin/vitest run` in `web/` | 446 tests passed in 88 files. |
-| `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/tsc --project tsconfig.e2e.json` in `web/` | Both type checks passed. |
-| `./node_modules/.bin/playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` in `web/` | Four trigger and three Activity scenarios passed, including cancel and confirm for forced resolution. |
+Shared verification commands and results: [RUN-007 — Independent review of 30bbaa1 through 6ce5470](../issue-readiness-before-work/evidence.md#independent-review-of-30bbaa1-through-6ce5470).
 
 Go used cached Docker images with pulls disabled. Browser verification
 used the installed web tools and Chromium. The browser fixture built the
@@ -157,16 +121,7 @@ budget with five-minute triggers, then verified that the deferred
 15-minute trigger ran before another five-minute trigger at the
 reopening, without waiting its configured interval.
 
-| Command | Result |
-| --- | --- |
-| `go test -count=1 ./internal/trigger ./internal/api ./internal/activity ./internal/mcpconfig` | All four affected packages passed. |
-| `go test -count=1 -p 1 ./...` | The full suite passed on repeat. The first run failed in the existing `TestBoundedBuildPipelineIntegration` fixture, which passed on repeat. |
-| `./scripts/go.sh vet ./...` and `gofmt -l .` in `server/` | Vet passed. Gofmt listed no files. |
-| `GOOS=linux CGO_ENABLED=0 go build ./...` and `GOOS=darwin CGO_ENABLED=0 go build ./...` | Both arm64 builds passed. |
-| `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed the disposable browser fixture tests. |
-| `./node_modules/.bin/vitest run` in `web/` | 447 tests passed in 88 files. |
-| `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/tsc --project tsconfig.e2e.json` in `web/` | Both type checks passed. |
-| `./node_modules/.bin/playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` in `web/` | Four trigger and three Activity scenarios passed. |
+Shared verification commands and results: [RUN-007 — Independent review of 6ce5470 through 29b552d](../issue-readiness-before-work/evidence.md#independent-review-of-6ce5470-through-29b552d).
 
 Go used cached Docker images with pulls disabled. Web checks used the
 installed tools and Chromium. Playwright built the web bundle and a
@@ -183,16 +138,7 @@ issue was discovered. `TestMissingIssueConfirmationSpacingSurvivesRestartAndRese
 verified that early polls simulating budget-driven rescheduling did not shorten the
 configured interval required to confirm issue absence.
 
-| Command | Result |
-| --- | --- |
-| `go test -count=1 ./internal/trigger ./internal/api ./internal/activity` | All three packages passed. |
-| `go test -count=1 -p 1 ./...` | The full Go suite passed. |
-| `./scripts/go.sh vet ./...` and `gofmt -l .` in `server/` | Vet passed. Gofmt listed no files. |
-| `GOOS=linux CGO_ENABLED=0 go build ./...` and `GOOS=darwin CGO_ENABLED=0 go build ./...` | Both arm64 builds passed. |
-| `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed the disposable browser fixture tests. |
-| `./node_modules/.bin/vitest run` in `web/` | 447 tests passed in 88 files. |
-| `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/tsc --project tsconfig.e2e.json` in `web/` | Both type checks passed. |
-| `./node_modules/.bin/playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` in `web/` | Five trigger and three Activity scenarios passed. |
+Shared verification commands and results: [RUN-007 — Independent review of 29b552d through 65f0d60](../issue-readiness-before-work/evidence.md#independent-review-of-29b552d-through-65f0d60).
 
 Go used cached Docker images with pulls disabled. Web verification used
 installed tools and Chromium. Playwright built the web bundle and a
@@ -209,16 +155,7 @@ affected hold at the limit and preserved discovery for other issues.
 Chromium verified that the console hid an expired retry while the page
 remained open.
 
-| Command | Result |
-| --- | --- |
-| `go test -count=1 ./internal/trigger ./internal/observability ./internal/api ./internal/activity` | All four packages passed. |
-| `go test -count=1 -p 1 ./...` and `go test -count=1 ./internal/engine` | The full suite passed. The engine passed in the full suite (30.571s) and on its standalone run (30.417s). |
-| `./scripts/go.sh vet ./...` and `gofmt -l .` in `server/` | Vet passed. Gofmt listed no files. |
-| `GOOS=linux CGO_ENABLED=0 go build ./...` and `GOOS=darwin CGO_ENABLED=0 go build ./...` | Both arm64 builds passed. |
-| `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed the disposable browser fixture tests. |
-| `./node_modules/.bin/vitest run` in `web/` | 449 tests passed in 88 files. |
-| `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/tsc --project tsconfig.e2e.json` in `web/` | Both type checks passed. |
-| `./node_modules/.bin/playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` in `web/` | Five trigger and three Activity scenarios passed in Chromium. |
+Shared verification commands and results: [RUN-007 — Independent review of 1ac3098 through 9251f46](../issue-readiness-before-work/evidence.md#independent-review-of-1ac3098-through-9251f46).
 
 Go used cached Docker images with pulls disabled. Playwright used installed
 Chromium and a disposable Darwin backend. Live tracker qualification remains
@@ -233,16 +170,7 @@ limits deferred the affected hold without spending its access retry
 budget. Multiple terminal access errors remained visible by issue key.
 Chromium verified the access error on its hold in the trigger details.
 
-| Command | Result |
-| --- | --- |
-| `go test -count=1 ./internal/trigger ./internal/mcpconfig ./internal/api ./internal/activity` | All four affected packages passed. |
-| `go test -count=1 -p 1 ./...` and `go test -count=1 ./internal/engine` | The full suite passed. The engine passed in the full suite (30.524s) and on its standalone run (30.434s). |
-| `./scripts/go.sh vet ./...` and `gofmt -l .` in `server/` | Vet passed. Gofmt listed no files. |
-| `GOOS=linux CGO_ENABLED=0 go build ./...` and `GOOS=darwin CGO_ENABLED=0 go build ./...` | Both arm64 builds passed. |
-| `go test -count=1 -tags e2e ./cmd/weft-e2e` | Passed the disposable browser fixture tests. |
-| `./node_modules/.bin/vitest run` in `web/` | 450 tests passed in 88 files. |
-| `./node_modules/.bin/tsc --noEmit` and `./node_modules/.bin/tsc --project tsconfig.e2e.json` in `web/` | Both type checks passed. |
-| `./node_modules/.bin/playwright test e2e/triggers.spec.ts e2e/activity.spec.ts` in `web/` | Five trigger and three Activity scenarios passed in Chromium. |
+Shared verification commands and results: [RUN-007 — Independent review of 9251f46 through abf8bc6](../issue-readiness-before-work/evidence.md#independent-review-of-9251f46-through-abf8bc6).
 
 Go used cached Docker images with pulls disabled. Playwright used installed
 Chromium and a disposable Darwin backend. Live tracker qualification remains
