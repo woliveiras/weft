@@ -10,9 +10,8 @@ import (
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
-// Capture checks that the scenario emitted the expected events. When the
-// contract check is enabled it exports every stored event from the scenario,
-// including events whose types were constructed at runtime.
+// Capture checks the expected event types and validates all stored wire
+// events, including dynamically named events. It optionally exports them.
 func Capture(t *testing.T, store storage.Store, expected ...domain.EventType) {
 	t.Helper()
 	filter := storage.EventFilter{Ascending: true, Limit: 500}
@@ -27,6 +26,15 @@ func Capture(t *testing.T, store storage.Store, expected ...domain.EventType) {
 			break
 		}
 		filter.AfterSeq = page[len(page)-1].Seq
+	}
+	schema, err := eventSchema()
+	if err != nil {
+		t.Fatalf("compile event schema: %v", err)
+	}
+	for _, event := range events {
+		if err := validateEvent(schema, event); err != nil {
+			t.Errorf("event %s (sequence %d): %v", event.Type, event.Seq, err)
+		}
 	}
 	for _, kind := range expected {
 		found := false
