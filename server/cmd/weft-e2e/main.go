@@ -391,19 +391,25 @@ func run() error {
 		}
 		return mcpconfig.CallWithClient(ctx, fixtureMCP.URL, token, name, args, fixtureMCP.Client())
 	}
-	a.Models.Add(llm.ProviderConfig{Name: "e2e", Type: "mock", DefaultModel: "fixture"}, analysisProvider{})
+	promptModel := os.Getenv("WEFT_E2E_PROMPT_MODEL") == "1"
+	fixtureModel := llm.ProviderConfig{Name: "e2e", Type: "mock", DefaultModel: "fixture"}
+	if promptModel {
+		// Prompt interpretation rejects providers registered as the development mock.
+		fixtureModel.Type = "e2e"
+	}
+	a.Models.Add(fixtureModel, analysisProvider{})
 	a.Tools.MustRegister(trackerTools()...)
 	// Browser journeys drive triggers through the API; the scheduled loop
 	// must not start tasks behind other journeys.
 	a.Triggers.Every = time.Hour
 	// Opt-in only for the disposable prompt interpretation browser suite.
-	if os.Getenv("WEFT_E2E_PROMPT_MODEL") == "1" {
+	if promptModel {
 		entries := []llm.Entry{}
 		for _, p := range a.Models.List() {
 			provider, _ := a.Models.Get(p.Name)
 			entries = append(entries, llm.Entry{Config: llm.ProviderConfig{Name: p.Name, Type: p.Type, DefaultModel: p.DefaultModel}, Provider: provider})
 		}
-		if err := a.Models.ReplaceProviders(entries, "e2e"); err != nil {
+		if err := a.Models.ReplaceProviders(entries, fixtureModel.Name); err != nil {
 			return err
 		}
 	}
