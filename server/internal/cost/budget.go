@@ -420,7 +420,10 @@ func (a applicable) applyLimit(l *Ledger) {
 		l.RaisedLimit = l.Limit
 	}
 	if limit := max(a.limit, l.RaisedLimit); limit != l.Limit {
-		l.Limit, l.Reached = limit, false
+		previous := l.Limit
+		l.Limit = limit
+		// A reduction preserves a refusal based on a projected reservation.
+		l.Reached = l.used() >= limit || (limit < previous && l.Reached)
 	}
 }
 
@@ -498,16 +501,17 @@ func (b Budgets) reservePart(ctx context.Context, a applicable, t Target, curren
 		}
 		// A definition change applies to the current period unless a
 		// person raised this ledger above it.
+		previous, wasReached := l.Limit, l.Reached
 		a.applyLimit(l)
 		l.WarningPercent, l.InterruptPercent = a.warning, a.interrupt
 		warn, refused, firstReach = false, false, false
 		// Free calls (local or allowed unpriced models) pass even at the limit.
 		if amount > 0 && (l.Reached || l.used()+amount > l.Limit) {
-			refused, firstReach = true, !l.Reached
+			refused, firstReach = true, !l.Reached || !wasReached
 			l.Reached = true
 			view = l.View()
-			if firstReach {
-				return l, nil // persist Reached; the call is refused below
+			if firstReach || l.Limit != previous {
+				return l, nil // persist the effective limit and refusal
 			}
 			for _, guard := range guards {
 				if err := b.checkSettingRevision(ctx, guard.Key, guard.Revision); err != nil {
@@ -517,6 +521,9 @@ func (b Budgets) reservePart(ctx context.Context, a applicable, t Target, curren
 			return nil, nil
 		}
 		l.Entries[rid] = Entry{Execution: t.Execution, Amount: amount}
+		if l.Limit > previous && l.used() < l.Limit {
+			l.scheduleHeldGraphs()
+		}
 		if !l.Warned && l.Limit > 0 && l.used() >= l.warningAt() {
 			l.Warned, warn = true, true
 		}

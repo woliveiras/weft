@@ -180,6 +180,10 @@ claim. An edited issue cannot start on a verdict for an older snapshot. The
 bounded evaluated content is available to the admitted task as
 untrusted context under the reviewed input scope.
 
+A reached monthly task budget defers admission before claim and preserves
+the issue's eligibility for a future poll. If the budget is reached during
+claim, the normal failure write-back identifies the budget and saved task.
+
 ### AC-002 — Clarification hold and capacity
 
 Weft durably records a hold, posts concrete questions as a comment on the

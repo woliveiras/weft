@@ -649,7 +649,7 @@ func (r *Runner) assessIssue(ctx context.Context, t *Trigger, call Invoker, i Is
 	if outcome == "claim_busy" {
 		return false, r.retryReadiness(ctx, t, h, "claim_busy", err)
 	}
-	return outcome != "readiness_changed", err
+	return outcome != "readiness_changed" && outcome != "budget_deferred", err
 }
 
 func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Invoker, h Hold) (bool, error) {

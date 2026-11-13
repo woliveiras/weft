@@ -43,6 +43,9 @@ func (m Manager) PrepareEnvironment(ctx context.Context, id string, revision int
 		return nil, storage.ErrConflict
 	}
 	if d.Status == "environment_pending" {
+		if err := m.checkDraftBudget(ctx, d); err != nil {
+			return nil, err
+		}
 		g, err := m.preparedEnvironmentGraph(ctx, d)
 		if err != nil {
 			return nil, err
@@ -51,6 +54,9 @@ func (m Manager) PrepareEnvironment(ctx context.Context, id string, revision int
 	}
 	if d.Status != "draft" {
 		return nil, storage.ErrConflict
+	}
+	if err := m.checkDraftBudget(ctx, d); err != nil {
+		return nil, err
 	}
 	review, err := m.Review(ctx, id)
 	if err != nil {
@@ -108,6 +114,9 @@ func (m Manager) startPreparedEnvironment(ctx context.Context, d *taskconfig.Dra
 	if d.Revision != revision {
 		return nil, storage.ErrConflict
 	}
+	if err := m.checkDraftBudget(ctx, d); err != nil {
+		return nil, err
+	}
 	review, err := m.Review(ctx, d.ID)
 	if err != nil {
 		return nil, err
@@ -145,7 +154,7 @@ func (m Manager) startPreparedEnvironment(ctx context.Context, d *taskconfig.Dra
 			return fail(err)
 		}
 	}
-	if err = m.Engine.GraphAction(ctx, g.Metadata.ID, "start", actor); err != nil {
+	if err = m.Engine.StartAdmittedTask(ctx, g.Metadata.ID, actor); err != nil {
 		return fail(err)
 	}
 	return tm.Transition(ctx, d, "running", actor)

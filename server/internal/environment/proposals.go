@@ -19,6 +19,9 @@ import (
 
 const proposalPrefix = "environment/proposals/"
 
+// ErrStartDeferred means the graph transition could not begin.
+var ErrStartDeferred = errors.New("environment proposal start deferred")
+
 type StartBudgetBlock struct {
 	Scope string `json:"scope"`
 	ID    string `json:"id"`
@@ -450,7 +453,7 @@ func (p *Proposals) Reconcile(ctx context.Context) {
 			continue
 		}
 		v.Revision = setting.Revision
-		if v.State != "awaiting_approval" && v.State != "building" && !(v.State == "ready" && v.Resume) {
+		if v.State != "awaiting_approval" && v.State != "building" && !(v.State == "ready" && (v.Resume || v.StartBlocked != nil)) {
 			continue
 		}
 		err = p.locked(ctx, v.GraphID, func(ctx context.Context) error {
@@ -459,7 +462,7 @@ func (p *Proposals) Reconcile(ctx context.Context) {
 				return err
 			}
 			if err = p.reconcileOne(ctx, fresh); err != nil {
-				if fresh.StartBlocked != nil || errors.Is(err, storage.ErrConflict) {
+				if fresh.StartBlocked != nil || (fresh.State == "ready" && fresh.Resume) || errors.Is(err, storage.ErrConflict) {
 					return err
 				}
 				fresh.State = "failed"
@@ -476,6 +479,16 @@ func (p *Proposals) Reconcile(ctx context.Context) {
 	}
 }
 func (p *Proposals) reconcileOne(ctx context.Context, v *Proposal) error {
+	if v.State == "ready" && v.StartBlocked != nil && !v.Resume {
+		rec, err := p.Store.GetGraphRecord(ctx, v.GraphID)
+		if errors.Is(err, storage.ErrNotFound) {
+			return nil
+		}
+		if err != nil || rec.DesiredState != domain.GraphRunning {
+			return err
+		}
+		return p.clearStartBlock(ctx, v)
+	}
 	if v.State != "awaiting_approval" && v.State != "building" && !(v.State == "ready" && v.Resume) {
 		return nil
 	}
@@ -520,16 +533,52 @@ func (p *Proposals) reconcileOne(ctx context.Context, v *Proposal) error {
 		if e != nil {
 			return e
 		}
-		if rec.DesiredState != domain.GraphRunning {
-			if v.StartBlocked, err = p.Start(ctx, v.GraphID, v.Actor); err != nil {
-				return err
-			}
-		}
+		// Consume the intent before an effect that may already have committed
+		// when the final proposal write fails.
 		v.Resume = false
+		if err := p.put(ctx, v); err != nil {
+			v.Resume = true
+			return err
+		}
+		if rec.DesiredState == domain.GraphRunning {
+			return nil
+		}
+		v.StartBlocked, err = p.Start(ctx, v.GraphID, v.Actor)
+		if errors.Is(err, ErrStartDeferred) {
+			v.Resume = true
+			return p.put(ctx, v)
+		}
+		if err != nil || v.StartBlocked == nil {
+			return err
+		}
+		latest, err := p.Store.GetGraphRecord(ctx, v.GraphID)
+		if err != nil {
+			return err
+		}
+		if latest.DesiredState == domain.GraphRunning {
+			return nil
+		}
 		return p.put(ctx, v)
 	}
 	return nil
 }
+
+// ClearStartBlock is called after the graph's running intent commits. The
+// proposal revision protects a replacement proposal or a concurrent update.
+func (p *Proposals) ClearStartBlock(ctx context.Context, id string) error {
+	v, err := p.Get(ctx, id)
+	if err != nil || v == nil || v.State != "ready" || v.StartBlocked == nil {
+		return err
+	}
+	return p.clearStartBlock(ctx, v)
+}
+
+func (p *Proposals) clearStartBlock(ctx context.Context, v *Proposal) error {
+	cleared := *v
+	cleared.StartBlocked = nil
+	return p.put(ctx, &cleared)
+}
+
 func (p *Proposals) Run(ctx context.Context) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()

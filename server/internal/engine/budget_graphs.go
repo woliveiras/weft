@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/observability"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
@@ -213,6 +215,7 @@ func (e *Engine) checkBudgetGraphTransition(ctx context.Context, target cost.Bud
 	if err != nil {
 		return "", false, nil, err
 	}
+	graphTarget := graphBudgetTarget(g)
 	if rec.DesiredState == domain.GraphPaused {
 		finished, err := e.runFinished(ctx, g, rec.RunID)
 		if err != nil {
@@ -222,7 +225,11 @@ func (e *Engine) checkBudgetGraphTransition(ctx context.Context, target cost.Bud
 			return "run_finished", false, nil, nil
 		}
 		if expired && target.Action != cost.ResumeGraph {
-			return "period_ended", true, nil, budgets.ScheduleGraphResume(ctx, target, now, source)
+			scheduled, _, err := budgets.RefreshGraphBudget(ctx, target, graphTarget, now, source)
+			if !scheduled {
+				return "", true, nil, err
+			}
+			return "period_ended", true, nil, nil
 		}
 	}
 	if target.Action == cost.ResumeGraph {
@@ -230,7 +237,7 @@ func (e *Engine) checkBudgetGraphTransition(ctx context.Context, target cost.Bud
 			return "", false, nil, err
 		}
 	}
-	blocker, reason, checked, err := budgets.CheckGraphBudgets(ctx, graphBudgetTarget(g), target, now)
+	blocker, reason, checked, err := budgets.CheckGraphBudgets(ctx, graphTarget, target, now)
 	if err != nil {
 		return "", false, nil, err
 	}
@@ -245,11 +252,23 @@ func (e *Engine) checkBudgetGraphTransition(ctx context.Context, target cost.Bud
 	}
 	sameLedger := target.Scope == blocker.Scope && target.ID == blocker.ID
 	if target.Action != cost.ResumeGraph {
-		if sameLedger {
-			return outcome, false, guards, nil
-		}
-		if rec.DesiredState == domain.GraphPaused {
-			return "limit_available", true, nil, budgets.ScheduleGraphResume(ctx, target, now, guards...)
+		if sameLedger || rec.DesiredState == domain.GraphPaused {
+			scheduled, changed, err := budgets.RefreshGraphBudget(ctx, target, graphTarget, now, guards...)
+			if err != nil {
+				return "", true, nil, err
+			}
+			if scheduled {
+				return "limit_available", true, nil, nil
+			}
+			if changed {
+				return "", true, nil, nil // evaluate the new ledger revision on the next sweep
+			}
+			if sameLedger {
+				return outcome, false, guards, nil
+			}
+			if reason == "" {
+				return "", true, nil, nil
+			}
 		}
 	}
 	if reason == "" {
@@ -341,7 +360,7 @@ func (e *Engine) reconcileBudgetGraphs(ctx context.Context) bool {
 	work, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	actions, invalid, err := e.monetaryBudgets().PendingGraphActions(work)
-	failures := 0
+	failures, conflicts := 0, 0
 	for _, target := range actions {
 		if work.Err() != nil {
 			break
@@ -364,9 +383,15 @@ func (e *Engine) reconcileBudgetGraphs(ctx context.Context) bool {
 			e.warnInvalidNodeControl(target.Graph, target.RunID, invalidControl)
 		case errors.Is(transitionErr, cost.ErrInvalidLedger):
 			invalid++
-		case transitionErr != nil && !errors.Is(transitionErr, ErrGraphTransitionBusy) && !errors.Is(transitionErr, storage.ErrConflict):
+		case errors.Is(transitionErr, storage.ErrConflict):
+			conflicts++
+			observability.BudgetOperations.WithLabelValues("all", "reconcile_graph", "conflict").Inc()
+		case transitionErr != nil && !errors.Is(transitionErr, ErrGraphTransitionBusy):
 			failures++
 		}
+	}
+	if conflicts > 0 && ctx.Err() == nil && budgetWarningDue(&e.budgetConflictWarningAt, now) {
+		e.log.Warn("budget graph transition conflicts", "conflicted_actions", conflicts)
 	}
 	if err == nil {
 		err = work.Err()
@@ -379,11 +404,41 @@ func (e *Engine) reconcileBudgetGraphs(ctx context.Context) bool {
 	return failed
 }
 
-// Share one warning per minute across status polling and budget sweeps.
+// Share each graph's warning limit across status polling and budget sweeps.
 func (e *Engine) warnInvalidNodeControl(graph, run string, err *invalidNodeControl) {
-	if budgetWarningDue(&e.invalidControlWarningAt, time.Now()) {
+	if e.invalidControlWarnings.allow(graph, time.Now()) {
 		e.log.Warn("check paused run completion", "graph", graph, "run", run, "err", err)
 	}
+}
+
+const maxGraphWarnings = 256
+
+type graphWarningLimiter struct {
+	mu     sync.Mutex
+	warned map[string]time.Time
+}
+
+func (l *graphWarningLimiter) allow(graph string, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.warned == nil {
+		l.warned = make(map[string]time.Time)
+	}
+	if last, ok := l.warned[graph]; ok && now.Sub(last) < time.Minute {
+		return false
+	}
+	if len(l.warned) >= maxGraphWarnings {
+		for id, last := range l.warned {
+			if now.Sub(last) >= time.Minute {
+				delete(l.warned, id)
+			}
+		}
+		if len(l.warned) >= maxGraphWarnings {
+			return false
+		}
+	}
+	l.warned[graph] = now
+	return true
 }
 
 func budgetWarningDue(last *atomic.Int64, now time.Time) bool {

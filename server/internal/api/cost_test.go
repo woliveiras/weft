@@ -575,6 +575,10 @@ func TestMonthlyBudgetEditsAndGraphLifecycle(t *testing.T) {
 						t.Fatalf("start with a reached %s ledger: %d %s", scope, c, body)
 					}
 				}
+				c, _, body := rawCall(t, "POST", srv.URL+path+"/nodes/reader/start", operatorTok, "", nil)
+				if c != 409 || !strings.Contains(body, `"code":"budget_resume_blocked"`) || !strings.Contains(body, `"scope":"run"`) {
+					t.Fatalf("node start bypassed the reached ledger: %d %s", c, body)
+				}
 				saved, err := app.Store.GetGraphRecord(ctx, graph)
 				if err != nil || saved.RunID != rec.RunID || saved.DesiredState != domain.GraphStopped {
 					t.Fatalf("blocked start created a run: %+v %v", saved, err)

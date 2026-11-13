@@ -4,6 +4,7 @@
   "title": "Weft Event",
   "description": "An immutable fact in the event log (server/internal/domain/event.go). Attribute naming follows CloudEvents conventions. Fields tagged omitempty in Go are absent when empty — in particular 'replica' is absent when it is 0. See docs/events.md for the catalogue and per-type data shapes.",
   "type": "object",
+  "additionalProperties": false,
   "required": ["seq", "id", "type", "time"],
   "properties": {
     "seq":         {"type": "integer", "minimum": 1, "description": "Store-assigned, strictly increasing position. SSE 'id:' field and resume cursor."},
@@ -115,6 +116,7 @@
     },
     "BudgetGraphTransition": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["scope", "id", "action", "outcome"],
       "properties": {
         "scope": {"enum": ["run", "installation", "user", "project", "workflow"]},
@@ -221,6 +223,7 @@
     },
     "EnvironmentCleanup": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["generation", "removed", "usedBy", "error"],
       "properties": {
         "generation": {"type": "string"},
@@ -231,6 +234,7 @@
     },
     "EnvironmentProposal": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["proposal", "state", "resume"],
       "properties": {
         "proposal": {"type": "string"},
@@ -238,6 +242,7 @@
         "resume": {"type": "boolean"},
         "startBlocked": {
           "type": "object",
+          "additionalProperties": false,
           "required": ["scope", "id"],
           "properties": {
             "scope": {"enum": ["run", "installation", "user", "project", "workflow"]},
@@ -251,6 +256,7 @@
     },
     "EnvironmentForceDeleteStarted": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["attempt", "reason"],
       "properties": {
         "attempt": {"type": "string"},
@@ -259,6 +265,7 @@
     },
     "EnvironmentForceDeleteResult": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["attempt", "outcome", "cleanupDeferred"],
       "properties": {
         "attempt": {"type": "string"},
@@ -268,6 +275,7 @@
     },
     "EnvironmentCleanupDecision": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["reason", "possibleResources"],
       "properties": {
         "reason": {"type": "string", "minLength": 1, "maxLength": 500},
@@ -279,6 +287,7 @@
     },
     "EnvironmentCleanupReleased": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["decision"],
       "properties": {
         "decision": {"type": "string"}
@@ -286,6 +295,7 @@
     },
     "GraphBrokerCleanupCompleted": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["groups"],
       "properties": {
         "groups": {"type": "integer", "minimum": 0}

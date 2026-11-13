@@ -327,6 +327,16 @@ func subjectOf(g *domain.Graph, c *domain.Channel) string { return g.Metadata.ID
 
 // GraphAction is start|stop|pause|resume|kill.
 func (e *Engine) GraphAction(ctx context.Context, id, action, actor string) error {
+	return e.graphAction(ctx, id, action, actor, false)
+}
+
+// StartAdmittedTask starts the first run after task admission and input
+// dispatch. Spending that changes after admission is checked at reservation.
+func (e *Engine) StartAdmittedTask(ctx context.Context, id, actor string) error {
+	return e.graphAction(ctx, id, "start", actor, true)
+}
+
+func (e *Engine) graphAction(ctx context.Context, id, action, actor string, admitted bool) error {
 	return e.withGraphActionTransition(ctx, id, action, func(ctx context.Context) error {
 		if action == "start" || action == "resume" {
 			if err := e.checkDeferredDeletion(ctx, id); err != nil {
@@ -337,7 +347,9 @@ func (e *Engine) GraphAction(ctx context.Context, id, action, actor string) erro
 		if err != nil {
 			return err
 		}
-		starting := action == "start" && rec.DesiredState != domain.GraphRunning
+		firstAdmittedStart := admitted && rec.RunID == "" && strings.HasPrefix(id, domain.TaskRunGraphPrefix) &&
+			(rec.DesiredState == "" || rec.DesiredState == domain.GraphStopped)
+		starting := action == "start" && rec.DesiredState != domain.GraphRunning && !firstAdmittedStart
 		if starting || (action == "resume" && rec.DesiredState == domain.GraphPaused) {
 			if err := e.checkManualBudgetResume(ctx, g, rec.RunID, actor, action, ""); err != nil {
 				return err
@@ -430,6 +442,13 @@ func (e *Engine) recordGraphAction(ctx context.Context, rec *domain.GraphRecord,
 		}
 	}
 	e.bus.Publish(ctx, domain.NewEvent(ev, id, map[string]any{"action": action, "runId": rec.RunID}).WithActor(actor))
+	if rec.DesiredState == domain.GraphRunning && e.opt.ClearProposalStartBlock != nil {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		defer cancel()
+		if err := e.opt.ClearProposalStartBlock(cleanup, id); err != nil {
+			e.log.WarnContext(ctx, "clear environment proposal start block", "graph", id, "err", err)
+		}
+	}
 	e.Nudge()
 	return nil
 }
@@ -481,6 +500,11 @@ func (e *Engine) nodeAction(ctx context.Context, id, node, action, actor string)
 		}
 		if rep := e.preflight(ctx, g, node); !rep.Valid {
 			return &ValidationError{Report: rep}
+		}
+		if rec.DesiredState == domain.GraphStopped {
+			if err := e.checkManualBudgetResume(ctx, g, rec.RunID, actor, action, node); err != nil {
+				return err
+			}
 		}
 		c.Stopped, c.Paused = false, false
 		// Starting a node clears its completion so it runs again.

@@ -309,6 +309,7 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var pve *llmconfig.ValidationError
 	var cve *cost.ValidationError
 	var budgetResume *engine.BudgetResumeError
+	var budgetReached *cost.ReachedError
 	var sve *scm.ValidationError
 	var tfe *trigger.FieldError
 	switch {
@@ -332,6 +333,8 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErr(w, http.StatusNotFound, "not_found", err.Error(), nil)
 	case errors.As(err, &budgetResume):
 		writeErr(w, http.StatusConflict, "budget_resume_blocked", err.Error(), map[string]string{"scope": budgetResume.Scope, "id": budgetResume.ID})
+	case errors.As(err, &budgetReached):
+		writeErr(w, http.StatusConflict, "budget_admission_blocked", err.Error()+" in Models → Costs.", map[string]string{"scope": budgetReached.Scope, "id": budgetReached.ID})
 	case errors.Is(err, cost.ErrInvalidLedger), errors.Is(err, engine.ErrConflict), errors.Is(err, hitl.ErrNotPending), errors.Is(err, storage.ErrConflict):
 		writeErr(w, http.StatusConflict, "conflict", err.Error(), nil)
 	case errors.Is(err, engine.ErrInvalid), errors.Is(err, errBadRequest):

@@ -124,6 +124,18 @@ func (b Budgets) SetDefinitions(ctx context.Context, defs []Definition, actor st
 	return defs, nil
 }
 
+// CheckAdmission returns the reached ledger as an error before a new task.
+func (b Budgets) CheckAdmission(ctx context.Context, t Target) error {
+	reached, err := b.Check(ctx, t)
+	if err != nil {
+		return err
+	}
+	if reached != nil {
+		return reached
+	}
+	return nil
+}
+
 // Check reports the first budget that is reached for a target, so new task
 // runs can be refused before they start. It returns nil when none is.
 func (b Budgets) Check(ctx context.Context, t Target) (*ReachedError, error) {
@@ -139,7 +151,9 @@ func (b Budgets) Check(ctx context.Context, t Target) (*ReachedError, error) {
 		if l == nil {
 			continue
 		}
+		a.applyLimit(l)
 		if v := l.View(); l.Reached || (v.Limit > 0 && v.Remaining == 0) {
+			v.Reached = true
 			return &ReachedError{Scope: a.scope, ID: a.id, View: v}, nil
 		}
 	}

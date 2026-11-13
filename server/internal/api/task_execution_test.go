@@ -3,15 +3,19 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/woliveiras/weft/server/internal/config"
+	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
 	"github.com/woliveiras/weft/server/internal/mcpconfig/mcptest"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"github.com/woliveiras/weft/server/internal/taskrun"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +25,13 @@ import (
 
 func taskStart(t *testing.T, srvURL, id, token string, rev int64) int {
 	t.Helper()
-	req, _ := http.NewRequest("POST", srvURL+"/api/v1/tasks/"+id+"/start", strings.NewReader(`{"confirm":true}`))
+	status, _ := taskActionResponse(t, srvURL, id, "start", token, rev)
+	return status
+}
+
+func taskActionResponse(t *testing.T, srvURL, id, action, token string, rev int64) (int, string) {
+	t.Helper()
+	req, _ := http.NewRequest("POST", srvURL+"/api/v1/tasks/"+id+"/"+action, strings.NewReader(`{"confirm":true}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("If-Match", fmt.Sprint(rev))
 	req.Header.Set("Content-Type", "application/json")
@@ -30,8 +40,84 @@ func taskStart(t *testing.T, srvURL, id, token string, rev int64) int {
 		t.Fatal(err)
 	}
 	defer res.Body.Close()
-	return res.StatusCode
+	data, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res.StatusCode, string(data)
 }
+
+func seedReachedAdmissionBudget(t *testing.T, srv *httptest.Server, store storage.Store, user string) string {
+	t.Helper()
+	id := cost.MonthlyID(user, cost.Period(time.Now()))
+	// The stored limit has not caught up with the reduced definition.
+	if c := call(t, srv, "PUT", "/api/v1/cost/budgets", adminTok, "application/json",
+		fmt.Sprintf(`{"budgets":[{"scope":"user","id":%q,"limitMicros":10}]}`, user), nil); c != 200 {
+		t.Fatalf("define budget: %d", c)
+	}
+	raw, err := json.Marshal(cost.Ledger{Scope: cost.User, ID: id, Currency: "USD", Limit: 20, Compacted: 10, Entries: map[string]cost.Entry{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PutSetting(t.Context(), cost.BudgetPrefix+cost.User+"/"+id, raw, 0, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func raiseAdmissionBudget(t *testing.T, srv *httptest.Server, scope, id string) {
+	t.Helper()
+	if c := call(t, srv, "POST", "/api/v1/cost/budgets/"+scope+"/"+id+"/raise", adminTok, "application/json",
+		`{"limitMicros":40}`, nil); c != 200 {
+		t.Fatalf("raise budget: %d", c)
+	}
+}
+
+func assertTaskBudgetBlock(t *testing.T, status int, body, id string) {
+	t.Helper()
+	for _, part := range []string{`"code":"budget_admission_blocked"`, `"scope":"user"`, `"id":"` + id + `"`, "Models → Costs"} {
+		if status != 409 || !strings.Contains(body, part) {
+			t.Fatalf("budget refusal missing %s: %d %s", part, status, body)
+		}
+	}
+}
+
+func TestTaskBudgetRefusalKeepsDraftRetryable(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", taskGraph, nil); c != 201 {
+		t.Fatal(c)
+	}
+	var d taskconfig.Draft
+	body := strings.Replace(taskBody, `"nodeId":"reader"`, `"nodeId":"reader","resultNodeId":"reader"`, 1)
+	if c := call(t, srv, "POST", "/api/v1/tasks", operatorTok, "application/json", body, &d); c != 201 {
+		t.Fatal(c)
+	}
+	id := seedReachedAdmissionBudget(t, srv, a.Store, "operator")
+	status, refusal := taskActionResponse(t, srv.URL, d.ID, "start", adminTok, d.Revision)
+	assertTaskBudgetBlock(t, status, refusal, id)
+	var saved taskconfig.Draft
+	if c := call(t, srv, "GET", "/api/v1/tasks/"+d.ID, viewerTok, "", "", &saved); c != 200 ||
+		saved.Status != "draft" || saved.ExecutionGraphID != "" || saved.Revision != d.Revision {
+		t.Fatalf("budget refusal changed the draft: %d %+v", c, saved)
+	}
+	graph := taskrun.ExecutionID(d.ID)
+	if _, err := a.Store.GetGraph(t.Context(), graph, 0); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("budget refusal created the graph: %v", err)
+	}
+	if messages, err := a.Store.ListOperatorMessages(t.Context(), graph, "reader", 20); err != nil || len(messages) != 0 {
+		t.Fatalf("budget refusal dispatched input: %v %v", messages, err)
+	}
+	raiseAdmissionBudget(t, srv, cost.User, id)
+	if status := taskStart(t, srv.URL, d.ID, adminTok, d.Revision); status != 202 {
+		t.Fatalf("retry the same revision after raise: %d", status)
+	}
+	waitFor(t, 5*time.Second, "admitted task ran", func() bool {
+		var v taskrun.View
+		call(t, srv, "GET", "/api/v1/tasks/"+d.ID+"/progress", viewerTok, "", "", &v)
+		return v.State == "succeeded" && len(v.Executions) == 1
+	})
+}
+
 func TestTaskExecutionCopiesAndIdempotentStart(t *testing.T) {
 	srv, a := setupApp(t, nil)
 	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", taskGraph, nil); c != 201 {

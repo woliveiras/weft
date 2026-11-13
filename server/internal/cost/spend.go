@@ -182,7 +182,10 @@ func (b Budgets) Preview(ctx context.Context, t Target) ([]View, error) {
 			out = append(out, View{Scope: a.scope, ID: a.id, Currency: cat.Currency, Limit: a.limit, Remaining: a.limit})
 			continue
 		}
-		out = append(out, l.View())
+		a.applyLimit(l)
+		v := l.View()
+		v.Reached = v.Reached || (v.Limit > 0 && v.Remaining == 0)
+		out = append(out, v)
 	}
 	return out, nil
 }

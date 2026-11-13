@@ -54,7 +54,8 @@ Startup fails if no credential is configured and auth is not explicitly disabled
   | 403 | `forbidden` | Role too low; on callbacks: tool denied or rejected by a human |
   | 404 | `not_found` | Unknown graph/node/channel/approval/execution, unknown action segment |
   | 409 | `conflict` | `If-Match` mismatch, graph exists, delete while running, approval already decided, pause when not running, provider in use or default |
-  | 409 | `budget_resume_blocked` | A monetary budget blocks graph start, graph resume, or node resume. `details` contains the blocking `scope` and `id`. |
+  | 409 | `budget_admission_blocked` | A reached monthly budget blocks a new task or its environment preparation. `details` contains the blocking `scope` and `id`. Raise the budget in Models → Costs and retry the saved draft. |
+  | 409 | `budget_resume_blocked` | A monetary budget blocks graph start, graph resume, node resume, or a node start that would start a stopped graph. `details` contains the blocking `scope` and `id`. |
   | 409 | `secret_key_missing` | A credential was sent but the server has no installation key to encrypt it |
   | 422 | `invalid` | Graph validation failed, or a graph/node start whose agents cannot reach their model provider — `details` is the full `ValidationReport`; provider input invalid — `details.errors[]` with `path` and `message` |
   | 429 | `rate_limited` | Tool grant rate limit (callbacks) |

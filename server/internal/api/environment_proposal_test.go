@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -37,14 +38,32 @@ func (p *proposalProvider) Chat(ctx context.Context, r *llm.ChatRequest) (*llm.C
 	return &llm.ChatResponse{Message: llm.ChatMessage{Content: `{"environment":{"image":"alpine:3.22"},"rationale":"A minimal shell for the fixture; no dependencies need installing.","tools":["sh"]}`}}, nil
 }
 
+type failBlockedProposalOutcome struct {
+	storage.Store
+	writes int
+}
+
+func (s *failBlockedProposalOutcome) PutSetting(ctx context.Context, key string, value []byte, rev int64, actor string) (int64, error) {
+	if strings.HasPrefix(key, "environment/proposals/") && bytes.Contains(value, []byte(`"startBlocked"`)) {
+		s.writes++
+		return 0, errors.New("proposal outcome write unavailable")
+	}
+	return s.Store.PutSetting(ctx, key, value, rev, actor)
+}
+
 func TestEnvironmentProposalApprovalBuildAndResume(t *testing.T) {
-	for _, scenario := range []string{"resume", "stop revokes resume", "budget blocks automatic start", "budget reconciler holds graph lease"} {
+	for _, scenario := range []string{"resume", "stop revokes resume", "budget blocks automatic start", "budget outcome write fails", "budget reconciler holds graph lease"} {
 		t.Run(scenario, func(t *testing.T) {
 			stop := scenario == "stop revokes resume"
-			blocked := scenario == "budget blocks automatic start"
+			failOutcome := scenario == "budget outcome write fails"
+			blocked := scenario == "budget blocks automatic start" || failOutcome
 			root := t.TempDir()
 			bin, log := fakeDaemonCLI(t)
 			srv, app := setupApp(t, func(c *config.Config) { c.Workspaces.Root = root; c.Isolation.Docker.Bin = bin })
+			failure := &failBlockedProposalOutcome{Store: app.Store}
+			if failOutcome {
+				app.Proposals.Store = failure
+			}
 			provider := &proposalProvider{}
 			app.Models.Add(llm.ProviderConfig{Name: "analysis", DefaultModel: "fixture"}, provider)
 			const base = "/api/v1/graphs/proposal"
@@ -180,6 +199,20 @@ func TestEnvironmentProposalApprovalBuildAndResume(t *testing.T) {
 			}
 			if blocked {
 				expected = domain.GraphPaused
+				for range 3 {
+					app.Proposals.Reconcile(t.Context())
+				}
+				audit, err := app.Store.ListEvents(t.Context(), storage.EventFilter{
+					GraphID: "proposal", Types: []domain.EventType{domain.EvBudgetGraphTransition},
+				})
+				if err != nil || len(audit) != 1 || !bytes.Contains(audit[0].Data, []byte(`"requestedAction":"start"`)) {
+					t.Fatalf("expected one automatic start audit: %v %v", audit, err)
+				}
+			}
+			if failOutcome && (failure.writes != 1 || v.StartBlocked != nil) {
+				t.Fatalf("replayed blocked start after failed outcome write: writes %d, proposal %+v", failure.writes, v)
+			}
+			if blocked && !failOutcome {
 				var view environment.Proposal
 				if code := call(t, srv, "GET", base+"/environment/proposal", viewerTok, "", "", &view); code != 200 ||
 					view.State != "ready" || view.Resume || view.Error != "" || view.StartBlocked == nil ||
@@ -199,6 +232,17 @@ func TestEnvironmentProposalApprovalBuildAndResume(t *testing.T) {
 			}
 			if data, err := os.ReadFile(log); err != nil || len(data) == 0 {
 				t.Fatalf("approved build not run: %v", err)
+			}
+			if blocked {
+				raiseAdmissionBudget(t, srv, cost.TaskRun, "proposal")
+				if c := call(t, srv, "POST", base+"/start", adminTok, "", "", nil); c != 200 {
+					t.Fatalf("start after raise: %d", c)
+				}
+				var view environment.Proposal
+				if c := call(t, srv, "GET", base+"/environment/proposal", viewerTok, "", "", &view); c != 200 ||
+					view.State != "ready" || view.Resume || view.StartBlocked != nil {
+					t.Fatalf("successful start left a stale block: %d %+v", c, view)
+				}
 			}
 			eventtest.Capture(t, app.Store, "environment.proposal")
 		})

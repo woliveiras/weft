@@ -243,6 +243,11 @@ func (m Manager) Review(ctx context.Context, id string) (*Review, error) {
 	}
 	return r, nil
 }
+
+func (m Manager) checkDraftBudget(ctx context.Context, d *taskconfig.Draft) error {
+	return (cost.Budgets{Store: m.Store}).CheckAdmission(ctx, cost.Target{User: d.CreatedBy, Project: d.ProjectID, Workflow: d.GraphID})
+}
+
 func (m Manager) Start(ctx context.Context, id string, revision int64, actor string) (*taskconfig.Draft, error) {
 	tm := taskconfig.Manager{Store: m.Store}
 	d, err := tm.Get(ctx, id)
@@ -258,11 +263,8 @@ func (m Manager) Start(ctx context.Context, id string, revision int64, actor str
 	if d.Revision != revision {
 		return nil, storage.ErrConflict
 	}
-	// A reached monthly budget refuses new runs before they start.
-	if reached, err := (cost.Budgets{Store: m.Store}).Check(ctx, cost.Target{User: d.CreatedBy, Project: d.ProjectID, Workflow: d.GraphID}); err != nil {
+	if err := m.checkDraftBudget(ctx, d); err != nil {
 		return nil, err
-	} else if reached != nil {
-		return nil, fmt.Errorf("%w: %s", storage.ErrConflict, reached.Error())
 	}
 	review, err := m.Review(ctx, id)
 	if err != nil {
@@ -337,7 +339,7 @@ func (m Manager) Start(ctx context.Context, id string, revision int64, actor str
 	if err != nil {
 		return nil, err
 	}
-	if err = m.Engine.GraphAction(ctx, g.Metadata.ID, "start", actor); err != nil {
+	if err = m.Engine.StartAdmittedTask(ctx, g.Metadata.ID, actor); err != nil {
 		return fail(err)
 	}
 	return tm.Transition(ctx, d, "running", actor)

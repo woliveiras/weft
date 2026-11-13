@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/events"
 	"github.com/woliveiras/weft/server/internal/hitl"
 	"github.com/woliveiras/weft/server/internal/llm"
+	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/storage/fsstore"
 )
 
@@ -261,10 +263,35 @@ func TestProposalStopRevokesResume(t *testing.T) {
 	}
 }
 
+type failProposalBlockWrite struct {
+	storage.Store
+	attempts int
+}
+
+func (s *failProposalBlockWrite) PutSetting(ctx context.Context, key string, value []byte, rev int64, actor string) (int64, error) {
+	if bytes.Contains(value, []byte(`"startBlocked"`)) {
+		s.attempts++
+		return 0, errors.New("proposal outcome write unavailable")
+	}
+	return s.Store.PutSetting(ctx, key, value, rev, actor)
+}
+
 func TestProposalBudgetBlockIsPersistedOnce(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(fmt.Sprintf("write_fails_%t", fail), func(t *testing.T) {
+			testProposalBudgetBlock(t, fail)
+		})
+	}
+}
+
+func testProposalBudgetBlock(t *testing.T, fail bool) {
 	docker := newFakeDocker(t)
 	p, g, _ := proposalFixture(t, docker.bin)
 	ctx := t.Context()
+	failing := &failProposalBlockWrite{Store: p.Store}
+	if fail {
+		p.Store = failing
+	}
 	starts := 0
 	p.Start = func(_ context.Context, graph, actor string) (*StartBudgetBlock, error) {
 		starts++
@@ -295,11 +322,19 @@ func TestProposalBudgetBlockIsPersistedOnce(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if v.State != "ready" || v.Resume || v.StartBlocked == nil ||
-		*v.StartBlocked != (StartBudgetBlock{Scope: "project", ID: "project-a@2026-11"}) {
+	if v.State != "ready" || v.Resume {
 		t.Fatalf("wrong proposal outcome: %+v", v)
 	}
-	p.Reconcile(ctx)
+	if fail && (v.StartBlocked != nil || failing.attempts != 1) {
+		t.Fatalf("failed outcome write was replayed: %+v, attempts %d", v, failing.attempts)
+	}
+	if !fail && (v.StartBlocked == nil ||
+		*v.StartBlocked != (StartBudgetBlock{Scope: "project", ID: "project-a@2026-11"})) {
+		t.Fatalf("wrong proposal outcome: %+v", v)
+	}
+	for range 3 {
+		p.Reconcile(ctx)
+	}
 	if starts != 1 {
 		t.Fatalf("automatic start attempted %d times", starts)
 	}

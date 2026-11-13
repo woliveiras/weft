@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/config"
+	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/eventtest"
 	"github.com/woliveiras/weft/server/internal/taskauth"
@@ -36,7 +37,7 @@ func prepareTaskEnvironment(t *testing.T, url string, d taskconfig.Draft, token 
 }
 func TestTaskEnvironmentBuildRequiresSeparateStartAndRetainsSource(t *testing.T) {
 	bin, _ := fakeDaemonCLI(t)
-	srv, _ := setupApp(t, func(c *config.Config) { c.Isolation.Docker.Bin = bin })
+	srv, app := setupApp(t, func(c *config.Config) { c.Isolation.Docker.Bin = bin })
 	var g domain.Graph
 	if err := json.Unmarshal([]byte(taskGraph), &g); err != nil {
 		t.Fatal(err)
@@ -70,6 +71,14 @@ func TestTaskEnvironmentBuildRequiresSeparateStartAndRetainsSource(t *testing.T)
 			t.Fatal(c)
 		}
 	}
+	id := seedReachedAdmissionBudget(t, srv, app.Store, "admin")
+	status, body := taskActionResponse(t, srv.URL, d.ID, "prepare-environment", adminTok, d.Revision)
+	assertTaskBudgetBlock(t, status, body, id)
+	var saved taskconfig.Draft
+	if c := call(t, srv, "GET", "/api/v1/tasks/"+d.ID, viewerTok, "", "", &saved); c != 200 || saved.Status != "draft" || saved.ExecutionGraphID != "" {
+		t.Fatalf("budget refusal prepared an environment: %d %+v", c, saved)
+	}
+	raiseAdmissionBudget(t, srv, cost.User, id)
 	if c := prepareTaskEnvironment(t, srv.URL, d, adminTok); c != 202 {
 		t.Fatal(c)
 	}

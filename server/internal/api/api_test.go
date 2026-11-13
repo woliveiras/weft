@@ -14,6 +14,7 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/app"
 	"github.com/woliveiras/weft/server/internal/config"
+	"github.com/woliveiras/weft/server/internal/eventtest"
 )
 
 const (
@@ -68,7 +69,8 @@ func setupApp(t *testing.T, tweak func(*config.Config)) (*httptest.Server, *app.
 		sctx, c := context.WithTimeout(context.Background(), 5*time.Second)
 		defer c()
 		a.Engine.Shutdown(sctx)
-		_ = a.Close(sctx)
+		defer a.Close(sctx)
+		eventtest.ValidateStored(t, a.Store)
 	})
 	return srv, a
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/activity"
 	"github.com/woliveiras/weft/server/internal/app"
 	"github.com/woliveiras/weft/server/internal/config"
+	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
@@ -199,6 +200,24 @@ func TestTriggerStartsARealTaskUnderConsent(t *testing.T) {
 	var tr trigger.Trigger
 	if c := call(t, srv, "POST", "/api/v1/triggers", adminTok, "application/json", body, &tr); c != 201 {
 		t.Fatal(c)
+	}
+	id := seedReachedAdmissionBudget(t, srv, a.Store, "admin")
+	a.Triggers.Tick(t.Context())
+	blocked, err := a.Triggers.Triggers.Get(t.Context(), tr.ID)
+	if err != nil || blocked.State != trigger.Active || blocked.Claiming != "" || blocked.CurrentTask != "" ||
+		len(blocked.Processed) != 0 || !strings.Contains(blocked.LastError, id) {
+		t.Fatalf("trigger admitted an issue with a reached budget: %+v %v", blocked, err)
+	}
+	if len(updates) != 0 || len(comments) != 0 || model.observed() != nil {
+		t.Fatalf("budget deferral touched the tracker or assessed readiness: %v %v", updates, comments)
+	}
+	var page taskconfig.Page
+	if c := call(t, srv, "GET", "/api/v1/tasks", viewerTok, "", "", &page); c != 200 || len(page.Items) != 0 {
+		t.Fatalf("budget deferral created a task: %d %+v", c, page)
+	}
+	raiseAdmissionBudget(t, srv, cost.User, id)
+	if _, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "test", func(t *trigger.Trigger) error { t.NextRunAt = nil; return nil }); err != nil {
+		t.Fatal(err)
 	}
 	a.Triggers.Tick(t.Context())
 	got, err := a.Triggers.Triggers.Get(t.Context(), tr.ID)

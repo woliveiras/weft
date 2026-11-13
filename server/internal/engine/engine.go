@@ -107,10 +107,11 @@ type Options struct {
 	Sandboxes          SandboxFactory
 	// Environments, when set, is consulted before starting nodes that run
 	// commands in the graph's environment (see UsesEnvironment).
-	Environments         EnvironmentChecker
-	EnvironmentProposals EnvironmentChecker
-	CallbackURL          string // base internal URL, e.g. http://weftd:8080
-	Log                  *slog.Logger
+	Environments            EnvironmentChecker
+	EnvironmentProposals    EnvironmentChecker
+	ClearProposalStartBlock func(context.Context, string) error
+	CallbackURL             string // base internal URL, e.g. http://weftd:8080
+	Log                     *slog.Logger
 
 	LeaseTTL           time.Duration
 	ReconcileInterval  time.Duration
@@ -148,7 +149,8 @@ type Engine struct {
 	done                 chan struct{}
 
 	invalidLedgerWarningAt  atomic.Int64
-	invalidControlWarningAt atomic.Int64
+	budgetConflictWarningAt atomic.Int64
+	invalidControlWarnings  graphWarningLimiter
 }
 
 func New(opt Options) (*Engine, error) {

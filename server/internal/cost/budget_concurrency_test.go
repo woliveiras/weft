@@ -61,8 +61,8 @@ func TestDefinitionIncreaseDoesNotBecomeAnExplicitRaise(t *testing.T) {
 		t.Fatal(err)
 	}
 	put(200)
-	if err := b.ScheduleGraphResume(ctx, hold, now); err != nil {
-		t.Fatal(err)
+	if scheduled, _, err := b.RefreshGraphBudget(ctx, hold, target, now); err != nil || !scheduled {
+		t.Fatalf("schedule after increasing definition: %t %v", scheduled, err)
 	}
 	put(150)
 	r, err = b.Reserve(ctx, target, cat(flat), "team", "openai", request(120))

@@ -87,6 +87,15 @@ test('a budget-blocked automatic start leaves the approved environment ready', a
   expect(await read(page, id, 'executions')).toHaveLength(0);
   await settings(page, id);
   await expect(page.getByText(`Automatic start was blocked by the run budget (${id}).`)).toBeVisible();
+  const raised = await page.request.post(`/api/v1/cost/budgets/run/${id}/raise`, {
+    headers,
+    data: { limitMicros: 2_000_000 },
+  });
+  expect(raised.ok()).toBe(true);
+  const started = await page.request.post(`/api/v1/graphs/${id}/start`, { headers });
+  expect(started.ok()).toBe(true);
+  await expect(page.getByText(`Automatic start was blocked by the run budget (${id}).`)).toBeHidden();
+  expect((await read(page, id, 'environment/proposal')).startBlocked).toBeUndefined();
 });
 
 test('rejecting a proposal prevents build and execution', async ({ page }) => {
