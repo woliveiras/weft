@@ -284,7 +284,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 	a.Proposals.Save = func(ctx context.Context, g *domain.Graph, version int, actor string) error {
 		_, _, err := a.Engine.SaveGraph(ctx, g, version, actor)
-		return err
+		return retryProposalGraphTransition(err)
 	}
 	a.Proposals.Start = func(ctx context.Context, id, actor string) (*environment.StartBudgetBlock, error) {
 		err := a.Engine.GraphAction(ctx, id, "start", actor)
@@ -292,7 +292,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		if errors.As(err, &blocked) {
 			return &environment.StartBudgetBlock{Scope: blocked.Scope, ID: blocked.ID}, nil
 		}
-		return nil, err
+		return nil, retryProposalGraphTransition(err)
 	}
 	auth, err := api.NewAuthenticator(cfg.Auth)
 	if err != nil {
@@ -807,4 +807,11 @@ func shutdownHTTP(ctx context.Context, server *http.Server) error {
 		return fmt.Errorf("HTTP shutdown: %w", errors.Join(err, server.Close()))
 	}
 	return nil
+}
+
+func retryProposalGraphTransition(err error) error {
+	if errors.Is(err, engine.ErrGraphTransitionBusy) {
+		return errors.Join(storage.ErrConflict, err)
+	}
+	return err
 }

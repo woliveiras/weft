@@ -38,7 +38,7 @@ func (p *proposalProvider) Chat(ctx context.Context, r *llm.ChatRequest) (*llm.C
 }
 
 func TestEnvironmentProposalApprovalBuildAndResume(t *testing.T) {
-	for _, scenario := range []string{"resume", "stop revokes resume", "budget blocks automatic start"} {
+	for _, scenario := range []string{"resume", "stop revokes resume", "budget blocks automatic start", "budget reconciler holds graph lease"} {
 		t.Run(scenario, func(t *testing.T) {
 			stop := scenario == "stop revokes resume"
 			blocked := scenario == "budget blocks automatic start"
@@ -113,6 +113,39 @@ func TestEnvironmentProposalApprovalBuildAndResume(t *testing.T) {
 					t.Fatal(err)
 				}
 				seedLifecycleLedger(t, app.Store, rec.ID, rec.RunID, cost.TaskRun, rec.ID)
+			}
+			if scenario == "budget reconciler holds graph lease" {
+				ctx := t.Context()
+				waitFor(t, 5*time.Second, "proposal build started", func() bool {
+					app.Proposals.Reconcile(ctx)
+					v, err := app.Proposals.Get(ctx, "proposal")
+					if err != nil {
+						t.Fatal(err)
+					}
+					if v.State == "failed" {
+						t.Fatalf("proposal failed before lease test: %s", v.Error)
+					}
+					return v.State == "building"
+				})
+				const key = "graph-transition/proposal"
+				const holder = "reconciler-fixture"
+				if ok, err := app.Store.AcquireLease(ctx, key, holder, time.Minute); err != nil || !ok {
+					t.Fatalf("acquire lease: %t %v", ok, err)
+				}
+				waitFor(t, 5*time.Second, "built proposal waiting for the graph lease", func() bool {
+					app.Proposals.Reconcile(ctx)
+					v, err := app.Proposals.Get(ctx, "proposal")
+					if err != nil {
+						t.Fatal(err)
+					}
+					if v.State == "failed" {
+						t.Fatalf("proposal failed while the graph lease was held: %s", v.Error)
+					}
+					return v.State == "ready" && v.Resume
+				})
+				if err := app.Store.ReleaseLease(ctx, key, holder); err != nil {
+					t.Fatal(err)
+				}
 			}
 			deadline := time.Now().Add(5 * time.Second)
 			for time.Now().Before(deadline) {
