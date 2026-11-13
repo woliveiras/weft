@@ -71,7 +71,7 @@ tools:
 
 ### Matching and merge semantics (as implemented in `policy.go`)
 
-1. **Default deny.** Collect every grant whose `name` matches the tool name or capability. None → `tool.denied` (HTTP 403 on callbacks).
+1. **Default deny.** Collect every grant whose `name` matches the tool name or capability. MCP tools and `delegation.request` require exact tool names. No match produces `tool.denied` (HTTP 403 on callbacks).
 2. **Union of permissions.** If several grants match, the call is allowed if *any* of them would allow it:
 
 | Axis | Merged value |
@@ -99,6 +99,10 @@ tools:
 
 ### Gateway pipeline
 
+For runs with task consent, the gateway also applies the
+[task authorization rules](task-authorization.md) before approval. It rechecks
+consent after approval and environment preparation, before invoking the tool.
+
 ```mermaid
 flowchart LR
   A[call name+args] --> B{registered?}
@@ -109,7 +113,7 @@ flowchart LR
   E -- no --> X[error]
   E -- yes --> F{rate limit}
   F -- exceeded --> D3[deny: rate_limited]
-  F -- ok --> G{requiresApproval?}
+  F -- ok --> G{Human decision required?}
   G -- yes --> H[approval: human decides] -->|rejected/expired| D4[deny: rejected]
   G -- no --> I[execute in sandbox]
   H -->|approved| I
@@ -123,7 +127,7 @@ Tool *failures* (non-zero exit, missing file, HTTP error) are returned to the ag
 
 | Signal | Content |
 |---|---|
-| Events | `tool.invoked`, `tool.completed`, `tool.denied` with `{tool, args (≤ 2 KiB), outcome, durationMs, error}`, actor `agent:<node>#<n>`, execution and trace ids |
+| Events | `tool.invoked`, `tool.completed`, `tool.denied` with tool, outcome, duration, error, actor `agent:<node>#<n>`, execution and trace IDs. Arguments are capped at 2 KiB where recorded. [MCP audit events](mcp.md#connection-quotas-and-call-history) omit raw arguments and results. |
 | Metrics | `weft_tool_invocations_total{tool,outcome}`, `weft_tool_duration_seconds{tool}` |
 | Checkpoints | Before the first `filesystem.write`/`filesystem.delete`/`git.write`/`shell.exec` call of a round (after authorization and approval) the engine records a worktree checkpoint: `checkpoint.created`/`.restored`/`.failed` events, `weft_workspace_checkpoints_total{operation,outcome}`, `weft_workspace_checkpoint_duration_seconds{operation}` |
 | Traces | Span `tool.<name>` with `weft.graph/node/replica/execution`, `weft.tool.outcome` |
@@ -390,8 +394,12 @@ for kernel semantics.
 
 ## Native analysis delegation
 
-See [delegation](delegation.md) for the explicit grant, mandatory approval, child
-execution records, event metadata, fixed limits and inclusive usage accounting.
+Both delegation modes require an explicit grant for the exact
+`delegation.request` tool and honor any approval configured on that grant.
+The installation policy defaults to `required`, so each child also waits for an
+operator or admin decision in Approvals. `automatic` skips only that delegation
+decision. See [delegation](delegation.md) for child execution records, event
+metadata, fixed limits and inclusive usage accounting.
 
 ## Argument types
 

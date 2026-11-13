@@ -10,7 +10,7 @@ Weft is a self-hosted, vendor-neutral **agent factory**. Autonomous AI agents ru
 | [state-machines.md](state-machines.md) | Graph, replica, execution, message and approval state machines |
 | [execution-model.md](execution-model.md) | Loop modes, turns, delivery guarantees, clusters, routing, isolation |
 | [dev/contracts.md](dev/contracts.md) | HTTP API and Runtime Protocol v1 (wire contracts) |
-| [product-contracts.md](product-contracts.md) | Current-state inventory and design contracts for planned Release 1 capabilities |
+| [product-contracts.md](product-contracts.md) | Current-state inventory and design contracts for Release 1 capabilities |
 | [sandbox-runtime.md](sandbox-runtime.md) | The Docker daemon dedicated to agent sandboxes: architecture, usage, reset, troubleshooting |
 | [environments.md](environments.md) | Project environments: definition, build lifecycle, usage, recipes, troubleshooting |
 
@@ -77,15 +77,24 @@ and message publication.
 The engine claims work rather than delegating broker operations to agents.
 Deliveries are leased and redelivered when a turn fails before acknowledgement.
 
-### Planned Release 1 boundaries
+### Release 1 capability status
 
-The current architecture does not yet implement managed MCP connections,
-application-managed skills/project steering, first-class user tasks, or
-dynamic child executions. Their proposed API, persistence, authorization,
-audit, and failure contracts are documented in
-[product-contracts.md](product-contracts.md). The target component view there
-is explicitly planned and must not be read as a description of deployed
-components.
+Release 1 is in progress. The main paths for task-oriented workflows,
+standalone operation, and issue-to-pull-request delivery are available.
+
+- **Implemented.** Installation-managed MCP connections and gateway tool
+  invocation, MCP templates and browser OAuth, managed skills and project
+  steering, prompt-first tasks and drafts, task consent, and reviewed task
+  execution admission and recovery.
+- **In progress.** Dynamic delegation and execution trees, MCP vendor profiles
+  and qualification, standalone installation and recovery, and gateway-mediated
+  source control delivery.
+- **Planned.** Managed MCP server hosting and final Release 1 acceptance,
+  including the consolidated clean-install exercise and developer walkthrough.
+
+See the [specification index](../specs/README.md) for the full status list and
+[product contracts](product-contracts.md#6-planned-component-boundaries) for
+the target component view.
 
 ## 3. Architectural principles and how they are enforced
 
@@ -325,9 +334,9 @@ func (r *Registry) Schemas(p *Principal) []llm.ToolSchema // only granted tools 
 
 **How a call is handled:**
 
-1. **Authorise, default deny.** A grant matches a tool by tool name or by capability, using globs (`git.*`, `*`). When several grants match, they are merged permissively: a call is allowed if any one of them would allow it, and approval is required only if every matching grant requires it.
+1. **Authorise, default deny.** Apply the [grant matching rules](tool-permissions.md#matching-and-merge-semantics-as-implemented-in-policygo). MCP tools and `delegation.request` require exact grants.
 2. **Rate-limit** with a per-node token bucket.
-3. **Approval:** if required, block on `hitl`.
+3. **Check task scope and approval.** For runs with task consent, apply the [task authorization rules](task-authorization.md) alongside the tool grant. Wait on `hitl` when a human decision is required, then recheck consent before invoking the tool.
 4. **Execute** with constraints:
    - `paths`: `**` globs checked against a jail resolved through symlinks;
    - `commands`: argv allowlist; a command string containing shell metacharacters is rejected when the grant is constrained;
@@ -413,7 +422,7 @@ Every fact is appended to the event log *before* it is fanned out: graph lifecyc
 
 | Decision | Alternatives | Why | Consequences |
 |---|---|---|---|
-| **Store-tailing SSE.** | Broker-based fan-out; in-memory only. | Multi-instance correctness and exact resume with no extra infrastructure. | One store read per wake-up or second per subscriber. Narration-heavy graphs grow the log, so prune old events (`engine.eventRetention` is defined but pruning is roadmap). |
+| **Store-tailing SSE.** | Broker-based fan-out; in-memory only. | Multi-instance correctness and exact resume with no extra infrastructure. | One store read per wake-up or second per subscriber. Narration-heavy graphs grow the log. See [storage retention](database-schema.md#retention). |
 | **Recovery by redelivery, not replay.** | Event sourcing with deterministic replay. | LLM turns are non-deterministic; replaying them is meaningless. | The event log explains what happened; the broker and store hold the state needed to continue. |
 | **Best-effort history writes.** | Fail delivery if history fails. | Observability must not stop work. | History can have gaps under store outages, and the duplicate pre-check depends on it (see the limitations). |
 
@@ -487,8 +496,8 @@ Telemetry is optional: without `OTEL_EXPORTER_OTLP_ENDPOINT`, only stdout and `/
 
 | Item | Status |
 |---|---|
-| MCP tool provider (`mcp.<server>.*` grants) | Extension point. Grants parse, but no provider is registered. |
-| Sandbox daemon | Privileged Docker-in-Docker (rootless planned); one daemon per installation; no egress allowlist yet (`bridge` = whole internet); runtimes launched from `runtime.image` are not supported there. See [sandbox-runtime.md](sandbox-runtime.md#limitations). |
+| MCP tools | Installation-managed connections discover remote tools. Gateway invocation requires an exact `mcp.<connectionId>.<toolName>` grant. Managed MCP server hosting is planned. See [MCP connections and permissions](mcp.md). |
+| Sandbox daemon | Privileged Docker-in-Docker, one daemon per installation. `bridge` gives unrestricted internet access. Use the HTTP/HTTPS allowlists in `egress` mode for [runtime](environments.md#runtime-egress-proxy-and-per-environment-hosts-implemented) and [preparation](environments.md#build-and-setup-egress-proxy-implemented). External runtimes launched from `runtime.image` run separately. See [sandbox limitations](sandbox-runtime.md#limitations) for the boundaries, including rootless support. |
 | Kubernetes: engine-managed per-replica runtime/tool pods | Extension point. Use `weft k8s render` plus an explicit `endpoint`. Tools for `kubernetes` isolation currently run in the process sandbox of the `weftd` pod. |
 | Streaming LLM responses | Native turns only, for live narration (throttled, not per token); not offered to external agents through the LLM gateway endpoint; Anthropic does not stream. See [native-coding-runtime.md](native-coding-runtime.md#live-output-nat-09). |
 | Event-log pruning | Not implemented: the event log, message history and executions are kept until pruned externally (see [database-schema.md](database-schema.md#retention)). |

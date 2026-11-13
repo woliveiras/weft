@@ -90,6 +90,8 @@ recorded at the request estimate (`estimated: true`).
 | Task run | Ceiling for one run, raised by a human when reached |
 
 - Periods: calendar month (UTC) or per run.
+- A changed monthly definition applies to the current period. A manually raised
+  ledger keeps its higher limit until a definition exceeds it or the period ends.
 - Thresholds: a **warning** level (default 80%) and a **hard** level (100%).
   An optional **interrupt** level (for example 110%) stops a turn that is still
   running.
@@ -114,6 +116,10 @@ The enforcement point is the LLM gateway, before dispatch:
    whole reservation.
 5. Failure to persist a reservation or settlement is returned to the caller and
    fails closed.
+
+Zero-cost calls, including unpriced calls allowed by the price policy, pass the
+reservation check even at the limit. With `unpriced: "refuse"`, the gateway
+refuses unpriced calls while a budget applies.
 
 What happens when a threshold is reached:
 

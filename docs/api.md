@@ -250,22 +250,12 @@ else is unpriced. Weft ships no vendor prices. See
 | `GET /api/v1/cost/budgets/{scope}/{budget}` | viewer | Ledger view `{limitMicros, chargedMicros, estimatedMicros, reservedMicros, remainingMicros, reached, paused, raisedBy, notResumed?, invalid?, revision?}`; scope `run` with the task run's execution graph id, or a monthly scope with `<id>@<YYYY-MM>` (UTC month). Historical monthly views suppress `paused` and `notResumed`. Only scope, ID and revision are meaningful when `invalid` is true. |
 | `POST /api/v1/cost/budgets/{scope}/{budget}/raise` | admin | `{"limitMicros": n}` (must be higher). Audited as `budget.raised`. When charged plus reserved spend is at or above the new limit, the response keeps `reached` true and existing holds remain in place without a pending resume. Otherwise the controller attempts resumptions within a shared four-second window. `notResumed` lists graph IDs with pending resumptions and is also available from the ledger GET endpoints. The controller retries pending transitions in the background. The graph stays paused if any applicable ledger is reached, with the blocking scope identified in `budget.graph_transition`. Stopped, deleted and finished runs are cleared and audited. Closed periods return 422 and invalid ledgers return 409. |
 
-Before each model call of a task run (native turns, external callbacks and
-delegation children), the gateway reserves the call's maximum cost (input
-estimate plus a finite output allowance) with compare-and-set, so concurrent
-calls cannot overshoot. A call that does not fit is refused before dispatch,
-`budget.reached` is emitted once and the run is paused until a person raises
-the budget or stops it. Reported usage settles the reservation; unknown usage
-keeps it as an estimated charge. Free calls (local plugins, or unpriced models
-when the price policy allows them) still run at the limit; with
-`unpriced: "refuse"`, unpriced calls are refused while a budget applies.
-
-Every applicable budget is checked: the run's own, and the installation,
-user (who created the task), project and workflow monthly budgets. The
-tightest one decides; if one refuses, the parts reserved on the others are
-released. A reached monthly budget also refuses new task starts (`409`). A
-changed definition applies to the current month unless a person raised that
-month's ledger above it.
+[Budget enforcement](cost-control.md#enforcement) covers reservation, settlement,
+pause and resume for native turns, external callbacks and delegation children.
+The user budget is keyed to the task creator. A reached monthly budget blocks
+new task admission with `409 budget_admission_blocked`. A blocked graph or node
+control request returns `409 budget_resume_blocked`. Both responses identify the
+blocking ledger in `details.scope` and `details.id`.
 
 ## Installation network policy
 
