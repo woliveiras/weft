@@ -1,6 +1,18 @@
 {
   "version": 2,
   "skills": {
+    "product-testing-engineering": {
+      "source": "woliveiras/storehouse",
+      "sourceType": "github",
+      "skillPath": "skills/product-testing-engineering/SKILL.md",
+      "computedHash": "1ebb4ea43749b7846d36bd6a28d3bd437b4684fb363b75ab782af69ca4786b90"
+    },
+    "product-ui-ux-design": {
+      "source": "woliveiras/storehouse",
+      "sourceType": "github",
+      "skillPath": "skills/product-ui-ux-design/SKILL.md",
+      "computedHash": "b093c66b36ca4f3b3b4dfbe4c7c3b46dcce75425d1d31a5791343bd83e90c7ac"
+    },
     "sdd-specification": {
       "source": "woliveiras/storehouse",
       "sourceType": "github",
