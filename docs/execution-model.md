@@ -161,5 +161,9 @@ Each replica also has a scratch folder `<workdir>/.weft/<node>/r<n>` (`@loop`) f
 
 ## Native analysis delegation
 
-See [delegation](delegation.md) for the explicit grant, mandatory approval, child
-execution records, event metadata, fixed limits and inclusive usage accounting.
+Delegation uses the installation's approval mode. In `required` mode (the
+default), each child waits for an operator or admin decision in Approvals.
+In `automatic` mode, the child skips that delegation decision. The exact
+`delegation.request` grant and any configured tool approval still apply.
+See [delegation](delegation.md) for child execution records, event metadata,
+fixed limits and inclusive usage accounting.

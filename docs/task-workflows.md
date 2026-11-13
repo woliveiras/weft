@@ -5,8 +5,9 @@ The current wire contract remains [OpenAPI](../api/openapi.yaml).
 
 ## Prompt-first tasks and authorization modes — incremental delivery
 
-**Decision: 2026-10-19. PROMPT-01 editor, PROMPT-02 interpretation and PROMPT-03 public URL import and PROMPT-04 Git authentication are implemented;
-PROMPT-05 conditional prompt submission is implemented; authorization modes remain planned.** New task starts with
+**Decision (2026-10-19).** The prompt-first editor (PROMPT-01), interpretation
+(PROMPT-02), public URL import (PROMPT-03), Git authentication (PROMPT-04) and
+conditional submission (PROMPT-05) are implemented. New task starts with
 the Request field, visible workflow/environment selectors and collapsed Review
 settings. A new draft derives an editable display title from the first prompt
 line, bounded to 200 UTF-8 bytes; explicit and loaded titles are preserved.
@@ -14,8 +15,10 @@ Ambiguous required fields open the settings disclosure on validation failure.
 Saving still only persists a draft. Resolve request explicitly invokes the default
 model; URLs are identified but never fetched. Run task can resolve and start after server review using the existing admission path.
 The separate review/confirmation/start API remains available.
-The primary view reports existing authorization policies instead of offering
-unimplemented modes. No installation permission or shared workflow is changed.
+New tasks default to Ask for approval at admission. Save or resolve the draft to
+review capabilities and explicitly confirm another mode before starting. Task
+consent leaves installation permissions and shared workflows unchanged. See
+[Task authorization](task-authorization.md).
 
 ### Implemented request interpretation (PROMPT-02)
 
@@ -260,32 +263,30 @@ fake approval requests. Any repair must be revalidated before execution resumes.
 
 ### Authorization mode selection
 
-Expose the mode beside the prompt and throughout execution, for example:
-**Software Factory · Local worktree · Full access**. The selection applies to the
-task and participating agents within their effective grants, including delegated
-children without permission amplification. These are planned presets, not claims
-that the current gateway already supports task-level mode overrides.
+Show the mode beside the prompt and throughout execution, for example
+**Software Factory · Local worktree · Full access**. The selected mode applies
+within each agent's effective grants. Delegated children inherit the task's
+authorization ceiling and keep their own narrower grants. The
+[task authorization guide](task-authorization.md) defines the current modes and
+gateway precedence.
 
-| Mode | Intended behavior |
+| Mode | Behavior |
 |---|---|
-| Ask for approval | Ask for commands, modifications and external actions classified as requiring approval by the effective policy. Reads need not all become approval prompts. |
-| Workspace access | Preauthorize applicable commands and modifications in the task worktree; additional access requires approval when policy permits. This label is not a claim of OS confinement for native commands. |
-| Full access | Preauthorize the broad, explicitly reviewed capability set for the task, without individual prompts inside that scope. It does not grant unavailable tools or override mandatory installation policy. |
+| Ask for approval | Default at admission. Requires a human decision before each granted tool call. |
+| Workspace access | Preauthorizes jailed filesystem tools, Git reads and shell calls in Docker sandboxes. Other tools require a decision. Process shell execution is refused, including in the `weftd` pod with `isolation.mode: kubernetes`. |
+| Full access | Preauthorizes granted operations within the reviewed task scope. Mandatory approvals and other policy gates still apply. |
 
-Choosing Full access requires a concise review showing actual execution location,
-accessible files, network, external operations, and whether commit and push are
-included. Ordinary use must not repeat this confirmation for every command.
-A project may remember an explicitly confirmed preference; scope changes must not
-silently inherit broader authorization. Record the actor, mode, reviewed scope,
-policy/workflow version and time so automatic approval is auditable. Exact
-persistence fields and policy precedence require a design/implementation review.
+The Full access review shows the actual execution location, accessible files,
+network, external operations, and whether existing grants allow Git commit and
+push within the reviewed scope. The review applies to the task. A saved project
+preference is a suggestion that requires explicit confirmation for each new task.
+Configuration changes invalidate prior consent. Record the actor, mode, reviewed
+scope, policy/workflow version and time so automatic approval is auditable.
 
 Authorization mode and environment are independent. Full access in a sandbox is
-bounded by that sandbox's effective isolation and network/resource policies. Local
-commands execute with the OS user's authority; a worktree alone cannot enforce a
-filesystem or network boundary. Before shipping Workspace access for arbitrary
-native commands, define enforceable limits or require an explicit escalation;
-do not promise containment based on the command's working directory.
+bounded by that sandbox's effective isolation and network/resource policies. A
+local worktree separates changes. Native commands still run with the OS user's
+filesystem and network access.
 
 MCP tools still require explicit per-agent grants. Selecting Full access cannot
 silently authorize a new connection, add tools, expose credentials or grant child
@@ -294,12 +295,13 @@ remain active and visible. Commit/push must be represented explicitly in the
 reviewed scope; neither follows merely from a code-editing request. Restrictive
 user instructions must not be silently broadened by prompt interpretation.
 
-Allow reducing the mode and stopping the task. Revalidate pending and subsequent
-actions after a mode change; already dispatched external effects cannot be undone
-by changing a selector. Define cancellation behavior for in-flight commands.
-Continue recording actions and decisions even when individually preauthorized.
-An **Approve for me** risk-evaluation mode is deferred until there is a separately
-designed and tested evaluator; do not imply such an evaluator currently exists.
+An active task can reduce automatic authorization from Full access to Workspace
+access or Ask for approval, or from Workspace access to Ask for approval. Pending
+and subsequent calls recheck consent. In-flight operations may finish. **Stop task**
+requests cancellation through the task's execution copy and preserves its history.
+External effects are not rolled back. Keep recording actions and decisions even
+when individually preauthorized. An **Approve for me** risk-evaluation mode remains
+deferred pending a separately designed and tested evaluator.
 
 ### Validation before delivery
 

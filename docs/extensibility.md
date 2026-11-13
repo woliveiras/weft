@@ -299,9 +299,10 @@ for files, `tools.CheckCommand` for commands, `tools.CheckHost` for network
 destinations, and run processes only through `inv.Sandbox`. Return failures
 as `&tools.Result{IsError: true, Content: ...}` so the model can recover.
 
-An MCP bridge is a tool provider that registers one `Tool` per MCP tool with
-names `mcp.<server>.<tool>` and capability `mcp.<server>` — matching the grants
-the graph document format.
+Installation-managed [MCP connections](mcp.md) have their own discovered tool
+catalogue. A graph grants an MCP tool by its exact
+`mcp.<connectionId>.<toolName>` name. The generic capability and glob rules above
+apply to ordinary tool grants.
 
 ## Add a sandbox
 

@@ -183,10 +183,12 @@ issue, and the hold appears in Activity and the trigger. A claim applies
 project, workflow and task run. Administrators enter prices per million tokens
 (Weft ships none; local plugins such as Ollama cost nothing unless priced),
 a budget for every task run, and monthly budgets for the installation, a user,
-a project or a workflow. A run that reaches a budget pauses before the model
-is called; the task shows why, and an administrator can raise the budget to
-let it continue. New tasks show the budgets they will be held to. See
-[cost control](cost-control.md).
+a project or a workflow. New tasks show their applicable budgets. A reached
+monthly budget can block a task from starting. During a run, a call that cannot
+reserve enough budget is refused before dispatch and the run pauses. The task
+shows the reason. An administrator can raise the blocking budget in **Models →
+Costs**. See [budget enforcement](cost-control.md#enforcement) for admission,
+pause and resume behavior.
 
 ### What a model needs to run agents
 

@@ -13,7 +13,7 @@ schemas alongside the code.
 
 | Surface | Current contract and implementation | Known boundary |
 |---|---|---|
-| Public API | `/api/v1` REST API, role-checked per route; graph CRUD/versioning, lifecycle, messages, chat, executions, events, approvals, model providers, tools, workspace file listing/reading and Git inspection. See [API reference](api.md) and [OpenAPI](../api/openapi.yaml). | Skills/steering are implemented (see section 3); MCP registration/discovery are implemented; first-class user tasks remain planned; bounded native-child recursion, analysis profiles and configurable approval/limits are implemented (see section 4). |
+| Public API | `/api/v1` REST API, role-checked per route; graph CRUD/versioning, lifecycle, messages, chat, executions, events, approvals, model providers, tools, workspace file listing/reading and Git inspection. See [API reference](api.md) and [OpenAPI](../api/openapi.yaml). | Skills/steering and MCP registration/discovery are implemented (see section 3). Prompt-first tasks, reviewed task-owned execution copies, [task authorization](task-authorization.md), bounded native-child recursion, analysis profiles and configurable delegation approval/limits are implemented (see section 4). |
 | Web console | React/TypeScript SPA served by `weftd`; graph canvas, provider/integration settings, files, approvals, managed Docker reviews/previews, events, and operational views. Main surfaces: `web/src/App.tsx`, `GraphCanvas.tsx`, `IntegrationsView.tsx`, `FilesView.tsx`, `ApprovalsView.tsx`, and `EventsView.tsx`. | The canvas edits a local graph draft (agents, channels, properties, positions) shared with the YAML view and saves it through the whole-document `PUT` with `If-Match`; validation errors are mapped to the agent/channel field that caused them. File interaction is partial; user file operations are read-only. |
 | Runtime | External runtimes use Runtime Protocol v1. `TurnInput` carries graph/node/replica context, prompt, inputs, model reference, granted tools, and a per-execution callback token. Model calls and tools are mediated by the control plane. | Effective instruction snapshots are sent and persisted; native analysis children are implemented for native and external parents through authenticated callbacks; external child runtimes remain planned. Platform-managed provider credentials are not sent to runtimes; graph-authored `runtime.env` and `config` are passed as runtime inputs and are not a secure secret store. |
 | Tools and permissions | Default-deny tool gateway. Graph node `tools` grants are enforced for native and external agents; constraints and approval/rate limits are defined in [tool permissions](tool-permissions.md). | MCP registration/discovery and gateway invocation enforce exact grants and current connection state; see [MCP limits](mcp.md). |
@@ -67,8 +67,8 @@ and [gateway operations](sandbox-runtime.md#human-review-and-application-preview
 
 ### MCP connections
 
-MCP connections are installation-scoped resources and may have multiple
-connections for the same service. The API contract is listed below; the delivered scope is described in [MCP scope](mcp.md). Deletion removes local configuration and permanently reserves its ID.
+An installation can configure multiple connections for one MCP service. The
+[MCP guide](mcp.md) covers the connection lifecycle and tool authorization.
 
 | Method and path | Minimum role | Contract |
 |---|---|---|
@@ -81,14 +81,14 @@ connections for the same service. The API contract is listed below; the delivere
 | `POST /api/v1/mcp/connections/{connectionId}/test` | operator | Test reachability/authentication and report a redacted result. |
 | `POST /api/v1/mcp/connections/{connectionId}/tools/refresh` | operator | Discover and persist the current tool catalogue; return the new catalogue revision. |
 
-Connection metadata includes `callsPerMinute` (0/unset unlimited, fixed UTC-minute aggregate quota, up to 60,000), `id`, `service`, display name, endpoint/transport
+Connection metadata includes `id`, `service`, display name, endpoint and transport
 metadata, `status`, `credentialConfigured`, `lastTest`, `toolsRevision`,
-`createdAt`, `updatedAt`, and `updatedBy`. Credential values, authorization
-headers, refresh tokens, and ciphertext are never part of a read model.
-Secrets are encrypted with the installation secret key before being placed in
-revisioned settings, one setting per connection (for example,
-`mcp/connections/{connectionId}`), so updates to distinct connections do not
-overwrite each other.
+`createdAt`, `updatedAt`, `updatedBy`, and `callsPerMinute`. See the
+[quota rules](mcp.md#connection-quotas-and-call-history) for `callsPerMinute`.
+Read models exclude credential values, authorization headers, refresh tokens and
+ciphertext. The installation secret key encrypts secrets before storage. Each
+connection has its own revisioned setting, `mcp/connections/{connectionId}`, so
+updates to different connections are independent.
 
 **Implemented invocation contract:** The platform owns MCP transport sessions. Agent runtimes never receive MCP
 credentials or connect directly to MCP servers. Discovered tools are exposed
@@ -385,44 +385,21 @@ forces Docker removal or deletes workspaces/private caches. Historical resources
 without registered ownership remain untouched. See
 [shared cleanup](environments.md#cleanup-of-unused-shared-generations).
 Global CPU accounting is implemented for execution, builds, setup and cache copies, with finite defaults, atomic durable reservations, kernel caps, cancellation and readmission on resume. Legacy memory-only reservations block new admission until normal stop/reset releases them.
-The target lifecycle below includes those extensions.
 
 #### Reuse and resource lifecycle
 
-Reuse prepared images and compatible dependency caches across tasks for the
-same authorized repository and effective environment. The reuse identity must
-include the definition, relevant preparation inputs (including lockfiles),
-platform and policy. Reuse unchanged environments; rebuild on relevant input
-changes or explicit request. Coordinate concurrent builds with leases so the
-same compatible environment is not built repeatedly.
-
-Task workspaces/worktrees and active execution containers remain isolated.
-Continuing the same task may reuse its container, but simultaneous tasks must
-not share mutable task state. Share dependency caches only where concurrent
-access is supported; otherwise lock or isolate them. Shared image layers must
-exclude task-specific workspace contents and secrets, and reuse must not expose
-private artifacts across unauthorized scopes.
-
-Image/cache reuse saves build time and disk; memory consumption is controlled
-by per-sandbox CPU/memory limits and a global budget for active builds and
-executions. Queue tasks when capacity is exhausted and release capacity on
-completion, failure or cancellation. Stop idle containers while preserving
-resumable task state and workspace data.
-
-Track references and ownership for shared images/caches. Reset, graph deletion
-and cleanup must not remove resources another task still needs; reclaim unused
-resources through an explicit lifecycle. Reset retains shared generations; explicit cleanup rechecks references before removal.
-
-The console should explain source selection, approval waits, reuse versus
-rebuild (and why), capacity waits and reset effects. Extend existing audit and
-telemetry mechanisms for these outcomes without sensitive payloads or unbounded
-metric labels. Unit, integration and browser tests must cover discovery order,
-approval gating, reuse/invalidation, concurrent access, workspace isolation,
-resource admission and safe reset; see the acceptance evidence for coverage and limits.
+[Project environments](environments.md#reuse-across-tasks) owns the reuse,
+invalidation and cleanup rules. Each task keeps its own workspace, active
+container and writable cache copies. Shared image layers exclude task-specific
+files and secrets. The console explains source selection, approval and capacity
+waits, why an image was reused or rebuilt, and what Reset retains. See
+[sandbox capacity](sandbox-runtime.md#global-execution-sandbox-capacity) for
+admission, release and recovery, and [acceptance evidence](sandbox-acceptance.md)
+for test coverage and limits.
 
 ## 4. User Tasks and Child Executions
 
-### User-initiated tasks — implemented foundation and planned prompt-first UX
+### User-initiated tasks
 
 Durable task drafts, reviewed task-owned execution copies, registered local
 projects/worktrees and contextual progress/approval views are implemented within
@@ -431,39 +408,24 @@ the existing engine, queues, gateway, storage and versioned workflow graphs;
 they do not introduce another execution engine or a new user-role hierarchy.
 The current implemented API remains [OpenAPI](../api/openapi.yaml).
 
-**Incremental delivery, agreed 2026-10-19:** The prompt-first editor and collapsed
-Review settings are implemented (PROMPT-01), with an editable title derived from
-the prompt. PROMPT-02 adds explicit Resolve request: bounded model interpretation,
-server-validated workflow/bindings and durable repair states. It preserves the
-original request and grants, never imports URLs or starts agents. The selected
-workflow overrides interpretation; otherwise the named workflow or compatible
-Software Factory default is used. Saving still only creates/updates a draft;
-PROMPT-05 now offers an administrator-confirmed Run task action that resolves,
-reviews and starts only when requirements are satisfied, using the existing admission
-path. Missing inputs remain durable for explicit continuation; submission-key replays
-do not redispatch. Separate reviewed start remains available. The implemented contract is:
-New task becomes a prompt-first entry point accepting
-an objective and repository URL, with optional workflow selection and collapsed
-Review settings. A compatible configured workflow (initially Software Factory)
-can start on submit only when prerequisites and previously reviewed authority
-are satisfied. Missing inputs and approvals pause the durable task context.
-The same approval appears in the task and global inbox; hard policy denials
-remain denials. PROMPT-03 adds explicitly confirmed public HTTPS repository imports
-from Projects and New task, with persisted progress, cancellation, safe retry and
-pinned project reuse. It does not start tasks, grant access or use host credentials.
-PROMPT-04 adds per-attempt HTTPS tokens and explicitly selected native Git helper/
-GitHub CLI authentication. Secrets are not persisted, and server installations cannot
-select host authentication. MCP OAuth remains separate; task-level authorization
-modes remain planned.
+The [prompt-first workflow](task-workflows.md#prompt-first-tasks-and-authorization-modes--incremental-delivery)
+covers the editor, workflow selection, request interpretation and repository
+imports. Saving persists a draft. **Run task** requires administrator confirmation
+and uses existing admission after server review. Missing inputs stay in the draft
+for explicit continuation, and replaying a submission key cannot start another
+execution. The separate reviewed start remains available. The task and global
+inbox share one approval decision. A policy denial blocks the operation.
 
-Planned modes are **Ask for approval**, **Workspace access** and **Full access**.
-Full access preauthorizes a reviewed task scope, not all tools/accounts or a bypass
-of installation restrictions. Review native/sandbox location, file/network access,
-external actions and commit/push explicitly. Worktrees do not isolate native
-processes. Existing per-agent grants, child permission limits, mandatory policies
-and audit history remain. Project preference reuse and in-flight mode changes
-must preserve explicit scope and stale-policy checks. A risk-based **Approve for
-me** mode is deferred. See the linked contract for semantics and acceptance tests.
+[Task authorization](task-authorization.md) defines the implemented modes and
+gateway precedence. New tasks default to **Ask for approval** at admission.
+**Workspace access** and **Full access** require explicit confirmation of the
+reviewed task scope before starting. The gateway enforces installation policy,
+agent grants and mandatory approvals in every mode, including for delegated
+children. Project preferences are suggestions that require confirmation for each
+new task. Active tasks can only reduce automatic authorization, and pending calls
+recheck consent. The workflow guide covers the
+[mode selection and review](task-workflows.md#authorization-mode-selection).
+A risk-based **Approve for me** mode remains deferred.
 
 ### Dynamic child execution
 
@@ -577,7 +539,9 @@ reliable but provider pricing is not.
 | Read safe MCP/skill/task metadata and task history | yes | yes | yes | no |
 | Test an MCP connection or refresh its tool catalogue | no | yes | yes | no |
 | Create/update/revoke MCP connections or global skills | no | no | yes | no |
-| Start/cancel user tasks or decide approvals | no | yes | yes | no |
+| Start or cancel user tasks, or save task consent | no | no | yes | no |
+| Decide ordinary approvals | no | yes | yes | no |
+| Decide environment proposals | no | no | yes | no |
 | Invoke an MCP tool | no | no | no | only via current execution token and explicit effective grant |
 | Request a child execution | no | no | no | only via current execution token, enabled policy, approved profile, and enforced limits |
 | Read/write project steering | read-only through its authorized execution context | read-only through its authorized execution context | configure graph access | only content passed for this workspace; no direct host filesystem access |
@@ -590,27 +554,18 @@ designed.
 
 ### Audit event families
 
-Extend the event catalogue with installation-level events (no `graphId`
-unless the operation also names a graph) that never include credential
-material:
+The [event catalogue](events.md) defines the emitted names and payloads for
+[installation and task audit](events.md#installation-and-task-audit-events),
+[instructions](events.md#instruction-events) and
+[delegation](events.md#native-analysis-delegation). MCP tool calls use the
+gateway's `tool.*` events. See [MCP call history](mcp.md#connection-quotas-and-call-history)
+for the fields exposed to readers.
 
-- `mcp.connection.changed` and `mcp.connection.tested`;
-- `mcp.tools.refreshed`;
-- `mcp.tool.invoked`, `mcp.tool.completed`, and `mcp.tool.denied`;
-- `skill.changed`;
-- `task.created`, `task.state_changed`, and `task.completed`;
-- `delegation.profile.changed`, `delegation.policy.changed`,
-  `delegation.requested`, `delegation.approval_decided`, and
-  `delegation.state_changed`.
-
-Events include actor, scope IDs, resource IDs, revision, outcome, duration,
-and safe error code as applicable. Do not log raw credentials, auth headers,
-full prompts, or unredacted MCP arguments/results. For security-sensitive
-mutations (credential change/revocation, grants, approval decisions, and
-delegation policy changes), persist the required audit event before reporting
-success; surface an explicit error if it cannot be persisted. High-volume
-tool-call telemetry may follow the existing event policy but must never be
-presented as a guaranteed audit record unless durable append is confirmed.
+Use actor, scope and resource IDs, revision, outcome, duration and safe error
+codes where applicable. Omit raw credentials, auth headers, full prompts and
+unredacted MCP arguments or results. For security-sensitive changes that require
+an audit record, persist it before reporting success and surface failures. Tool
+telemetry is a guaranteed audit record only when durable append is confirmed.
 
 ### User-visible state and error mapping
 
@@ -633,8 +588,8 @@ connection/provider, omitted security policy, or a successful state.
 
 ## 6. Planned Component Boundaries
 
-The following view describes the target boundary for Release 1 additions; it
-does not depict currently shipped components:
+The following view describes the target boundaries for Release 1 additions.
+See the [specification index](../specs/README.md) for implementation status.
 
 ```mermaid
 flowchart LR
