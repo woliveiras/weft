@@ -196,8 +196,11 @@ func testBudgetRaise(t *testing.T, state string) {
 		v.Paused != (state == "blocked") || v.LimitMicros != 10_000_000 || v.RaisedBy != "admin" || !slices.Equal(v.NotResumed, pending) {
 		t.Fatalf("raise: %d %+v", c, v)
 	}
-	if _, rec, err := a.Engine.GetGraph(t.Context(), gid, 0); state != "deleted" && (err != nil || rec.DesiredState != want) {
-		t.Fatalf("state after raise: %+v %v", rec, err)
+	if state != "deleted" {
+		waitFor(t, 5*time.Second, "raised budget applies expected graph state or settles the resumed task", func() bool {
+			_, rec, err := a.Engine.GetGraph(t.Context(), gid, 0)
+			return err == nil && (rec.DesiredState == want || (want == domain.GraphRunning && settledBudgetTask(t, a.Store, gid, d.ID)))
+		})
 	}
 	var audit struct {
 		Resumed, NotResumed []string
@@ -222,7 +225,7 @@ func testBudgetRaise(t *testing.T, state string) {
 		}
 		waitFor(t, 12*time.Second, "pending resume applied and audited", func() bool {
 			_, rec, err := a.Engine.GetGraph(t.Context(), gid, 0)
-			if err != nil || rec.DesiredState != domain.GraphRunning {
+			if err != nil || (rec.DesiredState != domain.GraphRunning && !settledBudgetTask(t, a.Store, gid, d.ID)) {
 				return false
 			}
 			var fresh view
@@ -298,9 +301,10 @@ func TestMonthlyBudgetPausesRunsAndRefusesNewTasks(t *testing.T) {
 	if c := call(t, srv, "POST", ledger+"/raise", adminTok, "application/json", `{"limitMicros":100000000}`, &v); c != 200 || v.Reached || v.Paused {
 		t.Fatalf("raise: %d %+v", c, v)
 	}
-	if _, rec, err := a.Engine.GetGraph(t.Context(), gid, 0); err != nil || rec.DesiredState != domain.GraphRunning {
-		t.Fatalf("raise must resume the run: %+v %v", rec, err)
-	}
+	waitFor(t, 5*time.Second, "monthly raise resumes or settles the task", func() bool {
+		_, rec, err := a.Engine.GetGraph(t.Context(), gid, 0)
+		return err == nil && (rec.DesiredState == domain.GraphRunning || settledBudgetTask(t, a.Store, gid, d.ID))
+	})
 	if _, c := start(); c != 202 {
 		t.Fatalf("new tasks start after the raise: %d", c)
 	}
@@ -638,4 +642,33 @@ func seedLifecycleLedger(t *testing.T, st storage.Store, graph, run, scope, id s
 	if _, err := st.PutSetting(t.Context(), cost.BudgetPrefix+scope+"/"+id, raw, 0, "fixture"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// A resumed task can finish before the observer reads the graph. In that case
+// require both stopped graph state and its persisted terminal task outcome;
+// the calling tests still require the budget resume audit and cleared hold.
+func settledBudgetTask(t *testing.T, store storage.Store, graphID, taskID string) bool {
+	t.Helper()
+	rec, err := store.GetGraphRecord(t.Context(), graphID)
+	if err != nil || rec.State != domain.GraphStopped || rec.DesiredState != domain.GraphStopped {
+		return false
+	}
+	task, err := (taskconfig.Manager{Store: store}).Get(t.Context(), taskID)
+	if err != nil || task.ExecutionGraphID != graphID {
+		return false
+	}
+	if task.Status != "succeeded" && task.Status != "failed" && task.Status != "blocked" {
+		return false
+	}
+	events, err := store.ListEvents(t.Context(), storage.EventFilter{GraphID: graphID, Types: []domain.EventType{domain.EvBudgetGraphTransition}})
+	if err != nil {
+		return false
+	}
+	for _, event := range events {
+		var data struct{ Outcome string }
+		if json.Unmarshal(event.Data, &data) == nil && data.Outcome == "resumed" {
+			return true
+		}
+	}
+	return false
 }

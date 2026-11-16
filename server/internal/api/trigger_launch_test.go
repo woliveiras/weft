@@ -307,7 +307,7 @@ func TestTriggerEnvironmentLaunchLifecycle(t *testing.T) {
 			}
 			waitFor(t, 5*time.Second, "trigger task execution", func() bool {
 				view, err := a.API.TaskRunner().View(t.Context(), d.ID)
-				return err == nil && view.State == "succeeded" && len(view.Executions) == 1
+				return err == nil && view.State == "blocked" && len(view.Executions) == 1 && view.Executions[0].Status == domain.ExecSucceeded
 			})
 		})
 	}

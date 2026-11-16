@@ -143,6 +143,7 @@ type Emit struct {
 type Signal string
 
 const (
+	SignalBlocked       Signal = "blocked" // work cannot continue; requires operator attention
 	SignalNone          Signal = ""
 	SignalNoFurtherWork Signal = "no_further_work" // declaration; one confirmation turn follows
 	SignalConfirmStop   Signal = "confirm_stop"    // confirmation; the loop completes

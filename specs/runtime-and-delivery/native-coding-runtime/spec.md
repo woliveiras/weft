@@ -42,6 +42,10 @@ corrected invocation runs through the same gateway and unchanged grant.
 
 Supported provider output streams to the task while completion, usage and budget accounting retain their existing semantics. Interruption is visible and cannot turn partial output into successful completion.
 
+Edge case: an explicit blocked finish records a failed turn with its blocker
+summary, ends the replica without retry and does not publish downstream output.
+A completed turn does not establish that a task delivered its required PR.
+
 ### AC-005 — Factory stages and role guidance
 
 Software Factory v2 composes planning, implementation, read-only review, verification and SCM hand-off under the relevant grants. Small-model guidance is opt-in and the evaluation records whether the workflow completes.

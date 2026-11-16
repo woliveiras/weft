@@ -12,6 +12,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/observability"
+	"github.com/woliveiras/weft/server/internal/secrets"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/tools"
 )
@@ -543,6 +544,9 @@ func (r *Runner) followTask(ctx context.Context, t *Trigger) (string, error) {
 	link := r.TaskURL(t.CurrentTask)
 	add, outcome := LabelFailed, "task_failed"
 	message := "Weft failure. The task ended " + st.State + ". Review the task and resume the trigger when it is ready for more issues.\n\nTask: " + link
+	if st.State == "blocked" && st.PullRequestURL == "" {
+		message = "Weft delivery failure. The task ended blocked without an open pull request. Review the task before retrying.\n\nTask: " + link
+	}
 	if st.LaunchFailure {
 		r.log().WarnContext(ctx, "trigger task launch failed", "trigger", t.ID, "issue", i.Key, "task", t.CurrentTask, "cause", st.Reason)
 		message = "Weft failure. " + st.Reason + "\n\nTask: " + link
@@ -555,19 +559,26 @@ func (r *Runner) followTask(ctx context.Context, t *Trigger) (string, error) {
 			message = "Weft delivery failure. The task finished without an open pull request. Review delivery and resume the trigger.\n\nTask: " + link
 		}
 	}
+	if add == LabelFailed && st.Reason != "" && !st.LaunchFailure {
+		message += "\n\nAgent summary: " + secrets.SafeSummary(st.Reason)
+	}
 	writeErr := errors.Join(relabel(ctx, call, i.Key, []string{LabelInProgress}, add, ""), comment(ctx, call, i.Key, message))
 	_, err = r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
 		current.CurrentTask, current.CurrentIssue, current.CurrentSource = "", nil, SourceConfig{}
 		if add == LabelFailed || writeErr != nil {
 			current.State = Paused
-			current.PausedReason = "Review delivery for " + i.Key + " and resume the trigger."
+			current.LastFailedTask = t.CurrentTask
+			current.PausedReason = "Review delivery for " + i.Key + ". Task: " + link
+			if st.Reason != "" {
+				current.PausedReason += " Agent summary: " + secrets.SafeSummary(st.Reason)
+			}
 			if st.LaunchFailure {
 				current.LastFailedTask = t.CurrentTask
 				current.PausedReason = st.Reason + " Task: " + link
 				current.Processed[DedupKey(t, i)] = "failed"
 			}
 			if writeErr != nil {
-				current.PausedReason = "Tracker write-back for " + i.Key + " could not be confirmed. Review the tracker before resuming."
+				current.PausedReason = "Tracker write-back for " + i.Key + " could not be confirmed. Review the tracker before resuming. " + current.PausedReason
 			}
 		}
 		return nil

@@ -1,0 +1,37 @@
+import {test,expect} from '@playwright/test';
+const headers={Authorization:'Bearer e2e-admin-token'};
+test('a blocked task stops its execution copy and stays outside editable workflows',async({page})=>{
+ const graphId='blocked-task-workflow';
+ const created=await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id:graphId,name:'Blocked task workflow'},spec:{nodes:[{id:'worker',prompt:'task-blocked-fixture',runtime:{kind:'native'},model:{provider:'e2e',name:'fixture'},loop:{mode:'once'}}]}}});
+ expect(created.status()).toBe(201);
+ const response=await page.request.post('/api/v1/tasks',{headers,data:{title:'Blocked dependency update',request:'task-blocked-fixture',outcome:'implement',graphId,graphVersion:1,nodeId:'worker',resultNodeId:'worker'}});
+ expect(response.status()).toBe(201);
+ const task=await response.json();
+ expect((await page.request.post(`/api/v1/tasks/${task.id}/start`,{headers:{...headers,'If-Match':String(task.revision)},data:{confirm:true}})).status()).toBe(202);
+ await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+ await page.goto(`/#/tasks/${task.id}`);
+ await expect(page.getByRole('heading',{name:'Work needs attention',exact:true})).toBeVisible();
+ const journey=page.getByRole('main');
+ await expect(journey.getByLabel('Agent summary')).toContainText('Dependency registry unavailable.');
+ await expect(journey).not.toContainText('fixture-secret-value');
+ await page.reload();
+ await expect(journey.getByLabel('Agent summary')).toContainText('Dependency registry unavailable.');
+ const gid=`task-run-${task.id.slice(4)}`;
+ await expect.poll(async()=>{
+  const saved=await(await page.request.get(`/api/v1/tasks/${task.id}`,{headers})).json();
+  const graph=await(await page.request.get(`/api/v1/graphs/${gid}`,{headers})).json();
+  return [saved.status,graph.record.state,graph.record.desiredState];
+ }).toEqual(['blocked','stopped','stopped']);
+ expect((await page.request.delete(`/api/v1/graphs/${gid}`,{headers})).status()).toBe(409);
+ await page.goto('/#/graphs');
+ await expect(page.getByRole('button',{name:'Blocked task workflow',exact:true})).toBeVisible();
+ await expect(page.getByText('Blocked dependency update',{exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Select graph'}).click();
+ await expect(page.getByRole('region',{name:'Graph selector'})).not.toContainText(gid);
+ await page.getByLabel('Search graphs').press('Escape');
+ await page.goto(`/#/g/${gid}/canvas`);
+ await expect(page.getByRole('heading',{name:'Task execution',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:/^(Stop|Pause|Delete)$/})).toHaveCount(0);
+ await page.getByRole('link',{name:`Open task ${task.id}`}).click();
+ await expect(page.getByRole('heading',{name:'Work needs attention',exact:true})).toBeVisible();
+});

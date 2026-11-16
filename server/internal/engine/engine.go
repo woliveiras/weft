@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -87,6 +88,8 @@ type SandboxFactory func(ctx context.Context, s SandboxSpec) (tools.Sandbox, err
 
 // Options wires the engine to its adapters.
 type Options struct {
+	// SettleTask observes and closes owned task runs in the existing reconciliation cycle.
+	SettleTask         func(context.Context, string) error
 	ValidateToolGrants func(context.Context, *domain.Graph) error
 	Reviews            interface {
 		Pending(context.Context, string, string, int) (bool, error)
@@ -329,6 +332,11 @@ func (e *Engine) reconcile(ctx context.Context) {
 		if err := e.reconcileGraph(ctx, rec); err != nil && ctx.Err() == nil {
 			e.log.Warn("reconcile graph", "graph", rec.ID, "err", err)
 			e.markFailed(ctx, rec, err)
+		}
+		if e.opt.SettleTask != nil && strings.HasPrefix(rec.ID, domain.TaskRunGraphPrefix) {
+			if err := e.opt.SettleTask(ctx, rec.ID); err != nil && ctx.Err() == nil {
+				e.log.Warn("settle task", "graph", rec.ID, "err", err)
+			}
 		}
 	}
 	// Graphs deleted from the store: stop anything still running locally.

@@ -362,35 +362,47 @@ categories rather than copying tracker text, command output, credentials or
 internal paths. Build output remains available in the existing environment
 diagnostics. Uncertain preparation/start is not automatically replayed.
 
-### Explicit recovery of a failed pre-dispatch admission
+### Explicit recovery after admission or delivery failure
 
-**Resume and record consent** plus relabeling alone does not bypass the
-persisted admission. For a GitHub failure whose original task is still a draft
-with no execution copy or executions, an administrator can explicitly authorize
-one new admission:
+**Resume and record consent** plus relabeling alone cannot bypass an admission.
+For a readiness-enabled GitHub trigger, an administrator can authorize one new
+admission for an undispatched failed draft or a stopped task without a recorded
+pull request. A task that declared a blocker, or whose successful turn produced
+no required PR, is eligible. Prior tasks, execution graphs, events and admission
+records remain available for audit.
 
-1. Inspect the failed task and correct the workflow/trigger configuration.
-   Keep the trigger paused and verify that the old task dispatched no work.
-2. Call `POST /api/v1/triggers/{trigger}/retry-failed` with
-   `{"key":"owner/repo#1","taskId":"tsk_original","confirm":true}` using
-   the administrator API session. This cancels the old undispatched draft so
-   it cannot later be started, retains its diagnostics and all prior admission
-   records, and records the actor and a single-use retry generation. It changes
-   neither tracker labels nor the paused trigger state. A failed response must
-   be inspected before repeating the action.
-3. In graph **Settings → Triggers**, select **Resume and record consent**.
-4. After the retry was recorded, a human with GitHub Maintain or Admin permission
-   must remove/reapply `weft:todo`. Also restore the trigger's custom selection
-   label if it differs. Leave `weft:needs-attention` for the runner to remove
-   on claim. Existing or unverified label events cannot authorize the retry.
-5. Wait for a new readiness verdict and budget check, then a new task link and
-   `weft:wip`. With Ask, review the environment decision in **Approvals**.
-   The trigger prepares and starts the new task when ready.
+1. Inspect the original task, agent summary, tool outcomes, branch and tracker.
+   Correct the cause within the reviewed scope. Keep the trigger paused. Confirm
+   that no PR exists or uncertain external delivery needs reconciliation.
+2. For a historical task still marked running, open **Tasks → task → Stop** and
+   confirm. Wait for task progress `cancelled` and execution graph `stopped`.
+   Do not stop the source workflow or delete resources. Newly created tasks
+   settle automatically when no work or approval remains.
+3. Call `POST /api/v1/triggers/{trigger}/retry-failed` as an administrator with
+   `{"key":"owner/repo#1","taskId":"tsk_original","confirm":true}`.
+   An undispatched draft is cancelled; a finished task and its execution copy
+   are retained unchanged. The operation audits the actor and a single-use
+   retry generation. It does not resume the trigger or modify the tracker.
+   Inspect a failed/uncertain response before repeating it.
+4. In workflow **Settings → Triggers**, select **Resume and record consent**.
+5. After the retry was recorded, a human with GitHub Maintain or Admin permission
+   must remove/reapply `weft:todo`. Also restore a custom selection label if
+   configured. Leave `weft:needs-attention` for the runner to remove on claim.
+   Existing, bot or unverified label events cannot authorize a retry.
+6. Wait for current readiness, scope, consent and budget checks, a **new** task
+   link and `weft:wip`. With Ask, review environment and tool approvals. The
+   original task is never dispatched again.
 
-The retry is consumed even if that new launch fails. An already dispatched or
-partially prepared task is refused by this narrow recovery API; inspect and
-resolve its retained resources explicitly. There is no deletion, database edit,
-background cleanup or broad replay of failed tasks.
+For the operational rehearsal, select trigger `weft-issues` and issue
+`woliveiras/weft#1`. Use task `tsk_mwj872yo23cd5e38a778dbc151c7` as the original
+`taskId`, and use the trigger's API ID in the URL (look it up by name). These are
+operator steps, not an automatic migration or instructions to reset the stack.
+
+The retry is consumed even if the new launch fails. Running graphs, unfinished
+executions, pending approvals, recorded PR delivery, uncertain preparation,
+wrong task ownership and incomplete/bounded history return a conflict. Store
+errors propagate without granting recovery. There is no deletion, database
+edit, new reconciler or broad replay of failed tasks.
 
 GitHub triggers use the official GitHub MCP endpoint with a static
 repository-scoped token. Jira Cloud triggers use the official Atlassian MCP
@@ -685,6 +697,28 @@ Progress derives from persisted copy executions and current replica, queue and
 approval state. The explicitly selected result agent supplies the result; active
 work and pending approvals prevent success. Failed/interrupted turns prevent a
 success projection. At the 1,000-execution inspection cap, completion is unknown.
+The native runtime can declare `finish({"signal":"blocked","summary":"..."})`.
+It records a failed execution with signal `blocked`, acknowledges the input and
+ends that replica without automatic retry or downstream output. A correctable
+tool denial should first be retried within the existing grant using `argv` and
+`cwd`. An unavailable tool, rejected approval or unresolved dependency must not
+be described as successful completion. A successful turn alone does not establish
+SCM delivery: a task requiring a PR (including a GitHub issue task) is `blocked`
+when no PR was recorded. The task, trigger pause reason and issue comment expose
+the agent summary as bounded plain text (at most 201 Unicode characters,
+including an ellipsis), with credential/location redaction and a task link.
+
+A `task-run-<task suffix>` graph is a version-pinned execution copy owned by the
+task, not a reusable workflow. Workflows and the workflow selector exclude it;
+a direct workflow link opens a task hand-off page. Existing API mutation guards
+require task controls for these copies. Execution details remain readable.
+New copies carry `weft.task.lifecycle: settled`. The engine's existing
+reconciliation cycle observes task progress, requests stop only after work and
+approvals have settled, and persists the terminal task state after the graph is
+stopped. Budget-paused work and a once-mode replica awaiting retry do not settle.
+No new reconciliation loop is introduced. Historical copies without the marker
+are not stopped or migrated automatically; use the explicit task stop above.
+
 The stored admission status and observed progress are separate; the list displays
 the observed state when available. Missing telemetry is not evidence of success. Once/event
 workflows are supported initially; unsupported modes are blocked before start.

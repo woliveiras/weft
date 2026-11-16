@@ -217,3 +217,15 @@ it('shows the retained task launch cause on a paused trigger',async()=>{
  expect((await screen.findByRole('status')).textContent).toBe(cause);
  expect(screen.queryByRole('button',{name:'Resume and record consent'})).toBeNull();
 });
+
+it('shows the blocked delivery summary and links the original task',async()=>{
+ fakeApi({
+  'GET /api/v1/triggers':()=>[{...paused,currentTask:undefined,currentIssue:undefined,lastFailedTask:'tsk_blocked',pausedReason:'Review delivery for acme/app#7. Task: https://weft.example/#/tasks/tsk_blocked Agent summary: Dependency registry unavailable.'}],
+  'GET /api/v1/scm/connections':()=>[],
+ });
+ render(<TriggersSection graph={graph} role="admin"/>);
+ const card=await screen.findByRole('article',{name:'Trigger Ready'});
+ expect(within(card).getByRole('status').textContent).toContain('Agent summary: Dependency registry unavailable.');
+ expect(within(card).getByRole('link',{name:'Open failed task'}).getAttribute('href')).toBe('#/tasks/tsk_blocked');
+ expect(card.textContent).not.toContain('succeeded');
+});

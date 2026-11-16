@@ -19,6 +19,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/environment"
 	"github.com/woliveiras/weft/server/internal/graph"
+	"github.com/woliveiras/weft/server/internal/secrets"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 )
@@ -144,7 +145,7 @@ func Prepare(d *taskconfig.Draft, source *domain.Graph) (*domain.Graph, []string
 	g.Metadata.ID = ExecutionID(d.ID)
 	g.Metadata.Name = d.Title + " (task execution)"
 	g.Metadata.Version = 0
-	g.Metadata.Labels = map[string]string{domain.LabelTask: d.ID, domain.LabelTaskWorkflow: source.Metadata.ID, domain.LabelTaskUser: d.CreatedBy}
+	g.Metadata.Labels = map[string]string{"weft.task.lifecycle": "settled", domain.LabelTask: d.ID, domain.LabelTaskWorkflow: source.Metadata.ID, domain.LabelTaskUser: d.CreatedBy}
 	if d.ProjectID != "" {
 		g.Metadata.Labels[domain.LabelTaskProject] = d.ProjectID
 		g.Metadata.Labels[domain.LabelTaskBase] = d.BaseCommit
@@ -439,6 +440,13 @@ func (m Manager) View(ctx context.Context, id string) (*View, error) {
 	if err != nil {
 		return nil, err
 	}
+	for i, x := range xs {
+		copy := *x
+		if copy.Summary != "" {
+			copy.Summary = secrets.SafeSummary(copy.Summary)
+		}
+		xs[i] = &copy
+	}
 	v.Executions = xs
 	if len(xs) >= 1000 {
 		v.Blockers = append(v.Blockers, "Execution history exceeds this bounded view; completion cannot be inferred.")
@@ -452,10 +460,17 @@ func (m Manager) View(ctx context.Context, id string) (*View, error) {
 	active := false
 	workersActive := false
 	failed := false
+	blocked := false
 	for _, x := range xs {
 		if !x.Status.Terminal() {
 			workersActive = true
 			active = true
+		}
+		if x.Signal == "blocked" {
+			blocked = true
+			if x.Summary != "" {
+				v.Blockers = append(v.Blockers, x.Summary)
+			}
 		}
 		if x.Status == domain.ExecFailed || x.Status == domain.ExecInterrupted {
 			failed = true
@@ -479,7 +494,8 @@ func (m Manager) View(ctx context.Context, id string) (*View, error) {
 	}
 	for _, n := range st.Nodes {
 		for _, r := range n.Replicas {
-			if r.State == domain.ReplicaStarting || r.State == domain.ReplicaRunning || r.State == domain.ReplicaStopping {
+			if r.State == domain.ReplicaStarting || r.State == domain.ReplicaRunning || r.State == domain.ReplicaStopping ||
+				(r.State == domain.ReplicaIdle && g.Node(n.NodeID) != nil && g.Node(n.NodeID).Loop.Mode != domain.LoopEvent) {
 				workersActive = true
 				active = true
 			}
@@ -508,6 +524,9 @@ func (m Manager) View(ctx context.Context, id string) (*View, error) {
 		active = true
 		v.Blockers = append(v.Blockers, "A human approval is required.")
 	}
+	if d.Status == "cancelled" {
+		return v, nil
+	}
 	if d.Status == "cancel_requested" {
 		if !workersActive && st.State == domain.GraphStopped {
 			v.State = "cancelled"
@@ -530,12 +549,12 @@ func (m Manager) View(ctx context.Context, id string) (*View, error) {
 	// resume. Only infer a terminal task if its replicas have finished.
 	active = active || (st.DesiredState == domain.GraphPaused && !st.RunFinished)
 	if !active && (len(xs) > 0 || failed) {
-		if failed {
-			v.State = "failed"
-		} else if v.Result != nil && v.Result.Status == domain.ExecSucceeded {
-			v.State = "succeeded"
-		} else if st.State == domain.GraphStopped {
-			v.State = "interrupted"
+		state := settledOutcome(failed, blocked, v.Result, v.Delivery, d.TriggerGitHubIssue != "", st.State)
+		if state != "" {
+			v.State = state
+		}
+		if state == "blocked" && !blocked {
+			v.Blockers = append(v.Blockers, "The task finished without the required pull request.")
 		}
 	}
 	return v, nil
@@ -601,4 +620,23 @@ func preparationFailed(st *engine.GraphStatus) bool {
 		}
 	}
 	return false
+}
+
+func settledOutcome(failed, blocked bool, result *domain.Execution, delivery *Delivery, issueTask bool, graphState domain.GraphState) string {
+	if blocked {
+		return "blocked"
+	}
+	if failed {
+		return "failed"
+	}
+	if result != nil && result.Status == domain.ExecSucceeded {
+		if (delivery != nil || issueTask) && (delivery == nil || delivery.PullRequestURL == "") {
+			return "blocked"
+		}
+		return "succeeded"
+	}
+	if graphState == domain.GraphStopped {
+		return "interrupted"
+	}
+	return ""
 }

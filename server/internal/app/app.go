@@ -264,6 +264,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 	a.Engine, err = engine.New(engine.Options{
 		ValidateToolGrants: a.MCP.ValidateGrants,
+		SettleTask:         func(ctx context.Context, graphID string) error { return a.API.TaskRunner().Settle(ctx, graphID) },
 		Reviews:            a.Reviews,
 		Instance:           cfg.Instance, Store: a.Store, Broker: a.Broker, Bus: a.Bus, Approvals: a.Approvals,
 		Models: a.Models, Tools: toolGateway{a.Tools, a.Gateway, a.MCP}, Runtimes: runtimes, Workspaces: ws,

@@ -184,7 +184,7 @@ administrator's current consent.
 | `GET /api/v1/triggers/{trigger}/matches` | operator | Read-only preview returning `{next, waiting[], skipped[], busy}`. GitHub preview spends the shared trigger search budget and reports a deferral in `error` when the budget is full. Preview never evaluates readiness or writes to the tracker. |
 | `POST /api/v1/triggers/{trigger}/resolve-hold` | operator | Resolve the hold identified by `{key, generation}`. Use `force: true` to explicitly abandon a pending or failed label or assignment update, or to abandon comment publication after the label was applied. The tracker keeps its current labels and assignment. The API audits the resolution and frees capacity. It returns 409 if polling is in progress, the claim was interrupted, the hold generation changed, or tracker write-back requires forced resolution. |
 | `POST /api/v1/triggers/{trigger}/pause` | admin | Pause polling. |
-| `POST /api/v1/triggers/{trigger}/retry-failed` | admin | Confirm `{key, taskId, confirm:true}` for a paused readiness-enabled GitHub trigger and its original undispatched failed draft. Cancels that draft, retains previous records, and audits one new admission generation. Does not resume or modify GitHub. Requires a fresh verified maintainer `weft:todo` event after recording; ambiguous/dispatched tasks return 409. |
+| `POST /api/v1/triggers/{trigger}/retry-failed` | admin | Confirm `{key, taskId, confirm:true}` for a paused readiness-enabled GitHub trigger and its original undispatched failed draft or stopped task without PR delivery. Cancels only an undispatched draft; retains finished tasks, graphs and prior admissions, and audits one new admission generation. Does not resume or modify GitHub. Requires a fresh verified maintainer `weft:todo` event after recording; running, ambiguous, unowned or delivered tasks return 409. |
 | `POST /api/v1/triggers/{trigger}/resume` | admin | Record current consent and activate polling. |
 | `DELETE /api/v1/triggers/{trigger}` | admin | Remove the trigger. |
 
@@ -776,3 +776,17 @@ the connection and revoking OAuth when configured (otherwise 422). Success is
 204; removed IDs return 404 on reads and cannot be reused (409 on create).
 Minimal ID reservations and audit history remain; remote registrations are not deleted. MCP execution uses the existing agent tool gateway/callback path; there
 is no standalone endpoint that bypasses the execution principal.
+
+
+Task outcome clarification (2026-11-16): native `finish.signal` also accepts
+`blocked`. Its execution has `status: failed`, `signal: blocked` and the retained
+summary; it ends without input retry or downstream emits. Task progress uses the
+existing `blocked` state for agent blockers and missing required PR delivery.
+New owned execution copies stop through existing engine reconciliation and their
+task `status` persists the settled state. Historical admission records remain
+unchanged; `observedState` / task progress describes the current evidence.
+Task progress execution summaries are sanitized and limited to 201 Unicode
+characters. Raw execution audit records are retained. `GET /graphs` continues to
+include execution copies for diagnostic consumers; the console workflow list
+and selector exclude them. Non-GET graph controls remain refused with 409 for
+`task-run-*`; use the owning task's controls.

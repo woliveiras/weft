@@ -296,7 +296,7 @@ function TaskTracking({task,canControl,canDecide,nativeProfile}:{task:TaskDraft;
       {canControl&&progress?.state==='cancelled'&&current.projectId&&<TaskCleanup taskId={task.id} workspaces={progress.workspaces??[]} onChanged={()=>setRefresh(x=>x+1)}/>}
       {progress?.environment&&<TaskEnvironment key={task.id} task={current} environment={progress.environment} canControl={canControl} onChanged={()=>setRefresh(x=>x+1)}/>}
       {graph&&<TaskPlan key={`plan-${graph}`} graphId={graph}/>}
-      <h3>Result</h3><p>{progress?.result?.summary||'No result recorded yet.'}</p>
+      <h3>Result</h3><p aria-label="Agent summary">{progress?.result?.summary||'No result recorded yet.'}</p><p><a href={`#/tasks/${encodeURIComponent(task.id)}`}>Task details</a></p>
       <p>Agent output is generated content. Inspect tool outcomes and test evidence before accepting changes.</p>
       {graph&&<TaskEvidence key={graph} graphId={graph} workspaces={progress?.workspaces??[]} nativeProfile={nativeProfile} executions={progress?.executions??[]} role={canControl?'admin':canDecide?'operator':'viewer'}/>}
       {graph&&<TaskCheckpoints key={`checkpoints:${graph}`} graphId={graph} canRestore={canControl}/>}

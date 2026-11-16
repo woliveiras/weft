@@ -38,6 +38,7 @@ export function GraphList({
   onChanged: () => void;
   onAgent?: (graph: string, agent: string) => void;
 }) {
+  graphs = graphs.filter(({graph}) => !graph.metadata.id.startsWith('task-run-') && !graph.metadata.labels?.['weft.task']);
   const [creating, setCreating] = useState(false);
   const [actionError, setActionError] = useState<string>();
   const [budgetError, setBudgetError] = useState<{ graphId: string; message: string }>();

@@ -92,7 +92,7 @@ Source control hand-off (configured for this task; it replaces any earlier instr
 2. Commit every change with git.commit (all=true) and a message summarising the task.
 3. Push with git.push {"connection": %q}.
 4. Open the pull request with scm.pull_request.create {"connection": %q, "title": %q} and a body that summarises the change, the evidence and the checks still to run.
-If any step fails (a rejected push, a missing permission, a refused approval), stop and report the failure in your result. Never force a push and never target another branch.`,
+If any step fails (a rejected push, a missing permission, a refused approval), finish with signal "blocked" and report the failure in your summary. Never force a push and never target another branch.`,
 		Branch(c, d.ID), c.Name, c.Name, d.Title)
 	g.Metadata.Labels[domain.LabelTaskSCM] = c.Name
 	return nil, nil

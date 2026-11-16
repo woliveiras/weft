@@ -489,3 +489,73 @@ web/src/components/TasksPage.tsx
 web/src/components/TriggersSection.test.tsx
 web/src/components/TriggersSection.tsx
 ```
+
+
+## 2026-11-16 operational blockers AB2–AB4 (AC-004)
+
+- `internal/api/task_outcome_test.go` exercises trigger admission, a scripted native agent, real engine/task lifecycle, tracker HTTP boundary and explicit retry. Both `blocked` and `no_further_work` without a required PR produce task `blocked`, graph `stopped`, `weft:needs-attention`, a bounded/redacted agent summary and task URL. Admin/confirmation requirements, duplicate retry refusal, fresh maintainer relabeling and preservation of the original task/graph/executions are asserted.
+- Retry unit/integration cases reject running graphs, unfinished execution, pending approval, delivered PR, wrong ownership, empty history and storage failure. Existing admission, restart and maintainer-role tests still pass. A tracker write-back failure retains the sanitized reason and task URL while pausing.
+- `make test` passed: the full Docker Go suite, 40 Python tests and 466 Vitest tests. Node 22 Bookworm separately passed typechecking, E2E TypeScript compilation and Vitest. Selected Playwright task/trigger/workflow flows passed 29 tests. `make lint`, `make build`, explicit Linux/Darwin builds and `./scripts/go.sh test -tags e2e ./cmd/weft-e2e` passed. The normal Go test image with git/git-daemon was usable; no fallback image was needed for Go tests.
+- Verification found and corrected transient-state assumptions in budget and task-authorization fixtures: terminal task/graph state must now be observed, while budget-resume audit and authorization checks remain required. Earlier verbose runtime guidance exceeded small-context fixtures; the final concise finish description passes those unchanged tests.
+- Live issue retry and Gemini recovery were deliberately not executed. Operator recovery is documented in `docs/task-workflows.md`; it requires explicit task Stop for historical active copies, paused trigger, admin-confirmed retry and a new human Maintain/Admin `weft:todo` event. No retained admission or execution is deleted.
+- Final contract follow-up passed: `./scripts/go.sh test ./internal/eventtest ./internal/api ./internal/trigger -count=1`; emitted blocked events satisfy the schema. `make lint` and `make build` passed again after the final review; explicit cached-image `gofmt -l` produced no output and `git diff --check` passed.
+- `docker compose up -d --build --no-deps weftd` completed using the unmodified standard Dockerfile and cached base images. Running image: `sha256:2d0f31160f93e49c8f8d3384d5227beaeef3abf1efbc5a75aa728bb40f2f6e2c`. `docker history --no-trunc` shows the standard build-stage binary copies and `/web/dist`; container image ID matches, Docker health is healthy, `/healthz` is OK and authenticated `/api/v1/info` reports admin access.
+- Read-only API snapshots before/after show zero differences in provider, prices, cost policy/budgets, MCP/SCM connections, projects, network policy, triggers, both task records, all four graph definitions and graph state/run/version fields. `weft-deps` remains ready/up-to-date; prices version 3, task limit USD 2, warning 80%, installation USD 10/month, interruption 110%, network policy revision 1 and `weft-issues` paused are confirmed. The historical task and execution graph intentionally retain persisted `running`; no resume/retry/task-control/tracker mutation was performed.
+- Toolchain note: an initial offline build of the web tools could not fetch the missing pnpm package. The standard network-enabled package build succeeded; all base images were already cached. No project dependency or lockfile changed. An intermediate schema-test compile error used a nonexistent event constant; using the existing dynamic event name fixed it. All final checks above passed.
+
+- Post-rebuild read-only progress for the historical rehearsal task reports `blocked` and a 155-character displayed summary. Its stored task status remains `running` and original execution remains `succeeded` / `no_further_work`; audit history is not rewritten.
+
+Changed files for AB1–AB4:
+
+```
+docs/api.md
+docs/events.md
+docs/task-workflows.md
+schemas/event.schema.json
+schemas/turn.schema.json
+server/cmd/weft-e2e/main.go
+server/internal/activity/normalize.go
+server/internal/api/cost_test.go
+server/internal/api/task_outcome_test.go
+server/internal/api/trigger_launch_test.go
+server/internal/api/triggers_test.go
+server/internal/app/app.go
+server/internal/app/triggers.go
+server/internal/engine/engine.go
+server/internal/engine/turn.go
+server/internal/eval/shell_recovery_test.go
+server/internal/eventtest/schema_test.go
+server/internal/runtime/native/blocked_test.go
+server/internal/runtime/native/native.go
+server/internal/runtime/runtime.go
+server/internal/secrets/diagnostics.go
+server/internal/secrets/diagnostics_test.go
+server/internal/taskrun/delivery.go
+server/internal/taskrun/manager.go
+server/internal/taskrun/manager_test.go
+server/internal/taskrun/settle.go
+server/internal/taskrun/settle_test.go
+server/internal/tools/builtin_shell.go
+server/internal/tools/shell_guidance_test.go
+server/internal/trigger/complete_test.go
+server/internal/trigger/retry.go
+server/internal/trigger/retry_delivery_test.go
+server/internal/trigger/retry_unit_test.go
+server/internal/trigger/runner.go
+specs/product-and-tasks/task-execution-admission-and-recovery/evidence.md
+specs/product-and-tasks/task-execution-admission-and-recovery/matrix.md
+specs/product-and-tasks/task-execution-admission-and-recovery/spec.md
+specs/runtime-and-delivery/issue-readiness-before-work/evidence.md
+specs/runtime-and-delivery/issue-readiness-before-work/matrix.md
+specs/runtime-and-delivery/issue-readiness-before-work/spec.md
+specs/runtime-and-delivery/native-coding-runtime/evidence.md
+specs/runtime-and-delivery/native-coding-runtime/matrix.md
+specs/runtime-and-delivery/native-coding-runtime/spec.md
+web/e2e/task-authorization.spec.ts
+web/e2e/task-outcome.spec.ts
+web/src/App.tsx
+web/src/components/GraphList.tsx
+web/src/components/GraphNavigation.test.tsx
+web/src/components/TasksPage.tsx
+web/src/components/TriggersSection.test.tsx
+```

@@ -253,7 +253,7 @@ func TestTriggerStartsARealTaskUnderConsent(t *testing.T) {
 	waitFor(t, 5*time.Second, "task ran", func() bool {
 		var v taskrun.View
 		call(t, srv, "GET", "/api/v1/tasks/"+d.ID+"/progress", viewerTok, "", "", &v)
-		return v.State == "succeeded"
+		return v.State == "blocked" && v.Result != nil && v.Result.Status == domain.ExecSucceeded
 	})
 	// The next run reports completion on the issue and frees the trigger.
 	if _, err := a.Triggers.Triggers.Update(t.Context(), tr.ID, "test", func(t *trigger.Trigger) error { t.NextRunAt = nil; return nil }); err != nil {

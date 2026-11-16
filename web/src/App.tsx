@@ -150,7 +150,9 @@ function Shell() {
   );
 
   const list = graphs.data ?? [];
-  const current = route.view === 'graph' ? list.find((g) => g.graph.metadata.id === route.id) : undefined;
+  const ownedTask = route.view === 'graph' && route.id.startsWith('task-run-') ? 'tsk_' + route.id.slice('task-run-'.length) : undefined;
+  const workflows = list.filter(g => !g.graph.metadata.id.startsWith('task-run-') && !g.graph.metadata.labels?.['weft.task']);
+  const current = route.view === 'graph' ? workflows.find((g) => g.graph.metadata.id === route.id) : undefined;
   const pending = approvals.data?.length ?? 0;
   type GraphRoute = Extract<Route, {view: 'graph'}>;
   const [sessions, setSessions] = useState<Record<string, {route: GraphRoute; summary: GraphSummary}>>({});
@@ -183,7 +185,7 @@ function Shell() {
         <button type="button" className="brand" aria-label="Weft" onClick={() => go({ view: 'graphs' })}>
           <BrandMark size={26} /><span className="brand-name" aria-hidden="true">weft</span>
         </button>
-        <GraphSelector graphs={list} currentId={route.view === 'graph' ? route.id : undefined} dirty={dirty} loading={graphs.loading} error={graphs.error}
+        <GraphSelector graphs={workflows} currentId={route.view === 'graph' ? route.id : undefined} dirty={dirty} loading={graphs.loading} error={graphs.error}
           onReload={() => void graphs.reload()}
           onSelect={id => go(sessions[id]?.route ?? {view: 'graph', id, tab: 'canvas'})}/>
         <span className="spacer" />
@@ -208,6 +210,7 @@ function Shell() {
           onNavigate={view => go(view === 'administration' ? {view, section: 'health'} : view === 'activity' ? {view, activity: parseActivityState('')} : {view})} />
         <main>
           <ErrorBox error={info.error && !graphs.error ? `info: ${info.error}` : undefined} />
+          {ownedTask && <section className="page"><h1>Task execution</h1><p>This graph is the execution copy owned by a task.</p><a href={`#/tasks/${encodeURIComponent(ownedTask)}`}>Open task {ownedTask}</a></section>}
           {route.view === 'activity' && <ActivityPage state={route.activity} onChange={activity => go({ view: 'activity', activity })} />}
           {route.view === 'projects' && <ProjectsPage nativeProfile={info.data?.nativeProfile===true} canEdit={info.data?.identity?.role==='admin'}/>}
           {route.view === 'tasks' && <TasksPage key={route.taskId ?? (route.create ? 'new' : 'list')} id={route.taskId} create={route.create} info={info.data} graphs={list}/>}

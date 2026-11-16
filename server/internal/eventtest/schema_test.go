@@ -79,3 +79,26 @@ func TestOpenEventSchemaFromNestedDirectory(t *testing.T) {
 		t.Fatalf("opened %s", file.Name())
 	}
 }
+
+func TestBlockedExecutionRequiresFailureAndSummary(t *testing.T) {
+	schema, err := eventSchema()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, data string
+		ok         bool
+	}{
+		{"blocked", `{"signal":"blocked","status":"failed","summary":"Registry unavailable"}`, true},
+		{"not successful", `{"signal":"blocked","status":"succeeded","summary":"Registry unavailable"}`, false},
+		{"reason required", `{"signal":"blocked","status":"failed"}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ev := domain.NewEvent("execution.failed", "task-run-fixture", json.RawMessage(tc.data))
+			ev.Seq = 1
+			if err := validateEvent(schema, ev); (err == nil) != tc.ok {
+				t.Fatalf("valid = %t, want %t: %v", err == nil, tc.ok, err)
+			}
+		})
+	}
+}

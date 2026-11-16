@@ -41,6 +41,9 @@ type analysisProvider struct{}
 func (analysisProvider) Name() string                                    { return "e2e" }
 func (analysisProvider) Models(context.Context) ([]llm.ModelInfo, error) { return nil, nil }
 func (analysisProvider) Chat(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
+	if len(r.Messages) > 0 && strings.Contains(r.Messages[0].Content, "task-blocked-fixture") {
+		return &llm.ChatResponse{Message: llm.ChatMessage{ToolCalls: []llm.ToolCall{{ID: "blocked", Name: "finish", Arguments: json.RawMessage(`{"signal":"blocked","summary":"Dependency registry unavailable. token=fixture-secret-value"}`)}}}}, nil
+	}
 	if r.Metadata["operation"] == "issue_readiness" {
 		return &llm.ChatResponse{Message: llm.ChatMessage{Content: `{"missing":["acceptance"]}`}}, nil
 	}

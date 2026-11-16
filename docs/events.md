@@ -50,7 +50,7 @@ be stored before proceeding.
 | `replica.state_changed` | replica loop, on every state transition | `ReplicaStatus` |
 | `execution.started` | turn start | `{iteration, inputs: [messageId]}` |
 | `execution.completed` | turn succeeded | `Execution` |
-| `execution.failed` | turn failed, cancelled (kill) or interrupted (crash recovery) | `Execution`; for interruptions `{status: "interrupted", error}` |
+| `execution.failed` | turn failed, declared blocked, cancelled (kill) or interrupted (crash recovery) | `Execution`; for interruptions `{status: "interrupted", error}` |
 | `message.published` | engine, after the broker accepted a message on a channel | the full `Message` (`id, type, source, target, payload, metadata`) plus `channel` and `consumers` |
 | `message.held` | engine, message parked at an approval gate | `{channel, type, approval}` |
 | `message.dropped` | engine, emit matched no channel or exceeded `maxHops` | `{type, reason}` |
@@ -286,3 +286,14 @@ not event payloads. `repository.import` spans worker operations.
 `weft_repository_imports_total{outcome}` uses bounded outcomes `ready`, `failed`,
 `cancelled` and `uncertain`; `weft_repository_import_duration_seconds` records
 worker duration. No repository/attempt IDs are metric labels.
+
+
+A native agent declaring `finish.signal: "blocked"` emits `execution.failed`
+with the existing Execution payload: `status: "failed"`, `signal: "blocked"`,
+`summary` and `error: "agent reported a blocker"`. It is a settled blocker, not a
+retryable tool failure. No downstream emits are published for that turn. The
+existing execution outcome/latency metrics count it as failed. Task settlement
+uses existing `graph.stopping`, `graph.stopped` and `task.transition_requested`
+events with actor `system:task`; the latter retains its revision guard. Explicit
+undelivered-task recovery uses `trigger.failed_retry_requested` with the original
+task, issue, actor and new generation, preserving earlier execution events.

@@ -116,3 +116,31 @@ func TestPrepareDefaultsResultToEntry(t *testing.T) {
 		t.Fatalf("disabled entry/result: %v %v", blocks, err)
 	}
 }
+
+func TestSettledOutcomeRequiresDeliveryAndPreservesFailure(t *testing.T) {
+	success := &domain.Execution{Status: domain.ExecSucceeded}
+	for _, tc := range []struct {
+		name            string
+		failed, blocked bool
+		result          *domain.Execution
+		delivery        *Delivery
+		issue           bool
+		state           domain.GraphState
+		want            string
+	}{
+		{name: "plain result", result: success, want: "succeeded"},
+		{name: "SCM missing", result: success, delivery: &Delivery{}, want: "blocked"},
+		{name: "issue missing", result: success, issue: true, want: "blocked"},
+		{name: "delivered", result: success, delivery: &Delivery{PullRequestURL: "https://example.test/pr/1"}, issue: true, want: "succeeded"},
+		{name: "blocked agent", blocked: true, failed: true, result: success, want: "blocked"},
+		{name: "failed dependency", failed: true, result: success, want: "failed"},
+		{name: "no result", state: domain.GraphStopped, want: "interrupted"},
+		{name: "not settled", want: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := settledOutcome(tc.failed, tc.blocked, tc.result, tc.delivery, tc.issue, tc.state); got != tc.want {
+				t.Fatalf("got %q want %q", got, tc.want)
+			}
+		})
+	}
+}

@@ -59,7 +59,7 @@
         "emits": {"type": "array", "items": {"$ref": "#/$defs/Emit"}, "maxItems": 1000},
         "summary": {"type": "string"},
         "broadcast": {"type": "string"},
-        "signal": {"enum": ["", "no_further_work", "confirm_stop"]},
+        "signal": {"enum": ["", "no_further_work", "confirm_stop", "blocked"]},
         "usage": {"type": "object", "properties": {"inputTokens": {"type": "integer"}, "outputTokens": {"type": "integer"}}},
         "toolCalls": {"type": "integer"},
         "retry": {"type": "boolean", "description": "Nack the inputs (redelivered with back-off) instead of acking them."}

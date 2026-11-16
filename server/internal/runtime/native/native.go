@@ -84,9 +84,9 @@ var platformTools = []llm.ToolSchema{
 	},
 	{
 		Name:        "finish",
-		Description: "End this turn. signal: \"\" (default), \"no_further_work\" (declare the job complete) or \"confirm_stop\" (confirm a previous declaration). broadcast: one line for ring neighbours.",
+		Description: "End turn. signal: \"\" (default), \"no_further_work\" (complete), \"confirm_stop\" (confirm), \"blocked\" (unresolved blocker; summary required). Retry correctable denials. broadcast: neighbour update.",
 		Parameters: json.RawMessage(`{"type":"object","properties":{
-			"summary":{"type":"string"},"signal":{"type":"string","enum":["","no_further_work","confirm_stop"]},
+			"summary":{"type":"string"},"signal":{"type":"string","enum":["","no_further_work","confirm_stop","blocked"]},
 			"broadcast":{"type":"string"}}}`),
 	},
 }
@@ -322,6 +322,9 @@ func (r *Runtime) call(ctx context.Context, env runtime.TurnEnv, res *runtime.Tu
 			Summary, Signal, Broadcast string
 		}
 		_ = json.Unmarshal(args, &a)
+		if a.Signal == string(runtime.SignalBlocked) && strings.TrimSpace(a.Summary) == "" {
+			return "error: a blocked result requires a concise summary of the unresolved blocker", false
+		}
 		res.Summary = a.Summary
 		res.Signal = runtime.Signal(a.Signal)
 		res.Broadcast = a.Broadcast

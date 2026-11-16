@@ -38,6 +38,11 @@ Durable pause state is checked before and after a queue wait. Paused input waits
 
 Progress tracks owned executions and pending work. Retained output, failed/expired gates and failed preparation remain distinguishable from successful completion.
 
+Edge cases: new task execution copies stop through existing engine
+reconciliation after the task settles; pending work, approvals and resumable
+budget holds prevent settlement. Missing required PR delivery is blocked.
+Historical execution copies are preserved until an explicit task stop.
+
 ### AC-005 — Task-to-workflow contract
 
 A workflow is a saved graph definition, a task is a durable request against a
@@ -46,6 +51,9 @@ repository for task workspaces. Admission captures the selected graph version,
 entry point and input bindings. The task owns its execution and result links,
 which remain available after refresh. Concurrent reuse preserves independent
 execution scope and uses the existing engine.
+
+Execution copies are excluded from editable workflow lists; their controls and
+result links belong to the task, including direct workflow links to a copy.
 
 ## Explicit exclusions
 

@@ -223,6 +223,12 @@ with a bounded outcome. The outcomes are `label_failed`, `retry_failed`,
 writes or failed persistence cannot report successful publication or allow
 admission.
 
+Edge cases: a blocked agent or missing PR delivery exposes the bounded, sanitized
+agent summary and task link in the task, pause reason and issue comment. Explicit
+admin-confirmed recovery of a stopped, undelivered task preserves the old task,
+execution copy and admission evidence. A fresh maintainer `weft:todo` event after
+the recovery record is still required; resume/relabel alone cannot replay work.
+
 ### AC-005 — Consent and evaluation limits
 
 Readiness uses only the model with a separate fixed installation allowance.

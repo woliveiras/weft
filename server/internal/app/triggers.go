@@ -178,11 +178,14 @@ func (x triggerTasks) Status(ctx context.Context, taskID string) (trigger.TaskSt
 	default:
 		st.State = "running"
 	}
-	if v.State == "interrupted" || v.State == "blocked" {
+	if v.State == "interrupted" {
 		st.State = "failed"
 	}
 	if len(v.Blockers) > 0 {
 		st.Reason = v.Blockers[0]
+	}
+	if v.Result != nil && v.Result.Summary != "" {
+		st.Reason = v.Result.Summary
 	}
 	if v.Delivery != nil {
 		st.PullRequestURL = v.Delivery.PullRequestURL

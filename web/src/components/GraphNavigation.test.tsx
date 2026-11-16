@@ -87,3 +87,12 @@ it('shows the budget refusal beside the graph resume control', async () => {
    resume.mockRestore();
  }
 });
+
+it('excludes task execution copies from editable workflows and actions',async()=>{
+ const {GraphList}=await import('./GraphList');
+ const task={...graph,metadata:{id:'task-run-fixture',name:'Execution',labels:{'weft.task':'tsk_fixture'}}};
+ render(<GraphList canDelete graphs={[{graph:task,record:{state:'running'}} as unknown as GraphSummary]} onOpen={vi.fn()} onChanged={vi.fn()}/>);
+ expect(screen.queryByText('Execution')).toBeNull();
+ for(const name of ['Stop','Pause','Delete','Open']) expect(screen.queryByRole('button',{name:new RegExp(`^${name}$`)})).toBeNull();
+ expect(screen.getByText(/No graphs yet/)).toBeTruthy();
+});

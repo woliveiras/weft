@@ -22,6 +22,7 @@
     "data":        {"description": "Type-specific payload; see allOf below and docs/events.md."}
   },
   "allOf": [
+    {"if": {"properties": {"type": {"const": "execution.failed"}, "data": {"type": "object", "required": ["signal"], "properties": {"signal": {"const": "blocked"}}}}}, "then": {"properties": {"data": {"type": "object", "required": ["status", "summary"], "properties": {"status": {"const": "failed"}, "summary": {"type": "string"}}}}}},
     {"if": {"properties": {"type": {"const": "replica.state_changed"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/ReplicaStatus"}}}},
     {"if": {"properties": {"type": {"enum": ["approval.requested", "approval.decided"]}}}, "then": {"properties": {"data": {"type": "object", "required": ["id", "kind", "status"]}}}},
     {"if": {"properties": {"type": {"enum": ["agent.output", "agent.broadcast"]}}}, "then": {"properties": {"data": {"type": "object", "required": ["text"]}}}},

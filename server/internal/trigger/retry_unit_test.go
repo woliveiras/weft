@@ -20,3 +20,21 @@ func TestPendingRetryRequiresUnusedExplicitGenerationAndFailedAdmission(t *testi
 		}
 	}
 }
+
+func TestPendingRetryIsBoundToTheOriginalUndeliveredTask(t *testing.T) {
+	tr := &Trigger{Processed: map[string]string{"issue": "tsk_old"}, FailedRetries: map[string]FailedRetry{"issue": {Generation: "retry_1", TaskID: "tsk_old"}}}
+	if !pendingFailedRetry(tr, "issue") {
+		t.Fatal("explicit recovery unavailable")
+	}
+	tr.Processed["issue"] = "tsk_other"
+	if pendingFailedRetry(tr, "issue") {
+		t.Fatal("retry applied to a different admission")
+	}
+	tr.Processed["issue"] = "tsk_old"
+	r := tr.FailedRetries["issue"]
+	r.Consumed = true
+	tr.FailedRetries["issue"] = r
+	if pendingFailedRetry(tr, "issue") {
+		t.Fatal("consumed retry reused")
+	}
+}

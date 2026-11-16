@@ -75,3 +75,34 @@ func TestCompletionWritesBackAndTakesTheNextIssue(t *testing.T) {
 		t.Fatalf("no-PR completion = %v", got)
 	}
 }
+
+func TestBlockedCompletionRetainsSafeReasonWhenTrackerWriteFails(t *testing.T) {
+	st := triggerStore(t)
+	gh := newTracker("gh")
+	gh.issues = []map[string]any{ghIssue(1, "Blocked delivery", "weft")}
+	c := &clock{t: time.Now().UTC()}
+	r := runner(st, c, "a", gh)
+	fake := &tasks{status: map[string]trigger.TaskStatus{}}
+	r.Tasks, r.BaseURL = fake, "https://weft.example"
+	tr, err := r.Triggers.Create(t.Context(), input(), "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Tick(t.Context())
+	task := "tsk_acme/app1"
+	fake.status[task] = trigger.TaskStatus{State: "blocked", Reason: "Cannot deliver: token=fixture-private-token " + strings.Repeat("detail ", 80)}
+	gh.transientComments = 1
+	c.t = c.t.Add(time.Hour)
+	r.Tick(t.Context())
+	got, err := r.Triggers.Get(t.Context(), tr.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != trigger.Paused || got.LastFailedTask != task || got.CurrentTask != "" ||
+		!strings.Contains(got.PausedReason, "Tracker write-back") ||
+		!strings.Contains(got.PausedReason, "Task: https://weft.example/#/tasks/"+task) ||
+		!strings.Contains(got.PausedReason, "Agent summary: Cannot deliver") ||
+		strings.Contains(got.PausedReason, "fixture-private-token") || len([]rune(got.PausedReason)) > 500 {
+		t.Fatalf("unsafe or incomplete failure: %+v", got)
+	}
+}

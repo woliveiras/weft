@@ -322,7 +322,7 @@ func (r *replica) turn(loopCtx context.Context, n *domain.Node, dels []queue.Del
 
 	// Publish before acknowledging any input. A partial publication cannot be
 	// rolled back: retrying the turn may emit duplicates with new message IDs.
-	if err == nil && !yielded {
+	if err == nil && !yielded && res.Signal != runtime.SignalBlocked {
 		emits := append(env.drainEmits(), res.Emits...)
 		var parentMsg *domain.Message
 		if len(inputs) > 0 {
@@ -411,6 +411,10 @@ func (r *replica) turn(loopCtx context.Context, n *domain.Node, dels []queue.Del
 	x.Usage.Add(domainUsage(res.Usage))
 	e.reportExternalUsage(turnCtx, gid, n.ID, x.ID, res.Usage)
 	x.ToolCalls = env.toolCalls() + res.ToolCalls
+	if res.Signal == runtime.SignalBlocked {
+		finish(domain.ExecFailed, "agent reported a blocker")
+		return turnOutcome{completed: true, reason: "agent reported a blocker"}
+	}
 	finish(domain.ExecSucceeded, "")
 	span.SetAttributes(attribute.Int("weft.outputs", len(x.OutputIDs)))
 	if yielded {
