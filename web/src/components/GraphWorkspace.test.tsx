@@ -298,18 +298,26 @@ describe('GraphWorkspace editor', () => {
 
   it('confirms what removing an agent does before changing the draft', async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.fn(() => false);
-    vi.stubGlobal('confirm', confirmSpy);
     const { puts } = backend(() => valid);
     renderWorkspace('dev');
     await screen.findByRole('region', { name: 'Agent configuration' });
 
-    await user.click(toolbarButton('Remove agent'));
-    expect(confirmSpy).toHaveBeenCalledWith('Remove agent "Developer" and channels "in", "code"?');
+    const remove = toolbarButton('Remove Developer');
+    await user.click(remove);
+    const dialog = screen.getByRole('dialog', { name: 'Confirm removal' });
+    expect(dialog.textContent).toContain('Remove agent "Developer" and channels "in", "code"?');
+    expect(dialog.textContent).toContain('Agent ID: dev.');
+    expect(dialog.textContent).toContain('Save graph');
+    expect(dialog.textContent).toContain('Discard');
+    expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await user.keyboard('{Enter}');
+    expect(document.activeElement).toBe(remove);
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.queryByText('unsaved graph changes')).toBeNull();
 
-    confirmSpy.mockReturnValue(true);
-    await user.click(toolbarButton('Remove agent'));
+    await user.click(within(screen.getByRole('complementary', { name: 'Details' })).getByRole('button', { name: 'Remove agent' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove' }));
+    expect(puts()).toHaveLength(0);
     expect(screen.getByText('unsaved graph changes')).toBeTruthy();
     await user.click(toolbarButton('Save graph'));
     await waitFor(() => expect(puts()).toHaveLength(1));

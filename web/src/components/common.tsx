@@ -114,10 +114,32 @@ export function Icon({ name, size = 14 }: { name: IconName; size?: number }) {
   return <Glyph className="icon" size={size} strokeWidth={1.75} aria-hidden="true" focusable="false" fill={filled ? 'currentColor' : 'none'} />;
 }
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children, keyboard = false }: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  keyboard?: boolean;
+}) {
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label={title} onKeyDown={keyboard ? (event) => {
+        if (event.key === 'Escape') {
+          event.stopPropagation();
+          onClose();
+        }
+        if (event.key === 'Tab') {
+          const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
+          const first = buttons[0];
+          const last = buttons.at(-1);
+          if (event.shiftKey && event.target === first && last) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && event.target === last && first) {
+            event.preventDefault();
+            first.focus();
+          }
+        }
+      } : undefined}>
         <div className="modal-head">
           <h2>{title}</h2>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">

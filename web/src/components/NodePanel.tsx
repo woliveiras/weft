@@ -46,9 +46,10 @@ interface Props {
   /** Validation findings for this agent. */
   issues?: ElementIssue[];
   onConfigure?: () => void;
+  onRemove?: () => void;
 }
 
-export function NodePanel({ summary, status, nodeId, onSaved, onStatus, onUpdateNode, issues, onConfigure }: Props) {
+export function NodePanel({ summary, status, nodeId, onSaved, onStatus, onUpdateNode, issues, onConfigure, onRemove }: Props) {
   const graph = summary.graph;
   const gid = graph.metadata.id;
   const node = graph.spec.nodes.find((n) => n.id === nodeId);
@@ -107,7 +108,10 @@ export function NodePanel({ summary, status, nodeId, onSaved, onStatus, onUpdate
         {node.disabled && <Badge tone="muted">disabled</Badge>}
       </div>
       {node.description && <p className="muted">{node.description}</p>}
-      {onConfigure && <Btn tone="primary" onClick={onConfigure}>Configure agent</Btn>}
+      <div className="btn-row">
+        {onConfigure && <Btn tone="primary" onClick={onConfigure}>Configure agent</Btn>}
+        {onRemove && <Btn tone="danger" onClick={onRemove}>Remove agent</Btn>}
+      </div>
       <AgentEnvironment graph={graph} node={node} />
       <ElementIssues issues={issues} label="Agent validation" />
 

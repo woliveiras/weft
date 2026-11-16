@@ -43,22 +43,11 @@ async function connect(page: Page, source: string, target: string, count: number
 }
 
 async function deleteSelection(page: Page, message: string, accept: boolean) {
-  const dialogHandled = new Promise<void>((resolve, reject) => {
-    page.once('dialog', async dialog => {
-      try {
-        expect(dialog.type()).toBe('confirm');
-        expect(dialog.message()).toBe(message);
-        if (accept) await dialog.accept();
-        else await dialog.dismiss();
-        resolve();
-      } catch (error) {
-        await dialog.dismiss();
-        reject(error);
-      }
-    });
-  });
   await page.keyboard.press('Delete');
-  await dialogHandled;
+  const dialog = page.getByRole('dialog', { name: 'Confirm removal' });
+  await expect(dialog.getByText(message, { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: accept ? 'Remove' : 'Cancel', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
 }
 
 test('creates agents, drags connections, validates, cancels and confirms Delete, then reopens persisted edits', async ({ page }, testInfo) => {
@@ -149,4 +138,49 @@ test('creates agents, drags connections, validates, cancels and confirms Delete,
   const disconnected = await saved(page, id);
   expect(disconnected.graph.spec.nodes).toEqual(removed.graph.spec.nodes);
   expect(disconnected.graph.spec.channels ?? []).toEqual([]);
+});
+
+test('confirms draft removal from agent details and restores the agent and channel with Discard', async ({ page }) => {
+  const created = await page.request.post('/api/v1/graphs', { headers, data: {
+    metadata: { name: 'Removal review' },
+    spec: {
+      nodes: [
+        { id: 'one', runtime: { kind: 'echo' }, position: { x: 0, y: 0 } },
+        { id: 'two', name: 'Agent Two', runtime: { kind: 'echo' }, position: { x: 300, y: 0 } },
+      ],
+      channels: [{ id: 'delivery', from: 'one', to: ['two'], type: 'queue' }],
+    },
+  } });
+  expect(created.ok()).toBeTruthy();
+  const initial: GraphSummary = await created.json();
+  const id = initial.graph.metadata.id;
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.goto(`/#/g/${id}/canvas?sel=node:two`);
+  const button = page.getByRole('complementary', { name: 'Details' }).getByRole('button', { name: 'Remove agent', exact: true });
+  const dialog = page.getByRole('dialog', { name: 'Confirm removal' });
+  await expect(page.getByRole('button', { name: 'Remove Agent Two' })).toBeVisible();
+  await button.click();
+  await expect(dialog).toContainText('Remove agent "Agent Two" and channel "delivery"?');
+  await expect(dialog).toContainText('Agent ID: two');
+  await expect(dialog).toContainText('Save graph');
+  await expect(dialog).toContainText('Discard');
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(button).toBeFocused();
+  await expect(node(page, 'two')).toBeVisible();
+  await expect(edges(page)).toHaveCount(1);
+  await expect(page.getByText('unsaved graph changes', { exact: true })).toHaveCount(0);
+
+  await button.click();
+  await dialog.getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(node(page, 'two')).toHaveCount(0);
+  await expect(edges(page)).toHaveCount(0);
+  await expect(page.getByText('unsaved graph changes', { exact: true })).toBeVisible();
+  expect((await saved(page, id)).graph.spec).toEqual(initial.graph.spec);
+
+  await page.getByRole('button', { name: 'Discard', exact: true }).click();
+  await expect(node(page, 'two')).toBeVisible();
+  await expect(edges(page)).toHaveCount(1);
+  await expect(page.getByText('unsaved graph changes', { exact: true })).toHaveCount(0);
+  expect((await saved(page, id)).record.version).toBe(initial.record.version);
 });

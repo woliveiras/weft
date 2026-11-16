@@ -366,6 +366,11 @@ Everything above can be done from the console instead of YAML:
 6. **Run all** (or **Start** on one agent) and follow **Live output**,
    **Messages**, **Events** and **Approvals**.
 
+To remove an agent, select it on the graph and choose **Remove agent** in its
+details. Review the agent ID and affected channels before confirming. Agent and
+channel removals update the draft. Use **Save graph** to apply the changes or
+**Discard** to restore the saved graph.
+
 **Limits per turn** bound one agent turn: **Turn timeout** (default `30m`),
 **Max tool calls** (default 50) and **Token budget** (unlimited by default). A
 turn that exceeds one fails and its input is redelivered, so raise them for

@@ -100,9 +100,19 @@ export function GraphWorkspace({
   const [panelOpen, setPanelOpen] = useState(true);
   // Set when a start was refused because the environment is not ready.
   const [envBlock, setEnvBlock] = useState<string>();
+  const [removalRequest, setRemovalRequest] = useState<{
+    nodeIds: string[];
+    edges: EdgeRef[];
+    channelIds: string[];
+  }>();
+  const pendingRemoval = removalRequest && planRemoval(draftGraph, removalRequest.nodeIds, removalRequest.edges, removalRequest.channelIds);
+  const removalDescription = pendingRemoval && describeRemoval(draftGraph, pendingRemoval);
+  const removalOpener = useRef<HTMLElement | null>(null);
+  const canvasTab = useRef<HTMLButtonElement>(null);
   const lastSettingsSection = useRef<SettingsSection>('general');
   useEffect(() => {
     if (tab === 'settings') lastSettingsSection.current = settingsSection;
+    if (tab !== 'canvas') setRemovalRequest(undefined);
   }, [tab, settingsSection]);
   const appliedSelectionKey = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -246,15 +256,26 @@ export function GraphWorkspace({
     }
   };
 
-  /** Removes agents/edges after the user confirms what that does to the document. */
+  /** Preview all affected elements before editing the draft. */
   const removeElements = (nodeIds: string[], edges: EdgeRef[], channelIds: string[] = []) => {
-    const removal = planRemoval(draftGraph, nodeIds, edges, channelIds);
-    const message = describeRemoval(draftGraph, removal);
-    if (!message || !confirm(message)) return;
-    changeGraph((graph) => applyRemoval(graph, removal));
+    if (removalDescription || saving) return;
+    removalOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setRemovalRequest({ nodeIds, edges, channelIds });
+  };
+
+  const cancelRemoval = () => {
+    setRemovalRequest(undefined);
+    removalOpener.current?.focus();
+  };
+
+  const confirmRemoval = () => {
+    if (!pendingRemoval) return;
+    setRemovalRequest(undefined);
+    canvasTab.current?.focus();
+    changeGraph((graph) => applyRemoval(graph, pendingRemoval));
     if (
-      (selection?.kind === 'node' && removal.nodes.includes(selection.id)) ||
-      (selection?.kind === 'channel' && removal.channels.includes(selection.id))
+      (selection?.kind === 'node' && pendingRemoval.nodes.includes(selection.id)) ||
+      (selection?.kind === 'channel' && pendingRemoval.channels.includes(selection.id))
     ) {
       setSelection(null);
     }
@@ -279,6 +300,7 @@ export function GraphWorkspace({
     }
   };
 
+  const selectedAgent = selection?.kind === 'node' ? draftGraph.spec.nodes.find((node) => node.id === selection.id) : undefined;
   const state = status?.state ?? summary.record.state;
   const running = state === 'running' || state === 'paused' || state === 'stopping';
 
@@ -289,6 +311,7 @@ export function GraphWorkspace({
           {(['canvas', 'agent', 'runs', 'activity', 'files', 'events', 'messages', 'yaml', 'settings'] as GraphTab[]).map((t) => (
             <button
               key={t}
+              ref={t === 'canvas' ? canvasTab : undefined}
               type="button"
               role="tab"
               aria-selected={tab === t}
@@ -319,13 +342,13 @@ export function GraphWorkspace({
                   Graph settings
                 </Btn>
               )}
-              {tab === 'canvas' && selection?.kind === 'node' && (
-                <Btn small tone="danger" onClick={() => removeElements([selection.id], [])}>
-                  Remove agent
+              {tab === 'canvas' && selectedAgent && (
+                <Btn small tone="danger" onClick={() => removeElements([selectedAgent.id], [])} disabled={saving}>
+                  Remove {selectedAgent.name || selectedAgent.id}
                 </Btn>
               )}
               {tab === 'canvas' && selection?.kind === 'channel' && (
-                <Btn small tone="danger" onClick={() => removeElements([], [], [selection.id])}>
+                <Btn small tone="danger" onClick={() => removeElements([], [], [selection.id])} disabled={saving}>
                   Remove channel
                 </Btn>
               )}
@@ -459,6 +482,7 @@ export function GraphWorkspace({
                   status={status}
                   nodeId={selection.id}
                   onConfigure={() => configureAgent(selection.id)}
+                  onRemove={saving ? undefined : () => removeElements([selection.id], [])}
                   onSaved={(saved) => {
                     setDraftGraph(saved.graph);
                     setDraftDirty(false);
@@ -496,6 +520,22 @@ export function GraphWorkspace({
           issues={issues?.graph}
           onChange={changeGraph}
         />
+      )}
+      {tab === 'canvas' && pendingRemoval && removalDescription && (
+        <Modal title="Confirm removal" onClose={cancelRemoval} keyboard>
+          {removalDescription.split('\n').map((line) => <p key={line}>{line}</p>)}
+          {pendingRemoval.nodes.length > 0 && (
+            <p>Agent {pendingRemoval.nodes.length === 1 ? 'ID' : 'IDs'}: {pendingRemoval.nodes.map((id, index) => (
+              <span key={id}>{index > 0 && ', '}<code>{id}</code></span>
+            ))}.</p>
+          )}
+          {pendingRemoval.nodes.length > 0 && pendingRemoval.channels.length === 0 && <p>No channels will be removed.</p>}
+          <p>This changes the graph draft. Select <strong>Save graph</strong> to apply the removal, or <strong>Discard</strong> to undo it before saving.</p>
+          <div className="btn-row">
+            <Btn autoFocus onClick={cancelRemoval}>Cancel</Btn>
+            <Btn tone="danger" onClick={confirmRemoval}>Remove</Btn>
+          </div>
+        </Modal>
       )}
       {tab === 'agent' && <AgentConfiguration summary={currentSummary} nodeId={configuredId} section={agentSection}
         onSection={section => configureAgent(configuredId,section)} onSelect={id => configureAgent(id)}
