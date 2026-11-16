@@ -78,7 +78,7 @@ func shellRequest(inv *Invocation, command string, argv []string, cwd string) (E
 		}
 		split, err := SplitCommand(command)
 		if err != nil {
-			return req, err
+			return req, fmt.Errorf("invalid command syntax: %w", restrictedShellDenied(inv))
 		}
 		if err := CheckCommand(inv.Grant, split); err != nil {
 			return req, restrictedShellDenied(inv)

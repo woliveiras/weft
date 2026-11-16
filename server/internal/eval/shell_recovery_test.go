@@ -12,7 +12,10 @@ import (
 	"github.com/woliveiras/weft/server/internal/llm"
 )
 
-type recoveringScript struct{ scripted }
+type recoveringScript struct {
+	scripted
+	command string
+}
 
 func (recoveringScript) Name() string { return "recovering" }
 func (s recoveringScript) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
@@ -23,7 +26,11 @@ func (s recoveringScript) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.
 		}
 	}
 	if round == 0 {
-		return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "denied", Name: "shell.exec", Arguments: json.RawMessage(`{"command":"cd . && go test ./..."}`)}}}, StopReason: "tool_calls"}, nil
+		args, err := json.Marshal(map[string]string{"command": s.command})
+		if err != nil {
+			return nil, err
+		}
+		return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "denied", Name: "shell.exec", Arguments: args}}}, StopReason: "tool_calls"}, nil
 	}
 	if round == 1 {
 		result := req.Messages[len(req.Messages)-1].Content
@@ -46,10 +53,14 @@ func (s recoveringScript) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.
 	return s.scripted.Chat(ctx, &copyReq)
 }
 func TestScriptedAgentRecoversAfterRestrictedShellDenial(t *testing.T) {
-	a, ws := newApp(t)
-	a.Models.Add(llm.ProviderConfig{Name: "recovering", Type: "mock", DefaultModel: "script"}, recoveringScript{})
-	result := eval.Run(t.Context(), a, ws, eval.Cases[0], "recovering", "script", 901, 20, time.Minute)
-	if !result.Success || result.ToolErrors != 1 {
-		t.Fatalf("recovery failed: %+v", result)
+	for _, command := range []string{"cd . && go test ./...", "go test './..."} {
+		t.Run(command, func(t *testing.T) {
+			a, ws := newApp(t)
+			a.Models.Add(llm.ProviderConfig{Name: "recovering", Type: "mock", DefaultModel: "script"}, recoveringScript{command: command})
+			result := eval.Run(t.Context(), a, ws, eval.Cases[0], "recovering", "script", 901, 20, time.Minute)
+			if !result.Success || result.ToolErrors != 1 {
+				t.Fatalf("recovery failed: %+v", result)
+			}
+		})
 	}
 }

@@ -12,7 +12,7 @@ import (
 
 func TestRestrictedShellDenialExplainsRecoveryWithoutEchoingArguments(t *testing.T) {
 	inv := &Invocation{Grant: domain.ToolGrant{Name: "shell.exec", Commands: []string{"go", "gofmt", "git"}}}
-	for _, command := range []string{"cd server && go test ./...", "curl secret-argument", "go test; secret-argument"} {
+	for _, command := range []string{"cd server && go test ./...", "curl secret-argument", "go test; secret-argument", "go test 'secret-argument", `go test "secret-argument`, "go test secret-argument\\"} {
 		_, err := shellRequest(inv, command, nil, "")
 		if !errors.Is(err, ErrDenied) {
 			t.Fatal(err)
@@ -38,8 +38,10 @@ func TestRestrictedShellRecoveryUsesRealWorkingDirectory(t *testing.T) {
 	}
 	gw := NewGateway(Builtin(BuiltinConfig{}), nil, nil)
 	p := principal(dir, domain.ToolGrant{Name: "shell.exec", Commands: []string{"pwd"}})
-	if _, err := call(t, gw, p, "shell.exec", map[string]any{"command": "cd server && pwd"}); !errors.Is(err, ErrDenied) {
-		t.Fatal(err)
+	for _, command := range []string{"cd server && pwd", "pwd 'secret-argument", "pwd \"secret-argument", "pwd secret-argument\\"} {
+		if _, err := call(t, gw, p, "shell.exec", map[string]any{"command": command}); !errors.Is(err, ErrDenied) || !strings.Contains(err.Error(), "argv") {
+			t.Fatal(err)
+		}
 	}
 	r := run(t, gw, p, "shell.exec", map[string]any{"argv": []string{"pwd"}, "cwd": "server"})
 	if !strings.Contains(r.Content, filepath.Join(dir, "server")) {
