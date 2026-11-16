@@ -42,10 +42,11 @@ type Input struct {
 	SCMConnection string `json:"scmConnection,omitempty"`
 }
 type Draft struct {
-	TriggerGitHubIssue string      `json:"triggerGitHubIssue,omitempty"`
-	Submitted          bool        `json:"submitted,omitempty"`
-	Resolution         *Resolution `json:"resolution,omitempty"`
-	ObservedState      string      `json:"observedState,omitempty"`
+	EnvironmentApprovalID string      `json:"environmentApprovalId,omitempty"`
+	TriggerGitHubIssue    string      `json:"triggerGitHubIssue,omitempty"`
+	Submitted             bool        `json:"submitted,omitempty"`
+	Resolution            *Resolution `json:"resolution,omitempty"`
+	ObservedState         string      `json:"observedState,omitempty"`
 	Input
 	ExecutionGraphID string    `json:"executionGraphId,omitempty"`
 	LaunchError      string    `json:"launchError,omitempty"`
@@ -211,6 +212,7 @@ func (m Manager) save(ctx context.Context, id string, in Input, revision int64, 
 		}
 		d.Submitted = old.Submitted
 		d.TriggerGitHubIssue = old.TriggerGitHubIssue
+		d.EnvironmentApprovalID = old.EnvironmentApprovalID
 		d.CreatedAt = old.CreatedAt
 		d.CreatedBy = old.CreatedBy
 	}

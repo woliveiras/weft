@@ -178,6 +178,8 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
   if(saved&&saved.status!=='draft')return <TaskTracking task={saved} canControl={canStart} canDecide={canEdit} nativeProfile={nativeProfile}/>;
   return <>
     <a href="#/tasks">Back to tasks</a>
+    {saved?.environmentApprovalId&&<p>Environment preparation requires a decision in <a href="#/approvals">Approvals</a>. The issue remains in progress.</p>}
+    {saved?.launchError&&<p role="alert">{saved.launchError}</p>}
     {modelBlocked&&<NoModelProvider admin={admin}/>}
     {input.graphId&&<TaskBudgetPreview workflow={input.graphId} project={input.projectId}/>}
     <form className="card form" aria-label="Task request" onInvalidCapture={e=>{

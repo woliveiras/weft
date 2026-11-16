@@ -34,7 +34,7 @@ func issueReason(t *Trigger, i Issue) string {
 		return "is assigned to someone else"
 	case i.Blocked:
 		return "is blocked"
-	case t.Processed[DedupKey(t, i)] != "":
+	case t.Processed[DedupKey(t, i)] != "" && !pendingFailedRetry(t, DedupKey(t, i)):
 		return "already ran with this workflow (task " + t.Processed[DedupKey(t, i)] + ")"
 	}
 	return ""

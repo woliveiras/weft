@@ -44,6 +44,8 @@ func TestDue(t *testing.T) {
 		{trigger.Trigger{State: trigger.Active, NextRunAt: &past}, true},
 		{trigger.Trigger{State: trigger.Active, NextRunAt: &now}, true},
 		{trigger.Trigger{State: trigger.Active, NextRunAt: &future}, false},
+		{trigger.Trigger{State: trigger.Active, NextRunAt: &future, CurrentTask: "tsk_preparing"}, true},
+		{trigger.Trigger{State: trigger.Paused, NextRunAt: &future, CurrentTask: "tsk_preparing"}, false},
 		{trigger.Trigger{State: trigger.Paused}, false},
 		{trigger.Trigger{State: trigger.Finished}, false},
 	} {

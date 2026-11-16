@@ -233,6 +233,7 @@ func (s *Server) routes() {
 		{"POST /api/v1/triggers/{trigger}/resolve-hold", O, s.resolveTriggerHold},
 		{"POST /api/v1/triggers/{trigger}/pause", A, s.pauseTrigger},
 		{"POST /api/v1/triggers/{trigger}/resume", A, s.resumeTrigger},
+		{"POST /api/v1/triggers/{trigger}/retry-failed", A, s.retryFailedTrigger},
 		{"GET /api/v1/scm/connections", R, s.scmConnections},
 		{"POST /api/v1/scm/connections", A, s.createSCMConnection},
 		{"PUT /api/v1/scm/connections/{name}", A, s.updateSCMConnection},
@@ -1064,6 +1065,16 @@ func (s *Server) decide(w http.ResponseWriter, r *http.Request) error {
 	pending, err := s.Store.GetApproval(r.Context(), r.PathValue("aid"))
 	if err != nil {
 		return err
+	}
+	if pending.Kind == domain.ApprovalTaskEnvironment {
+		if !identityFrom(r.Context()).Role.Allows(config.RoleAdmin) {
+			return fmt.Errorf("%w: environment approval requires admin", tools.ErrDenied)
+		}
+		if approve {
+			if err := s.taskRunner().ValidateEnvironmentApproval(r.Context(), pending); err != nil {
+				return badRequest("task environment approval no longer matches the saved task")
+			}
+		}
 	}
 	if pending.Kind == domain.ApprovalEnvironment {
 		if !identityFrom(r.Context()).Role.Allows(config.RoleAdmin) {

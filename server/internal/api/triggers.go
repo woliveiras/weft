@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/woliveiras/weft/server/internal/trigger"
@@ -143,5 +144,29 @@ func (s *Server) previewTrigger(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}
 	writeJSON(w, 200, m)
+	return nil
+}
+
+func (s *Server) retryFailedTrigger(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Key     string `json:"key"`
+		TaskID  string `json:"taskId"`
+		Confirm bool   `json:"confirm"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1024)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil || !in.Confirm || in.Key == "" || len(in.Key) > 160 || in.TaskID == "" {
+		return badRequest("issue key, original task id and explicit confirmation are required")
+	}
+	var extra any
+	if dec.Decode(&extra) != io.EOF {
+		return badRequest("expected one JSON object")
+	}
+	t, err := s.triggers().RetryFailed(r.Context(), r.PathValue("trigger"), in.Key, in.TaskID, identityFrom(r.Context()).Name)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 200, t)
 	return nil
 }

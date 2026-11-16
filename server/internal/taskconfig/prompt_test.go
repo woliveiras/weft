@@ -222,3 +222,29 @@ func TestPromptSaveValidationAndDependencyFailures(t *testing.T) {
 		}
 	}
 }
+
+func TestPromptEditRetainsTriggerPreparationApproval(t *testing.T) {
+	s, err := sqlstore.OpenSQLite(t.Context(), filepath.Join(t.TempDir(), "approval.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err = s.Migrate(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	m := Manager{Store: s}
+	d, err := m.SavePrompt(t.Context(), PromptInput{Request: "Explain"}, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.EnvironmentApprovalID = "apr_saved"
+	d.TriggerGitHubIssue = "acme/app#1"
+	d, err = m.Transition(t.Context(), d, "draft", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err = m.SavePrompt(t.Context(), PromptInput{ID: d.ID, Revision: d.Revision, Request: "Edited request"}, "admin")
+	if err != nil || d.EnvironmentApprovalID != "apr_saved" || d.TriggerGitHubIssue != "acme/app#1" {
+		t.Fatal("prompt edit discarded trusted preparation metadata", d, err)
+	}
+}

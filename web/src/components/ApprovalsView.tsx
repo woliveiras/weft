@@ -8,6 +8,7 @@ import { Badge, Btn, PageHeading, Empty, ErrorBox, JsonView, fmtDateTime } from 
 
 const KIND_HELP: Record<string, string> = {
   delegation: 'A temporary analysis child requests approval. It uses the parent model with no tools or workspace access. Rejecting returns an error to the parent; approval never expands its grants.',
+  task_environment: 'Review the saved task environment. Admin approval permits preparation; the trigger starts the task after the environment is ready. Tool authorization remains Ask.',
   environment: 'Review the proposed environment and rationale. Admin approval saves the definition and starts its build. Tasks remain blocked until ready.',
   tool: 'An agent wants to invoke a tool that requires approval.',
   message: 'A message is held at a gated channel or node.',

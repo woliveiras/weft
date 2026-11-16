@@ -15,7 +15,7 @@ test('saves and resumes a reviewed request without starting or changing the work
  await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption('task-draft-flow');
  await openTaskSettings(page);
  await page.getByRole('combobox',{name:'Entry agent',exact:true}).selectOption('worker');
- // Explicitly clear the suggested result to retain invalid-input coverage.
+ // An omitted result must resolve to the entry agent, including after reload.
  await openTaskSettings(page);
  await page.getByRole('combobox',{name:'Result agent',exact:true}).selectOption('');
  await page.getByRole('button',{name:'Save draft',exact:true}).click();
@@ -24,7 +24,9 @@ test('saves and resumes a reviewed request without starting or changing the work
  await page.reload();
  await expect(page.getByRole('textbox',{name:'Request',exact:true})).toHaveValue('Explain why the parser rejects this input.');
  await page.getByRole('button',{name:'Review requirements'}).click();
- await expect(page.getByRole('article',{name:'Task requirements'})).toContainText('Select an enabled result agent.');
+ await expect(page.getByRole('article',{name:'Task requirements'})).not.toContainText('Select an enabled result agent.');
+ await openTaskSettings(page);
+ await expect(page.getByRole('combobox',{name:'Result agent',exact:true})).toHaveValue('worker');
  expect(await (await page.request.get('/api/v1/graphs/task-draft-flow/executions',{headers})).json()).toEqual([]);
  const saved=await (await page.request.get('/api/v1/graphs/task-draft-flow',{headers})).json();
  expect(saved.record.version).toBe(1);expect(saved.graph.spec.nodes[0].tools??[]).toEqual([]);

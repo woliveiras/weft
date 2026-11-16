@@ -60,9 +60,10 @@ func (r *Runner) Run(ctx context.Context) {
 	}
 }
 
-// Due reports whether an active trigger should run now.
+// Due follows admitted tasks on each controller tick; discovery retains the
+// configured interval. Waiting for preparation never holds a poll open.
 func Due(t *Trigger, now time.Time) bool {
-	return t.State == Active && (t.NextRunAt == nil || !now.Before(*t.NextRunAt))
+	return t.State == Active && (t.CurrentTask != "" || t.NextRunAt == nil || !now.Before(*t.NextRunAt))
 }
 
 // Tick runs every due trigger once.
@@ -253,6 +254,16 @@ func (r *Runner) step(ctx context.Context, t *Trigger, search *githubSearchPoll)
 	if Reason(t, i) != "" {
 		return "eligibility_changed", heldErr
 	}
+	if pendingFailedRetry(t, DedupKey(t, i)) {
+		retry := t.FailedRetries[DedupKey(t, i)]
+		signal, err := trackerRead[string](ctx, call, trackerRequeue, trackerArgs{Key: i.Key, Since: retry.RecordedAt})
+		if err != nil {
+			return "retry_unverified", errors.New("failed admission requeue could not be verified")
+		}
+		if signal == "" {
+			return "retry_waiting", nil
+		}
+	}
 	if t.ReadinessDisabled {
 		return r.claimAndStart(ctx, t, call, i)
 	}
@@ -334,6 +345,9 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 	admission := "trigger-admissions/" + triggerFingerprint(struct {
 		Source, Cloud, Issue, Workflow string
 	}{i.Source, t.Source.CloudID, strings.ToLower(i.Key), t.Workflow})
+	if pendingFailedRetry(t, DedupKey(t, i)) {
+		admission += "/" + t.FailedRetries[DedupKey(t, i)].Generation
+	}
 	owner := r.Instance + "/" + t.ID
 	ok, err := r.Store.AcquireLease(ctx, admission, owner, 3*time.Minute)
 	if err != nil || !ok {
@@ -422,7 +436,9 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 	key := DedupKey(t, i)
 	taskID, startErr := r.Tasks.Start(ctx, t, i)
 	if startErr != nil {
-		reason := "Weft failure. Weft could not start a task for this issue. Review the task and trigger, then resume the trigger."
+		cause := launchReason(startErr)
+		r.log().WarnContext(ctx, "trigger task launch failed", "trigger", t.ID, "issue", i.Key, "task", taskID, "cause", cause)
+		reason := "Weft failure. Weft could not start a task for this issue. " + cause
 		var reached *cost.ReachedError
 		if errors.As(startErr, &reached) {
 			reason = "Weft could not admit this task. " + reached.Error() + " in Models → Costs."
@@ -430,10 +446,14 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 				reason += " Start the saved task after raising the budget: " + r.TaskURL(taskID)
 			}
 		}
+		if taskID != "" && !strings.Contains(reason, r.TaskURL(taskID)) {
+			reason += "\n\nTask: " + r.TaskURL(taskID)
+		}
 		writeErr := errors.Join(relabel(ctx, call, i.Key, []string{LabelInProgress}, LabelFailed, ""), comment(ctx, call, i.Key, reason))
 		_, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(t *Trigger) error {
 			finishClaim(t, key, i.Key, "failed")
-			t.State, t.PausedReason = Paused, "Weft could not start a task for "+i.Key+". Review the task and trigger before resuming."
+			t.LastFailedTask = taskID
+			t.State, t.PausedReason = Paused, "Weft could not start a task for "+i.Key+". "+cause
 			return nil
 		})
 		return "start_failed", errors.Join(writeErr, err)
@@ -467,6 +487,10 @@ func finishClaim(t *Trigger, key, issue, result string) {
 		t.Processed = map[string]string{}
 	}
 	t.Processed[key] = result
+	if retry, ok := t.FailedRetries[key]; ok {
+		retry.Consumed = true
+		t.FailedRetries[key] = retry
+	}
 	delete(t.RetainedReadiness, key)
 	if idx := t.holdIndex(issue); idx >= 0 {
 		t.Holds = slices.Delete(t.Holds, idx, idx+1)
@@ -488,6 +512,7 @@ type Tasks interface {
 
 // TaskStatus is what a trigger needs to know about its task.
 type TaskStatus struct {
+	LaunchFailure  bool
 	State          string
 	Reason         string
 	PullRequestURL string
@@ -518,6 +543,10 @@ func (r *Runner) followTask(ctx context.Context, t *Trigger) (string, error) {
 	link := r.TaskURL(t.CurrentTask)
 	add, outcome := LabelFailed, "task_failed"
 	message := "Weft failure. The task ended " + st.State + ". Review the task and resume the trigger when it is ready for more issues.\n\nTask: " + link
+	if st.LaunchFailure {
+		r.log().WarnContext(ctx, "trigger task launch failed", "trigger", t.ID, "issue", i.Key, "task", t.CurrentTask, "cause", st.Reason)
+		message = "Weft failure. " + st.Reason + "\n\nTask: " + link
+	}
 	if st.State == "succeeded" {
 		if st.PullRequestURL != "" {
 			add, outcome = LabelReview, "completed"
@@ -532,6 +561,11 @@ func (r *Runner) followTask(ctx context.Context, t *Trigger) (string, error) {
 		if add == LabelFailed || writeErr != nil {
 			current.State = Paused
 			current.PausedReason = "Review delivery for " + i.Key + " and resume the trigger."
+			if st.LaunchFailure {
+				current.LastFailedTask = t.CurrentTask
+				current.PausedReason = st.Reason + " Task: " + link
+				current.Processed[DedupKey(t, i)] = "failed"
+			}
 			if writeErr != nil {
 				current.PausedReason = "Tracker write-back for " + i.Key + " could not be confirmed. Review the tracker before resuming."
 			}

@@ -79,7 +79,7 @@
         "sandbox.lifecycle", "scm.branch_pushed", "scm.connection_changed", "scm.pull_request_opened",
         "task.authorization_preference_requested", "task.authorization_requested", "task.draft_save_requested", "task.prompt_resolution",
         "task.transition_requested", "task.workspace_cleanup_completed", "task.workspace_cleanup_requested", "tool.completed",
-        "tool.denied", "tool.invoked", "trigger.changed", "trigger.hold_resolved",
+        "tool.denied", "tool.invoked", "trigger.changed", "trigger.failed_retry_requested", "trigger.hold_resolved",
         "trigger.note", "trigger.run", "workspace.observed"
       ]
     },

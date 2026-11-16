@@ -209,3 +209,11 @@ describe('TriggersSection', () => {
     expect(screen.queryByRole('button', { name: 'Add issue trigger' })).toBeNull();
   });
 });
+
+it('shows the retained task launch cause on a paused trigger',async()=>{
+ const cause='Task environment build failed. The container image build command failed.';
+ fakeApi({'GET /api/v1/triggers':()=>[{...paused,currentTask:undefined,pausedReason:cause}],'GET /api/v1/scm/connections':()=>[]});
+ render(<TriggersSection graph={graph} role="viewer"/>);
+ expect((await screen.findByRole('status')).textContent).toBe(cause);
+ expect(screen.queryByRole('button',{name:'Resume and record consent'})).toBeNull();
+});

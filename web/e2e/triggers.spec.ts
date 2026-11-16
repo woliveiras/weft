@@ -140,3 +140,16 @@ test('forced resolution requires confirmation and records the unpublished commen
   const resolution = page.getByRole('region', { name: 'Resolved readiness holds' }).getByRole('listitem').filter({ hasText: 'acme/app#13' });
   await expect(resolution).toContainText('The readiness comment has not been published.');
 });
+
+test('links a failed trigger to the draft with its retained launch cause',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+  await page.goto('/#/g/git-inspect/canvas');
+  await page.getByRole('button',{name:'Graph settings',exact:true}).click();
+  await page.getByRole('navigation',{name:'Graph settings sections'}).getByRole('link',{name:/^Triggers( ·|$)/}).click();
+  const card=page.getByRole('article',{name:'Trigger Failed launch fixture'});
+  const cause='Task environment preparation failed. Select an enabled result agent.';
+  await expect(card.getByRole('status')).toHaveText(cause);
+  await card.getByRole('link',{name:'Open failed task'}).click();
+  await expect(page.getByRole('alert')).toHaveText(cause);
+  await expect(page.getByRole('textbox',{name:'Request',exact:true})).toHaveValue('Fix the parser');
+});

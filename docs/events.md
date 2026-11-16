@@ -74,6 +74,7 @@ be stored before proceeding.
 | `trigger.note` | something a person should know about a trigger's task (missing Jira transition, failed comment) | `{trigger, task, message}` (graph id = the task run) |
 | `trigger.run` | one trigger run (no graph id) | `{trigger, outcome, error?}` |
 | `trigger.changed` | trigger created, updated, paused, resumed or deleted (no graph id) | `{trigger, action, state, workflow}` (actor = caller or `system:trigger`) |
+| `trigger.failed_retry_requested` | administrator requests a single retry of a confirmed pre-dispatch failure; recorded before cancelling the old draft | `{trigger, issue, task, generation}`; successful permission is retained in `failedRetries` and announced by `trigger.changed` with `action: failed_retry_recorded` |
 | `trigger.hold_resolved` | operator resolution or automatic release of a readiness hold (no graph id) | `{trigger, key, reason, round}` (actor = operator or `system:trigger` for automatic release). Replaces `trigger.changed` with `action: hold_resolved`. |
 | `scm.connection_changed` | SCM connection created, updated or deleted (no graph id) | `{action, connection}` (actor = caller) — never tokens |
 | `cost.recorded` | LLM gateway, after every dispatched model call; runtime turn for `TurnResult.usage` (graph, node and execution ids) | `{source: "gateway"\|"external", provider, type, model, execution, usage, estimated, priced, rateSource: "catalogue"\|"local"\|"unpriced", priceVersion, costMicros, currency, error?}` — never prompts, completions or credentials |

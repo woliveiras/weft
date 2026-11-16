@@ -73,6 +73,8 @@ func (m Manager) savePrompt(ctx context.Context, p PromptInput, actor, newID str
 			return nil, storage.ErrConflict
 		}
 		d.Input = old.Input
+		d.EnvironmentApprovalID = old.EnvironmentApprovalID
+		d.TriggerGitHubIssue = old.TriggerGitHubIssue
 		d.Submitted = old.Submitted
 		d.CreatedAt = old.CreatedAt
 		d.CreatedBy = old.CreatedBy

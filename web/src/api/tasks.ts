@@ -27,6 +27,7 @@ export interface TaskDraft extends TaskInput {
   observedState?: string;
   executionGraphId?: string;
   launchError?: string;
+  environmentApprovalId?: string;
   createdBy: string;
   updatedBy: string;
   createdAt: string;

@@ -13,6 +13,7 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/app"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
+	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"github.com/woliveiras/weft/server/internal/trigger"
 
 	"github.com/woliveiras/weft/server/internal/tools"
@@ -59,6 +60,30 @@ func prepareReadinessFixture(ctx context.Context, a *app.App) error {
 	_, err := a.MCP.Put(ctx, mcpconfig.Input{ID: "e2e-tracker", Name: "Tracker fixture", Service: "github",
 		Endpoint: "https://api.githubcopilot.com/mcp/", Enabled: true, Credential: &mcpconfig.Credential{Value: "e2e-tracker-placeholder-credential"}}, 0, "e2e-fixture")
 	if err != nil {
+		return err
+	}
+	g, err := a.Store.GetGraph(ctx, "git-inspect", 0)
+	if err != nil {
+		return err
+	}
+	d, err := (taskconfig.Manager{Store: a.Store}).SaveTriggered(ctx, taskconfig.Input{Title: "Failed issue launch", Request: "Fix the parser", Outcome: "implement", GraphID: "git-inspect", GraphVersion: g.Metadata.Version, NodeID: "worker"}, "e2e-fixture", "acme/app#15")
+	if err != nil {
+		return err
+	}
+	d.LaunchError = "Task environment preparation failed. Select an enabled result agent."
+	if _, err = (taskconfig.Manager{Store: a.Store}).Transition(ctx, d, "draft", "e2e-fixture"); err != nil {
+		return err
+	}
+	failed, err := a.Triggers.Triggers.Create(ctx, trigger.Input{Name: "Failed launch fixture", Workflow: "git-inspect", NodeID: "worker", Source: trigger.SourceConfig{Kind: "github", ConnectionID: "e2e-tracker", Repository: "acme/app"}}, "e2e-fixture")
+	if err != nil {
+		return err
+	}
+	if _, err = a.Triggers.Triggers.Update(ctx, failed.ID, "e2e-fixture", func(tr *trigger.Trigger) error {
+		tr.State = trigger.Paused
+		tr.PausedReason = d.LaunchError
+		tr.LastFailedTask = d.ID
+		return nil
+	}); err != nil {
 		return err
 	}
 	a.TrackerAPI.Client = &http.Client{Transport: issueFixtureTransport{}}

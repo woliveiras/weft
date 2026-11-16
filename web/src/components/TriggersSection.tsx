@@ -149,6 +149,7 @@ export function TriggersSection({ graph, role, onTriggers }: {
             </p>
             <p className="small muted">Runs as {t.consent.actor} for workflow version {t.consent.workflowVersion} (consent recorded {fmtDateTime(t.consent.recordedAt)}).</p>
             {t.pausedReason && <p role="status">{t.pausedReason}</p>}
+            {t.lastFailedTask && <p><a href={`#/tasks/${encodeURIComponent(t.lastFailedTask)}`}>Open failed task</a></p>}
             {t.lastError && <p className="tone-bad small">Last run failed: {t.lastError}</p>}
             <p className="small">
               {t.lastRunAt ? `Last run ${fmtDateTime(t.lastRunAt)}` : 'Not run yet'}

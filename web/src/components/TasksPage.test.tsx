@@ -226,3 +226,11 @@ it('offers Same as entry when the result is omitted',async()=>{
  await userEvent.click(screen.getByText('Review settings'));
  expect(within(screen.getByLabelText('Result agent')).getByRole('option',{name:'Same as entry'}).getAttribute('value')).toBe('');
 });
+it('shows a retained launch failure and the pending environment approval on a draft',async()=>{
+ const draft={id:'tsk_launch',revision:2,status:'draft',title:'Issue task',request:'Fix parser',outcome:'implement',graphId:'factory',graphVersion:1,nodeId:'worker',resultNodeId:'worker',launchError:'Task environment preparation failed. Select an enabled result agent.',environmentApprovalId:'apr_env'};
+ fakeApi({'GET /api/v1/projects':()=>[],'GET /api/v1/tasks':()=>({items:[draft]}),'GET /api/v1/tasks/tsk_launch':()=>draft});
+ render(<TasksPage id="tsk_launch" info={info} graphs={graphs}/>);
+ expect((await screen.findByRole('alert')).textContent).toBe(draft.launchError);
+ expect(screen.getByRole('link',{name:'Approvals'}).getAttribute('href')).toBe('#/approvals');
+ expect(screen.getByText(/The issue remains in progress/)).toBeTruthy();
+});

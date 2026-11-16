@@ -364,6 +364,12 @@ func (m *Manager) run(ctx context.Context, b *build, g *domain.Graph, st *Status
 		if g.Spec.Workspace.Repo != "" {
 			return m.sharedSteps(ctx, g, &result, b.force, logBuf)
 		}
+		if !b.force {
+			image, caches, reused, err := m.reuseWorkflowImage(ctx, g, &result, logBuf)
+			if err != nil || reused {
+				return image, caches, err
+			}
+		}
 		return m.steps(ctx, g, st.Hash, logBuf)
 	})
 

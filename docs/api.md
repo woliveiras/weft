@@ -184,8 +184,15 @@ administrator's current consent.
 | `GET /api/v1/triggers/{trigger}/matches` | operator | Read-only preview returning `{next, waiting[], skipped[], busy}`. GitHub preview spends the shared trigger search budget and reports a deferral in `error` when the budget is full. Preview never evaluates readiness or writes to the tracker. |
 | `POST /api/v1/triggers/{trigger}/resolve-hold` | operator | Resolve the hold identified by `{key, generation}`. Use `force: true` to explicitly abandon a pending or failed label or assignment update, or to abandon comment publication after the label was applied. The tracker keeps its current labels and assignment. The API audits the resolution and frees capacity. It returns 409 if polling is in progress, the claim was interrupted, the hold generation changed, or tracker write-back requires forced resolution. |
 | `POST /api/v1/triggers/{trigger}/pause` | admin | Pause polling. |
+| `POST /api/v1/triggers/{trigger}/retry-failed` | admin | Confirm `{key, taskId, confirm:true}` for a paused readiness-enabled GitHub trigger and its original undispatched failed draft. Cancels that draft, retains previous records, and audits one new admission generation. Does not resume or modify GitHub. Requires a fresh verified maintainer `weft:todo` event after recording; ambiguous/dispatched tasks return 409. |
 | `POST /api/v1/triggers/{trigger}/resume` | admin | Record current consent and activate polling. |
 | `DELETE /api/v1/triggers/{trigger}` | admin | Remove the trigger. |
+
+An omitted `resultNodeId` means the entry agent. `lastFailedTask` links a retained
+launch failure; `failedRetries` records explicit single-use recovery decisions.
+Ask environment preparation uses administrator-only `task_environment` approvals
+bound to the saved task scope. The task exposes `environmentApprovalId` and
+`launchError`; an ordinary task preparation cannot bypass a pending decision.
 
 The default selection label is `weft:todo`. The interval defaults to 15
 minutes and accepts 5–1440 minutes. `readinessDisabled` defaults to

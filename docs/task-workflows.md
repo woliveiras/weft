@@ -322,6 +322,76 @@ authorization and readiness settings. Edit the trigger and then review
 and resume it to consent to a changed scope. The prototype uses the new
 trigger policy when a trigger is reviewed again.
 
+**Same as entry** selects the entry agent as the result agent. This also
+applies to saved triggers with an empty `resultNodeId` and task API requests
+that omit the result. A disabled or nonexistent explicit result still blocks
+launch.
+
+After readiness and the admission budget check, Weft claims the issue and
+creates a task under the recorded trigger consent. For workflows with an
+environment, the task prepares a stopped execution copy before starting agents.
+Builds run asynchronously. The existing trigger task-status check follows the
+admitted task on each controller tick (normally 30 seconds), while issue
+discovery keeps the configured polling interval. `weft:wip` remains in place
+through preparation, capacity waits and approvals. Pausing the trigger suspends
+its automatic continuation; resuming requires current consent.
+
+With **Ask**, environment preparation creates a durable `task_environment`
+decision in **Approvals** before preparation starts. An administrator reviews
+the saved definition and approves or rejects it. The decision expires after
+24 hours and is bound to the task's authorization scope: editing the task or
+workflow cannot reuse a stale decision. Tool authorization stays Ask. Approval
+does not dispatch agents; the next status check requests preparation, then a
+later check starts the task once its environment is ready. The ordinary task
+console still requires its own explicit preparation and start actions.
+
+Compatible repository environments use the existing shared-image pipeline.
+A task without `workspace.repo` can also reuse its workflow's ready image when
+the full effective image definition matches and neither definition contains
+workspace context, provenance or setup commands. The task owns a separate image
+reference and fresh cache volumes; resetting the source cannot remove those
+references. Setup/workspace-derived images are not transferable through this
+shortcut. Without a compatible image the normal asynchronous build runs.
+
+A preparation, approval or launch failure pauses the trigger, applies
+`weft:needs-attention`, retains `launchError` on the task and links the issue
+comment to that task. The task and trigger display the bounded cause; the
+trigger has an **Open failed task** link. One structured trigger failure log
+records trigger, issue, task and cause. Public diagnostics use trusted reason
+categories rather than copying tracker text, command output, credentials or
+internal paths. Build output remains available in the existing environment
+diagnostics. Uncertain preparation/start is not automatically replayed.
+
+### Explicit recovery of a failed pre-dispatch admission
+
+**Resume and record consent** plus relabeling alone does not bypass the
+persisted admission. For a GitHub failure whose original task is still a draft
+with no execution copy or executions, an administrator can explicitly authorize
+one new admission:
+
+1. Inspect the failed task and correct the workflow/trigger configuration.
+   Keep the trigger paused and verify that the old task dispatched no work.
+2. Call `POST /api/v1/triggers/{trigger}/retry-failed` with
+   `{"key":"owner/repo#1","taskId":"tsk_original","confirm":true}` using
+   the administrator API session. This cancels the old undispatched draft so
+   it cannot later be started, retains its diagnostics and all prior admission
+   records, and records the actor and a single-use retry generation. It changes
+   neither tracker labels nor the paused trigger state. A failed response must
+   be inspected before repeating the action.
+3. In graph **Settings → Triggers**, select **Resume and record consent**.
+4. After the retry was recorded, a human with GitHub Maintain or Admin permission
+   must remove/reapply `weft:todo`. Also restore the trigger's custom selection
+   label if it differs. Leave `weft:needs-attention` for the runner to remove
+   on claim. Existing or unverified label events cannot authorize the retry.
+5. Wait for a new readiness verdict and budget check, then a new task link and
+   `weft:wip`. With Ask, review the environment decision in **Approvals**.
+   The trigger prepares and starts the new task when ready.
+
+The retry is consumed even if that new launch fails. An already dispatched or
+partially prepared task is refused by this narrow recovery API; inspect and
+resolve its retained resources explicitly. There is no deletion, database edit,
+background cleanup or broad replay of failed tasks.
+
 GitHub triggers use the official GitHub MCP endpoint with a static
 repository-scoped token. Jira Cloud triggers use the official Atlassian MCP
 endpoint with a scoped API token that also works at the Atlassian API

@@ -295,7 +295,11 @@ Graphs with the same exact `spec.workspace.repo` URL and the default graph
 workspace path automatically reuse compatible prepared images. Each graph has
 its own workspace and active containers. Custom `workspace.path` is rejected
 for this flow to avoid accidental aliasing. Graphs without a repository URL
-retain the existing per-graph build lifecycle; a local path alone does not
+retain the existing per-graph build lifecycle, except that an owned task copy
+can reuse its source workflow’s ready image when both definitions have no setup,
+context or provenance and their full image-definition digests match. This path
+holds the source environment lease while validating/tagging the image, gives
+the task its own image reference and creates fresh private caches; a local path alone does not
 establish a shared repository identity. A graph is the task boundary here;
 nodes within a graph retain their existing shared/worktree configuration.
 

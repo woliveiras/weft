@@ -340,3 +340,62 @@ Fixture verification on 2026-11-12.
 Go used cached Docker images with pulls disabled. Playwright used installed
 Chromium and a disposable Darwin backend. Live tracker qualification remains
 in PROD-14.
+
+## AA1–AA3 trigger launch repair on 2026-11-16
+
+The operational failure was confirmed in the trigger/task managers: an empty
+result was copied into a draft, trigger launch skipped environment preparation,
+and start errors were replaced by generic tracker messages without a saved
+launch diagnostic. Recovery also retained a failed admission that ordinary
+resume/relabel could not reconsider.
+
+The repair defaults omitted results to the entry at save, legacy decode, consent
+comparison and review. Trigger tasks use the existing status tick to await a
+durable Ask approval, prepare asynchronously and start the ready execution copy.
+Repository images retain the shared pipeline. Compatible source images without
+repository, context, provenance or setup can be tagged for a task with private
+caches. No new reconciler was introduced. The maintainer explicitly approved
+this minimal extension. Public failure causes are classified from trusted text,
+persisted on the draft, logged once at the trigger boundary and linked from the
+tracker and console. A narrow administrator retry records a new single-use
+admission generation, retires the undispatched draft without deleting it and
+requires renewed consent plus a fresh verified maintainer requeue.
+
+Verification covers:
+
+- Unit tests for result defaults, legacy fingerprints, enabled-agent validation,
+  reuse exclusions, approval validation, safe diagnostics and retry generations.
+- API/store/gateway/environment/engine integration with a GitHub transport fixture:
+  readiness verdict, claim, pending Ask decision, asynchronous build, compatible
+  reuse with and without a repository, one task execution and retained `weft:wip`.
+  The real managers run against SQLite and a controlled Docker CLI boundary.
+- Preparation, build and start failures; approval rejection, expiration, stale
+  scope and role restrictions; persisted safe cause, task link, failure label and
+  exactly one structured launch-failure log. The existing no-environment launch
+  and budget-before-effects integration tests remain enabled.
+- Persisted runner recovery with unchanged original admission, audited generation,
+  rejection of old/unprivileged labels and exactly one fresh admission. API tests
+  reject missing confirmation and non-admin callers and prevent old-draft start.
+- Vitest task/trigger diagnostics and pending-approval navigation; Chromium trigger,
+  task-draft and task-authorization flows using a disposable backend.
+
+| Command | Result |
+| --- | --- |
+| `./scripts/go.sh test ./...` | Full Go suite passed. The cached Go test image includes Git and git-daemon; no fallback image was needed. |
+| `./scripts/go.sh test ./internal/api -run TestTriggerEnvironmentLaunchLifecycle -count=1` | All nine lifecycle cases passed, including repository image reuse. |
+| `./scripts/go.sh test -tags e2e ./cmd/weft-e2e` | Passed. |
+| `./scripts/go.sh vet ./...`, `make lint`, Docker `gofmt -l .` with `--pull=never` | Passed; no unformatted files. |
+| `make build` and Docker `CGO_ENABLED=0 GOOS=linux/darwin go build ./...` | Passed for both supported targets. Windows was not built. |
+| `make test-python` | All 40 SDK, agent and script tests passed. |
+| `pnpm typecheck`, `tsc --project tsconfig.e2e.json`, `pnpm exec vitest run`, `pnpm run build` | Passed in cached `node:22-bookworm` with the named node-modules volume and public npm registry; 464 tests in 88 files. |
+| `playwright test e2e/triggers.spec.ts e2e/task-drafts.spec.ts e2e/task-authorization.spec.ts` | 22 Chromium scenarios passed, including all six trigger scenarios. |
+| `git diff --check` | Passed. |
+
+The aggregate `make test` target was covered through its Go/Python suites and
+the equivalent web commands above. Playwright used the installed macOS Chromium
+and Node, with a disposable Darwin backend cross-built in the cached Go container;
+a temporary config changed only the web-server executable, not checks or tests.
+An initial Vitest run timed out in an unchanged shared-environment test while
+Go builds were running; the complete rerun passed without changing its timeout.
+The first Go full run caught the new event missing from the schema/catalog; both
+were added before the successful full rerun. No tests were weakened.

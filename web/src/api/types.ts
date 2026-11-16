@@ -364,7 +364,7 @@ export interface MessageRecord {
   updatedAt: string;
 }
 
-export type ApprovalKind = 'tool' | 'message' | 'turn' | 'question' | 'environment' | 'delegation';
+export type ApprovalKind = 'tool' | 'message' | 'turn' | 'question' | 'environment' | 'task_environment' | 'delegation';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
 
 export interface Approval {
@@ -538,6 +538,7 @@ export interface Trigger extends TriggerInput {
   id: string;
   state: 'active' | 'paused' | 'finished';
   pausedReason?: string;
+  lastFailedTask?: string;
   consent: { actor: string; workflowVersion: number; authorizationMode: string; recordedAt: string };
   lastRunAt?: string;
   nextRunAt?: string;

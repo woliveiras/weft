@@ -58,6 +58,9 @@ func (m Manager) PrepareEnvironment(ctx context.Context, id string, revision int
 	if err := m.checkDraftBudget(ctx, d); err != nil {
 		return nil, err
 	}
+	if err := m.checkEnvironmentApproval(ctx, d); err != nil {
+		return nil, err
+	}
 	review, err := m.Review(ctx, id)
 	if err != nil {
 		return nil, err
