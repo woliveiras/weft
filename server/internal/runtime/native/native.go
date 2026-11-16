@@ -331,7 +331,9 @@ func (r *Runtime) call(ctx context.Context, env runtime.TurnEnv, res *runtime.Tu
 	env.Output(ctx, "→ "+call.Name+" "+truncate(string(args), 300))
 	out, err := env.InvokeTool(ctx, call.Name, args)
 	switch {
-	case errors.Is(err, tools.ErrDenied), errors.Is(err, tools.ErrUnknownTool):
+	case errors.Is(err, tools.ErrDenied):
+		return err.Error(), false
+	case errors.Is(err, tools.ErrUnknownTool):
 		return "permission denied: " + call.Name + " is not granted to you", false
 	case errors.Is(err, tools.ErrRejected):
 		return "a human rejected this call: " + err.Error(), false

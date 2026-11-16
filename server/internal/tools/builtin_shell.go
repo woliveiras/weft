@@ -16,6 +16,8 @@ func shellTools() []Tool {
 		name: "shell.exec", capability: capShell,
 		description: "Run a command in the workspace and return its exit code, stdout and stderr. " +
 			"Pass either 'command' (a shell command line) or 'argv' (program and arguments, no shell). " +
+			"With a command-restricted grant, run one allowed program per call without shell operators; use cwd for the relative directory (not cd), and argv for program and arguments. " +
+			"For example: {\"argv\":[\"go\",\"test\",\"./...\"],\"cwd\":\"server\"}. " +
 			"Commands run non-interactively with a timeout; do not start servers or watchers that never exit.",
 		schema: schema(`{"type":"object","properties":{` +
 			`"command":{"type":"string","description":"Shell command line, e.g. 'go test ./...'"},` +
@@ -67,19 +69,19 @@ func shellRequest(inv *Invocation, command string, argv []string, cwd string) (E
 	switch {
 	case len(argv) > 0:
 		if err := CheckCommand(inv.Grant, argv); err != nil {
-			return req, err
+			return req, restrictedShellDenied(inv)
 		}
 		req.Argv = argv
 	case len(inv.Grant.Commands) > 0:
 		if strings.ContainsAny(command, shellMeta) {
-			return req, fmt.Errorf("%w: this agent may only run single commands from %v; shell operators (; | & $ ` < > parentheses, newlines) are not allowed", ErrDenied, inv.Grant.Commands)
+			return req, restrictedShellDenied(inv)
 		}
 		split, err := SplitCommand(command)
 		if err != nil {
 			return req, err
 		}
 		if err := CheckCommand(inv.Grant, split); err != nil {
-			return req, err
+			return req, restrictedShellDenied(inv)
 		}
 		req.Argv = split // run without a shell: what was checked is what runs
 	default:
@@ -161,4 +163,9 @@ func SplitCommand(s string) ([]string, error) {
 		return nil, errors.New("empty command")
 	}
 	return args, nil
+}
+
+// Do not echo rejected command arguments, which may contain credentials.
+func restrictedShellDenied(inv *Invocation) error {
+	return fmt.Errorf("%w: shell.exec is granted with restrictions. Allowed programs/command patterns: %v. Run one allowed command per call; shell operators (; | & $ ` < > parentheses, braces, newlines) are not allowed. Use cwd for the workspace-relative directory instead of cd, and argv for the program and arguments, for example {\"argv\":[\"go\",\"test\",\"./...\"],\"cwd\":\"server\"} when go is allowed. Run subsequent commands in separate calls.", ErrDenied, inv.Grant.Commands)
 }

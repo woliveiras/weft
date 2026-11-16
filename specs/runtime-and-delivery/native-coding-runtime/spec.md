@@ -34,6 +34,10 @@ Edit tools enforce workspace grants and report failed matches. Multi-edit and pa
 
 Declared checks run in the selected worktree under shell grants and expose outcome evidence. Plans belong to the execution. Worktree checkpoints are recorded before applicable edits and a reviewed restore preserves protected Git state.
 
+Edge case: a command-restricted shell denial retains the grant explanation and
+guides the agent to one allowed program per call using `argv` and `cwd`. A
+corrected invocation runs through the same gateway and unchanged grant.
+
 ### AC-004 — Streaming and accounting
 
 Supported provider output streams to the task while completion, usage and budget accounting retain their existing semantics. Interruption is visible and cannot turn partial output into successful completion.
