@@ -315,7 +315,7 @@ repositories and user acceptance remain in the final external validation round.
 
 ## Issue-trigger readiness and delivery
 
-Open **Graph settings → Issue triggers** on a saved workflow. Select the
+Open the graph **Settings** tab → **Triggers** on a saved workflow. Select the
 tracker, entry and result agents, and source control connection. Saving
 records consent for the current source, gateway operations, workflow,
 authorization and readiness settings. Edit the trigger and then review

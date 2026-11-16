@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EnvironmentView, Graph } from '../api/types';
 import { EventStreamProvider } from '../hooks/useEventStream';
 import { apiError, fakeApi } from '../test/fakeApi';
-import { EnvironmentSection, environmentUsers } from './EnvironmentSection';
+import { EnvironmentNetwork, EnvironmentSection, environmentUsers } from './EnvironmentSection';
 
 class FakeEventSource {
   onopen: (() => void) | null = null;
@@ -166,9 +166,9 @@ it('explains reuse, writable cache isolation and shared reset retention', async 
 });
 
 it('offers reviewed egress and preserves the explicit host list when editing it', async () => {
-  fakeApi({ 'GET /api/v1/graphs/g/environment': () => view() });
   const env = { image: 'alpine', network: { run: 'egress' as const, allowedHosts: ['example.com'] } };
-  const { onChange } = renderSection({ graph: graph(env), savedGraph: graph(env) });
+  const onChange = vi.fn();
+  render(<EnvironmentNetwork graph={graph(env)} onChange={onChange} />);
   expect((screen.getByLabelText('Network for agents') as HTMLSelectElement).value).toBe('egress');
   expect((screen.getByLabelText('Allowed hosts (one exact DNS name per line)') as HTMLTextAreaElement).value).toBe('example.com');
   await userEvent.selectOptions(screen.getByLabelText('Network for agents'), 'none');
@@ -176,9 +176,9 @@ it('offers reviewed egress and preserves the explicit host list when editing it'
 });
 
 it('edits preparation hosts independently from runtime hosts and clears only the preparation list', async () => {
-  fakeApi({ 'GET /api/v1/graphs/g/environment': () => view() });
   const env = { image: 'alpine', network: { setup: 'egress' as const, setupAllowedHosts: ['registry.npmjs.org'], run: 'egress' as const, allowedHosts: ['example.com'] } };
-  const { onChange } = renderSection({ graph: graph(env), savedGraph: graph(env) });
+  const onChange = vi.fn();
+  render(<EnvironmentNetwork graph={graph(env)} onChange={onChange} />);
   expect((screen.getByLabelText('Network during build and setup') as HTMLSelectElement).value).toBe('egress');
   const field = screen.getByLabelText('Build and setup hosts (one exact DNS name per line)');
   expect((field as HTMLTextAreaElement).value).toBe('registry.npmjs.org');

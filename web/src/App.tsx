@@ -13,6 +13,7 @@ import { Badge, Btn, ErrorBox, Icon, Modal } from './components/common';
 import { GraphSelector } from './components/GraphSelector';
 import { GraphList } from './components/GraphList';
 import { GraphWorkspace, type GraphTab } from './components/GraphWorkspace';
+import { settingsPath, settingsSection, type SettingsSection } from './components/graphSettingsSections';
 import { AdministrationPage, administrationSections, ConnectionsPage, ModelsPage, type AdministrationSection } from './components/InstallationPages';
 import { connectionTabs, type ConnectionTab } from './components/mcpNavigation';
 import { SkillsView } from './components/SkillsView';
@@ -27,7 +28,7 @@ import { ThemeSwitcher } from './components/ThemeSwitcher';
  *   #/activity[?window=&status=&workflow=&agent=&focus=&tab=health]
  *   #/graphs  #/approvals  #/connections  #/models  #/administration/<section>
  * Legacy #/integrations links remain MCP aliases, including OAuth returns.
- *   #/g/<id>/<tab>[?c=<correlation id>]
+ *   #/g/<id>/<tab>[?c=<correlation id>]  #/g/<id>/settings/<section>
  */
 type Route =
   | { view: 'graphs' }
@@ -39,7 +40,7 @@ type Route =
   | { view: 'models' }
   | { view: 'administration'; section: AdministrationSection }
   | { view: 'skills' }
-  | { view: 'graph'; id: string; tab: GraphTab; selectionKey?: string; agentId?: string; agentSection?: AgentSection; executionId?: string; runSection?: RunSection; correlationId?: string; connectionOrigin?: string };
+  | { view: 'graph'; id: string; tab: GraphTab; settingsSection?: SettingsSection; selectionKey?: string; agentId?: string; agentSection?: AgentSection; executionId?: string; runSection?: RunSection; correlationId?: string; connectionOrigin?: string };
 
 export function parseRoute(hash: string): Route {
   const [path, qs] = hash.replace(/^#/, '').split('?');
@@ -56,11 +57,21 @@ export function parseRoute(hash: string): Route {
   if (parts[0] === 'connections' && parts[1] === 'history') return { view: 'connections', history: true };
   if (parts[0] === 'integrations' || parts[0] === 'connections') return { view: 'connections', connectQuery: parts[1] === 'connect' ? (hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : '') : undefined, oauthQuery: parts[1] === 'oauth' ? (qs ?? '') : undefined };
   if (parts[0] === 'g' && parts[1]) {
-    const tab = (['canvas', 'agent', 'runs', 'activity', 'files', 'events', 'messages', 'yaml'] as GraphTab[]).includes(parts[2] as GraphTab)
+    const tab = (['canvas', 'agent', 'runs', 'activity', 'files', 'events', 'messages', 'yaml', 'settings'] as GraphTab[]).includes(parts[2] as GraphTab)
       ? (parts[2] as GraphTab)
       : 'canvas';
-    const c = new URLSearchParams(qs ?? '').get('c') ?? undefined;
-    return { view: 'graph', id: decodeURIComponent(parts[1]), tab, correlationId: c, ...(new URLSearchParams(qs ?? '').has('connection') ? {connectionOrigin:new URLSearchParams(qs ?? '').get('connection')!} : {}), ...(new URLSearchParams(qs ?? '').has('sel') ? {selectionKey:new URLSearchParams(qs ?? '').get('sel')!} : {}), ...(tab === 'runs' ? {executionId:new URLSearchParams(qs ?? '').get('execution') ?? undefined, runSection:runSection(new URLSearchParams(qs ?? '').get('section'))} : {}), ...(tab === 'agent' ? {agentId: new URLSearchParams(qs ?? '').get('agent') ?? '', agentSection: agentSection(new URLSearchParams(qs ?? '').get('section'))} : {}) };
+    const query = new URLSearchParams(qs);
+    return {
+      view: 'graph',
+      id: decodeURIComponent(parts[1]),
+      tab,
+      correlationId: query.get('c') ?? undefined,
+      ...(query.has('connection') ? { connectionOrigin: query.get('connection')! } : {}),
+      ...(query.has('sel') ? { selectionKey: query.get('sel')! } : {}),
+      ...(tab === 'settings' ? { settingsSection: settingsSection(parts[3]) } : {}),
+      ...(tab === 'runs' ? { executionId: query.get('execution') ?? undefined, runSection: runSection(query.get('section')) } : {}),
+      ...(tab === 'agent' ? { agentId: query.get('agent') ?? '', agentSection: agentSection(query.get('section')) } : {}),
+    };
   }
   return { view: 'graphs' };
 }
@@ -82,7 +93,7 @@ export function routeHash(r: Route): string {
   if (r.view === 'models') return '#/models';
   if (r.view === 'administration') return `#/administration/${r.section}`;
   if (r.view === 'graph') {
-    const path = `#/g/${encodeURIComponent(r.id)}/${r.tab}${r.tab === 'runs' ? (r.executionId ? `?execution=${encodeURIComponent(r.executionId)}&section=${r.runSection ?? 'result'}` : '') : r.tab === 'agent' ? `?agent=${encodeURIComponent(r.agentId ?? '')}&section=${r.agentSection ?? 'general'}` : r.tab === 'canvas' && r.selectionKey ? `?sel=${encodeURIComponent(r.selectionKey)}` : r.correlationId ? `?c=${encodeURIComponent(r.correlationId)}` : ''}`;
+    const path = r.tab === 'settings' ? settingsPath(r.id, r.settingsSection) : `#/g/${encodeURIComponent(r.id)}/${r.tab}${r.tab === 'runs' ? (r.executionId ? `?execution=${encodeURIComponent(r.executionId)}&section=${r.runSection ?? 'result'}` : '') : r.tab === 'agent' ? `?agent=${encodeURIComponent(r.agentId ?? '')}&section=${r.agentSection ?? 'general'}` : r.tab === 'canvas' && r.selectionKey ? `?sel=${encodeURIComponent(r.selectionKey)}` : r.correlationId ? `?c=${encodeURIComponent(r.correlationId)}` : ''}`;
     return r.connectionOrigin ? `${path}${path.includes('?') ? '&' : '?'}connection=${encodeURIComponent(r.connectionOrigin)}` : path;
   }
   return '#/graphs';
@@ -226,7 +237,8 @@ function Shell() {
                 executionId={workspaceRoute.executionId} runSection={workspaceRoute.runSection}
                 agentId={workspaceRoute.agentId} agentSection={workspaceRoute.agentSection}
                 onAgent={(agentId, agentSection) => go({...workspaceRoute, tab: 'agent', agentId, agentSection})}
-                onTab={tab => go({...workspaceRoute, tab})} onSaved={onSaved} onDirtyChange={onDirtyChange}
+                settingsSection={workspaceRoute.settingsSection}
+                onTab={(tab, settingsSection) => go({...workspaceRoute, tab, settingsSection})} onSaved={onSaved} onDirtyChange={onDirtyChange}
                 correlationId={workspaceRoute.correlationId}
                 onCorrelation={c => go({...workspaceRoute, tab: 'messages', correlationId: c})}/>
             </Activity>;

@@ -5,6 +5,7 @@ test('administrators add an issue trigger to a workflow, preview matching issues
   await page.evaluate(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
   await page.reload();
   await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Graph settings sections' }).getByRole('link', { name: /^Triggers( ·|$)/ }).click();
   const section = page.getByRole('group', { name: 'Issue triggers' });
   await expect(section).toBeVisible();
   await section.getByRole('button', { name: 'Add issue trigger', exact: true }).click();
@@ -52,6 +53,7 @@ test('shows the same held issue and round in the trigger and Activity', async ({
   await expect(holds).toContainText('The issue is waiting for clarification.');
   await page.goto('/#/g/git-inspect/canvas');
   await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Graph settings sections' }).getByRole('link', { name: /^Triggers( ·|$)/ }).click();
   const trigger = page.getByRole('article', { name: 'Trigger Held readiness fixture' });
   await expect(trigger.getByRole('list', { name: 'Held issues' })).toContainText('acme/app#11 · round 1 · The issue is waiting for clarification.');
   await expect(trigger.getByRole('listitem').filter({ hasText: 'acme/app#11' }))
@@ -64,6 +66,7 @@ test('an operator resolves a hold and Activity records why', async ({ page }) =>
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-operator-token'));
   await page.goto('/#/g/git-inspect/canvas');
   await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Graph settings sections' }).getByRole('link', { name: /^Triggers( ·|$)/ }).click();
   const trigger = page.getByRole('article', { name: 'Trigger Held readiness fixture' });
   await trigger.getByRole('button', { name: 'Resolve hold' }).click();
   await expect(trigger.getByRole('list', { name: 'Held issues' })).toHaveCount(0);
@@ -81,6 +84,7 @@ test('shows the access retry in local time until its deadline', async ({ page })
   const results = page.waitForResponse((response) =>
     new URL(response.url()).pathname === '/api/v1/triggers' && response.request().method() === 'GET');
   await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Graph settings sections' }).getByRole('link', { name: /^Triggers( ·|$)/ }).click();
   const response = await results;
   expect(response.ok()).toBeTruthy();
   const triggers: { name: string; holds?: { retryAccessAt?: string }[] }[] = await response.json();
@@ -100,6 +104,7 @@ test('forced resolution requires confirmation and records the unpublished commen
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-operator-token'));
   await page.goto('/#/g/git-inspect/canvas');
   await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Graph settings sections' }).getByRole('link', { name: /^Triggers( ·|$)/ }).click();
   const card = page.getByRole('article', { name: 'Trigger Unpublished readiness fixture' });
   const holds = card.getByRole('list', { name: 'Held issues' });
   const button = card.getByRole('button', { name: 'Force resolve hold' });

@@ -14,8 +14,8 @@ is installed on your machine, and agents never get access to Docker.
 | Understand what happens on Build | [How a build works](#how-a-build-works) |
 | Fix a failed build | [Troubleshooting](#troubleshooting) |
 
-**Repository discovery and acceptance are available** in **Graph settings →
-Environment → Discover from repository**, for an existing checkout without an
+**Repository discovery and acceptance are available** from the graph
+**Settings** tab → **Environment → Discover from repository**, for an existing checkout without an
 explicit environment. Discovery follows `.weft/environment.yaml` →
 `.devcontainer/devcontainer.json` → Dockerfiles → standard Compose filenames.
 Select a file (and a development service for Compose), choose **Review
@@ -110,7 +110,7 @@ be retried after two minutes. States are `analyzing`, `awaiting_approval`,
 `building`, `ready`, `failed`, `rejected`, `expired` and `cancelled`.
 `environment.proposal` events contain identifiers and state, not file contents;
 analysis uses an `environment.propose` span and the existing model, approval and
-build telemetry. After approval saves the definition, reload graph settings to
+build telemetry. After approval saves the definition, reload **Settings → Environment** to
 view the saved version and build logs. If a budget blocks the requested
 automatic start, the proposal stays `ready` and clears the start request.
 The proposal API and audit event record `startBlocked: {scope, id}`. Graph
@@ -222,19 +222,20 @@ image copies by tag and digest, and an unavailable registry.
 
 ### 1. Define the environment
 
-1. Open the graph, then **Graph settings** in the canvas toolbar.
+1. Open the graph **Settings** tab.
 2. In **Environment → Source**, pick:
    - **base image** — an image from a registry that already has the tools,
      e.g. `golang:1.26`;
-   - **Dockerfile** — written in the panel, when you need system packages or
-     several toolchains in one image.
+   - **Dockerfile** — written in the **Environment** section, when you need system
+     packages or several toolchains in one image.
 3. **Setup commands** (one per line) run once per build inside the image, with
    the graph's workspace (your cloned repository) at `/workspace`. Use them for
    user-level installs and dependency downloads (`go mod download`,
    `mise install`, `pnpm install`). They run **without root**: install system
    packages in the Dockerfile instead.
-4. **Network during build and setup**: `bridge` (default) lets setup download packages;
-   `none` for commands without networking, or `egress` with **Build and setup hosts**.
+4. In **Network**, set **Network during build and setup** to `bridge` (default)
+   to download packages, `none` for commands without networking, or `egress`
+   with **Build and setup hosts**.
 5. **Network for agents**: `none` (default), unrestricted `bridge` when permitted,
    or `egress` with exact **Allowed hosts**. Installation policy bounds both
    environment and agent overrides; an egress environment cannot override to
@@ -275,9 +276,8 @@ Starting the graph (or one of those agents) is refused while the environment
 is not ready. **Run all** then shows the reason with two buttons: **Build and
 start when ready** (builds, waits, and starts the graph) and **Build
 environment** (operators and admins). The message names the cause — for example
-`environment not ready: it has not been built yet; build it in Graph settings →
-Environment (needed by maintainer)`. Saving the graph shows the same message as
-a warning. Agents that do not use the environment are not affected.
+`environment not ready: it has not been built yet`. Saving the graph shows the
+same cause as a warning, with a link to the graph **Settings** tab → **Environment**. Agents that do not use the environment are not affected.
 
 A rebuild applies to agents when they restart (their sandbox container is
 created when they start).
@@ -592,7 +592,7 @@ documented in [sandbox capacity](sandbox-runtime.md#global-execution-sandbox-cap
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Start refused: `environment not ready: it has not been built yet` | No build of the saved definition | **Build** in Graph settings → Environment |
+| Start refused: `environment not ready: it has not been built yet` | No build of the saved definition | **Build** in the graph **Settings** tab → **Environment** |
 | Start refused: `the definition changed since the last build` | The environment was edited and saved | **Build** again |
 | `add sandbox user (the base image needs /bin/sh)` | Distroless or scratch base image | Use an image with a shell, or a Dockerfile `FROM` one |
 | Setup fails with `permission denied` installing packages | Setup runs as user 10001 | Move `apt-get`/`apk add` into the Dockerfile |
@@ -606,7 +606,8 @@ documented in [sandbox capacity](sandbox-runtime.md#global-execution-sandbox-cap
 
 ### Following builds and agent readiness
 
-Graph settings → Environment and the agent panel show structured progress:
+The graph **Settings** tab → **Environment** and the agent panel show
+structured progress:
 preparing, waiting for capacity, waiting for a compatible build, building the
 image, and private cache/setup preparation. The server persists progress with
 the build log approximately every two seconds; short phases may not appear.
@@ -966,7 +967,7 @@ failures and policy checks before/after capacity admission. Per-environment prox
 
 ## Proxy state and blocked access in the console
 
-In **Graph settings → Environment** or the agent's **Command environment** panel,
+In the graph **Settings** tab → **Network** or the agent's **Command environment** panel,
 select **Show proxy diagnostics**. Viewers, operators and administrators can inspect
 this read-only view. While open, it refreshes about every ten seconds after the
 previous query completes; it also offers manual refresh. Closing it stops polling.

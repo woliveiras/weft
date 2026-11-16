@@ -51,3 +51,11 @@ it('retains a scoped connection return destination without accepting an external
  expect(routeHash(route)).toBe('#/g/g/agent?agent=reader&section=tools&connection=team');
  expect(routeHash({...route,view:'graph',id:'g',tab:'runs'})).toBe('#/g/g/runs?connection=team');
 });
+
+it('round trips settings deep links and falls back to General for an unknown section', () => {
+  const network = '#/g/example/settings/network';
+  expect(parseRoute(network)).toMatchObject({ tab: 'settings', settingsSection: 'network' });
+  expect(routeHash(parseRoute(network))).toBe(network);
+  expect(routeHash(parseRoute('#/g/example/settings/unknown'))).toBe('#/g/example/settings/general');
+  expect(routeHash(parseRoute('#/g/example/settings'))).toBe('#/g/example/settings/general');
+});

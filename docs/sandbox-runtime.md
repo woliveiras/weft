@@ -141,8 +141,8 @@ nodes:
 ### 3. Use a different toolchain
 
 The default image is Python 3.12 with git and make. For a project's toolchain,
-define a [project environment](environments.md) in **Graph settings →
-Environment**: Weft builds it on this daemon and every docker-isolated agent
+define a [project environment](environments.md) in the graph **Settings** tab →
+**Environment**. Weft builds it on this daemon. Every docker-isolated agent
 of the graph without an image of its own runs in it. An agent's **Image**
 setting overrides it with any image the daemon can pull; such images must run
 as uid 10001 (or create that user) to write in the workspace.

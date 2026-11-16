@@ -2097,3 +2097,72 @@ button, summary, a { touch-action: manipulation; }
 .activity-errors { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 24ch; }
 .activity-links { display: flex; flex-wrap: wrap; gap: 4px 10px; }
 @media (prefers-reduced-motion: reduce) { .activity-counter { transition: none; } }
+
+.workspace-settings > .toolbar { flex-shrink: 0; }
+.graph-settings {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: minmax(175px, 220px) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+  padding: var(--space-5);
+}
+.graph-settings > nav {
+  display: grid;
+  gap: var(--space-1);
+}
+.graph-settings > nav a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  color: var(--text);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  text-decoration: none;
+}
+.graph-settings > nav a:hover,
+.graph-settings > nav a[aria-current='page'] {
+  background: var(--surface-raised);
+  border-color: var(--border);
+}
+.graph-settings > nav a[aria-current='page'] { font-weight: 600; }
+.graph-settings-content {
+  max-width: 960px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.graph-settings-content h2 {
+  margin-top: 0;
+  font: var(--text-h2);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text);
+}
+.graph-settings .node-editor fieldset { padding: var(--space-4); }
+.graph-settings .node-editor .tiny { font-size: var(--font-size-sm, 13px); }
+.graph-settings .node-editor select { max-width: 100%; }
+
+@media (max-width: 900px) {
+  .toolbar > .tabs { max-width: 100%; overflow-x: auto; }
+  .toolbar > .tabs > button { flex-shrink: 0; }
+  .workspace-settings .toolbar-run-controls { max-width: 100%; }
+}
+
+@media (max-width: 760px) {
+  .graph-settings {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: max-content;
+    align-content: start;
+  }
+  .graph-settings > nav {
+    display: flex;
+    overflow-x: auto;
+  }
+  .graph-settings > nav a { flex: none; }
+  .graph-settings .parameter-row { grid-template-columns: minmax(0, 1fr); }
+}

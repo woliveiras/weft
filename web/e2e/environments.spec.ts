@@ -12,6 +12,7 @@ async function read(page: Page, id: string, suffix: string) {
 async function settings(page: Page, id: string) {
   await page.goto(`/#/g/${id}/canvas`);
   await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Graph settings sections' }).getByRole('link', { name: /^Environment( ·|$)/ }).click();
 }
 async function discover(page: Page, id: string) {
   await settings(page, id);

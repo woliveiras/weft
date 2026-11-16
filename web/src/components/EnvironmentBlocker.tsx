@@ -41,7 +41,7 @@ export function EnvironmentBlocker({
         const env = await api.environment(graphId);
         if (cancelled) return;
         if (env.state === 'failed') {
-          setError(`The environment build failed: ${env.error ?? 'see the build log in Graph settings → Environment'}`);
+          setError(`The environment build failed: ${env.error ?? 'see the build log in Settings → Environment'}`);
           setPhase('idle');
           return;
         }
@@ -102,7 +102,7 @@ export function EnvironmentBlocker({
       {phase === 'building' && (
         <p className="muted small" role="status">
           Building the environment…{startAfter.current ? ' The graph starts as soon as it is ready.' : ''} Follow the log in
-          Graph settings → Environment.
+          Settings → Environment.
         </p>
       )}
       {phase === 'starting' && <p className="muted small">Environment ready. Starting…</p>}

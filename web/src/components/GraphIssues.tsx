@@ -1,3 +1,4 @@
+import { settingsPath, settingsSectionForIssue } from './graphSettingsSections';
 import type { Selection } from './canvas/GraphCanvas';
 import { fieldIssues, type ElementIssue, type IssueIndex } from './canvas/edit';
 
@@ -35,15 +36,14 @@ export function ElementIssues({ issues, label }: { issues?: ElementIssue[]; labe
 export function IssueSummary({
   index,
   onSelect,
-  onOpenSettings,
+  graphId,
 }: {
   index: IssueIndex;
   onSelect: (s: Selection) => void;
-  /** Opens graph settings, where graph-level findings are edited. */
-  onOpenSettings?: () => void;
+  graphId: string;
 }) {
-  const rows: { key: string; severity: ElementIssue['severity']; text: string; target?: Selection }[] = [];
-  for (const issue of index.graph) rows.push({ key: `g${rows.length}`, severity: issue.severity, text: `${issue.path}: ${issue.message}` });
+  const rows: { key: string; severity: ElementIssue['severity']; text: string; target?: Selection; path?: string }[] = [];
+  for (const issue of index.graph) rows.push({ key: `g${rows.length}`, severity: issue.severity, path: issue.path, text: `${issue.path}: ${issue.message}` });
   for (const [id, list] of index.nodes)
     for (const issue of list)
       rows.push({ key: `n${rows.length}`, severity: issue.severity, text: `${issue.field || 'agent'}: ${issue.message}`, target: { kind: 'node', id } });
@@ -71,10 +71,8 @@ export function IssueSummary({
               <button type="button" className="link" onClick={() => onSelect(row.target!)}>
                 {row.target.kind === 'node' ? 'Agent' : 'Channel'} {row.target.id}
               </button>
-            ) : onOpenSettings ? (
-              <button type="button" className="link" onClick={onOpenSettings}>
-                Graph settings
-              </button>
+            ) : row.path !== undefined ? (
+              <a href={settingsPath(graphId, settingsSectionForIssue(row.path))}>Graph settings</a>
             ) : null}{' '}
             {row.text}
           </li>

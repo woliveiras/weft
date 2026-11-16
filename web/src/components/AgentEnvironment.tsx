@@ -37,7 +37,7 @@ function GraphEnvironment({ graph }: { graph: Graph }) {
     <ErrorBox error={status.error} />
     {status.error ? <p>Environment readiness could not be verified.</p> : status.data ? <>
       <EnvironmentProgress view={status.data} />
-      <p>{status.data.upToDate ? 'Environment is ready for commands. Execution still requires sandbox capacity.' : 'Agent start is blocked until the saved environment is built and ready. Review Graph settings → Environment.'}</p>
+      <p>{status.data.upToDate ? 'Environment is ready for commands. Execution still requires sandbox capacity.' : 'Agent start is blocked until the saved environment is built and ready. Review Settings → Environment.'}</p>
       {status.data.image && <p>Image: <code>{status.data.image}</code></p>}
       <ErrorBox error={status.data.error} />
     </> : <p>Checking environment…</p>}

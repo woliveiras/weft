@@ -64,7 +64,7 @@ state under **Administration → Health**. See
 
 ### Prepare a project environment
 
-In **Graph settings → Environment**, choose **Discover environment**. Weft
+In the graph **Settings** tab → **Environment**, choose **Discover environment**. Weft
 checks its optional YAML definition, devcontainer, Dockerfiles and Compose in
 that order. Select and review the source (and Compose development service),
 accept it into the draft, save and build. Invalid higher-priority definitions
@@ -172,7 +172,7 @@ a refused approval). Agents never run an SCM CLI or see the token.
 
 ### Start tasks from labelled issues
 
-In a saved workflow, open **Graph settings → Issue triggers**. Select the
+In a saved workflow, open the graph **Settings** tab → **Triggers**. Select the
 tracker connection, agents and delivery connection. The default selection
 label is `weft:todo`. Saving records your consent. **Preview matching
 issues** reads the queue. Readiness checks happen before work starts.
@@ -342,16 +342,16 @@ Everything above can be done from the console instead of YAML:
 
 1. **Graphs → New graph**, keep or adjust the template, **Create**. The graph
    opens on the **Graph** tab.
-2. **Graph settings** (toolbar) edits graph-wide values:
-   - **Name** and **Description**;
-   - **Repository URL**: a remote repository (`https://…`, `ssh://…` or
+2. The graph **Settings** tab edits graph-wide values:
+   - **General**: **Name**, **Description**, and **Max hops**, the length limit
+     for a chain of agent-to-agent messages;
+   - **Workspace → Repository URL**: a remote repository (`https://…`, `ssh://…` or
      `user@host:path`) cloned into the graph workspace the first time the
      graph starts, while the workspace is empty. Changing it later does not
      replace an existing workspace. Local paths and `file://` are refused, so a
      graph cannot copy another graph's workspace or the server's files.
      Private repositories need credentials, which are not supported yet;
-   - **Parameters**: values used in prompts as `@name`;
-   - **Max hops**: how long a chain of agent-to-agent messages may get.
+   - **Parameters**: values used in prompts as `@name`.
 3. **Add agent**, then select it to configure it in **Agent configuration**:
    name, runtime, provider and model, prompt (**Edit → Apply to draft**), loop
    and stop policy, replicas, **Command sandbox** (see below), **Limits per
@@ -360,8 +360,9 @@ Everything above can be done from the console instead of YAML:
    channel, then select it to set its type, message types, route condition
    and **Require approval before delivery**. A channel with approval and no consumer is a
    convenient "notify me" endpoint: its messages wait in **Approvals**.
-5. **Save graph**. Problems are listed above the canvas and next to the field
-   that caused them; fix them and they clear on their own.
+5. **Save graph**. The validation summary links graph-wide problems to the
+   affected Settings section. Fix problems in the draft and they clear on
+   their own.
 6. **Run all** (or **Start** on one agent) and follow **Live output**,
    **Messages**, **Events** and **Approvals**.
 

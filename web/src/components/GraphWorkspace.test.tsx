@@ -1,12 +1,14 @@
 import type { AgentSection } from './agentSettingsModel';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Activity, useState } from 'react';
+import { Activity, useEffect, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Graph, GraphSummary, Info, ValidationResult } from '../api/types';
 import { EventStreamProvider } from '../hooks/useEventStream';
 import { apiError, fakeApi, type Call } from '../test/fakeApi';
 import { GraphWorkspace, type GraphTab } from './GraphWorkspace';
+import { parseRoute, routeHash } from '../App';
+import type { SettingsSection } from './graphSettingsSections';
 
 class FakeEventSource {
   onopen: (() => void) | null = null;
@@ -64,6 +66,9 @@ function backend(validate: (graph: Graph) => ValidationResult = promptRule) {
   const status = () => ({ graphId: 'g', state: 'stopped', desiredState: 'stopped', nodes: [], channels: [] });
   const api = fakeApi({
     ...perNode,
+    'GET /api/v1/triggers': () => [{ id: 't', name: 'Paused trigger', state: 'paused', source: { kind: 'github' }, authorizationMode: 'ask', consent: { actor: 'admin', workflowVersion: 1 } }],
+    'GET /api/v1/trigger-policy': () => ({}),
+    'GET /api/v1/scm/connections': () => [],
     'GET /api/v1/graphs/g': () => state.current,
     'GET /api/v1/graphs/g/status': status,
     'GET /api/v1/graphs/g/events': () => [],
@@ -106,7 +111,22 @@ function backend(validate: (graph: Graph) => ValidationResult = promptRule) {
 
 function Harness({ start = 'canvas' as GraphTab, role = 'admin' as 'viewer' | 'operator' | 'admin' }) {
   const [summary, setSummary] = useState(initial);
-  const [tab, setTab] = useState<GraphTab>(start);
+  const initialRoute = parseRoute(location.hash);
+  const [tab, setTab] = useState<GraphTab>(initialRoute.view === 'graph' && initialRoute.tab === 'settings' ? 'settings' : start);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>(
+    initialRoute.view === 'graph' ? initialRoute.settingsSection : undefined,
+  );
+  useEffect(() => {
+    const onHashChange = () => {
+      const route = parseRoute(location.hash);
+      if (route.view === 'graph' && route.tab === 'settings') {
+        setTab(route.tab);
+        setSettingsSection(route.settingsSection);
+      }
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
   const [agentId, setAgentId] = useState('dev');
   const [section, setSection] = useState<AgentSection>('general');
   return (
@@ -118,7 +138,12 @@ function Harness({ start = 'canvas' as GraphTab, role = 'admin' as 'viewer' | 'o
         agentId={tab === 'agent' ? agentId : undefined}
         agentSection={section}
         onAgent={(id, section) => {setAgentId(id); setSection(section); setTab('agent');}}
-        onTab={setTab}
+        settingsSection={settingsSection}
+        onTab={(nextTab, nextSection) => {
+          history.replaceState(null, '', routeHash({ view: 'graph', id: 'g', tab: nextTab, settingsSection: nextSection }));
+          setTab(nextTab);
+          setSettingsSection(nextSection);
+        }}
         onSaved={setSummary}
         onCorrelation={() => undefined}
       />
@@ -133,6 +158,12 @@ function renderWorkspace(selected?: string) {
 
 const agentEditor = () => screen.getByRole('region', { name: 'Agent configuration' });
 const toolbarButton = (name: string) => screen.getByRole('button', { name });
+const settingsNav = () => screen.getByRole('navigation', { name: 'Graph settings sections' });
+
+async function openSection(user: ReturnType<typeof userEvent.setup>, title: string) {
+  await user.click(within(settingsNav()).getByRole('link', { name: new RegExp(`^${title}( ·|$)`) }));
+  return screen.findByRole('region', { name: title });
+}
 
 beforeEach(() => {
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -333,7 +364,7 @@ describe('GraphWorkspace editor', () => {
     expect((puts()[0].body as Graph).spec.nodes[0].limits).toEqual({ turnTimeout: '2h', maxToolCalls: 300 });
   });
 
-  it('edits graph settings: repository and parameters, with graph-level errors linked to the panel', async () => {
+  it('edits graph settings: repository and parameters, with graph-level errors linked to the affected section', async () => {
     const user = userEvent.setup();
     const { puts } = backend((graph) =>
       graph.spec.workspace?.repo?.startsWith('/')
@@ -346,22 +377,27 @@ describe('GraphWorkspace editor', () => {
     );
     renderWorkspace();
     await user.click(await screen.findByRole('button', { name: 'Graph settings' }));
-    const settings = screen.getByRole('region', { name: 'Graph configuration' });
+    const settings = await openSection(user, 'Workspace');
 
     const repo = within(settings).getByLabelText('Repository URL');
     await user.type(repo, '/var/lib/weft/workspaces/other');
     await user.click(toolbarButton('Save graph'));
-    const summary = await screen.findByRole('list', { name: 'Graph validation' });
-    expect(within(settings).getByText('is not a remote repository URL')).toBeTruthy();
+    await screen.findByRole('list', { name: 'Graph validation' });
+    expect(within(settings).getByRole('list', { name: 'Workspace validation' }).textContent).toContain('is not a remote repository URL');
+    expect(within(settingsNav()).getByRole('link', { name: /Workspace .*Error/ })).toBeTruthy();
     expect(puts()).toHaveLength(0);
 
-    // The summary links graph-level problems back to the settings panel.
-    await user.click(within(summary).getByRole('button', { name: 'Graph settings' }));
-    await user.clear(within(screen.getByRole('region', { name: 'Graph configuration' })).getByLabelText('Repository URL'));
+    await user.click(screen.getByRole('tab', { name: 'Graph' }));
+    const link = within(screen.getByRole('list', { name: 'Graph validation' })).getByRole('link', { name: 'Graph settings' });
+    expect(link.getAttribute('href')).toBe('#/g/g/settings/workspace');
+    await user.click(link);
+    await screen.findByRole('region', { name: 'Workspace' });
+    await user.clear(within(screen.getByRole('region', { name: 'Workspace' })).getByLabelText('Repository URL'));
     await user.type(
-      within(screen.getByRole('region', { name: 'Graph configuration' })).getByLabelText('Repository URL'),
+      within(screen.getByRole('region', { name: 'Workspace' })).getByLabelText('Repository URL'),
       'https://github.com/woliveiras/bookaneer.git',
     );
+    await openSection(user, 'Parameters');
     await user.click(screen.getByRole('button', { name: 'Add parameter' }));
     const parameter = screen.getByRole('group', { name: 'Parameter 1' });
     await user.type(within(parameter).getByLabelText('Name'), 'branch');
@@ -379,12 +415,15 @@ describe('GraphWorkspace editor', () => {
     const { puts, api } = backend(() => valid);
     renderWorkspace();
     await user.click(await screen.findByRole('button', { name: 'Graph settings' }));
+    await openSection(user, 'Environment');
     const env = screen.getByRole('group', { name: 'Environment' });
     await user.selectOptions(within(env).getByLabelText('Source'), 'image');
     await user.type(within(env).getByLabelText('Base image'), 'golang:1.26');
     await user.type(within(env).getByLabelText('Setup commands (one per line)'), 'go version{Enter}go mod download');
     await user.type(within(env).getByLabelText('Cache directories (one per line)'), '/home/sandbox/go/pkg/mod');
-    await user.selectOptions(within(env).getByLabelText('Network for agents'), 'bridge');
+    const network = await openSection(user, 'Network');
+    await user.selectOptions(within(network).getByLabelText('Network for agents'), 'bridge');
+    await openSection(user, 'Environment');
     const status = within(env).getByRole('region', { name: 'Environment status' });
     expect(within(status).getByText(/Unsaved environment changes/)).toBeTruthy();
 
@@ -402,7 +441,9 @@ describe('GraphWorkspace editor', () => {
     await user.click(build);
     await waitFor(() => expect(api.find('POST', '/api/v1/graphs/g/environment/build')).toHaveLength(1));
     // The status follows the build until it is ready.
+    expect(await within(settingsNav()).findByRole('link', { name: 'Environment · building' })).toBeTruthy();
     expect(await within(status).findByText('Ready', {}, { timeout: 4000 })).toBeTruthy();
+    expect(within(settingsNav()).getByRole('link', { name: 'Environment · ready' })).toBeTruthy();
   });
 
   it('offers to build the environment when a start is refused for it', async () => {
@@ -518,7 +559,7 @@ it('preserves agent edits when validation is unavailable',async()=>{
 it('keeps graph-level changes in the review when opening an agent',async()=>{
  backend();const user=userEvent.setup();renderWorkspace();
  await user.click(toolbarButton('Graph settings'));
- const settings=screen.getByRole('complementary',{name:'Graph settings'});
+ const settings=screen.getByRole('region',{name:'General'});
  await user.type(within(settings).getByLabelText('Name'),' edited');
  await user.click(screen.getByRole('tab',{name:'Agent configuration'}));
  await user.selectOptions(screen.getByLabelText('Agent',{exact:true}),'dev');
@@ -559,4 +600,23 @@ it('preserves locally selected agents when a cached workspace becomes visible ag
  expect(agents().getByRole('button',{name:/^Reviewer.*rev/}).getAttribute('aria-current')).toBe('true');
  view.rerender(content(false));view.rerender(content(true));
  await waitFor(()=>expect(agents().getByRole('button',{name:/^Reviewer.*rev/}).getAttribute('aria-current')).toBe('true'));
+});
+
+it('opens a section directly, loads existing statuses and moves focus during keyboard navigation', async () => {
+  backend();
+  location.hash = '#/g/g/settings/triggers';
+  render(<Harness />);
+  const heading = await screen.findByRole('heading', { name: 'Triggers' });
+  const nav = settingsNav();
+  expect(document.activeElement).toBe(heading);
+  expect((await within(nav).findByRole('link', { name: 'Triggers · paused' })).getAttribute('aria-current')).toBe('page');
+  expect(within(nav).getByRole('link', { name: 'Environment · not built' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Add agent' })).toBeNull();
+
+  const general = within(nav).getByRole('link', { name: 'General' });
+  general.focus();
+  await userEvent.keyboard('{Enter}');
+  expect(document.activeElement).toBe(await screen.findByRole('heading', { name: 'General' }));
+  expect(general.getAttribute('aria-current')).toBe('page');
+  expect(screen.getByLabelText('ID', { exact: true })).toHaveProperty('readOnly', true);
 });

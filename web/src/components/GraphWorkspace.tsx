@@ -22,6 +22,7 @@ import {
 import { GraphCanvas, type Selection } from './canvas/GraphCanvas';
 import { EnvironmentBlocker, environmentIssue } from './EnvironmentBlocker';
 import { GraphSettings } from './GraphSettings';
+import type { SettingsSection } from './graphSettingsSections';
 import { ChannelPanel } from './ChannelPanel';
 import { Badge, Btn, ErrorBox, Icon, Modal } from './common';
 import { EventsView } from './EventsView';
@@ -32,7 +33,7 @@ import { NodePanel } from './NodePanel';
 import { TaskActivity } from './TaskActivity';
 import { YamlEditor } from './YamlEditor';
 
-export type GraphTab = 'canvas' | 'agent' | 'runs' | 'activity' | 'files' | 'events' | 'messages' | 'yaml';
+export type GraphTab = 'canvas' | 'agent' | 'runs' | 'activity' | 'files' | 'events' | 'messages' | 'yaml' | 'settings';
 
 /** A validation result and the draft it was computed for (paths are indices into that draft). */
 interface Validation {
@@ -54,6 +55,7 @@ export function GraphWorkspace({
   runSection,
   agentId,
   agentSection = 'general',
+  settingsSection = 'general',
   onAgent,
   onTab,
   onSaved,
@@ -70,7 +72,8 @@ export function GraphWorkspace({
   agentId?: string;
   agentSection?: AgentSection;
   onAgent?: (id:string,section:AgentSection)=>void;
-  onTab: (t: GraphTab) => void;
+  settingsSection?: SettingsSection;
+  onTab: (t: GraphTab, section?: SettingsSection) => void;
   onSaved: (s: GraphSummary) => void;
   onDirtyChange?: (id:string,dirty:boolean)=>void;
   correlationId?: string;
@@ -97,8 +100,10 @@ export function GraphWorkspace({
   const [panelOpen, setPanelOpen] = useState(true);
   // Set when a start was refused because the environment is not ready.
   const [envBlock, setEnvBlock] = useState<string>();
-  // Graph settings show in the side panel while no agent or channel is selected.
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const lastSettingsSection = useRef<SettingsSection>('general');
+  useEffect(() => {
+    if (tab === 'settings') lastSettingsSection.current = settingsSection;
+  }, [tab, settingsSection]);
   const appliedSelectionKey = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (appliedSelectionKey.current === selectionKey) return;
@@ -107,15 +112,11 @@ export function GraphWorkspace({
     const separator = selectionKey.indexOf(':');
     const kind = selectionKey.slice(0, separator), id = selectionKey.slice(separator + 1);
     if ((kind === 'node' || kind === 'channel') && id) {
-      setSelection({kind, id}); setSettingsOpen(false); setPanelOpen(true);
+      setSelection({kind, id}); setPanelOpen(true);
     }
   }, [selectionKey]);
 
-  const openSettings = () => {
-    setSelection(null);
-    setSettingsOpen(true);
-    setPanelOpen(true);
-  };
+  const openSettings = (section = lastSettingsSection.current) => onTab('settings', section);
   const configureAgent = (id:string, section:AgentSection = 'general') => {
     setSelection(id ? {kind:'node',id} : null);
     if (onAgent) onAgent(id,section); else onTab('agent');
@@ -282,17 +283,17 @@ export function GraphWorkspace({
   const running = state === 'running' || state === 'paused' || state === 'stopping';
 
   return (
-    <div className="workspace">
+    <div className={tab === 'settings' ? 'workspace workspace-settings' : 'workspace'}>
       <div className="toolbar">
         <div className="tabs" role="tablist">
-          {(['canvas', 'agent', 'runs', 'activity', 'files', 'events', 'messages', 'yaml'] as GraphTab[]).map((t) => (
+          {(['canvas', 'agent', 'runs', 'activity', 'files', 'events', 'messages', 'yaml', 'settings'] as GraphTab[]).map((t) => (
             <button
               key={t}
               type="button"
               role="tab"
               aria-selected={tab === t}
               className={tab === t ? 'on' : ''}
-              onClick={() => t === 'agent' ? configureAgent(configuredId) : onTab(t)}
+              onClick={() => t === 'agent' ? configureAgent(configuredId) : t === 'settings' ? openSettings() : onTab(t)}
             >
               {t === 'canvas'
                 ? 'Graph'
@@ -306,15 +307,15 @@ export function GraphWorkspace({
                     ? 'Definition'
                     : t === 'messages'
                       ? 'Messages'
-                      : 'Events'}
+                      : t === 'settings' ? 'Settings' : 'Events'}
             </button>
           ))}
         </div>
         <div className="toolbar-actions">
-          {(tab === 'canvas' || tab === 'yaml' || tab === 'agent') && (
+          {(tab === 'canvas' || tab === 'yaml' || tab === 'agent' || tab === 'settings') && (
             <>
               {tab === 'canvas' && (
-                <Btn small tone="ghost" onClick={openSettings} aria-pressed={settingsOpen && !selection}>
+                <Btn small tone="ghost" onClick={() => openSettings()}>
                   Graph settings
                 </Btn>
               )}
@@ -405,7 +406,7 @@ export function GraphWorkspace({
           version, or overwrite it with yours.
         </p>
       )}
-      {issues && (tab === 'canvas' || tab === 'yaml' || tab === 'agent') && (
+      {issues && (tab === 'canvas' || tab === 'yaml' || tab === 'agent' || tab === 'settings') && (
         <IssueSummary
           index={issues}
           onSelect={(target) => {
@@ -413,16 +414,13 @@ export function GraphWorkspace({
             setPanelOpen(true);
             onTab('canvas');
           }}
-          onOpenSettings={() => {
-            openSettings();
-            onTab('canvas');
-          }}
+          graphId={gid}
         />
       )}
       {tab === 'canvas' && (
-        <div className={`floor ${(selection || settingsOpen) && panelOpen ? 'with-panel' : ''}`}>
+        <div className={`floor ${selection && panelOpen ? 'with-panel' : ''}`}>
           <AgentList graph={draftGraph} status={status} statusError={statusError} selected={selection?.kind==='node'?selection.id:undefined}
-            onSelect={id=>{setSelection({kind:'node',id});setSettingsOpen(false);setPanelOpen(true);}} onConfigure={id=>configureAgent(id)}/>
+            onSelect={id=>{setSelection({kind:'node',id});setPanelOpen(true);}} onConfigure={id=>configureAgent(id)}/>
           <GraphCanvas
             graph={draftGraph}
             status={status}
@@ -447,26 +445,9 @@ export function GraphWorkspace({
             onRemove={removeElements}
             onSelect={(s) => {
               setSelection(s);
-              setSettingsOpen(false);
               if (s) setPanelOpen(true);
             }}
           />
-          {!selection && settingsOpen && panelOpen && (
-            <aside className="side-panel" aria-label="Graph settings">
-              <button type="button" className="icon-btn panel-close" onClick={() => setSettingsOpen(false)} aria-label="Close panel">
-                <Icon name="x" />
-              </button>
-              <GraphSettings
-                graph={draftGraph}
-                savedGraph={summary.graph}
-                dirty={draftDirty}
-                running={running}
-                role={info?.identity?.role}
-                issues={issues?.graph}
-                onChange={changeGraph}
-              />
-            </aside>
-          )}
           {selection && panelOpen && (
             <aside className="side-panel" aria-label="Details">
               <button type="button" className="icon-btn panel-close" onClick={() => setPanelOpen(false)} aria-label="Close panel">
@@ -503,6 +484,18 @@ export function GraphWorkspace({
             </aside>
           )}
         </div>
+      )}
+      {tab === 'settings' && (
+        <GraphSettings
+          section={settingsSection}
+          graph={draftGraph}
+          savedGraph={summary.graph}
+          dirty={draftDirty}
+          running={running}
+          role={info?.identity?.role}
+          issues={issues?.graph}
+          onChange={changeGraph}
+        />
       )}
       {tab === 'agent' && <AgentConfiguration summary={currentSummary} nodeId={configuredId} section={agentSection}
         onSection={section => configureAgent(configuredId,section)} onSelect={id => configureAgent(id)}

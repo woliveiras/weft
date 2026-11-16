@@ -31,8 +31,13 @@ function holdRetryDeadline(hold: NonNullable<Trigger['holds']>[number], now: num
 }
 
 /** Issue triggers of a saved workflow: labelled issues start tasks under the consent of the administrator who saves or resumes them. */
-export function TriggersSection({ graph, role }: { graph: Graph; role?: string }) {
+export function TriggersSection({ graph, role, onTriggers }: {
+  graph: Graph;
+  role?: string;
+  onTriggers?: (triggers: Trigger[] | undefined) => void;
+}) {
   const list = useAsync(() => api.triggers(graph.metadata.id), [graph.metadata.id]);
+  useEffect(() => { onTriggers?.(list.data); }, [list.data, onTriggers]);
   const policy = useAsync(() => api.triggerPolicy(), []);
   const scm = useAsync(() => api.scmConnections().catch(() => []), []);
   const [editing, setEditing] = useState<string>();

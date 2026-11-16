@@ -63,6 +63,7 @@ test('failed build retries successfully through the browser', async ({ page }) =
   const id = 'retry-build';
   await open(page, id);
   await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Graph settings sections' }).getByRole('link', { name: /^Environment( ·|$)/ }).click();
   await page.getByRole('button', { name: 'Discover environment', exact: true }).click();
   await page.getByRole('combobox', { name: 'Repository definition', exact: true }).selectOption('Dockerfile');
   await page.getByRole('button', { name: 'Review environment', exact: true }).click();
@@ -115,6 +116,7 @@ test('environment build and setup wait for execution capacity, then become ready
     await executed(page, holder);
     await open(page, id);
     await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
+    await page.getByRole('navigation', { name: 'Graph settings sections' }).getByRole('link', { name: /^Environment( ·|$)/ }).click();
     await page.getByRole('button', { name: 'Build', exact: true }).click();
     await expect(page.getByText('Waiting for sandbox capacity', { exact: true })).toBeVisible();
     expect((await read(page, id, 'environment')).phase).toBe('waiting_capacity');
@@ -123,6 +125,7 @@ test('environment build and setup wait for execution capacity, then become ready
     await expect.poll(async () => (await read(page, id, 'environment')).state).toBe('ready');
     await open(page, id);
     await page.getByRole('button', { name: 'Graph settings', exact: true }).click();
+    await page.getByRole('navigation', { name: 'Graph settings sections' }).getByRole('link', { name: /^Environment( ·|$)/ }).click();
     await expect(page.getByText('Ready', { exact: true })).toBeVisible();
     expect((await read(page, id, 'environment')).log).toContain('Running 1 setup command');
     await page.getByRole('button', { name: 'Run all', exact: true }).click();

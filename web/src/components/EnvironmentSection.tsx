@@ -1,7 +1,7 @@
 import { EnvironmentProxies } from './EnvironmentProxies';
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
-import type { EnvironmentSpec, Graph } from '../api/types';
+import type { EnvironmentSpec, EnvironmentView, Graph } from '../api/types';
 import { useAsync, useThrottled } from '../hooks/useData';
 import { useEventStream } from '../hooks/useEventStream';
 import type { ElementIssue } from './canvas/edit';
@@ -41,6 +41,7 @@ export function EnvironmentSection({
   canReset,
   canAccept = false,
   issues,
+  onBuildStatus,
   onChange,
 }: {
   /** The draft. */
@@ -53,6 +54,7 @@ export function EnvironmentSection({
   canReset: boolean;
   canAccept?: boolean;
   issues?: ElementIssue[];
+  onBuildStatus?: (view: EnvironmentView | undefined) => void;
   onChange: (update: (graph: Graph) => Graph) => void;
 }) {
   const env = graph.spec.environment;
@@ -76,7 +78,6 @@ export function EnvironmentSection({
   return (
     <fieldset aria-label="Environment">
       <legend>Environment</legend>
-      <EnvironmentProxies key={savedGraph.metadata.id} graphId={savedGraph.metadata.id} />
       <p className="muted tiny">
         The container image agents run their commands in when their Command sandbox uses docker isolation without an
         image of their own. Weft builds it on its own sandbox daemon, never on your machine.
@@ -144,6 +145,49 @@ export function EnvironmentSection({
             install outside the workspace becomes part of the image.
           </span>
           <FieldIssues issues={issues} field="spec.environment.setup" />
+          <LinesField
+            label="Cache directories (one per line)"
+            values={env?.caches}
+            placeholder={'/home/sandbox/go/pkg/mod\n/home/sandbox/.local/share/pnpm'}
+            onChange={(caches) => patch({ caches })}
+          />
+          <span className="muted tiny">Kept in volumes across agent restarts and rebuilds; Reset clears them.</span>
+          <FieldIssues issues={issues} field="spec.environment.caches" />
+          <label>
+            Build timeout
+            <input value={env?.timeout ?? ''} placeholder="30m" onChange={(event) => patch({ timeout: event.target.value || undefined })} />
+          </label>
+          <FieldIssues issues={issues} field="spec.environment.timeout" />
+          <EnvironmentStatus
+            graph={graph}
+            savedGraph={savedGraph}
+            dirty={dirty}
+            running={running}
+            canBuild={canBuild}
+            canReset={canReset}
+            onBuildStatus={onBuildStatus}
+          />
+        </>
+      )}
+    </fieldset>
+  );
+}
+
+export function EnvironmentNetwork({ graph, onChange }: {
+  graph: Graph;
+  onChange: (update: (graph: Graph) => Graph) => void;
+}) {
+  const env = graph.spec.environment;
+  const patch = (patch: Partial<EnvironmentSpec>) =>
+    onChange((g) => ({ ...g, spec: { ...g.spec, environment: { ...g.spec.environment, ...patch } } }));
+
+  return (
+    <>
+      <p><a href="#/administration/network">Administration → Network policies</a></p>
+      <EnvironmentProxies graphId={graph.metadata.id} />
+      {env ? (
+        <fieldset aria-label="Environment network">
+          <legend>Environment network</legend>
           <label>
             Network during build and setup
             <select
@@ -169,30 +213,9 @@ export function EnvironmentSection({
           </label>
           {env?.network?.run === 'egress' && <LinesField label="Allowed hosts (one exact DNS name per line)" values={env.network.allowedHosts} placeholder="registry.npmjs.org" onChange={(allowedHosts) => patch({ network: { ...env.network, allowedHosts } })} />}
           <span className="muted tiny">Installation policy must permit the network and every host. An egress environment cannot switch to unrestricted bridge.</span>
-          <LinesField
-            label="Cache directories (one per line)"
-            values={env?.caches}
-            placeholder={'/home/sandbox/go/pkg/mod\n/home/sandbox/.local/share/pnpm'}
-            onChange={(caches) => patch({ caches })}
-          />
-          <span className="muted tiny">Kept in volumes across agent restarts and rebuilds; Reset clears them.</span>
-          <FieldIssues issues={issues} field="spec.environment.caches" />
-          <label>
-            Build timeout
-            <input value={env?.timeout ?? ''} placeholder="30m" onChange={(event) => patch({ timeout: event.target.value || undefined })} />
-          </label>
-          <FieldIssues issues={issues} field="spec.environment.timeout" />
-          <EnvironmentStatus
-            graph={graph}
-            savedGraph={savedGraph}
-            dirty={dirty}
-            running={running}
-            canBuild={canBuild}
-            canReset={canReset}
-          />
-        </>
-      )}
-    </fieldset>
+        </fieldset>
+      ) : <p className="muted">Choose a source in Environment to configure its networks.</p>}
+    </>
   );
 }
 
@@ -240,6 +263,7 @@ function EnvironmentStatus({
   running,
   canBuild,
   canReset,
+  onBuildStatus,
 }: {
   graph: Graph;
   savedGraph: Graph;
@@ -247,6 +271,7 @@ function EnvironmentStatus({
   running: boolean;
   canBuild: boolean;
   canReset: boolean;
+  onBuildStatus?: (view: EnvironmentView | undefined) => void;
 }) {
   const gid = savedGraph.metadata.id;
   const status = useAsync(() => api.environment(gid), [gid, savedGraph.metadata.version]);
@@ -256,6 +281,10 @@ function EnvironmentStatus({
   const [busy, setBusy] = useState(false);
   const view = status.data;
   const building = view?.state === 'building';
+  useEffect(() => {
+    onBuildStatus?.(view);
+    return () => onBuildStatus?.(undefined);
+  }, [onBuildStatus, view]);
 
   // Follow a running build: the log tail is stored every few seconds.
   useEffect(() => {

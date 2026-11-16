@@ -32,6 +32,7 @@ for(const mode of ['required','automatic'] as const){
    await page.getByRole('button',{name:'Save graph',exact:true}).click();
    await expect(page.getByRole('button',{name:'Save graph',exact:true})).toBeDisabled();
    await page.getByRole('button',{name:'Graph settings',exact:true}).click();
+   await page.getByRole('navigation', { name: 'Graph settings sections' }).getByRole('link', { name: /^Environment( ·|$)/ }).click();
    await page.getByRole('button',{name:'Discover environment',exact:true}).click();
    await page.getByRole('combobox',{name:'Repository definition',exact:true}).selectOption({label:'Dockerfile'});
    await page.getByRole('button',{name:'Review environment',exact:true}).click();
