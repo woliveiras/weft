@@ -20,13 +20,28 @@ import (
 	"github.com/woliveiras/weft/server/internal/trigger"
 )
 
-type outcomeModel struct{ signal string }
+type outcomeModel struct {
+	signal  string
+	started chan struct{}
+	release <-chan struct{}
+}
 
 func (outcomeModel) Name() string                                    { return "outcome" }
 func (outcomeModel) Models(context.Context) ([]llm.ModelInfo, error) { return nil, nil }
-func (p outcomeModel) Chat(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (p outcomeModel) Chat(ctx context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
 	if len(r.Tools) == 0 {
 		return &llm.ChatResponse{Message: llm.ChatMessage{Content: `{"missing":[]}`}}, nil
+	}
+	if p.started != nil {
+		select {
+		case p.started <- struct{}{}:
+		default:
+		}
+		select {
+		case <-p.release:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 	args, _ := json.Marshal(map[string]string{"signal": p.signal, "summary": "Dependency registry unavailable. token=fixture-sensitive-value " + strings.Repeat("detail ", 100)})
 	calls := []llm.ToolCall{{ID: "finish", Name: "finish", Arguments: args}}
@@ -37,10 +52,18 @@ func (p outcomeModel) Chat(_ context.Context, r *llm.ChatRequest) (*llm.ChatResp
 }
 
 func TestTriggerUndeliveredTaskSettlesAndCanBeExplicitlyRetried(t *testing.T) {
-	for _, signal := range []string{"blocked", "no_further_work"} {
+	for _, signal := range []string{"blocked", "no_further_work", "legacy_cancel"} {
 		t.Run(signal, func(t *testing.T) {
 			srv, a := setupTriggerApp(t, func(c *config.Config) { c.Server.PublicURL = "https://weft.example" })
-			a.Models.Add(llm.ProviderConfig{Name: "outcome", Type: "mock", DefaultModel: "fixture"}, outcomeModel{signal})
+			model := outcomeModel{signal: signal}
+			var release chan struct{}
+			if signal == "legacy_cancel" {
+				release = make(chan struct{})
+				model.signal = "no_further_work"
+				model.started = make(chan struct{}, 1)
+				model.release = release
+			}
+			a.Models.Add(llm.ProviderConfig{Name: "outcome", Type: "mock", DefaultModel: "fixture"}, model)
 			graph := strings.Replace(taskGraph, `"kind":"echo"`, `"kind":"native"`, 1)
 			graph = strings.Replace(graph, `"tools":[]`, `"prompt":"Complete the issue or declare the blocker.","model":{"provider":"outcome","name":"fixture"},"tools":[]`, 1)
 			if c, _, b := rawCall(t, "POST", srv.URL+"/api/v1/graphs", adminTok, graph, nil); c != 201 {
@@ -96,10 +119,30 @@ func TestTriggerUndeliveredTaskSettlesAndCanBeExplicitlyRetried(t *testing.T) {
 				t.Fatalf("not started: %+v", tr)
 			}
 			gid := taskrun.ExecutionID(id)
+			if signal == "legacy_cancel" {
+				select {
+				case <-model.started:
+				case <-time.After(10 * time.Second):
+					t.Fatal("agent did not start")
+				}
+				// Reproduce a pre-lifecycle copy before the agent can finish.
+				g, err := a.Store.GetGraph(t.Context(), gid, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				delete(g.Metadata.Labels, "weft.task.lifecycle")
+				if _, err = a.Store.SaveGraph(t.Context(), g, g.Metadata.Version); err != nil {
+					t.Fatal(err)
+				}
+				close(release)
+			}
 			var v taskrun.View
 			waitFor(t, 10*time.Second, "blocked task and stopped execution copy", func() bool {
 				call(t, srv, "GET", "/api/v1/tasks/"+id+"/progress", viewerTok, "", "", &v)
 				rec, err := a.Store.GetGraphRecord(t.Context(), gid)
+				if signal == "legacy_cancel" {
+					return err == nil && v.State == "blocked" && v.Task.Status == "running" && rec.State == domain.GraphRunning && rec.DesiredState == domain.GraphRunning
+				}
 				return err == nil && v.State == "blocked" && v.Task.Status == "blocked" && rec.State == domain.GraphStopped && rec.DesiredState == domain.GraphStopped
 			})
 			if v.Result == nil || !strings.HasPrefix(v.Result.Summary, "Dependency registry unavailable.") || strings.Contains(v.Result.Summary, "fixture-sensitive") || len([]rune(v.Result.Summary)) > 201 {
@@ -131,6 +174,31 @@ func TestTriggerUndeliveredTaskSettlesAndCanBeExplicitlyRetried(t *testing.T) {
 			}
 			if c := call(t, srv, "DELETE", "/api/v1/graphs/"+gid, adminTok, "", "", nil); c != 409 {
 				t.Fatal(c)
+			}
+			if signal == "legacy_cancel" {
+				// Retry refuses the still-running historical task before explicit Stop.
+				retryPath := "/api/v1/triggers/" + tr.ID + "/retry-failed"
+				retryBody := `{"key":"acme/app#7","taskId":"` + id + `","confirm":true}`
+				if c := call(t, srv, "POST", retryPath, adminTok, "application/json", retryBody, nil); c != 409 {
+					t.Fatal(c)
+				}
+				if c := call(t, srv, "POST", "/api/v1/tasks/"+id+"/cancel", adminTok, "application/json", `{"confirm":true}`, nil); c != 202 {
+					t.Fatal(c)
+				}
+				waitFor(t, 10*time.Second, "historical cancellation persisted", func() bool {
+					var stored taskconfig.Draft
+					c := call(t, srv, "GET", "/api/v1/tasks/"+id, viewerTok, "", "", &stored)
+					rec, err := a.Store.GetGraphRecord(t.Context(), gid)
+					return c == 200 && stored.Status == "cancelled" && err == nil && rec.State == domain.GraphStopped && rec.DesiredState == domain.GraphStopped
+				})
+				g, err := a.Store.GetGraph(t.Context(), gid, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if g.Metadata.Labels["weft.task.lifecycle"] != "" {
+					t.Fatal("historical graph was migrated")
+				}
+				eventtest.Capture(t, a.Store, "task.transition_requested")
 			}
 			oldTask, _ := (taskconfig.Manager{Store: a.Store}).Get(t.Context(), id)
 			oldGraph, _ := a.Store.GetGraph(t.Context(), gid, 0)

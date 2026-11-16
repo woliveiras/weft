@@ -17,12 +17,22 @@ func (m Manager) Settle(ctx context.Context, graphID string) error {
 	if err != nil {
 		return err
 	}
-	if g.Metadata.Labels["weft.task.lifecycle"] != "settled" {
-		return nil
-	}
 	id := g.Metadata.Labels[domain.LabelTask]
 	if id == "" || graphID != ExecutionID(id) {
 		return errors.New("invalid task graph ownership")
+	}
+	if g.Metadata.Labels["weft.task.lifecycle"] != "settled" {
+		d, err := (taskconfig.Manager{Store: m.Store}).Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		// Historical runs only settle an explicit operator cancellation.
+		if d.Status != "cancel_requested" {
+			return nil
+		}
+		if d.ExecutionGraphID != graphID {
+			return errors.New("invalid task graph binding")
+		}
 	}
 	v, err := m.View(ctx, id)
 	if err != nil {
@@ -41,6 +51,9 @@ func (m Manager) Settle(ctx context.Context, graphID string) error {
 	if err != nil {
 		return err
 	}
+	if v.State == "cancelled" && !cancellationConfirmed(rec, v) {
+		return nil
+	}
 	// A preparation block has no terminal execution and still requires an
 	// explicit operator stop. A pending approval or budget pause is not done.
 	if len(v.Executions) == 0 && v.State != "cancelled" {
@@ -57,4 +70,18 @@ func (m Manager) Settle(ctx context.Context, graphID string) error {
 		return nil
 	} // recompute next cycle
 	return err
+}
+
+// Cancellation is final only after both control and execution state agree.
+// Bounded or pending history cannot authorize a persisted terminal status.
+func cancellationConfirmed(rec *domain.GraphRecord, v *View) bool {
+	if rec.State != domain.GraphStopped || rec.DesiredState != domain.GraphStopped || len(v.Executions) >= 1000 || len(v.PendingApprovals) > 0 {
+		return false
+	}
+	for _, x := range v.Executions {
+		if !x.Status.Terminal() {
+			return false
+		}
+	}
+	return true
 }

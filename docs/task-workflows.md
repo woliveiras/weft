@@ -375,7 +375,9 @@ records remain available for audit.
    Correct the cause within the reviewed scope. Keep the trigger paused. Confirm
    that no PR exists or uncertain external delivery needs reconciliation.
 2. For a historical task still marked running, open **Tasks → task → Stop** and
-   confirm. Wait for task progress `cancelled` and execution graph `stopped`.
+   confirm. Wait for the persisted task `status` (`GET /api/v1/tasks/{id}`)
+   to become `cancelled`, and for execution graph state and desired state to be
+   `stopped`. This also applies to historical copies without the lifecycle label.
    Do not stop the source workflow or delete resources. Newly created tasks
    settle automatically when no work or approval remains.
 3. Call `POST /api/v1/triggers/{trigger}/retry-failed` as an administrator with
@@ -718,6 +720,10 @@ approvals have settled, and persists the terminal task state after the graph is
 stopped. Budget-paused work and a once-mode replica awaiting retry do not settle.
 No new reconciliation loop is introduced. Historical copies without the marker
 are not stopped or migrated automatically; use the explicit task stop above.
+An explicit `cancel_requested` is finalized to persisted `cancelled` even without
+that marker, after both graph states are stopped, all executions are terminal
+and no approval is pending. Incomplete history or a storage failure defers this
+transition; the existing audited task transition is used.
 
 The stored admission status and observed progress are separate; the list displays
 the observed state when available. Missing telemetry is not evidence of success. Once/event

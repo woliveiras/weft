@@ -559,3 +559,41 @@ web/src/components/GraphNavigation.test.tsx
 web/src/components/TasksPage.tsx
 web/src/components/TriggersSection.test.tsx
 ```
+
+
+## 2026-11-16 historical cancellation recovery follow-up (AC1)
+
+The previous operational record did not cover explicit Stop of an unmarked
+historical execution copy. `Settle` returned before persisting cancellation,
+leaving `cancel_requested` in storage while progress reported `cancelled`.
+Retry correctly refused that nonterminal record. The correction finalizes that
+explicit cancellation through the existing engine cycle and audited task
+transition. Retry eligibility, admin confirmation, paused-trigger requirements,
+new maintainer labeling and retained history are unchanged.
+
+Verification:
+
+- The extended `TestTriggerUndeliveredTaskSettlesAndCanBeExplicitlyRetried/legacy_cancel` reproduces a running copy without the lifecycle label, refuses premature retry, uses the task Cancel API, checks `GET /tasks/{id}` reports persisted `cancelled`, then exercises retry, fresh GitHub Maintain-role label evidence and a new admission. Original task/graph/executions remain unchanged by retry and no lifecycle label is added.
+- Replaying that new test against the prior implementation failed specifically waiting for persisted cancellation. The AC2 unit regression likewise failed on the original raw parser error. Both pass with the corrections.
+- Targeted taskrun/tools/eval/API tests passed. `./scripts/go.sh test ./...` passed, as did `make lint` (including `./scripts/go.sh vet ./...`), `make build`, `gofmt -l` in cached `golang:1.26-alpine` with `--pull=never`, explicit `GOOS=linux go build ./cmd/...` and `GOOS=darwin go build ./cmd/...`, and `git diff --check`. The normal Docker Go test image was usable; no fallback was needed.
+- No web source changed; web tests were not rerun for this backend-only follow-up. No spec intent, dependency, authentication configuration or retry security check changed. Live task controls, trigger retry/resume and GitHub writes were not exercised.
+- `docker compose up -d --build --no-deps weftd` completed using the standard unchanged Dockerfile and cached base images. Running image `sha256:1a36d012a32f1324db0bfcbf767083345e4715d0b8980ce687ed7ace570bdcf1` matches the rebuilt image. `docker history --no-trunc` confirms standard build-stage binary and console copies; Docker health is healthy, `/healthz` is OK and authenticated `/api/v1/info` succeeds.
+- Read-only pre/post API snapshots report no changes in providers, prices, cost policy/budgets, MCP/SCM connections, projects, network policy, triggers, the two persisted tasks, four graph definitions or graph state/run/version fields. Prices remain version 3, task limit USD 2 with 80% warning, installation USD 10/month with 110% interruption, network revision 1 and `weft-deps` ready/up-to-date. `weft-issues` is paused; the rehearsal task and graph intentionally remain running. No task control, retry, resume, GitHub write or direct database update was performed.
+
+Files changed in this follow-up (AC1 and AC2):
+
+```
+docs/task-workflows.md
+server/internal/api/task_outcome_test.go
+server/internal/eval/shell_recovery_test.go
+server/internal/taskrun/settle.go
+server/internal/taskrun/settle_test.go
+server/internal/tools/builtin_shell.go
+server/internal/tools/shell_guidance_test.go
+specs/product-and-tasks/task-execution-admission-and-recovery/evidence.md
+specs/product-and-tasks/task-execution-admission-and-recovery/matrix.md
+specs/runtime-and-delivery/issue-readiness-before-work/evidence.md
+specs/runtime-and-delivery/issue-readiness-before-work/matrix.md
+specs/runtime-and-delivery/native-coding-runtime/evidence.md
+specs/runtime-and-delivery/native-coding-runtime/matrix.md
+```
