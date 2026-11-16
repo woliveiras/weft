@@ -399,3 +399,93 @@ An initial Vitest run timed out in an unchanged shared-environment test while
 Go builds were running; the complete rerun passed without changing its timeout.
 The first Go full run caught the new event missing from the schema/catalog; both
 were added before the successful full rerun. No tests were weakened.
+
+
+### Read-only operational stack verification
+
+`docker compose up -d --build --no-deps weftd` succeeded using the unchanged
+standard Dockerfile. All three base image digests were already cached; no base
+image was downloaded. The running container is `e2e5c7640b85` with image
+`sha256:8b5fd37100600c56b5311d008ceb221e86c3d4f28efd5ba0cc47ab12459d3153`.
+Docker health and `/healthz` both passed. `docker history --no-trunc` showed the
+Dockerfile's runtime package layer, compiled `/out/weftd` and `/out/weft` copies,
+preview relay and `/web/dist` copy. There was no override or injected binary.
+
+Thirteen authenticated read-only API projections were checked before and after.
+The workflow, its environment, providers, prices, cost policy, budgets, network
+policy, MCP/SCM connections, projects, triggers and health had identical SHA-256
+comparisons. The retained task projection differed only by the derived
+`resultNodeId: updater`; removing that derived field reproduced its original
+hash. Its persisted revision remained 1 and status remained `draft`, with no
+execution graph. The old result-agent blocker disappeared from its review.
+The retained task still needs preparation and renewed task authorization;
+recovery creates a new admission with fresh scope rather than modifying it now.
+
+Preserved operational state: Gemini ready; workflow `weft-deps` environment
+ready, hash `594c685eceed`; price version 3; task budget USD 2 with 80% warning;
+installation budget USD 10/month with 110% interruption; network policy revision
+1; MCP `github`, SCM `weft-github`, project `weft`; paused `weft-issues` trigger
+`trg_mwj0ulob8333166fa4c262284fb0` with its failed processed key; original task
+`tsk_mwj0v5hzff6b56126a14f84f37e6`. No real GitHub requests or writes, trigger
+resume, task start/cancellation/deletion, direct database writes, volume deletion
+or secret changes were performed. The administrator token was used without
+printing it. The operator's live issue recovery remains intentionally pending.
+
+### Changed files for AA1–AA3
+
+The implementation commits are `74c4eab` and `52fca58`. All paths below are
+relative to the repository root; the subsequent verification commit updates
+only this evidence file.
+
+```text
+docs/api.md
+docs/environments.md
+docs/events.md
+docs/task-workflows.md
+schemas/event.schema.json
+server/cmd/weft-e2e/tracker.go
+server/internal/api/server.go
+server/internal/api/task_execution_test.go
+server/internal/api/tasks_test.go
+server/internal/api/trigger_launch_test.go
+server/internal/api/triggers.go
+server/internal/api/triggers_test.go
+server/internal/app/triggers.go
+server/internal/app/triggers_test.go
+server/internal/domain/state.go
+server/internal/environment/manager.go
+server/internal/environment/workflow_reuse.go
+server/internal/environment/workflow_reuse_test.go
+server/internal/taskconfig/integration_test.go
+server/internal/taskconfig/manager.go
+server/internal/taskconfig/manager_test.go
+server/internal/taskconfig/prompt.go
+server/internal/taskconfig/prompt_test.go
+server/internal/taskrun/environment_approval.go
+server/internal/taskrun/environment_approval_test.go
+server/internal/taskrun/environment_prepare.go
+server/internal/taskrun/manager.go
+server/internal/taskrun/manager_test.go
+server/internal/trigger/eligibility.go
+server/internal/trigger/launch_error.go
+server/internal/trigger/launch_error_test.go
+server/internal/trigger/result_test.go
+server/internal/trigger/retry.go
+server/internal/trigger/retry_test.go
+server/internal/trigger/retry_unit_test.go
+server/internal/trigger/runner.go
+server/internal/trigger/runner_test.go
+server/internal/trigger/trigger.go
+server/internal/trigger/trigger_test.go
+specs/runtime-and-delivery/issue-readiness-before-work/evidence.md
+specs/runtime-and-delivery/issue-readiness-before-work/matrix.md
+web/e2e/task-drafts.spec.ts
+web/e2e/triggers.spec.ts
+web/src/api/tasks.ts
+web/src/api/types.ts
+web/src/components/ApprovalsView.tsx
+web/src/components/TasksPage.test.tsx
+web/src/components/TasksPage.tsx
+web/src/components/TriggersSection.test.tsx
+web/src/components/TriggersSection.tsx
+```
