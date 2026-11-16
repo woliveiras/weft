@@ -220,3 +220,9 @@ it('shows historical spend without an active budget pause on a cancelled task',a
  expect(screen.queryByText(/paused because|Runs paused|Resume pending/)).toBeNull();
  expect(screen.queryByRole('button',{name:'Raise budget'})).toBeNull();
 });
+it('offers Same as entry when the result is omitted',async()=>{
+ fakeApi({'GET /api/v1/projects':()=>[],'GET /api/v1/tasks':()=>({items:[]})});
+ render(<TasksPage create info={info} graphs={graphs}/>);
+ await userEvent.click(screen.getByText('Review settings'));
+ expect(within(screen.getByLabelText('Result agent')).getByRole('option',{name:'Same as entry'}).getAttribute('value')).toBe('');
+});

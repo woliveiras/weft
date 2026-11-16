@@ -115,7 +115,11 @@ func Prepare(d *taskconfig.Draft, source *domain.Graph) (*domain.Graph, []string
 			}
 		}
 	}
-	result := g.Node(d.ResultNodeID)
+	resultID := d.ResultNodeID
+	if resultID == "" {
+		resultID = d.NodeID
+	}
+	result := g.Node(resultID)
 	if result == nil || result.Disabled {
 		blockers = append(blockers, "Select an enabled result agent.")
 	}

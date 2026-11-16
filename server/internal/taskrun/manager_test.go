@@ -104,3 +104,15 @@ func TestIssueSourceRequiresExactEntryGrantAndPreservesTemplate(t *testing.T) {
 		t.Fatal("source/grants changed or instructions absent")
 	}
 }
+
+func TestPrepareDefaultsResultToEntry(t *testing.T) {
+	g := &domain.Graph{Metadata: domain.GraphMetadata{ID: "source", Version: 1}, Spec: domain.GraphSpec{Nodes: []domain.Node{{ID: "worker", Runtime: domain.RuntimeRef{Kind: domain.RuntimeEcho}}}}}
+	d := &taskconfig.Draft{ID: "tsk_default", Input: taskconfig.Input{GraphVersion: 1, NodeID: "worker"}}
+	if _, blocks, err := Prepare(d, g); err != nil || len(blocks) != 0 {
+		t.Fatalf("implicit result: %v %v", blocks, err)
+	}
+	g.Spec.Nodes[0].Disabled = true
+	if _, blocks, err := Prepare(d, g); err != nil || len(blocks) != 2 {
+		t.Fatalf("disabled entry/result: %v %v", blocks, err)
+	}
+}

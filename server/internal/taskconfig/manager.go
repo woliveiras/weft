@@ -116,6 +116,9 @@ func decode(rec *storage.Setting) (*Draft, error) {
 		return nil, errors.New("invalid stored task draft")
 	}
 	d.Revision = rec.Revision
+	if d.ResultNodeID == "" && d.Resolution == nil {
+		d.ResultNodeID = d.NodeID
+	}
 	return &d, nil
 }
 func (m Manager) Get(ctx context.Context, id string) (*Draft, error) {
@@ -169,6 +172,9 @@ func (m Manager) SaveTriggered(ctx context.Context, in Input, actor, githubIssue
 }
 
 func (m Manager) save(ctx context.Context, id string, in Input, revision int64, actor, githubIssueKey string) (*Draft, error) {
+	if in.ResultNodeID == "" {
+		in.ResultNodeID = in.NodeID
+	}
 	if err := Validate(in); err != nil {
 		return nil, err
 	}

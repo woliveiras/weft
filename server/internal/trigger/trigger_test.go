@@ -157,3 +157,25 @@ func TestEditRejectsMissingWorkflowOrAgent(t *testing.T) {
 		})
 	}
 }
+
+func TestSameAsEntryConsentAndLegacyTrigger(t *testing.T) {
+	m := trigger.Manager{Store: triggerStore(t)}
+	in := input()
+	in.ResultNodeID = ""
+	tr, err := m.Create(ctx, in, "admin")
+	if err != nil || tr.ResultNodeID != in.NodeID {
+		t.Fatalf("default result: %+v %v", tr, err)
+	}
+	scope := tr.Consent.Scope
+	tr, err = m.Update(ctx, tr.ID, "fixture", func(tr *trigger.Trigger) error { tr.ResultNodeID = ""; return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if problem, err := m.ConsentProblem(ctx, tr); err != nil || problem != "" {
+		t.Fatalf("legacy empty result: %q %v", problem, err)
+	}
+	tr, err = m.Resume(ctx, tr.ID, "admin")
+	if err != nil || tr.ResultNodeID != in.NodeID || tr.Consent.Scope != scope {
+		t.Fatalf("resumed result: %+v %v", tr, err)
+	}
+}

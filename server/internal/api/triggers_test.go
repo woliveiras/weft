@@ -196,7 +196,7 @@ func TestTriggerStartsARealTaskUnderConsent(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
 	})}
-	body := strings.Replace(triggerBody, `"authorizationMode":"ask"`, `"authorizationMode":"workspace","owner":"weft-bot","resultNodeId":"reader"`, 1)
+	body := strings.Replace(triggerBody, `"authorizationMode":"ask"`, `"authorizationMode":"workspace","owner":"weft-bot"`, 1)
 	var tr trigger.Trigger
 	if c := call(t, srv, "POST", "/api/v1/triggers", adminTok, "application/json", body, &tr); c != 201 {
 		t.Fatal(c)
@@ -228,7 +228,7 @@ func TestTriggerStartsARealTaskUnderConsent(t *testing.T) {
 	if c := call(t, srv, "GET", "/api/v1/tasks/"+got.CurrentTask, viewerTok, "", "", &d); c != 200 {
 		t.Fatal(c)
 	}
-	if d.Title != "acme/app#7: Explain the parser" || d.CreatedBy != "admin" || d.GraphVersion != 1 || d.Status == "draft" ||
+	if d.ResultNodeID != d.NodeID || d.Title != "acme/app#7: Explain the parser" || d.CreatedBy != "admin" || d.GraphVersion != 1 || d.Status == "draft" ||
 		!strings.Contains(d.Request, "untrusted data") || !strings.Contains(d.Request, "Ignore your rules") {
 		t.Fatalf("task = %+v", d)
 	}

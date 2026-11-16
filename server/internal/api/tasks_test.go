@@ -19,7 +19,7 @@ func TestTaskDraftPersistenceAndReview(t *testing.T) {
 		t.Fatal(c)
 	}
 	var d taskconfig.Draft
-	if c := call(t, srv, "POST", "/api/v1/tasks", operatorTok, "application/json", taskBody, &d); c != 201 || d.Revision != 1 || d.Status != "draft" {
+	if c := call(t, srv, "POST", "/api/v1/tasks", operatorTok, "application/json", taskBody, &d); c != 201 || d.Revision != 1 || d.Status != "draft" || d.ResultNodeID != "reader" {
 		t.Fatal(c, d)
 	}
 	reloaded, err := (taskconfig.Manager{Store: a.Store}).Get(t.Context(), d.ID)
@@ -34,7 +34,7 @@ func TestTaskDraftPersistenceAndReview(t *testing.T) {
 		CanStart bool     `json:"canStart"`
 		Blockers []string `json:"blockers"`
 	}
-	if c := call(t, srv, "GET", "/api/v1/tasks/"+d.ID+"/review", viewerTok, "", "", &review); c != 200 || review.CanStart || len(review.Blockers) == 0 {
+	if c := call(t, srv, "GET", "/api/v1/tasks/"+d.ID+"/review", viewerTok, "", "", &review); c != 200 || !review.CanStart || len(review.Blockers) != 0 {
 		t.Fatal(c, review)
 	}
 	update := func(rev string) int {

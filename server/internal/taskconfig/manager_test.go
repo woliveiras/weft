@@ -76,3 +76,16 @@ func TestChannelInputValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestDecodeLegacyResultDefault(t *testing.T) {
+	for _, tc := range []struct{ raw, want string }{
+		{`{"nodeId":"entry"}`, "entry"},
+		{`{"nodeId":"entry","resultNodeId":"result"}`, "result"},
+		{`{"nodeId":"entry","resolution":{"state":"needs_input"}}`, ""},
+	} {
+		d, err := decode(&storage.Setting{Value: []byte(tc.raw), Revision: 3})
+		if err != nil || d.ResultNodeID != tc.want || d.Revision != 3 {
+			t.Fatalf("decode %s: %+v %v", tc.raw, d, err)
+		}
+	}
+}

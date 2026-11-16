@@ -156,6 +156,9 @@ func (e *FieldError) add(path, f string, a ...any) {
 var idRe = regexp.MustCompile(`^[a-z0-9]{1,40}$`)
 
 func validate(in *Input) error {
+	if in.ResultNodeID == "" {
+		in.ResultNodeID = in.NodeID
+	}
 	fe := &FieldError{}
 	in.Name, in.Label, in.Owner = strings.TrimSpace(in.Name), strings.TrimSpace(in.Label), strings.TrimSpace(in.Owner)
 	if in.Name == "" || len(in.Name) > 100 {
@@ -375,7 +378,7 @@ func (m Manager) Edit(ctx context.Context, id string, in Input, actor string) (*
 		if err != nil {
 			return err
 		}
-		covered := t.Consent.Scope != reviewed.Scope
+		covered := !consentScopeMatches(t.Consent.Scope, in, reviewed)
 		if t.Source != in.Source {
 			t.SearchDeferredReason, t.SearchTurn = "", 0
 		}
@@ -435,6 +438,9 @@ func (m Manager) Resume(ctx context.Context, id, actor string) (*Trigger, error)
 				h.AccessError, h.AccessFailures, h.Eligibility = "", 0, ""
 			}
 		}
+		if t.ResultNodeID == "" {
+			t.ResultNodeID = t.NodeID
+		}
 		t.Consent, t.State, t.PausedReason, t.LastError, t.NextRunAt = c, Active, "", "", nil
 		return nil
 	})
@@ -478,7 +484,7 @@ func (m Manager) ConsentProblem(ctx context.Context, t *Trigger) (string, error)
 		return problem, nil
 	}
 	scope, err := m.reviewedScope(ctx, triggerInput(t), g)
-	if err != nil || t.Consent.Scope == "" || t.Consent.Scope != scope.Scope ||
+	if err != nil || t.Consent.Scope == "" || !consentScopeMatches(t.Consent.Scope, triggerInput(t), scope) ||
 		t.Consent.TrackerRevision != scope.TrackerRevision || t.Consent.ReadinessLimits != scope.ReadinessLimits ||
 		t.Consent.ReadinessModel != scope.ReadinessModel || t.Consent.ReadinessModelScope != scope.ReadinessModelScope || !slices.Equal(t.Consent.Operations, scope.Operations) {
 		return "The tracker connection or readiness scope changed. Review the trigger and resume to record new consent.", nil
@@ -534,6 +540,11 @@ func (m Manager) reviewedScope(ctx context.Context, in Input, g *domain.Graph) (
 			}
 		}
 	}
+	// Empty and explicit entry results grant exactly the same scope. Keep the
+	// original empty representation in the fingerprint for saved triggers.
+	if in.ResultNodeID == in.NodeID {
+		in.ResultNodeID = ""
+	}
 	in.Name, in.IntervalMinutes = "", 0
 	c.Scope = triggerFingerprint(struct {
 		Policy  int
@@ -547,4 +558,22 @@ func triggerFingerprint(v any) string {
 	raw, _ := json.Marshal(v)
 	digest := sha256.Sum256(raw)
 	return hex.EncodeToString(digest[:])
+}
+
+// consentScopeMatches accepts the original explicit-entry encoding as well as
+// the canonical Same-as-entry encoding, without widening any other scope field.
+func consentScopeMatches(stored string, in Input, scope Consent) bool {
+	if stored == scope.Scope {
+		return true
+	}
+	if in.ResultNodeID != in.NodeID || in.NodeID == "" {
+		return false
+	}
+	scope.Scope = ""
+	in.Name, in.IntervalMinutes = "", 0
+	return stored == triggerFingerprint(struct {
+		Policy  int
+		Input   Input
+		Consent Consent
+	}{1, in, scope})
 }

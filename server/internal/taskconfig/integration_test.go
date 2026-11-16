@@ -61,7 +61,7 @@ func TestDraftSurvivesStoreRestart(t *testing.T) {
 			defer s.Close()
 			m := Manager{Store: s}
 			loaded, err := m.Get(ctx, draft.ID)
-			if err != nil || loaded.Request != draft.Request || loaded.Revision != 1 || loaded.Source == nil || *loaded.Source != *draft.Source {
+			if err != nil || loaded.ResultNodeID != input.NodeID || loaded.Request != draft.Request || loaded.Revision != 1 || loaded.Source == nil || *loaded.Source != *draft.Source {
 				t.Fatal(loaded, err)
 			}
 			updated := good()

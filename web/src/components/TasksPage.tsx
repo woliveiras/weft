@@ -223,7 +223,7 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
         </select></label>
         <TaskIssueSource source={input.source} grants={selected?.spec.nodes.find(n=>n.id===input.nodeId)?.tools??selected?.spec.defaults?.tools??[]} onChange={source=>change({source})}/>
         <label>Result agent<select value={input.resultNodeId??''} onChange={e=>change({resultNodeId:e.target.value})}>
-          <option value="">Select result agent before starting</option>
+          <option value="">Same as entry</option>
           {selected?.spec.nodes.filter(n=>!n.disabled).map(n=><option key={n.id} value={n.id}>{n.name||n.id}</option>)}
         </select></label>
         <SCMHandOffField value={input.scmConnection??''} onChange={scmConnection=>change({scmConnection:scmConnection||undefined})}/>

@@ -215,9 +215,9 @@ func TestTaskAdmissionRejectsUnreviewedAndStaleRequests(t *testing.T) {
 	srv, _ := setupApp(t, nil)
 	call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", taskGraph, nil)
 	var d taskconfig.Draft
-	call(t, srv, "POST", "/api/v1/tasks", operatorTok, "application/json", taskBody, &d)
+	call(t, srv, "POST", "/api/v1/tasks", operatorTok, "application/json", strings.Replace(taskBody, `"nodeId":"reader"`, `"nodeId":"reader","resultNodeId":"missing"`, 1), &d)
 	if c := taskStart(t, srv.URL, d.ID, adminTok, d.Revision); c != 422 {
-		t.Fatal("missing result binding", c)
+		t.Fatal("invalid explicit result binding", c)
 	}
 	if c := call(t, srv, "POST", "/api/v1/tasks/"+d.ID+"/start", adminTok, "application/json", `{"confirm":false}`, nil); c != 400 {
 		t.Fatal(c)

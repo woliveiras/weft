@@ -17,7 +17,11 @@ test('administrators add an issue trigger to a workflow, preview matching issues
   await expect(form.getByLabel('Label', { exact: true })).toHaveValue('weft:todo');
   await expect(form).toContainText('Saving records your consent: tasks start as you, with Ask authorization');
   await expect(form).toContainText('16 KiB of input, 512 output tokens and 10 seconds');
+  await expect(form.getByLabel('Result agent')).toHaveValue('');
+  const created = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/triggers' && response.request().method() === 'POST');
   await form.getByRole('button', { name: 'Save trigger', exact: true }).click();
+  const saved = await (await created).json();
+  expect(saved.resultNodeId).toBe(saved.nodeId);
   const card = section.getByRole('article', { name: 'Trigger Ready issues' });
   await expect(card.getByText('Active', { exact: true })).toBeVisible();
   await expect(card).toContainText('Runs as e2e-admin for workflow version');
