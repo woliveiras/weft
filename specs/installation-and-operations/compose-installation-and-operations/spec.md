@@ -18,13 +18,13 @@ Operate the local Compose installation through documented bootstrap, health and 
 
 ## Behavior and invariants
 
-- Bootstrap provisions the initial installation identity and private data configuration without overwriting an existing profile. After bootstrap, routine model, connection and workflow operation uses the console.
+- Bootstrap provisions the initial installation identity and private data configuration without overwriting an existing profile. After bootstrap, routine model, connection and workflow operation uses the console or OPS-003 declarative configuration.
 
 ## Acceptance criteria
 
 ### AC-001 — Separate bootstrap and application setup
 
-Bootstrap provisions the initial installation identity and private data configuration without overwriting an existing profile. After bootstrap, routine model, connection and workflow operation uses the console.
+Bootstrap provisions the initial installation identity and private data configuration without overwriting an existing profile. After bootstrap, routine model, connection and workflow operation uses the console or OPS-003 declarative configuration.
 
 ### AC-002 — Health and dependency visibility
 
@@ -43,6 +43,8 @@ A stale observation from a worker cannot overwrite a newer run/stop command or g
 - Verify documented clean-install reachability for providers, MCP, store and runtime using the intended exposure policy. Image acquisition and final human walkthrough remain gated.
 
 ## History
+
+- 2026-11-17. Maintainer decision OPS-003 adds declarative plan/apply/export as an alternative to routine console setup. Bootstrap authentication and installation encryption remain separate.
 
 - 2026-10-18. The release checkpoint documented Compose volume/network/health/restart behavior, bounded dependency reporting and the recovery runbook.
 - 2026-10-19. The delivery plan retained a clean-install exercise after remaining Release 1 work.

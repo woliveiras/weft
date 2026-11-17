@@ -44,6 +44,8 @@ Disabled or missing ready providers block inference-dependent admission and expl
 
 ## History
 
+- 2026-11-17. Maintainer decision OPS-003 supersedes UI/API-only configuration: declarative YAML includes plugin activation and model providers through the same managed service, with server-confined secret references. Console editing and write-only credentials remain supported.
+
 - 2026-10-18. Browser configuration and managed LangGraph gateway acceptance used synthetic credentials. Provider management was isolated in its own disposable browser backend after registry reload affected other fixture scenarios.
 - 2026-10-30. The local-first plan recorded the three plugin states, UI/API-only configuration and development-only mock. PLUG-01–05 are reported complete by 2026-11-11.
 

@@ -1,0 +1,17 @@
+# OPS-003 behavior and oracle matrix
+
+Created before implementation. All expectations derive from the 2026-11-17
+maintainer request and the preceding specification, not implementation output.
+
+| Criterion | Scenario | Invariant | Observable oracle | Oracle provenance | Planned verification | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC-001 | Every kind; malformed/unknown fields; multiple documents; duplicate keys; legacy graph | Typed configuration and safe errors | Valid kinds parse; invalid inputs identify paths without values | spec-derived | Parser unit tests; API/CLI integration | Pending |
+| AC-002 | Forbidden env/key variables; missing env; traversal; absolute path; symlink escape; oversize and nonregular files | Server confinement | Rejected references produce no value in any output | spec-derived | Resolver unit tests; fixture API, captured logs and persisted event assertions | Pending |
+| AC-002 | Omitted and preserve refs; new or changed synthetic secret | Credential preservation | Stored credential retained; diff only set/changed/unchanged | spec-derived | Manager and API integration | Pending |
+| AC-003 | Create/update/no-op; console edit; per-object force; stale reviewed plan | No silent overwrite | Expected action/diff and revision conflict; unrelated object unchanged | spec-derived | Planner unit and HTTP integration | Pending |
+| AC-004 | Reverse file dependency order; failure in middle; retry; absent existing object | Ordered partial application | Earlier objects persist; later not applied; retry no duplicates; no deletion | spec-derived | Service integration with real store and fixture dependencies | Pending |
+| AC-005 | Installation containing every kind; repeated export; export/apply | Lossless secret-free configuration | Byte-stable export and every object unchanged; zero side effects | spec-derived | Full fixture round-trip integration | Pending |
+| AC-006 | Missing/invalid mode; consent flag absent/present; console edit; no-op paused trigger | Explicit admin consent | Paused reason or actor/mode scope; no implicit mode; no renewed no-op consent | spec-derived | Trigger unit and API integration | Pending |
+| AC-007 | MCP ready/unavailable; SCM failure; project URL/ref retry; graph network/environment | Existing boundaries | Sanitized status; one project; correct order; build warning and no build | spec-derived | Manager/API integration with local protocol fixtures | Pending |
+| AC-008 | Anonymous/viewer/operator/admin; file/directory; dry-run/yes/force/export | Authorization and confirmation | Only admin succeeds; only confirmed apply writes; no local secret reads | spec-derived | API authorization and CLI HTTP integration | Pending |
+| AC-009 | Docs/example/Compose; cached toolchains; real read-only export/dry-run | Rehearsal preservation | Documented commands and outcomes; standard image; no live writes | spec-derived | Evidence record and command logs | Pending |

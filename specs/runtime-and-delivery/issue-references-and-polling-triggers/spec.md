@@ -91,6 +91,8 @@ issues and other non-GitHub trackers on PR merge is excluded.
 
 ## History
 
+- 2026-11-17. Maintainer decision OPS-003: reviewed console creation and scope edits record admin consent; declarative creation/updates require an explicit record-consent flag, otherwise save paused with `consent required`. This replaces edit-then-resume consent for console scope edits, while preserving mode validation and runner preflight.
+
 - 2026-11-12. The maintainer approved the RUN-007 readiness policy and the
   `weft:todo`, `weft:wip`, `weft:needs-attention` and `weft:done` cycle.
 

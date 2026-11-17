@@ -54,6 +54,8 @@ Admins review revisioned network settings and see current proxy status. Collecte
 
 ## History
 
+- 2026-11-17. Maintainer decision OPS-003 adds administrator declarative management of the existing revisioned network policy before dependent graphs. No default network permissions or running-resource revocation semantics change.
+
 - 2026-10-18 Release 1 checkpoint. The plan records policy checks, managed execution/preparation proxies, revisioned settings and bounded denial history.
 
 ## Reconciliation
