@@ -30,25 +30,50 @@ type Definition struct {
 }
 
 type definitions struct {
-	Budgets   []Definition `json:"budgets"`
-	UpdatedAt *time.Time   `json:"updatedAt,omitempty"`
-	UpdatedBy string       `json:"updatedBy,omitempty"`
+	ObjectRevisions map[string]int64 `json:"objectRevisions,omitempty"`
+	Budgets         []Definition     `json:"budgets"`
+	UpdatedAt       *time.Time       `json:"updatedAt,omitempty"`
+	UpdatedBy       string           `json:"updatedBy,omitempty"`
 }
 
 // Definitions returns the monthly budgets and the setting revision.
 func (b Budgets) Definitions(ctx context.Context) ([]Definition, int64, error) {
+	defs, revision, _, err := b.DefinitionsWithRevisions(ctx)
+	return defs, revision, err
+}
+
+// DefinitionsWithRevisions returns one coherent snapshot. Object revisions change
+// only with that budget, including edits that restore an earlier value. Legacy
+// definitions have revision zero until their first change; reading never migrates.
+func (b Budgets) DefinitionsWithRevisions(ctx context.Context) ([]Definition, int64, map[string]int64, error) {
 	st, err := b.Store.GetSetting(ctx, DefinitionsKey)
 	if errors.Is(err, storage.ErrNotFound) {
-		return []Definition{}, 0, nil
+		return []Definition{}, 0, nil, nil
 	}
 	if err != nil {
-		return nil, 0, fmt.Errorf("cost: read budgets: %w", err)
+		return nil, 0, nil, fmt.Errorf("cost: read budgets: %w", err)
 	}
 	var d definitions
 	if err := json.Unmarshal(st.Value, &d); err != nil || validateDefinitions(d.Budgets) != nil {
-		return nil, 0, errors.New("cost: the stored budget definitions are corrupt")
+		return nil, 0, nil, errors.New("cost: the stored budget definitions are corrupt")
 	}
-	return d.Budgets, st.Revision, nil
+	return d.Budgets, st.Revision, d.ObjectRevisions, nil
+}
+
+func definitionRevisions(before, after []Definition, prior map[string]int64, next int64) map[string]int64 {
+	previous := make(map[string]Definition, len(before))
+	for _, d := range before {
+		previous[d.Scope+"/"+d.ID] = d
+	}
+	revisions := make(map[string]int64, len(after))
+	for _, d := range after {
+		key := d.Scope + "/" + d.ID
+		revisions[key] = prior[key]
+		if old, ok := previous[key]; !ok || old != d {
+			revisions[key] = next
+		}
+	}
+	return revisions
 }
 
 func validateDefinitions(defs []Definition) *ValidationError {
@@ -102,21 +127,30 @@ func validateDefinitions(defs []Definition) *ValidationError {
 // the current month's ledger during reconciliation or the next reservation
 // unless a person raised that ledger above it.
 func (b Budgets) SetDefinitions(ctx context.Context, defs []Definition, actor string, ifRevision int64) ([]Definition, error) {
+	return b.setDefinitions(ctx, defs, actor, ifRevision, false)
+}
+
+// SetDefinitionsAt also fences an absent (revision zero) snapshot.
+func (b Budgets) SetDefinitionsAt(ctx context.Context, defs []Definition, actor string, revision int64) ([]Definition, error) {
+	return b.setDefinitions(ctx, defs, actor, revision, true)
+}
+
+func (b Budgets) setDefinitions(ctx context.Context, defs []Definition, actor string, ifRevision int64, exact bool) ([]Definition, error) {
 	if defs == nil {
 		defs = []Definition{}
 	}
 	if ve := validateDefinitions(defs); ve != nil {
 		return nil, ve
 	}
-	_, rev, err := b.Definitions(ctx)
+	before, rev, objectRevisions, err := b.DefinitionsWithRevisions(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if ifRevision > 0 && ifRevision != rev {
+	if (exact || ifRevision > 0) && ifRevision != rev {
 		return nil, fmt.Errorf("%w: budgets changed (revision %d, you edited %d); reload", storage.ErrConflict, rev, ifRevision)
 	}
 	now := time.Now().UTC()
-	raw, _ := json.Marshal(definitions{Budgets: defs, UpdatedAt: &now, UpdatedBy: actor})
+	raw, _ := json.Marshal(definitions{Budgets: defs, ObjectRevisions: definitionRevisions(before, defs, objectRevisions, rev+1), UpdatedAt: &now, UpdatedBy: actor})
 	if _, err := b.Store.PutSetting(ctx, DefinitionsKey, raw, rev, actor); err != nil {
 		return nil, fmt.Errorf("cost: store budgets: %w", err)
 	}

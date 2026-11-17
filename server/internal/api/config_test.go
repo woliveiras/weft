@@ -559,3 +559,31 @@ func TestDeclarativeExportHandlesDuplicateTriggerDisplayNames(t *testing.T) {
 		t.Fatal(plan)
 	}
 }
+
+func TestDeclarativeBudgetRevisionDetectsRestoredConsoleEdit(t *testing.T) {
+	srv := setup(t)
+	const initial = `{"budgets":[{"scope":"installation","id":"*","limitMicros":10000000},{"scope":"user","id":"alice","limitMicros":2000000}]}`
+	put := func(body string) {
+		t.Helper()
+		if code := call(t, srv, "PUT", "/api/v1/cost/budgets", adminTok, "application/json", body, nil); code != 200 {
+			t.Fatalf("console budget update: %d", code)
+		}
+	}
+	put(initial)
+	exported := exportConfig(t, srv)
+	put(strings.Replace(initial, "10000000", "11000000", 1))
+	put(initial)
+	plan := configRequest(t, srv, "plan", installation.Request{Files: []string{exported}})
+	if plan.OK {
+		t.Fatal("restoring an edited budget must not restore its prior revision")
+	}
+	for _, o := range plan.Objects {
+		want := "unchanged"
+		if o.Key == "Budget/installation/*" {
+			want = "conflict"
+		}
+		if o.Action != want {
+			t.Fatalf("%s: want %s, got %s", o.Key, want, o.Action)
+		}
+	}
+}

@@ -185,3 +185,18 @@ func TestCheckAdmissionUsesEffectiveLimitAndPropagatesLedgerErrors(t *testing.T)
 		t.Fatalf("expected dependency failure: %v", err)
 	}
 }
+
+func TestDefinitionsAtRejectsConcurrentFirstWrite(t *testing.T) {
+	_, b := budgetEnv(t, 0)
+	defs := []cost.Definition{{Scope: cost.Installation, ID: "*", LimitMicros: 10}}
+	if _, err := b.SetDefinitionsAt(ctx, defs, "admin", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.SetDefinitionsAt(ctx, nil, "stale-admin", 0); !errors.Is(err, storage.ErrConflict) {
+		t.Fatalf("absent snapshot must be fenced: %v", err)
+	}
+	stored, rev, objects, err := b.DefinitionsWithRevisions(ctx)
+	if err != nil || len(stored) != 1 || stored[0] != defs[0] || objects["installation/*"] != rev {
+		t.Fatalf("failed write changed definitions: %+v %v %v", stored, objects, err)
+	}
+}

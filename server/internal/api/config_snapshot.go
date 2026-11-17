@@ -18,15 +18,16 @@ import (
 )
 
 type configObject struct {
-	Doc             installation.Document
-	NativeID        string
-	NativeRevision  int64
-	Secrets         map[string]bool
-	Status          string
-	DefaultOnly     bool
-	NativeTime      time.Time
-	NativeConfig    string
-	ConsentRequired bool
+	Doc                  installation.Document
+	NativeID             string
+	NativeRevision       int64
+	NativeObjectRevision int64
+	Secrets              map[string]bool
+	Status               string
+	DefaultOnly          bool
+	NativeTime           time.Time
+	NativeConfig         string
+	ConsentRequired      bool
 }
 
 func publicFields(v, shape any) map[string]any {
@@ -101,13 +102,19 @@ func (s *Server) configSnapshot(ctx context.Context) (map[string]configObject, e
 	if err = add(o); err != nil {
 		return nil, err
 	}
-	defs, rev, err := s.budgets().Definitions(ctx)
+	defs, rev, objectRevisions, err := s.budgets().DefinitionsWithRevisions(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, d := range defs {
-		o = newConfigObject("Budget", d.Scope+"/"+d.ID, d, nil)
+		key := d.Scope + "/" + d.ID
+		var stamp any
+		if objectRevisions[key] > 0 {
+			stamp = objectRevisions[key]
+		}
+		o = newConfigObject("Budget", key, d, stamp)
 		o.NativeRevision = rev
+		o.NativeObjectRevision = objectRevisions[key]
 		o.DefaultOnly = rev == 0
 		if err = add(o); err != nil {
 			return nil, err

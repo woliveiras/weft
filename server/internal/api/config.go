@@ -354,14 +354,14 @@ func (s *Server) applyConfigObject(ctx context.Context, p configPrepared, old co
 		return "", err
 	case "Budget":
 		in := p.Input.(cost.Definition)
-		defs, rev, err := s.budgets().Definitions(ctx)
+		defs, rev, objectRevisions, err := s.budgets().DefinitionsWithRevisions(ctx)
 		if err != nil {
 			return "", err
 		}
 		found := false
 		for i, d := range defs {
 			if d.Scope == in.Scope && d.ID == in.ID {
-				if old.Doc.Kind == "" || installation.Digest(d) != installation.Digest(old.Doc.Spec) {
+				if old.Doc.Kind == "" || objectRevisions[d.Scope+"/"+d.ID] != old.NativeObjectRevision || installation.Digest(d) != installation.Digest(old.Doc.Spec) {
 					return "", fmt.Errorf("budget changed after plan")
 				}
 				defs[i] = in
@@ -374,7 +374,7 @@ func (s *Server) applyConfigObject(ctx context.Context, p configPrepared, old co
 			}
 			defs = append(defs, in)
 		}
-		_, err = s.budgets().SetDefinitions(ctx, defs, actor, rev)
+		_, err = s.budgets().SetDefinitionsAt(ctx, defs, actor, rev)
 		return "", err
 	case "NetworkPolicy":
 		v, err := s.networkSettings().Save(ctx, p.Input.(environmentpolicy.NetworkSettings), old.NativeRevision, actor)
