@@ -110,8 +110,15 @@ func TestReadConfigFilesRejectsDuplicatesAndSymlinks(t *testing.T) {
 	if _, err := readConfigFiles(dir); err == nil {
 		t.Fatal("duplicate object accepted")
 	}
-	if err := os.Symlink(filepath.Join(dir, "a.yaml"), filepath.Join(t.TempDir(), "linked.yaml")); err != nil {
+	linked := filepath.Join(t.TempDir(), "linked.yaml")
+	if err := os.Symlink(filepath.Join(dir, "a.yaml"), linked); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := readConfigFiles(linked); err == nil {
+		t.Fatal("symlink input accepted")
+	}
+	if _, err := readConfigFiles(filepath.Dir(linked)); err == nil {
+		t.Fatal("symlink directory entry accepted")
 	}
 }
 
