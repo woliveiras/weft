@@ -155,18 +155,8 @@ func (b Budgets) Policy(ctx context.Context) (Policy, int64, error) {
 // SetPolicy validates and stores the policy. Existing ledgers keep their
 // limits; the new default applies to task runs that start afterwards.
 func (b Budgets) SetPolicy(ctx context.Context, p Policy, actor string, ifRevision int64) (Policy, error) {
-	ve := &ValidationError{}
-	if p.TaskRunBudgetMicros < 0 || p.TaskRunBudgetMicros > MaxBudgetMicros {
-		ve.Errors = append(ve.Errors, Issue{"taskRunBudgetMicros", fmt.Sprintf("must be between 0 (no budget) and %d", MaxBudgetMicros)})
-	}
-	if p.WarningPercent == 0 {
-		p.WarningPercent = 80
-	}
-	if p.WarningPercent < 1 || p.WarningPercent > 100 {
-		ve.Errors = append(ve.Errors, Issue{"warningPercent", "must be between 1 and 100"})
-	}
-	if len(ve.Errors) > 0 {
-		return Policy{}, ve
+	if err := NormalizePolicy(&p); err != nil {
+		return Policy{}, err
 	}
 	_, rev, err := b.Policy(ctx)
 	if err != nil {
@@ -694,4 +684,22 @@ func (b Budgets) Reconcile(ctx context.Context, ended func(ctx context.Context, 
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// NormalizePolicy is shared by preview and mutation.
+func NormalizePolicy(p *Policy) error {
+	ve := &ValidationError{}
+	if p.TaskRunBudgetMicros < 0 || p.TaskRunBudgetMicros > MaxBudgetMicros {
+		ve.Errors = append(ve.Errors, Issue{"taskRunBudgetMicros", fmt.Sprintf("must be between 0 (no budget) and %d", MaxBudgetMicros)})
+	}
+	if p.WarningPercent == 0 {
+		p.WarningPercent = 80
+	}
+	if p.WarningPercent < 1 || p.WarningPercent > 100 {
+		ve.Errors = append(ve.Errors, Issue{"warningPercent", "must be between 1 and 100"})
+	}
+	if len(ve.Errors) > 0 {
+		return ve
+	}
+	return nil
 }

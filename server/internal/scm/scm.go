@@ -330,6 +330,14 @@ func (m Manager) apply(c *Connection, in Input, actor string, now time.Time) err
 
 // Save creates (update=false) or updates a connection.
 func (m Manager) Save(ctx context.Context, in Input, actor string, update bool) (View, error) {
+	return m.saveAt(ctx, in, actor, update, nil)
+}
+
+// SaveAt fences declarative updates against the reviewed object timestamp.
+func (m Manager) SaveAt(ctx context.Context, in Input, actor string, update bool, expected time.Time) (View, error) {
+	return m.saveAt(ctx, in, actor, update, &expected)
+}
+func (m Manager) saveAt(ctx context.Context, in Input, actor string, update bool, expected *time.Time) (View, error) {
 	var out Connection
 	err := m.mutate(ctx, actor, func(d *document) error {
 		if ve := m.validate(&in, *d, update); ve != nil {
@@ -350,6 +358,9 @@ func (m Manager) Save(ctx context.Context, in Input, actor string, update bool) 
 		}
 		for i := range d.Connections {
 			if d.Connections[i].Name == in.Name {
+				if expected != nil && !d.Connections[i].UpdatedAt.Equal(*expected) {
+					return storage.ErrConflict
+				}
 				if err := m.apply(&d.Connections[i], in, actor, now); err != nil {
 					return err
 				}

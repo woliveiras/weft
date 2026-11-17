@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -82,6 +83,7 @@ type Deps struct {
 }
 
 type Server struct {
+	configurationMu sync.Mutex
 	Deps
 	mux      *http.ServeMux
 	internal *http.ServeMux // callback API; == mux unless server.internalAddr is set
@@ -120,6 +122,9 @@ func (s *Server) routes() {
 	O := config.RoleOperator
 	A := config.RoleAdmin
 	routes := []route{
+		{"POST /api/v1/config/plan", A, s.configPlan},
+		{"POST /api/v1/config/apply", A, s.configApply},
+		{"GET /api/v1/config/export", A, s.configExport},
 		{"GET /api/v1/tasks", R, s.listTasks},
 		{"POST /api/v1/tasks", O, s.saveTask},
 		{"POST /api/v1/tasks/prompt", O, s.resolveTaskPrompt},
@@ -298,6 +303,10 @@ func (s *Server) wrap(rt route) http.Handler {
 		if r.Method != http.MethodGet && strings.HasPrefix(r.PathValue("id"), taskrun.GraphPrefix) {
 			writeErr(w, 409, "conflict", "Task execution copies are immutable; use task controls.", nil)
 			return
+		}
+		if rt.role == config.RoleAdmin && r.Method != http.MethodGet {
+			s.configurationMu.Lock()
+			defer s.configurationMu.Unlock()
 		}
 		if err := rt.h(w, r); err != nil {
 			s.writeError(w, r, err)

@@ -154,6 +154,8 @@ func (l LLM) Static() ([]llm.ProviderConfig, string) {
 // Secrets configures the installation key that encrypts credentials
 // operators enter in the console (model provider keys, integration tokens).
 type Secrets struct {
+	// Dir confines declarative file secret references; empty disables file references.
+	Dir string `yaml:"dir"`
 	// KeyEnv names the environment variable holding the key (base64 or hex,
 	// 32 bytes). It takes precedence over KeyFile.
 	KeyEnv string `yaml:"keyEnv"`
@@ -319,6 +321,7 @@ func applyEnv(c *Config) {
 	str("WEFT_SANDBOX_IMAGE", &c.Isolation.Docker.Image)
 	str("WEFT_SANDBOX_DOCKER_HOST", &c.Isolation.Docker.Host)
 	str("WEFT_SECRET_KEY_FILE", &c.Secrets.KeyFile)
+	str("WEFT_SECRETS_DIR", &c.Secrets.Dir)
 	if v := os.Getenv("WEFT_SECRET_KEY_GENERATE"); v != "" {
 		c.Secrets.GenerateKeyFile, _ = strconv.ParseBool(v)
 	}

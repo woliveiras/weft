@@ -56,32 +56,34 @@ type Tool struct {
 	InputSchema json.RawMessage `json:"inputSchema"`
 }
 type View struct {
-	LocalProcess         *LocalProcess     `json:"localProcess,omitempty"`
-	EnvironmentKeys      []string          `json:"environmentKeys,omitempty"`
-	ArgumentPolicy       []ArgumentRule    `json:"argumentPolicy,omitempty"`
-	AtlassianPolicy      *AtlassianPolicy  `json:"atlassianPolicy,omitempty"`
-	TransportProfile     string            `json:"transportProfile,omitempty"`
-	MetadataHeaders      map[string]string `json:"metadataHeaders,omitempty"`
-	CredentialType       string            `json:"credentialType,omitempty"`
-	TemplateParameters   map[string]string `json:"templateParameters,omitempty"`
-	CallsPerMinute       int               `json:"callsPerMinute,omitempty"`
-	OAuth                *OAuthView        `json:"oauth,omitempty"`
-	Template             *TemplateRef      `json:"template,omitempty"`
-	ID                   string            `json:"id"`
-	Name                 string            `json:"name"`
-	Service              string            `json:"service"`
-	Endpoint             string            `json:"endpoint"`
-	Enabled              bool              `json:"enabled"`
-	Revision             int64             `json:"revision"`
-	Status               string            `json:"status"`
-	CredentialConfigured bool              `json:"credentialConfigured"`
-	Tools                []Tool            `json:"tools"`
-	ToolsRevision        int64             `json:"toolsRevision"`
-	LastTest             *time.Time        `json:"lastTest,omitempty"`
-	Error                string            `json:"error,omitempty"`
-	CreatedAt            time.Time         `json:"createdAt"`
-	UpdatedAt            time.Time         `json:"updatedAt"`
-	UpdatedBy            string            `json:"updatedBy"`
+	// ConfigurationUpdatedAt excludes discovery and other transient health writes.
+	ConfigurationUpdatedAt *time.Time        `json:"configurationUpdatedAt,omitempty"`
+	LocalProcess           *LocalProcess     `json:"localProcess,omitempty"`
+	EnvironmentKeys        []string          `json:"environmentKeys,omitempty"`
+	ArgumentPolicy         []ArgumentRule    `json:"argumentPolicy,omitempty"`
+	AtlassianPolicy        *AtlassianPolicy  `json:"atlassianPolicy,omitempty"`
+	TransportProfile       string            `json:"transportProfile,omitempty"`
+	MetadataHeaders        map[string]string `json:"metadataHeaders,omitempty"`
+	CredentialType         string            `json:"credentialType,omitempty"`
+	TemplateParameters     map[string]string `json:"templateParameters,omitempty"`
+	CallsPerMinute         int               `json:"callsPerMinute,omitempty"`
+	OAuth                  *OAuthView        `json:"oauth,omitempty"`
+	Template               *TemplateRef      `json:"template,omitempty"`
+	ID                     string            `json:"id"`
+	Name                   string            `json:"name"`
+	Service                string            `json:"service"`
+	Endpoint               string            `json:"endpoint"`
+	Enabled                bool              `json:"enabled"`
+	Revision               int64             `json:"revision"`
+	Status                 string            `json:"status"`
+	CredentialConfigured   bool              `json:"credentialConfigured"`
+	Tools                  []Tool            `json:"tools"`
+	ToolsRevision          int64             `json:"toolsRevision"`
+	LastTest               *time.Time        `json:"lastTest,omitempty"`
+	Error                  string            `json:"error,omitempty"`
+	CreatedAt              time.Time         `json:"createdAt"`
+	UpdatedAt              time.Time         `json:"updatedAt"`
+	UpdatedBy              string            `json:"updatedBy"`
 }
 type record struct {
 	ProcessEnvironmentSealed string              `json:"processEnvironmentSealed,omitempty"`
@@ -208,7 +210,15 @@ func (m *Manager) List(ctx context.Context) ([]View, error) {
 }
 func (m *Manager) save(ctx context.Context, r record, rev int64, actor, event string) (View, error) {
 	r.View = operationCatalogue(r.View)
+	if r.ConfigurationUpdatedAt == nil {
+		previous := r.UpdatedAt
+		r.ConfigurationUpdatedAt = &previous
+	}
 	r.UpdatedAt = time.Now().UTC()
+	if event == "mcp.connection.changed" {
+		changed := r.UpdatedAt
+		r.ConfigurationUpdatedAt = &changed
+	}
 	r.UpdatedBy = actor
 	r.CredentialConfigured = r.Sealed != ""
 	if r.OAuth != nil {

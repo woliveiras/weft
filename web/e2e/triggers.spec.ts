@@ -42,7 +42,9 @@ test('administrators add an issue trigger to a workflow, preview matching issues
   await edit.getByLabel('Assess issue readiness before work').uncheck();
   await edit.getByRole('button', { name: 'Save trigger', exact: true }).click();
   await expect(card).toContainText('Readiness disabled');
-  await expect(card).toContainText('The trigger changed what was consented to');
+  await expect(card.getByText('Active', { exact: true })).toBeVisible();
+  const reviewed = await page.request.get(`/api/v1/triggers/${saved.id}`, { headers: { Authorization: 'Bearer e2e-admin-token' } });
+  expect((await reviewed.json()).consent.actor).toBe('e2e-admin');
   page.on('dialog', (d) => void d.accept());
   await card.getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(section.getByRole('article', { name: 'Trigger Ready issues' })).toHaveCount(0);

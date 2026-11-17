@@ -216,7 +216,7 @@ func TestReadinessRevalidatesSnapshotAndPreservesHoldsWhenDisabled(t *testing.T)
 	consent := tr.Consent.Scope
 	in.ReadinessDisabled = true
 	tr, err = r.Triggers.Edit(t.Context(), tr.ID, in, "admin")
-	if err != nil || tr.State != trigger.Paused || len(tr.Holds) != 1 {
+	if err != nil || tr.State != trigger.Active || tr.Consent.Actor != "admin" || tr.Consent.Scope == consent || len(tr.Holds) != 1 {
 		t.Fatalf("disable: %+v %v", tr, err)
 	}
 	tr, err = r.Triggers.Resume(t.Context(), tr.ID, "admin")

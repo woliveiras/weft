@@ -74,7 +74,7 @@ func TestTriggerValidationAndConsent(t *testing.T) {
 	if err != nil || tr.Consent.Actor != "bob" || tr.Consent.WorkflowVersion != 2 {
 		t.Fatalf("resume: %+v %v", tr, err)
 	}
-	// Editing what the consent covers pauses the trigger; cosmetic edits do not.
+	// Reviewed console scope edits record consent; cosmetic edits retain it.
 	cosmetic := input()
 	cosmetic.Name, cosmetic.IntervalMinutes = "Renamed", 30
 	if tr, err = m.Edit(ctx, tr.ID, cosmetic, "bob"); err != nil || tr.State != trigger.Active || tr.Name != "Renamed" {
@@ -82,11 +82,11 @@ func TestTriggerValidationAndConsent(t *testing.T) {
 	}
 	covered := cosmetic
 	covered.Authorization = taskauth.Full
-	if tr, err = m.Edit(ctx, tr.ID, covered, "bob"); err != nil || tr.State != trigger.Paused || tr.PausedReason == "" {
+	if tr, err = m.Edit(ctx, tr.ID, covered, "bob"); err != nil || tr.State != trigger.Active || tr.Consent.Actor != "bob" || tr.Consent.Authorization != taskauth.Full {
 		t.Fatalf("covered edit: %+v %v", tr, err)
 	}
-	if p, _ := m.ConsentProblem(ctx, tr); p == "" {
-		t.Fatal("authorization change must invalidate consent")
+	if p, _ := m.ConsentProblem(ctx, tr); p != "" {
+		t.Fatal("reviewed scope edit must record current consent")
 	}
 	if tr, err = m.Resume(ctx, tr.ID, "carol"); err != nil || tr.State != trigger.Active || tr.Consent.Authorization != taskauth.Full {
 		t.Fatalf("resume after edit: %+v %v", tr, err)

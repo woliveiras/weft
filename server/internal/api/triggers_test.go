@@ -67,8 +67,8 @@ func TestTriggersThroughAPI(t *testing.T) {
 		t.Fatalf("resume: %d %+v", c, tr)
 	}
 	edited := strings.Replace(triggerBody, `"ask"`, `"full"`, 1)
-	if c := call(t, srv, "PUT", "/api/v1/triggers/"+tr.ID, adminTok, "application/json", edited, &tr); c != 200 || tr.State != "paused" {
-		t.Fatalf("consent-relevant edit must pause: %d %+v", c, tr)
+	if c := call(t, srv, "PUT", "/api/v1/triggers/"+tr.ID, adminTok, "application/json", edited, &tr); c != 200 || tr.State != "active" || tr.Consent.Actor != "admin" || tr.Consent.Authorization != "full" {
+		t.Fatalf("reviewed scope edit must record consent: %d %+v", c, tr)
 	}
 	if c := call(t, srv, "DELETE", "/api/v1/triggers/"+tr.ID, adminTok, "", "", nil); c != 204 {
 		t.Fatalf("delete: %d", c)

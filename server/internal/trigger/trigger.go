@@ -316,6 +316,11 @@ func (m Manager) consent(ctx context.Context, in Input, actor string) (Consent, 
 	if err != nil {
 		return Consent{}, err
 	}
+	return m.PreviewGraphConsent(ctx, in, g, actor)
+}
+
+// PreviewGraphConsent checks the same scope as a consent write without saving it.
+func (m Manager) PreviewGraphConsent(ctx context.Context, in Input, g *domain.Graph, actor string) (Consent, error) {
 	fe := &FieldError{}
 	if g.Node(in.NodeID) == nil {
 		fe.add("nodeId", "the entry agent is not in the workflow")
@@ -368,9 +373,8 @@ func apply(t *Trigger, in Input) {
 	t.IntervalMinutes, t.SCMConnection, t.ProjectID, t.ExecutionMode, t.Authorization = in.IntervalMinutes, in.SCMConnection, in.ProjectID, in.ExecutionMode, in.Authorization
 }
 
-// Edit changes a trigger. A change to what the consent covers (workflow,
-// entry or result agent, project, environment, authorization, source or
-// delivery) pauses it until a person resumes it and records new consent.
+// Edit records the administrator's reviewed scope while preserving an
+// explicitly paused state. OPS-003 makes console saves explicit consent.
 func (m Manager) Edit(ctx context.Context, id string, in Input, actor string) (*Trigger, error) {
 	if err := validate(&in); err != nil {
 		return nil, err
@@ -385,8 +389,8 @@ func (m Manager) Edit(ctx context.Context, id string, in Input, actor string) (*
 			t.SearchDeferredReason, t.SearchTurn = "", 0
 		}
 		apply(t, in)
-		if covered && t.State == Active {
-			t.State, t.PausedReason = Paused, "The trigger changed what was consented to. Review it and resume to record new consent."
+		if covered {
+			t.Consent = reviewed
 		}
 		return nil
 	})
