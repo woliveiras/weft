@@ -28,7 +28,8 @@ const usage = `weft - Weft agent factory CLI
 
 Graphs:
   weft graphs                         list graphs
-  weft apply -f graph.yaml            create or update a graph
+  weft apply -f <file|directory>      plan and apply configuration (confirmation required)
+  weft export [-o installation.yaml]  export installation configuration
   weft validate -f graph.yaml         validate a graph locally and on the server
   weft get <graph> [-o yaml|json]     print a graph document
   weft delete <graph>                 delete a (stopped) graph
@@ -65,6 +66,8 @@ func main() {
 		err = c.listGraphs()
 	case "apply":
 		err = c.apply(args)
+	case "export":
+		err = c.exportConfiguration(args)
 	case "validate":
 		err = c.validate(args)
 	case "get":
@@ -227,37 +230,6 @@ func readGraph(path string) ([]byte, *domain.Graph, error) {
 		return nil, nil, err
 	}
 	return b, &g, nil
-}
-
-func (c *client) apply(args []string) error {
-	path, _ := fileFlag(args)
-	if path == "" {
-		return fmt.Errorf("apply needs -f <file>")
-	}
-	b, g, err := readGraph(path)
-	if err != nil {
-		return err
-	}
-	graph.Normalize(g)
-	var out summary
-	resp, err := c.req("GET", "/api/v1/graphs/"+g.Metadata.ID, nil, "")
-	if err != nil {
-		return err
-	}
-	resp.Body.Close()
-	method, p := "POST", "/api/v1/graphs"
-	if resp.StatusCode == 200 {
-		method, p = "PUT", "/api/v1/graphs/"+g.Metadata.ID
-	}
-	resp, err = c.req(method, p, bytes.NewReader(b), "application/yaml")
-	if err != nil {
-		return err
-	}
-	if err := decode(resp, &out); err != nil {
-		return err
-	}
-	fmt.Printf("graph %s applied (version %d)\n", out.Graph.Metadata.ID, out.Record.Version)
-	return nil
 }
 
 func (c *client) validate(args []string) error {

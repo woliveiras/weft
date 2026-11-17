@@ -36,3 +36,7 @@ server/eval-baseline.md
 
 # Artifacts from older Compose TLS test runners.
 /server/.weft-test-tls.*
+
+# Local declarative apply revision knowledge (no credentials).
+*.weft-state.json
+/installation-secrets/
