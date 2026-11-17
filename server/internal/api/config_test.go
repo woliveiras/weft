@@ -587,3 +587,68 @@ func TestDeclarativeBudgetRevisionDetectsRestoredConsoleEdit(t *testing.T) {
 		}
 	}
 }
+
+func TestDeclarativeNetworkPrecedesManualEnvironmentWithoutBuild(t *testing.T) {
+	bin, daemonLog := fakeDaemonCLI(t)
+	srv, a := setupApp(t, func(c *config.Config) {
+		c.Isolation.Docker.Bin = bin
+		c.Isolation.Docker.Host = "tcp://sandbox-daemon:2376"
+	})
+	before, _ := os.ReadFile(daemonLog)
+	workflow := yamlObject("Graph", "manual-env", "  environment:\n    dockerfile: FROM golang:1.26-alpine\n    network: {run: egress, allowedHosts: [storage.googleapis.com]}\n  defaults: {runtime: {kind: echo}}\n  nodes: [{id: worker, isolation: {mode: docker}}]")
+	denied := configRequest(t, srv, "plan", installation.Request{Files: []string{workflow}})
+	if denied.OK || denied.Objects[0].Action != "error" || !strings.Contains(denied.Objects[0].Error, "spec.environment") {
+		t.Fatalf("missing installation-policy validation: %+v", denied)
+	}
+	network := yamlObject("NetworkPolicy", "installation", "  setupNetworks: [none, bridge]\n  runNetworks: [none, egress]\n  egressHosts: [storage.googleapis.com]")
+	report := configApplyRequest(t, srv, installation.Request{Files: []string{workflow, network}})
+	if !report.OK || report.Objects[0].Key != "NetworkPolicy/installation" || report.Objects[1].Key != "Graph/manual-env" || !strings.Contains(report.Objects[1].Warning, "build") {
+		t.Fatalf("ordered environment apply: %+v", report)
+	}
+	g, err := a.Store.GetGraph(t.Context(), "manual-env", 0)
+	if err != nil || g.Spec.Environment == nil || !strings.Contains(g.Spec.Environment.Dockerfile, "golang") {
+		t.Fatalf("manual definition not retained: %v", err)
+	}
+	after, _ := os.ReadFile(daemonLog)
+	if string(before) != string(after) {
+		t.Fatal("configuration apply invoked Docker")
+	}
+	events, err := a.Store.ListEvents(t.Context(), storage.EventFilter{Limit: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range events {
+		if strings.HasPrefix(string(e.Type), "environment.build") {
+			t.Fatal("apply started an environment build", e.Type)
+		}
+	}
+}
+
+func TestDeclarativeMCPUnavailableReportsSanitizedDiscovery(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	t.Setenv("WEFT_SECRET_UNAVAILABLE_FIXTURE", "unique-mcp-unavailable-secret")
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		io.WriteString(w, "unique-mcp-unavailable-secret")
+	}))
+	defer upstream.Close()
+	a.MCP.Discover = func(ctx context.Context, endpoint, token string) ([]mcpconfig.Tool, error) {
+		return mcpconfig.DiscoverWithClient(ctx, endpoint, token, upstream.Client())
+	}
+	raw := yamlObject("MCPConnection", "unavailable", "  name: Unavailable fixture\n  service: generic\n  endpoint: "+upstream.URL+"\n  enabled: true\n  secretRef: {env: WEFT_SECRET_UNAVAILABLE_FIXTURE}")
+	report := configApplyRequest(t, srv, installation.Request{Files: []string{raw}})
+	if !report.OK || report.Objects[0].Result != "applied" || !strings.HasPrefix(report.Objects[0].Status, "unavailable:") {
+		t.Fatalf("saved unavailable connection was not reported: %+v", report)
+	}
+	v, err := a.MCP.Get(t.Context(), "unavailable")
+	if err != nil || !v.Enabled || v.Status != "unavailable" || v.Error == "" {
+		t.Fatalf("connection not retained: %+v %v", v, err)
+	}
+	response, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(response)+exportConfig(t, srv), "unique-mcp-unavailable-secret") {
+		t.Fatal("discovery response leaked credential")
+	}
+}
