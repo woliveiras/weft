@@ -38,6 +38,11 @@ x-weftd-env: &weftd-env
   WEFT_SECRET_KEY: ${WEFT_SECRET_KEY:-}
   WEFT_SECRET_KEY_PREVIOUS: ${WEFT_SECRET_KEY_PREVIOUS:-}
   WEFT_SECRET_KEY_FILE: /var/lib/weft/data/secret.key
+  # Optional declarative credential references; never the installation key.
+  WEFT_SECRET_GEMINI: ${WEFT_SECRET_GEMINI:-}
+  WEFT_SECRET_GITHUB_MCP: ${WEFT_SECRET_GITHUB_MCP:-}
+  WEFT_SECRET_GITHUB_SCM: ${WEFT_SECRET_GITHUB_SCM:-}
+  WEFT_SECRETS_DIR: ${WEFT_SECRETS_DIR:-}
   WEFT_GRAFANA_URL: ${WEFT_GRAFANA_URL:-http://localhost:3000}
   WEFT_BOOTSTRAP_GRAPHS: /app/examples/graphs
   WEFT_BOOTSTRAP_START: ${WEFT_BOOTSTRAP_START:-}

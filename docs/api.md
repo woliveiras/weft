@@ -180,7 +180,7 @@ administrator's current consent.
 | `GET /api/v1/triggers?workflow=` | viewer | List trigger state, consent, current task, skips and readiness holds. |
 | `POST /api/v1/triggers` | admin | Create and consent to `{name, workflow, nodeId, resultNodeId?, source: {kind, connectionId, repository?, cloudId?, query?}, label?, owner?, intervalMinutes?, scmConnection?, projectId?, executionMode?, authorizationMode?, readinessDisabled?}`. |
 | `GET /api/v1/triggers/{trigger}` | viewer | Read one trigger. |
-| `PUT /api/v1/triggers/{trigger}` | admin | Edit using the create body. Changing consent scope pauses the trigger. After consent and resumption, readiness-enabled polling releases holds that fall outside the updated scope. Holds stay in place while readiness is disabled until an operator resolves them. |
+| `PUT /api/v1/triggers/{trigger}` | admin | Edit using the create body. Changing consent scope records replacement consent from the authenticated administrator and preserves the existing active/paused state. With current consent and active polling, readiness releases holds that fall outside the updated scope. Holds stay in place while readiness is disabled until an operator resolves them. |
 | `GET /api/v1/triggers/{trigger}/matches` | operator | Read-only preview returning `{next, waiting[], skipped[], busy}`. GitHub preview spends the shared trigger search budget and reports a deferral in `error` when the budget is full. Preview never evaluates readiness or writes to the tracker. |
 | `POST /api/v1/triggers/{trigger}/resolve-hold` | operator | Resolve the hold identified by `{key, generation}`. Use `force: true` to explicitly abandon a pending or failed label or assignment update, or to abandon comment publication after the label was applied. The tracker keeps its current labels and assignment. The API audits the resolution and frees capacity. It returns 409 if polling is in progress, the claim was interrupted, the hold generation changed, or tracker write-back requires forced resolution. |
 | `POST /api/v1/triggers/{trigger}/pause` | admin | Pause polling. |
@@ -790,3 +790,49 @@ characters. Raw execution audit records are retained. `GET /graphs` continues to
 include execution copies for diagnostic consumers; the console workflow list
 and selector exclude them. Non-GET graph controls remain refused with 409 for
 `task-run-*`; use the owning task's controls.
+
+## Declarative installation configuration
+
+All three endpoints require **admin**. The console remains editable and uses the
+same underlying validation, encryption, authorization and audit services.
+
+| Method and path | Behavior |
+| --- | --- |
+| `POST /api/v1/config/plan` | Read-only ordered field diff; no discovery, imports, tests or builds. |
+| `POST /api/v1/config/apply` | Confirmed, revision-fenced application; stops at failure with a partial report. |
+| `GET /api/v1/config/export` | Deterministic `application/yaml`, safe preserve references and object revisions. |
+
+Plan and apply accept the same JSON schema:
+
+```json
+{
+  "files": ["apiVersion: weft.io/v1\nkind: CostPolicy\nmetadata: {name: installation}\nspec: {taskRunBudgetMicros: 2000000, warningPercent: 80}\n"],
+  "revisions": {},
+  "force": [],
+  "recordConsent": false,
+  "expected": {},
+  "confirmed": false
+}
+```
+
+For apply, set `confirmed: true` and fill `expected` with each `objects[].key`
+and `objects[].revision` from the reviewed plan. `revisions` represents the
+input's prior successful apply; otherwise `metadata.revision` is used.
+`force` contains explicit `Kind/name` identities. It does not override a stale
+reviewed plan. Secret values and ciphertext are never returned.
+
+Reports contain `ok` and `objects`: `key`, `action`, `revision`, `changes`
+(`path`, `before`, `after`), optional `secret`, `status`, `consent`, `warning`,
+`error` and, after apply, `result`. Actions are create/update/unchanged/conflict/error;
+results are applied/unchanged/failed/not-applied. Inspect `ok` even on HTTP 200.
+Malformed/oversized bodies use HTTP 400; authentication and role failures use
+401/403. Maximum YAML content is 4 MiB/500 documents.
+
+No object is implicitly deleted. Trigger consent needs `recordConsent`; without
+it, new/changed triggers are paused with `consent required`. Configuration apply
+does not start tasks or build environments. MCP discovery reports sanitized
+status; SCM reports its existing connection test. MCP views include optional
+`configurationUpdatedAt`, which excludes discovery-only updates.
+
+See the [operator guide](declarative-configuration.md) for kinds, reference
+confinement, import confirmation, recovery and CLI examples.

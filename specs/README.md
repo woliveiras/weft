@@ -113,12 +113,14 @@ The [historical source map](./historical-source-map.md) records the migration of
 
 ## Installation and operations
 
+### Implemented
+
+- [OPS-003 — Declarative Installation Configuration](./installation-and-operations/declarative-installation-configuration/spec.md) — `implemented`. Plan, apply and export installation YAML with confined secret references, revision conflicts and explicit consent.
+
 ### In progress
 
 - [OPS-001 — Compose Installation and Operations](./installation-and-operations/compose-installation-and-operations/spec.md) — `in-progress`. Operate the local Compose installation through documented bootstrap, health and maintenance boundaries.
 - [OPS-002 — Standalone Installation and Recovery](./installation-and-operations/standalone-installation-and-recovery/spec.md) — `in-progress`. Package the native profile, preserve offline data and qualify installation lifecycle on each supported platform.
-
-- [OPS-003 — Declarative Installation Configuration](./installation-and-operations/declarative-installation-configuration/spec.md) — `in-progress`. Plan, apply and export installation YAML with confined secret references, revision conflicts and explicit consent.
 
 ## Production readiness
 

@@ -47,6 +47,58 @@ tags:
 security:
   - bearer: []
 paths:
+  /api/v1/config/plan:
+    post:
+      tags: [system]
+      summary: Plan declarative installation configuration without writes
+      x-weft-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConfigurationRequest'}
+      responses:
+        '200':
+          description: Per-object field diff, conflicts and safe reference diagnostics; inspect ok
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConfigurationReport'}
+        '400': {description: Invalid or oversized configuration request}
+        '401': {description: Authentication required}
+        '403': {description: Administrator role required}
+  /api/v1/config/apply:
+    post:
+      tags: [system]
+      summary: Apply explicitly confirmed configuration in dependency order
+      description: Requires confirmed and expected revisions from the reviewed plan. Force applies to named baseline conflicts only. No implicit deletion, builds or task starts. Stops after failure and reports partial success. Trigger consent requires recordConsent.
+      x-weft-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConfigurationRequest'}
+      responses:
+        '200':
+          description: Per-object outcome; inspect ok even when HTTP succeeds
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConfigurationReport'}
+        '400': {description: Invalid request or missing confirmation}
+        '401': {description: Authentication required}
+        '403': {description: Administrator role required}
+  /api/v1/config/export:
+    get:
+      tags: [system]
+      summary: Export ordered installation YAML with revisions and preserve references
+      x-weft-role: admin
+      responses:
+        '200':
+          description: Secret-free multi-document configuration; no runtime task copies
+          content:
+            application/yaml:
+              schema: {type: string}
+        '401': {description: Authentication required}
+        '403': {description: Administrator role required}
   /api/v1/repository-imports:
     get:
       summary: List durable public repository imports
@@ -2573,6 +2625,59 @@ components:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
   schemas:
+    ConfigurationRequest:
+      type: object
+      additionalProperties: false
+      required: [files]
+      properties:
+        files:
+          type: array
+          minItems: 1
+          description: YAML text read on the client; at most 4 MiB total and 500 documents
+          items: {type: string}
+        revisions:
+          type: object
+          description: Last applied revisions by Kind/name; overrides embedded metadata.revision
+          additionalProperties: {type: string}
+        expected:
+          type: object
+          description: Required for apply; current revisions from the reviewed plan, including absent
+          additionalProperties: {type: string}
+        force:
+          type: array
+          items: {type: string}
+          description: Explicit Kind/name baseline conflicts to override
+        recordConsent: {type: boolean, default: false}
+        confirmed: {type: boolean, default: false}
+    ConfigurationReport:
+      type: object
+      required: [ok, objects]
+      properties:
+        ok: {type: boolean}
+        objects:
+          type: array
+          items:
+            type: object
+            required: [key, action, revision, changes]
+            properties:
+              key: {type: string}
+              action: {type: string, enum: [create, update, unchanged, conflict, error]}
+              revision: {type: string}
+              changes:
+                type: array
+                items:
+                  type: object
+                  required: [path]
+                  properties:
+                    path: {type: string}
+                    before: {}
+                    after: {}
+              secret: {type: string, enum: [set, unchanged, changed]}
+              status: {type: string}
+              consent: {type: string}
+              warning: {type: string}
+              error: {type: string}
+              result: {type: string, enum: [applied, unchanged, failed, not-applied]}
     RepositoryImport:
       type: object
       properties:
@@ -2836,6 +2941,7 @@ components:
         error: {type: string}
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}
+        configurationUpdatedAt: {type: string, format: date-time, description: Changes only when connection configuration changes; discovery health does not advance it.}
         updatedBy: {type: string}
     Provider:
       type: object

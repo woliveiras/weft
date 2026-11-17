@@ -3,6 +3,15 @@
 This guide takes you from a clone to a running agent factory, then to real
 models, your own graph, and running without Docker.
 
+## Declarative setup alternative
+
+Administrators can describe plugin activation, providers, cost/network policy,
+connections, projects, graphs and issue triggers in YAML. Start with
+`weft apply -f examples/installation/ --dry-run`, review changes, then confirm
+apply. Credentials are server-side references; trigger consent needs a separate
+flag. See [Declarative installation configuration](declarative-configuration.md)
+for setup, export, conflicts and the complete example.
+
 ## Console navigation
 
 Use the [console navigation guide](interface-navigation.md) to find Tasks,

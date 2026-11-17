@@ -2,7 +2,7 @@
 id: OPS-003
 title: "Declarative Installation Configuration"
 summary: "Plan, apply and export installation objects through administrator-only YAML configuration."
-status: in-progress
+status: implemented
 scope: [installation configuration, CLI, admin API, secret references, consent]
 risk: high
 risk_domains: [secrets, authorization, persistence, concurrency]
@@ -52,8 +52,7 @@ ModelProvider, PriceCatalog, CostPolicy, Budget, NetworkPolicy, MCPConnection,
 SCMConnection, Project, Graph and IssueTrigger. Graph retains its existing
 metadata (including id/name) and spec. Input properties otherwise follow the
 existing API's camelCase names and units; money uses integer micro-USD.
-Singleton names are `installation`. Budget identity is scope/id. Trigger names
-and project aliases resolve to existing objects without introducing duplicates.
+Singleton names are `installation`. Budget identity is scope/id. Exports use stable trigger IDs and retain the display name in spec.name; hand-authored trigger names must resolve unambiguously. Project aliases resolve by URL/ref without introducing duplicates.
 
 Credential input is replaced by `secretRef: {env: WEFT_SECRET_GEMINI}` or
 `secretRef: {file: gemini.key}`. Export uses `secretRef: {preserve: true}` with a
@@ -94,7 +93,7 @@ successful apply of that input. No sidecar is written during dry-run.
 - Plans have no writes, discovery calls, SCM tests, imports, builds or consent
   events. Availability of references may be checked server-side without storage.
 - Revisions cover configuration and credential changes, not transient health,
-  polling counters or budget spend. Compare before writing; force overrides only
+  polling counters or budget spend. Budget definitions retain independent revision stamps in their existing settings record, including change-then-restore edits; legacy records are not rewritten on reads. Compare before writing; force overrides only
   the selected object's baseline conflict, never authorization or validation.
 - Existing objects absent from the file remain untouched. A no-op performs no
   save, audit mutation, consent renewal, import, test or discovery call.
@@ -102,6 +101,9 @@ successful apply of that input. No sidecar is written during dry-run.
   graph, trigger. References within the batch resolve by stable identity. Errors
   stop subsequent writes; report applied/unchanged/failed/not-applied per object.
   Retry keeps completed work idempotent; no pretend transaction or rollback.
+  Each server serializes administrator mutations during a batch; long imports can
+  delay other administrator writes. Native store revisions remain the write
+  preconditions across server instances; this is not a distributed transaction.
 - Apply confirmation includes repository download. Imports use existing reviewed
   URL/ref validation, durable import progress and retry rules, and wait for a
   completed project before dependent graphs/triggers. No GitHub writes in plan.

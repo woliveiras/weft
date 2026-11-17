@@ -237,7 +237,7 @@ reply input, up to 512 output tokens, a 10-second deadline and a monetary
 check before the call. If a limit prevents a reliable verdict, hold the
 issue and show which limit applied. The readiness policy, tracker reply
 reads and comments, and limits are part of the reviewed trigger consent.
-Changes invalidate consent through the existing check. The runner rejects or pauses for an out-of-scope policy or stale consent before
+Changes invalidate the previous consent through the existing check. Reviewed administrator edits record replacement consent under OPS-003; declarative edits require explicit record-consent. The runner rejects or pauses for an out-of-scope policy or stale consent before
 the affected tracker or provider call and checks again before claim after a
 wait. Injected issue text or replies, including claims of approval, cause no
 authorization change, tool dispatch, shell, file or SCM activity. The selected
@@ -316,6 +316,8 @@ spec-derived oracles for implementation.
   preserves the edit count for a later selection by the same workflow. At the third edit, keep
   `weft:needs-attention`, request operator intervention once and stop
   assessing the hold until an operator resolves it.
+
+- **2026-11-17 — Maintainer decision OPS-003.** Reviewed console scope edits record replacement administrator consent while preserving active/paused state. Declarative edits without explicit consent pause the trigger. Readiness holds, limits and runner checks remain unchanged.
 
 ## Explicit exclusions
 

@@ -1,0 +1,163 @@
+# Review rates and scopes before applying. Secret values belong only on the server.
+# First inspect: weft apply -f examples/installation/ --dry-run
+apiVersion: weft.io/v1
+kind: InferencePlugin
+metadata:
+  name: gemini
+spec:
+  enabled: true
+---
+apiVersion: weft.io/v1
+kind: ModelProvider
+metadata:
+  name: gemini
+spec:
+  type: gemini
+  default: true
+  defaultModel: gemini-3.6-flash
+  concurrency: 2
+  contextWindow: 1048576
+  maxRetries: 3
+  secretRef: {env: WEFT_SECRET_GEMINI}
+---
+apiVersion: weft.io/v1
+kind: PriceCatalog
+metadata:
+  name: installation
+spec:
+  currency: USD
+  unpriced: refuse
+  prices:
+    - type: gemini
+      model: gemini-3.6-flash
+      inputMicrosPerMTok: 750000
+      outputMicrosPerMTok: 3750000
+      cacheReadMicrosPerMTok: 75000
+---
+apiVersion: weft.io/v1
+kind: CostPolicy
+metadata:
+  name: installation
+spec:
+  taskRunBudgetMicros: 2000000
+  warningPercent: 80
+---
+apiVersion: weft.io/v1
+kind: Budget
+metadata:
+  name: installation/*
+spec:
+  scope: installation
+  id: '*'
+  limitMicros: 10000000
+  interruptPercent: 110
+---
+apiVersion: weft.io/v1
+kind: NetworkPolicy
+metadata:
+  name: installation
+spec:
+  setupNetworks: [none, bridge]
+  runNetworks: [none, egress]
+  egressHosts: [proxy.golang.org, sum.golang.org, storage.googleapis.com]
+---
+apiVersion: weft.io/v1
+kind: MCPConnection
+metadata:
+  name: github
+spec:
+  name: GitHub weft
+  service: github
+  endpoint: https://api.githubcopilot.com/mcp/
+  enabled: true
+  callsPerMinute: 60
+  secretRef: {env: WEFT_SECRET_GITHUB_MCP}
+---
+apiVersion: weft.io/v1
+kind: SCMConnection
+metadata:
+  name: weft-github
+spec:
+  kind: github
+  repository: woliveiras/weft
+  requirePullRequestApproval: true
+  secretRef: {env: WEFT_SECRET_GITHUB_SCM}
+---
+apiVersion: weft.io/v1
+kind: Project
+metadata:
+  name: weft
+spec:
+  url: https://github.com/woliveiras/weft
+  ref: HEAD
+  executionMode: workflow
+---
+apiVersion: weft.io/v1
+kind: Graph
+metadata:
+  id: weft-deps
+  name: Weft dependency updates
+  description: One native agent that handles a GitHub issue in woliveiras/weft end to end.
+spec:
+  workspace:
+    git: true
+    repo: https://github.com/woliveiras/weft
+  environment:
+    dockerfile: |-
+      ARG GO_IMAGE=golang:1.26-alpine
+      FROM ${GO_IMAGE}
+      RUN apk add --no-cache git git-daemon
+    caches: [/home/sandbox/go/pkg/mod]
+    network:
+      run: egress
+      allowedHosts: [proxy.golang.org, sum.golang.org, storage.googleapis.com]
+  channels:
+    - id: requests
+      label: ingress
+      to: [updater]
+  nodes:
+    - id: updater
+      name: Updater
+      description: Reads the issue, changes the repository, runs the checks and commits.
+      position: {x: 0, y: 0}
+      runtime:
+        kind: native
+      isolation:
+        mode: docker
+      limits:
+        maxToolCalls: 300
+        turnTimeout: 2h0m0s
+      prompt: |
+        You work on the repository in @workspace. The issue to solve is in @input.
+        Follow the repository's AGENTS.md. Make the smallest change that meets the
+        issue's acceptance criteria, run the verification commands the issue names,
+        and commit the result with a clear message. If a check fails and you cannot
+        fix it within the issue's scope, stop and explain what failed.
+      tools:
+        - name: filesystem.read
+        - name: filesystem.write
+        - name: git.read
+        - name: git.write
+        - name: shell.exec
+          commands: [go, gofmt, git]
+        - name: environment.status
+---
+apiVersion: weft.io/v1
+kind: IssueTrigger
+metadata:
+  name: weft-issues
+spec:
+  name: weft-issues
+  source:
+    kind: github
+    connectionId: github
+    repository: woliveiras/weft
+  label: weft:todo
+  intervalMinutes: 5
+  readinessDisabled: false
+  authorizationMode: full
+  projectId: weft
+  workflow: weft-deps
+  nodeId: updater
+  resultNodeId: updater
+  scmConnection: weft-github
