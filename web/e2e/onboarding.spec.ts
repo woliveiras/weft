@@ -1,0 +1,53 @@
+import { test, expect } from '@playwright/test';
+const headers = { Authorization: 'Bearer e2e-admin-token' };
+
+test('direct first use preserves canvas drafts and inspects a real execution without onboarding', async ({page}) => {
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  const id='direct-first-use';
+  expect((await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id,name:'Direct first use'},spec:{nodes:[{id:'echo',name:'Echo',runtime:{kind:'echo'},loop:{mode:'once'},tools:[]}]}}})).status()).toBe(201);
+  await page.goto('/#/graphs');
+  const guide = page.getByRole('region',{name:'Getting started',exact:true});
+  await expect(guide).toHaveCount(0);
+  await page.goto('/#/g/'+id+'/canvas');
+  const stored = await (await page.request.get('/api/v1/graphs/' + id, {headers})).json();
+  expect(stored.graph.spec.nodes[0].runtime.kind).toBe('echo');
+  expect(stored.graph.spec.nodes[0].tools ?? []).toEqual([]);
+  expect(await (await page.request.get('/api/v1/graphs/' + id + '/executions', {headers})).json()).toEqual([]);
+  await page.getByRole('complementary',{name:'Agents', exact:true}).getByRole('button',{name:'Configure Echo',exact:true}).click();
+  const name = page.getByRole('region',{name:'Agent configuration',exact:true}).getByLabel('Name',{exact:true});
+  await name.fill('My first echo');
+  await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Models',exact:true}).click();
+  await page.getByRole('button', {name:'Workflows',exact:true}).click();
+  await page.getByRole('button',{name:'Configure Echo',exact:true}).click();
+  await expect(name).toHaveValue('My first echo');
+  await page.getByRole('button',{name:'Review & save',exact:true}).click();
+  await page.getByRole('button',{name:'Save graph draft',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Review & save',exact:true})).toBeDisabled();
+  await page.getByRole('tab',{name:'Graph',exact:true}).click();
+  await page.getByRole('button',{name:'Run all',exact:true}).click();
+  await page.getByRole('tab',{name:'Runs',exact:true}).click();
+  await expect.poll(async () => (await (await page.request.get('/api/v1/graphs/' + id + '/executions',{headers})).json()).some((e:{status:string})=> e.status === 'succeeded')).toBe(true);
+  await page.getByRole('button',{name:'Refresh runs',exact:true}).click();
+  await page.getByRole('link',{name:/^exe_/}).first().click();
+  await expect(page.getByRole('region',{name:'Run detail'})).toContainText('Completed');
+  await page.getByRole('navigation',{name:'Run sections'}).getByRole('link',{name:'Result',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Run detail'})).toContainText('echoed 0 message(s)');
+  await page.reload();
+  await expect(guide).toHaveCount(0);
+  await expect(page.getByRole('region',{name:'Run detail'})).toContainText('Completed');
+  expect((await page.request.get('/api/v1/graphs/' + id,{headers})).ok()).toBe(true);
+});
+
+test('viewer navigation ignores corrupt legacy guide progress and preserves narrow-screen permissions',async({page})=>{
+ await page.addInitScript(()=>{localStorage.setItem('weftToken','e2e-viewer-token');localStorage.setItem('weft.guide.v1:["viewer","viewer"]','{');});
+ const mutations:string[]=[];page.on('request',r=>{if(r.method()!=='GET')mutations.push(r.url());});
+ await page.setViewportSize({width:580,height:850});await page.goto('/#/graphs');
+ await expect(page.getByRole('heading',{name:'Graphs',exact:true})).toBeVisible();
+ await expect(page.getByRole('region',{name:'Getting started',exact:true})).toHaveCount(0);
+ await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Models',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Models',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Add provider'})).toHaveCount(0);
+ await page.reload();await expect(page.getByRole('region',{name:'Getting started',exact:true})).toHaveCount(0);
+ expect(mutations).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ expect(await page.evaluate(()=>localStorage.getItem('weft.guide.v1:["viewer","viewer"]'))).toBe('{');
+});

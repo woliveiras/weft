@@ -1,0 +1,3 @@
+module example.com/prefs
+
+go 1.22

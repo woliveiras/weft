@@ -1,0 +1,17 @@
+# Smallest useful graph, and a zero-cost way to watch the machinery work:
+# echo agents forward messages without calling a model. A ticker emits
+# every 10 seconds; a 3-replica cluster competes over the queue; a
+# broadcast reaches every replica of the auditor; all hops are traced.
+apiVersion: weft.io/v1
+kind: Graph
+metadata: {id: hello-echo, name: Hello Echo, labels: {example: "true"}}
+spec:
+  defaults: {runtime: {kind: echo}}
+  nodes:
+    - {id: ticker, loop: {mode: continuous, interval: 10s}, config: {type: tick}}
+    - {id: workers, cluster: {replicas: 3}}
+    - {id: auditor, cluster: {replicas: 2}}
+  channels:
+    - {id: work, from: ticker, to: [workers]}
+    - {id: done, from: workers, to: [auditor], type: broadcast}
+    - {id: manual, to: [workers], label: ingress}

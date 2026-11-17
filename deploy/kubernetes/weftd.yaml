@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: weftd
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: weftd
+spec:
+  selector: {app: weftd}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weftd
+spec:
+  # Instances share work through leases in PostgreSQL and consumer groups in
+  # NATS; any number can run. Each pod advertises its own callback URL
+  # (pod IP) because external agents call back the instance running the turn.
+  replicas: 2
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  selector: {matchLabels: {app: weftd}}
+  template:
+    metadata:
+      labels: {app: weftd}
+      annotations: {prometheus.io/scrape: "true", prometheus.io/port: "8080", prometheus.io/path: /metrics}
+    spec:
+      serviceAccountName: weftd
+      # Graceful stop lets in-flight turns finish and releases leases.
+      terminationGracePeriodSeconds: 90
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      topologySpreadConstraints:
+        - {maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: ScheduleAnyway, labelSelector: {matchLabels: {app: weftd}}}
+      containers:
+        - name: weftd
+          image: weft/weftd
+          args: ["--config", "/etc/weft/weft.yaml"]
+          ports: [{name: http, containerPort: 8080}]
+          env:
+            - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
+            - {name: WEFT_INSTANCE, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
+            - {name: WEFT_INTERNAL_URL, value: "http://$(POD_IP):8080"}
+            - {name: WEFT_ADMIN_TOKEN, valueFrom: {secretKeyRef: {name: weft, key: admin-token}}}
+            - {name: WEFT_RUNTIME_SECRET, valueFrom: {secretKeyRef: {name: weft, key: runtime-secret}}}
+            - {name: WEFT_SECRET_KEY, valueFrom: {secretKeyRef: {name: weft, key: secret-key}}}
+            - {name: WEFT_SECRET_KEY_PREVIOUS, valueFrom: {secretKeyRef: {name: weft, key: secret-key-previous, optional: true}}}
+            - {name: WEFT_STORAGE_DSN, valueFrom: {secretKeyRef: {name: weft, key: postgres-dsn}}}
+          readinessProbe: {httpGet: {path: /readyz, port: http}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, initialDelaySeconds: 15, periodSeconds: 10}
+          resources:
+            requests: {cpu: 250m, memory: 256Mi}
+            limits: {memory: 2Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: config, mountPath: /etc/weft}
+            - {name: workspaces, mountPath: /var/lib/weft/workspaces}
+            - {name: data, mountPath: /var/lib/weft/data}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - {name: config, configMap: {name: weft-config}}
+        - {name: workspaces, persistentVolumeClaim: {claimName: weft-workspaces}}
+        - {name: data, emptyDir: {}}
+        - {name: tmp, emptyDir: {}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: weftd
+spec:
+  minAvailable: 1
+  selector: {matchLabels: {app: weftd}}

@@ -1,0 +1,14 @@
+# Agent workspaces (git repositories, worktrees, scratch). Every weftd pod
+# may run any replica, so the volume must be ReadWriteMany (NFS, CephFS,
+# EFS-equivalents, Longhorn RWX, ...). With a single weftd replica a
+# ReadWriteOnce volume is sufficient.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: weft-workspaces
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 50Gi
+  # storageClassName: nfs-client

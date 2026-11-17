@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weft.io/schemas/v1/instructions.schema.json",
+  "title": "Weft skills and instruction snapshots",
+  "$defs": {
+    "Input": {
+      "type": "object", "additionalProperties": false, "required": ["id", "title", "body"],
+      "properties": {
+        "id": {"type":"string", "pattern":"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"},
+        "title": {"type":"string", "minLength":1, "maxLength":200},
+        "description": {"type":"string", "maxLength":1000},
+        "body": {"type":"string", "minLength":1, "description":"Nonempty UTF-8 Markdown, no NUL, maximum 16384 bytes."},
+        "enabled": {"type":"boolean"}, "global": {"type":"boolean"}
+      }
+    },
+    "Version": {
+      "type":"object", "required":["id","title","body","revision","actor","at","deleted"],
+      "properties": {
+        "id":{"type":"string"},"title":{"type":"string"},"description":{"type":"string"},"body":{"type":"string"},
+        "enabled":{"type":"boolean"},"global":{"type":"boolean"},"revision":{"type":"integer","minimum":1},
+        "actor":{"type":"string"},"at":{"type":"string","format":"date-time"},"deleted":{"type":"boolean"}
+      }
+    },
+    "Skill": {"allOf":[{"$ref":"#/$defs/Version"},{"type":"object","required":["history"],"properties":{"history":{"type":"array","items":{"$ref":"#/$defs/Version"}}}}]},
+    "Entry": {
+      "type":"object", "required":["scope","source","included"],
+      "properties":{
+        "scope":{"enum":["installation","graph","project","agent","task","repository","repository-skill","guidance"]},
+        "source":{"type":"string"}, "revision":{"type":"integer"}, "sha256":{"type":"string"},
+        "body":{"type":"string", "description":"Legacy snapshot content."},
+        "included":{"type":"boolean"}, "reason":{"type":"string"},
+        "order":{"type":"integer","minimum":1}, "record":{"type":"integer","minimum":1},
+        "stage":{"enum":["catalogue","instruction","prompt","message","body","reference"]},
+        "delivery":{"enum":["prepared","indeterminate","confirmed","interrupted"]},
+        "selection":{"type":"string"}, "description":{"type":"string"}, "canonical":{"type":"string"},
+        "declaredVersion":{"type":"string"}, "lockStatus":{"type":"string"}
+      }
+    },
+    "Snapshot": {
+      "type":"object", "required":["graphId","nodeId","entries","budget"],
+      "properties": {
+        "graphId":{"type":"string"},"nodeId":{"type":"string"},"executionId":{"type":"string"},
+        "budget":{"type":"integer","minimum":0,"description":"Remaining conservative guidance budget in UTF-8 bytes."},
+        "repositoryPolicy":{"enum":["graph_off","agent_disabled","agent_restricted","inherited"]},
+        "blockedSources":{"type":"array","items":{"enum":["agents","claude","github"]}},
+        "entries":{"type":"array","items":{"$ref":"#/$defs/Entry"}},
+        "reads":{"type":"array","items":{"$ref":"#/$defs/Entry"}}
+      }
+    }
+  }
+}

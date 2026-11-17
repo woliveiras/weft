@@ -1,0 +1,3392 @@
+openapi: 3.1.0
+info:
+  title: Weft Control Plane API
+  version: "1.0.0"
+  summary: Vendor-neutral agent factory - graphs of continuously running agent loops.
+  description: |
+    Public REST API (`/api/v1`), live event stream (SSE), health/metrics, and the
+    Runtime Protocol v1 callback API (`/internal/v1`) used by external agent runtimes.
+
+    * Authentication: `Authorization: Bearer <token>`. Tokens are static (configured
+      with a role) or OIDC JWTs (RS256/ES256). `GET` requests may pass `?access_token=`
+      instead (needed by EventSource); never for writes.
+    * Roles are hierarchical: `viewer` < `operator` < `admin`. Each operation states the
+      minimum role in `x-weft-role`.
+    * Errors use the `Error` schema. `details` carries a validation report for 422.
+    * JSON field names are camelCase; message metadata keys are snake_case.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: http://localhost:8080
+    description: docker compose default
+tags:
+  - name: system
+  - name: graphs
+  - name: lifecycle
+  - name: environments
+  - name: nodes
+  - name: messages
+  - name: executions
+  - name: events
+  - name: approvals
+  - name: catalog
+  - name: workspace
+  - name: mcp
+  - name: providers
+    description: Model providers - inference plugins enabled by administrators and instances managed through the API with encrypted credentials.
+  - name: scm
+    description: Server-held source control connections for gateway push and pull request tools.
+  - name: cost
+    description: Model prices, cost records and monetary budgets.
+  - name: runtime-callback
+    description: |
+      Runtime Protocol v1 callbacks. Called by external agent runtimes during a turn with the
+      per-execution token from `TurnInput.callback.token`. The token authorises exactly one
+      running execution and stops working when the turn ends. Keep `/internal` off public ingress.
+security:
+  - bearer: []
+paths:
+  /api/v1/repository-imports:
+    get:
+      summary: List durable public repository imports
+      x-weft-role: viewer
+      responses:
+        '200':
+          description: Import records; unfinished expired attempts are reconciled
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/RepositoryImport'}}
+    post:
+      summary: Confirm HTTPS import with explicit Git authentication or reuse a pinned snapshot
+      description: No task execution or permission changes. Shallow smart HTTP fetch, no redirects; native credentials require explicit native-only selection; two active imports per process, three minutes and 128 MiB incoming transfer per attempt. Partial directories are retained. Matching URL/ref reuses the ready commit without refreshing HEAD.
+      x-weft-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [url, confirmed]
+              properties:
+                url: {type: string, maxLength: 2048, description: Public HTTPS clone URL without credentials, query or fragment; public DNS hostname required}
+                ref: {type: string, maxLength: 256, default: HEAD, description: HEAD, full refs/heads/ or refs/tags/ reference, or full commit hash}
+                authentication:
+                  type: object
+                  additionalProperties: false
+                  description: Per-attempt credentials are never returned or stored. Native modes use the Weft OS user's configuration; MCP OAuth is unrelated. Authenticated and anonymous URL/ref snapshots have separate reuse keys; a ready snapshot does not revalidate credentials.
+                  properties:
+                    mode: {enum: [anonymous, token, local_git, local_gh], default: anonymous}
+                    username: {type: string, maxLength: 256, writeOnly: true, description: Required for token mode only; no colon or control characters}
+                    token: {type: string, maxLength: 8192, writeOnly: true, description: Required for token mode only; no control characters; re-enter for retries}
+                confirmed: {type: boolean, const: true}
+                retry: {type: boolean, default: false}
+                revision: {type: integer, description: Current record revision required for explicit retry}
+      responses:
+        '202':
+          description: Existing ready/active import or new attempt
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RepositoryImport'}
+        '400': {description: Invalid URL/ref/body, missing confirmation or unavailable importer}
+        '403': {description: Administrator required}
+        '409': {description: Capacity exhausted, stale revision, retry required or prior attempt still finishing}
+  /api/v1/repository-imports/{iid}:
+    get:
+      summary: Inspect progress or reconcile an expired import
+      x-weft-role: viewer
+      parameters:
+        - {in: path, name: iid, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Authoritative import state; live bytes are process-local until persisted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RepositoryImport'}
+        '404': {description: Import not found}
+        '409': {description: Concurrent reconciliation; reload current state}
+  /api/v1/repository-imports/{iid}/cancel:
+    post:
+      summary: Request cancellation before project publication
+      x-weft-role: admin
+      parameters:
+        - {in: path, name: iid, required: true, schema: {type: string}}
+        - {in: header, name: If-Match, required: true, schema: {type: string}}
+      responses:
+        '202':
+          description: Cancellation state; partial files remain preserved
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RepositoryImport'}
+        '400': {description: Missing or invalid revision}
+        '403': {description: Administrator required}
+        '404': {description: Import not found}
+        '409': {description: Stale revision or import no longer cancellable}
+  /api/v1/projects:
+    get:
+      summary: List explicitly registered server-side Git repositories
+      x-weft-role: viewer
+      responses:
+        '200':
+          description: Registered repository metadata; no secrets or automatic execution
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Project'}}
+    post:
+      summary: Register a repository root after reading its Git metadata
+      x-weft-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, path]
+              properties:
+                name: {type: string, maxLength: 200}
+                path: {type: string, maxLength: 4096, description: Absolute path on the Weft server}
+      responses:
+        '201':
+          description: Registered immutable project and initial HEAD commit
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Project'}
+        '400': {description: Invalid path, unavailable repository or Git failure}
+        '403': {description: Administrator required}
+  /api/v1/projects/{pid}/preferences:
+    put:
+      summary: Save an explicitly reviewed execution preference without changing tasks or grants
+      x-weft-role: admin
+      parameters:
+        - {in: path, name: pid, required: true, schema: {type: string}}
+        - {in: header, name: If-Match, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [executionMode]
+              properties:
+                executionMode: {enum: [workflow, local, sandbox]}
+      responses:
+        '200':
+          description: Updated suggestion; task admission still revalidates capabilities and permissions
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Project'}
+        '400': {description: Invalid preference, missing revision or local mode unavailable in this profile}
+        '403': {description: Administrator required}
+        '409': {description: Stale project revision}
+  /api/v1/tasks/submit:
+    post:
+      summary: Submit a prompt and start only when effective requirements permit
+      x-weft-role: admin
+      description: Requires explicit confirmation of existing workflow permissions. Saves/resolves/reviews before existing version-fenced task admission. Missing requirements retain the same draft. Key reservation precedes side effects; identical replays only return current state, never launch again. After repair use a new key and the current draft revision. Uncertain reservations remain retained and require inspection, not automatic replay.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [request, key, confirm]
+              properties:
+                key: {type: string, minLength: 16, maxLength: 80, pattern: "^[a-zA-Z0-9-]+$"}
+                confirm: {type: boolean, const: true}
+                request: {type: string, minLength: 1, maxLength: 16384}
+                settings:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    title: {type: string, maxLength: 200}
+                    executionMode: {enum: [workflow, local, sandbox]}
+                    projectId: {type: string}
+                    baseCommit: {type: string}
+                    source: {$ref: '#/components/schemas/TaskIssueSource'}
+                graphId: {type: string, maxLength: 128, description: Explicit workflow selection overrides model suggestions}
+                id: {type: string}
+                revision: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: Started/current task or durable blocked draft with review requirements
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task: {$ref: '#/components/schemas/TaskDraft'}
+                  review: {$ref: '#/components/schemas/TaskReview'}
+        '400': {description: Malformed request, unknown field or missing confirmation}
+        '403': {description: Administrator authority required}
+        '409': {description: Key/input mismatch, stale draft, concurrent change or uncertain reservation}
+        '422': {description: Invalid request or admission requirements changed}
+        '500': {description: Dependency failure; inspect persisted task before creating a new submission}
+  /api/v1/tasks/prompt:
+    post:
+      summary: Persist and interpret a task request without starting agents (operator)
+      description: Saves the original request before a bounded model call. Unresolved drafts survive restart and block admission. Existing drafts require their current revision. Returns actionable resolution states; model errors never expose provider payloads. URLs are identified but not fetched. Only whitelisted fields are accepted; no permission changes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [request]
+              properties:
+                request: {type: string, minLength: 1, maxLength: 16384}
+                settings:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    title: {type: string, maxLength: 200}
+                    executionMode: {enum: [workflow, local, sandbox]}
+                    projectId: {type: string}
+                    baseCommit: {type: string}
+                    source: {$ref: '#/components/schemas/TaskIssueSource'}
+                graphId: {type: string, maxLength: 128, description: Explicit workflow selection overrides model suggestions}
+                id: {type: string}
+                revision: {type: integer, minimum: 1}
+      responses:
+        '200':
+          description: Persisted draft with resolution status; no agents started
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TaskDraft'}
+        '400': {description: Malformed request or unknown fields}
+        '403': {description: Operator authority required}
+        '409': {description: Draft changed or is no longer editable}
+        '422': {description: Invalid request}
+        '500': {description: Storage failure; a pending draft may already have been saved and can be resumed from Tasks}
+  /api/v1/tasks:
+    get:
+      summary: List persisted task drafts (does not list historical agent turns)
+      x-weft-role: viewer
+      parameters:
+        - {in: query, name: after, schema: {type: string}, description: Opaque cursor returned by the preceding page}
+        - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+      responses:
+        '200':
+          description: Draft page in stable ID order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/TaskDraft'}}
+                  next: {type: string}
+        '422': {description: Invalid cursor or limit}
+    post:
+      summary: Save a new task draft without starting agents or changing grants
+      x-weft-role: operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TaskDraftInput'}
+      responses:
+        '201':
+          description: Persisted draft
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TaskDraft'}
+        '400': {description: Malformed or unexpected JSON fields}
+        '403': {description: Operator role required}
+        '404': {description: Workflow not found}
+        '409': {description: Selected workflow version changed}
+        '422': {description: Invalid request or unavailable entry agent}
+  /api/v1/tasks/{tid}:
+    parameters:
+      - {in: path, name: tid, required: true, schema: {type: string}}
+    get:
+      summary: Read a task draft
+      x-weft-role: viewer
+      responses:
+        '200':
+          description: Persisted draft
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TaskDraft'}
+        '404': {description: Draft not found}
+    put:
+      summary: Update a task draft with revision protection
+      x-weft-role: operator
+      parameters:
+        - {in: header, name: If-Match, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TaskDraftInput'}
+      responses:
+        '200':
+          description: Updated draft
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TaskDraft'}
+        '400': {description: Invalid JSON or missing revision}
+        '403': {description: Operator role required}
+        '404': {description: Draft or workflow not found}
+        '409': {description: Stale draft or workflow version}
+        '422': {description: Invalid draft}
+  /api/v1/tasks/{tid}/review:
+    get:
+      summary: Preview current workflow requirements without admitting execution
+      x-weft-role: viewer
+      parameters:
+        - {in: path, name: tid, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Current validation and launch blockers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [task, currentGraphVersion, validation, blockers, canStart]
+                properties:
+                  task: {$ref: '#/components/schemas/TaskDraft'}
+                  currentGraphVersion: {type: integer}
+                  validation: {type: object}
+                  blockers: {type: array, items: {type: string}}
+                  canStart: {type: boolean}
+                  canPrepareEnvironment: {type: boolean}
+                  environmentDefinition: {type: object}
+                  environment: {type: object}
+                  executionGraphId: {type: string}
+                  grants: {type: array, items: {type: object}}
+                  model: {type: object}
+                  isolation: {type: string}
+                  agents: {type: array, items: {type: object}}
+                  project: {$ref: '#/components/schemas/Project'}
+                  workspacePath: {type: string}
+        '404': {description: Task or workflow not found}
+  /api/v1/tasks/{tid}/progress:
+    get:
+      summary: Read owned executions and conservative result projection
+      x-weft-role: viewer
+      parameters:
+        - {in: path, name: tid, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Persisted task, observed state, bounded executions, optional result and blockers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task: {$ref: '#/components/schemas/TaskDraft'}
+                  state: {type: string}
+                  workspacePath: {type: string}
+                  workspaces: {type: array, items: {type: object}, description: Prepared agent/replica paths and exact Git inspection scope}
+                  environment: {type: object}
+                  pendingApprovals: {type: array, items: {type: object}}
+                  executions: {type: array, items: {type: object}}
+                  result: {type: object}
+                  blockers: {type: array, items: {type: string}}
+        '404': {description: Task not found}
+  /api/v1/tasks/{tid}/start:
+    post:
+      summary: Claim a draft revision and start an explicitly reviewed execution copy
+      x-weft-role: admin
+      parameters:
+        - {in: path, name: tid, required: true, schema: {type: string}}
+        - {in: header, name: If-Match, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, required: [confirm], properties: {confirm: {const: true}}}
+      responses:
+        '202':
+          description: Claimed task; repeated submissions return existing state without dispatching another start
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TaskDraft'}
+        '400': {description: Missing confirmation or revision}
+        '403': {description: Administrator required}
+        '409': {description: Stale revision or ownership conflict}
+        '422': {description: Unsupported or invalid workflow requirements}
+  /api/v1/tasks/{tid}/prepare-environment:
+    post:
+      summary: Prepare the task-owned environment without starting agents
+      x-weft-role: admin
+      parameters:
+        - {in: path, name: tid, required: true, schema: {type: string}}
+        - {in: header, name: If-Match, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, required: [confirm], properties: {confirm: {const: true}}}
+      responses:
+        '202':
+          description: Preparation requested; review build state and explicitly start separately
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TaskDraft'}
+        '400': {description: Missing confirmation or revision}
+        '403': {description: Administrator required}
+        '409': {description: Stale revision or uncertain preparation ownership}
+        '422': {description: Invalid workflow or environment requirements}
+  /api/v1/tasks/{tid}/cleanup:
+    parameters:
+      - {in: path, name: tid, required: true, schema: {type: string}}
+      - {in: query, name: node, schema: {type: string}, description: Omit for the shared task worktree}
+      - {in: query, name: replica, schema: {type: integer, minimum: 0, default: 0}}
+    get:
+      summary: Preview a stopped registered-project task worktree for explicit cleanup
+      x-weft-role: admin
+      responses:
+        '200':
+          description: Current path, branch, HEAD, Git status, cleanliness and review fingerprint
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path: {type: string}
+                  branch: {type: string}
+                  head: {type: string}
+                  status: {type: string}
+                  clean: {type: boolean}
+                  fingerprint: {type: string}
+        '403': {description: Administrator required}
+        '404': {description: Task or worktree unavailable}
+        '409': {description: Task not stopped or workspace ownership conflict}
+    post:
+      summary: Revalidate a clean worktree review and remove only its checkout; retain branch and history
+      x-weft-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [confirm, fingerprint]
+              properties:
+                confirm: {const: true}
+                fingerprint: {type: string, minLength: 64, maxLength: 64}
+      responses:
+        '200': {description: Reviewed checkout removed; branch and source retained}
+        '400': {description: Invalid or absent explicit confirmation}
+        '403': {description: Administrator required}
+        '409': {description: Changed review, dirty checkout, running task or ownership conflict}
+  /api/v1/tasks/{tid}/cancel:
+    post:
+      summary: Stop only the task execution copy while retaining its data
+      x-weft-role: admin
+      parameters:
+        - {in: path, name: tid, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, required: [confirm], properties: {confirm: {const: true}}}
+      responses:
+        '202': {description: Cancellation requested; inspect progress for settled workers}
+        '400': {description: Explicit confirmation required}
+        '403': {description: Administrator required}
+        '409': {description: Unconfirmed launch or ownership conflict}
+  /api/v1/delegation-policy:
+    get:
+      summary: Read the effective native delegation policy
+      x-weft-role: viewer
+      responses:
+        '200':
+          description: Built-in defaults (revision 0) or installation policy
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DelegationPolicyView'}
+    put:
+      summary: Replace the native delegation policy
+      x-weft-role: admin
+      description: Finite limits only. New requests use this revision; waiting requests revalidate before inference. Already-started children retain their snapshots.
+      parameters:
+        - {in: header, name: If-Match, required: true, schema: {type: string}, description: Current revision including 0 for defaults}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DelegationPolicy'}
+      responses:
+        '200':
+          description: Saved revision
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DelegationPolicyView'}
+        '400': {description: Invalid configuration or missing revision}
+        '403': {description: Administrator required}
+        '409': {description: Stale revision}
+  /api/v1/delegation-profiles:
+    get:
+      summary: List enabled and disabled native analysis profiles
+      x-weft-role: viewer
+      responses:
+        '200':
+          description: Built-in analysis and custom profiles
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/DelegationProfileView'}}
+    post:
+      summary: Create an installation-approved native analysis profile
+      x-weft-role: admin
+      description: Profiles cannot add tools, credentials, runtimes, model overrides or workspace access.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DelegationProfile'}
+      responses:
+        '201':
+          description: Created revision
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DelegationProfileView'}
+        '400': {description: Invalid profile}
+        '403': {description: Administrator required}
+        '409': {description: Duplicate profile ID}
+  /api/v1/delegation-profiles/{profile}:
+    parameters:
+      - {in: path, name: profile, required: true, schema: {type: string}}
+    get:
+      summary: Read a delegation profile revision
+      x-weft-role: viewer
+      responses:
+        '200':
+          description: Current profile
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DelegationProfileView'}
+        '404': {description: Unknown profile}
+    put:
+      summary: Update or disable a delegation profile
+      x-weft-role: admin
+      parameters:
+        - {in: header, name: If-Match, required: true, schema: {type: string}, description: Current revision including 0 for the built-in analysis profile}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DelegationProfile'}
+      responses:
+        '200':
+          description: Saved revision; existing execution snapshots remain unchanged
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DelegationProfileView'}
+        '400': {description: Invalid profile or missing revision}
+        '403': {description: Administrator required}
+        '404': {description: Unknown profile}
+        '409': {description: Stale revision}
+  /api/v1/skills:
+    get:
+      operationId: listSkills
+      x-weft-role: viewer
+      summary: List installation skills with immutable revision histories
+      responses:
+        '200':
+          description: Skills, including disabled and tombstoned records
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '../schemas/instructions.schema.json#/$defs/Skill'}}
+    post:
+      operationId: createSkill
+      x-weft-role: admin
+      summary: Create a skill at revision 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '../schemas/instructions.schema.json#/$defs/Input'}
+      responses:
+        '201':
+          description: Created; ETag contains revision
+          content:
+            application/json:
+              schema: {$ref: '../schemas/instructions.schema.json#/$defs/Skill'}
+        '409': {description: ID already exists}
+        '422': {description: Invalid skill fields}
+  /api/v1/skills/{sid}:
+    parameters:
+      - {in: path, name: sid, required: true, schema: {type: string}}
+    get:
+      operationId: getSkill
+      x-weft-role: viewer
+      responses:
+        '200':
+          description: Current revision and history; ETag contains revision
+          content:
+            application/json:
+              schema: {$ref: '../schemas/instructions.schema.json#/$defs/Skill'}
+        '404': {description: Unknown skill}
+    put:
+      operationId: updateSkill
+      x-weft-role: admin
+      parameters:
+        - {in: header, name: If-Match, required: true, schema: {type: string}, description: Current positive revision}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '../schemas/instructions.schema.json#/$defs/Input'}
+      responses:
+        '200':
+          description: New immutable revision
+          content:
+            application/json:
+              schema: {$ref: '../schemas/instructions.schema.json#/$defs/Skill'}
+        '400': {description: Invalid or missing If-Match or malformed JSON}
+        '409': {description: Revision conflict}
+        '422': {description: Invalid skill fields}
+    delete:
+      operationId: deleteSkill
+      x-weft-role: admin
+      parameters:
+        - {in: header, name: If-Match, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Tombstoned revision; prior history preserved
+          content:
+            application/json:
+              schema: {$ref: '../schemas/instructions.schema.json#/$defs/Skill'}
+        '409': {description: Stale revision or a current/active graph selects this skill}
+  /api/v1/graphs/{id}/instructions:
+    get:
+      operationId: inspectInstructions
+      x-weft-role: viewer
+      summary: Inspect current saved configuration, not an execution snapshot
+      parameters:
+        - {in: path, name: id, required: true, schema: {type: string}}
+        - {in: query, name: node, required: true, schema: {type: string}}
+        - {in: query, name: replica, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        '200':
+          description: Recognized sources, content, hashes and explicit omissions
+          content:
+            application/json:
+              schema: {$ref: '../schemas/instructions.schema.json#/$defs/Snapshot'}
+  /api/v1/executions/{eid}/instructions:
+    get:
+      operationId: getExecutionInstructions
+      x-weft-role: viewer
+      parameters:
+        - {in: path, name: eid, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Immutable instruction snapshot recorded before runtime invocation
+          content:
+            application/json:
+              schema: {$ref: '../schemas/instructions.schema.json#/$defs/Snapshot'}
+        '404': {description: Unknown execution or no snapshot (legacy or failed before context preparation)}
+  /api/v1/reviews:
+    get:
+      tags: [approvals]
+      operationId: listReviews
+      summary: List durable application reviews visible to the current reviewer
+      x-weft-role: operator
+      responses:
+        "200":
+          description: Safe review views without credentials or internal paths
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/HumanReview"}}
+  /api/v1/reviews/{review}/{action}:
+    post:
+      tags: [approvals]
+      operationId: reviewAction
+      summary: Decide or operate an authorized application review
+      x-weft-role: operator
+      parameters:
+        - {name: review, in: path, required: true, schema: {type: string}}
+        - name: action
+          in: path
+          required: true
+          schema: {type: string, enum: [decide, credential, restart, renew, revoke-access, logs]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                state: {type: string, enum: [approved, changes_requested, rejected]}
+                method: {type: string, enum: [managed, external, local, without_execution]}
+                comment: {type: string, maxLength: 16000}
+                revision: {type: integer, description: Required for decide; must equal the current generation}
+                browser: {type: boolean, description: Credential action only; one-use exchange when true}
+      responses:
+        "200":
+          description: Review view, private credential with URL, or bounded logs according to action
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - {$ref: "#/components/schemas/HumanReview"}
+                  - {type: object, required: [token, url], properties: {token: {type: string}, url: {type: string}}}
+                  - {type: object, required: [logs], properties: {logs: {type: string}}}
+        "400": {description: Invalid request or action}
+        "403": {description: Reviewer or required method denied}
+        "404": {description: Review not found}
+        "409": {description: Stale candidate or generation, repeated decision, or unavailable session}
+  /healthz:
+    get:
+      tags: [system]
+      operationId: healthz
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Process is alive
+          content:
+            application/json:
+              schema: {type: object, properties: {status: {const: ok}}}
+  /readyz:
+    get:
+      tags: [system]
+      operationId: readyz
+      summary: Readiness probe (storage and broker reachable)
+      security: []
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Readiness"}
+        "503":
+          description: A dependency is not reachable (the failing check carries the error text)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Readiness"}
+  /metrics:
+    get:
+      tags: [system]
+      operationId: metrics
+      summary: Prometheus metrics (unauthenticated unless server.protectMetrics is set, then a viewer token is required)
+      security: []
+      responses:
+        "200":
+          description: Prometheus text exposition format
+          content:
+            text/plain: {schema: {type: string}}
+  /api/v1/info:
+    get:
+      tags: [system]
+      operationId: getInfo
+      summary: Platform information
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Info
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Info"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /api/v1/graphs:
+    get:
+      tags: [graphs]
+      operationId: listGraphs
+      summary: List graphs with their control records
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Graphs
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/GraphSummary"}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+    post:
+      tags: [graphs]
+      operationId: createGraph
+      summary: Create a graph (JSON or YAML)
+      x-weft-role: admin
+      requestBody: {$ref: "#/components/requestBodies/GraphDocument"}
+      responses:
+        "201":
+          description: Created (version 1)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GraphSummary"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/Invalid"}
+  /api/v1/graphs/validate:
+    post:
+      tags: [graphs]
+      operationId: validateGraph
+      summary: Normalise and validate a graph without saving it
+      x-weft-role: viewer
+      requestBody: {$ref: "#/components/requestBodies/GraphDocument"}
+      responses:
+        "200":
+          description: Validation report (valid or not)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ValidationReport"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /api/v1/graphs/{id}:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    get:
+      tags: [graphs]
+      operationId: getGraph
+      summary: Get the latest (or a specific) version of a graph
+      x-weft-role: viewer
+      parameters:
+        - name: version
+          in: query
+          schema: {type: integer, minimum: 0}
+          description: 0 or absent = latest
+      responses:
+        "200":
+          description: Graph
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GraphSummary"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    put:
+      tags: [graphs]
+      operationId: updateGraph
+      summary: Save a new version (applied live if the graph is running)
+      description: |
+        Behaviour changes (prompt, model, tools, loop, approvals) apply on each replica's next
+        turn; structural changes (runtime, isolation, workspace, cluster comms) restart affected
+        replicas gracefully. Send `If-Match: <version>` for optimistic concurrency.
+      x-weft-role: admin
+      parameters:
+        - name: If-Match
+          in: header
+          schema: {type: string}
+          description: Expected current version (e.g. `3`, quotes and `W/` are tolerated)
+      requestBody: {$ref: "#/components/requestBodies/GraphDocument"}
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GraphSummary"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/Invalid"}
+    delete:
+      tags: [graphs]
+      operationId: deleteGraph
+      summary: Delete a stopped graph definition (all versions, control record) and its broker groups; history is kept
+      x-weft-role: admin
+      responses:
+        "204": {description: Deleted}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/v1/graphs/{id}/versions:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    get:
+      tags: [graphs]
+      operationId: listGraphVersions
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    version: {type: integer}
+                    createdAt: {type: string, format: date-time}
+                    author: {type: string}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/graphs/{id}/export:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    get:
+      tags: [graphs]
+      operationId: exportGraph
+      summary: Download the graph document (attachment)
+      x-weft-role: viewer
+      parameters:
+        - {name: format, in: query, schema: {enum: [yaml, json], default: yaml}}
+        - {name: version, in: query, schema: {type: integer}}
+      responses:
+        "200":
+          description: Document
+          content:
+            application/yaml: {schema: {type: string}}
+            application/json: {schema: {$ref: "#/components/schemas/Graph"}}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/graphs/{id}/{action}:
+    parameters:
+      - $ref: "#/components/parameters/GraphId"
+      - name: action
+        in: path
+        required: true
+        schema: {enum: [start, stop, pause, resume, kill]}
+        description: |
+          start = new run (clears per-node stops); stop = graceful (in-flight turns finish);
+          kill = cancel in-flight turns (inputs are redelivered); pause/resume = no new turns.
+    post:
+      tags: [lifecycle]
+      operationId: graphAction
+      x-weft-role: operator
+      responses:
+        "200":
+          description: Status after the action was recorded (convergence is asynchronous)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GraphStatus"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/v1/graphs/{id}/status:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    get:
+      tags: [lifecycle]
+      operationId: graphStatus
+      summary: Live replicas, states and queue depths
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GraphStatus"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/graphs/{id}/environment:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    get:
+      tags: [environments]
+      operationId: getEnvironment
+      summary: Build state of the graph's project environment, compared with the saved definition
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Environment
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Environment"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/graphs/{id}/environment/discovery:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    get:
+      tags: [environments]
+      operationId: discoverEnvironment
+      summary: Inspect environment candidates in an existing checkout without accepting or building
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Advisory discovery result; invalid candidates block fallback
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [source, status, candidates]
+                properties:
+                  source: {type: string, enum: [interface, weft, devcontainer, dockerfile, compose, none]}
+                  status: {type: string, enum: [configured, review_required, invalid, proposal_required]}
+                  candidates:
+                    type: array
+                    items:
+                      type: object
+                      required: [path, sha256]
+                      properties:
+                        path: {type: string}
+                        sha256: {type: string, description: Empty when the file could not be read safely}
+                        services: {type: array, items: {type: string}}
+                        targets: {type: array, items: {type: string}, description: Named stages for standalone Dockerfiles}
+                        error: {type: string}
+        "400":
+          description: Workspace unavailable or scan failed; no fallback is performed
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/graphs/{id}/environment/resolve:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    post:
+      tags: [environments]
+      operationId: resolveEnvironment
+      summary: Validate a discovered candidate and return its definition for review
+      description: >-
+        Read-only. Verifies source priority and hash, normalizes supported fields, and records
+        referenced file hashes in origin. Acceptance uses the existing admin graph PUT with
+        If-Match. Saving and building revalidate the files and definition; neither happens here.
+      x-weft-role: viewer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [source, path, sha256]
+              properties:
+                source: {type: string, enum: [weft, devcontainer, dockerfile, compose]}
+                path: {type: string}
+                sha256: {type: string, minLength: 64, maxLength: 64}
+                service: {type: string, description: Required for a Compose candidate}
+                target: {type: string, description: Optional named stage for a standalone Dockerfile; omitted selects the final stage}
+      responses:
+        "200":
+          description: Validated environment definition; no save or build performed
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EnvironmentDefinition"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/graphs/{id}/environment/proposal:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    get:
+      tags: [environments]
+      operationId: getEnvironmentProposal
+      summary: Read durable proposal state and rationale
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Current proposal or null when absent
+          content:
+            application/json:
+              schema: {type: [object, "null"]}
+    post:
+      tags: [environments]
+      operationId: proposeEnvironment
+      summary: Analyze manifests without tools and request developer approval
+      description: Requires a stopped graph with no environment and no discovered definition. Does not build or execute repository commands. One model call bounded to 90 seconds. Admin approval through Approvals revalidates inputs and saves/builds the definition. Model defaults to the configured provider; resume explicitly opts into starting the graph once ready.
+      x-weft-role: admin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                model:
+                  type: object
+                  properties:
+                    provider: {type: string}
+                    name: {type: string}
+                resume: {type: boolean, default: false}
+      responses:
+        "201": {description: Proposal persisted and awaiting admin approval}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /api/v1/graphs/{id}/environment/proposal/cancel:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    post:
+      tags: [environments]
+      operationId: cancelEnvironmentProposal
+      summary: Cancel analysis or a pending proposal without building
+      x-weft-role: admin
+      responses:
+        "200": {description: Cancelled proposal}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /api/v1/graphs/{id}/environment/proposal/retry:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    post:
+      tags: [environments]
+      operationId: retryEnvironmentProposal
+      summary: Revalidate and retry an already approved environment build
+      x-weft-role: admin
+      responses:
+        "200": {description: Current proposal state}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /api/v1/graphs/{id}/environment/build:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    post:
+      tags: [environments]
+      operationId: buildEnvironment
+      summary: Build the environment of the saved graph version in the background
+      description: >-
+        Without force, an environment already built from the current definition is left alone (200).
+        Otherwise the build starts and the response reports state building (202); follow it with GET or the
+        environment.* events. Accepted repository definitions and source hashes are revalidated before any build or cache hit.
+      x-weft-role: operator
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force: {type: boolean, description: Rebuild even when up to date.}
+      responses:
+        "200":
+          description: Already up to date
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Environment"}
+        "202":
+          description: Build started
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Environment"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/v1/graphs/{id}/environment/reset:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    post:
+      tags: [environments]
+      operationId: resetEnvironment
+      summary: Delete the environment's images and cache volumes (graph must be stopped)
+      x-weft-role: admin
+      responses:
+        "200":
+          description: Environment after reset (state absent)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Environment"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/v1/graphs/{id}/nodes/{node}/{action}:
+    parameters:
+      - $ref: "#/components/parameters/GraphId"
+      - $ref: "#/components/parameters/NodeId"
+      - name: action
+        in: path
+        required: true
+        schema: {enum: [start, stop, pause, resume, kill]}
+        description: Starting one node of a stopped graph starts the graph with only that node running.
+    post:
+      tags: [nodes]
+      operationId: nodeAction
+      x-weft-role: operator
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GraphStatus"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/v1/graphs/{id}/nodes/{node}/scale:
+    parameters:
+      - $ref: "#/components/parameters/GraphId"
+      - $ref: "#/components/parameters/NodeId"
+    put:
+      tags: [nodes]
+      operationId: scaleNode
+      summary: Set replicas (fixed clusters) or the ceiling (autoscaled clusters, saved as a new version)
+      x-weft-role: operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [replicas]
+              properties: {replicas: {type: integer, minimum: 0, maximum: 256}}
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GraphStatus"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/graphs/{id}/nodes/{node}/chat:
+    parameters:
+      - $ref: "#/components/parameters/GraphId"
+      - $ref: "#/components/parameters/NodeId"
+    get:
+      tags: [nodes]
+      operationId: listOperatorMessages
+      summary: Latest 200 operator messages for the node (oldest first)
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/OperatorMessage"}}
+    post:
+      tags: [nodes]
+      operationId: sendOperatorMessage
+      summary: Send a human message to a node (wakes a waiting replica; withdraws a pending auto-stop)
+      x-weft-role: operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: {type: string, minLength: 1}
+                replica: {type: integer, description: "-1 or absent = whichever replica takes its next turn first"}
+      responses:
+        "201":
+          description: Queued
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/OperatorMessage"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/graphs/{id}/channels/{channel}/messages:
+    parameters:
+      - $ref: "#/components/parameters/GraphId"
+      - name: channel
+        in: path
+        required: true
+        schema: {type: string}
+    post:
+      tags: [messages]
+      operationId: injectMessage
+      summary: Inject a message onto a channel (held if the channel has an approval gate)
+      x-weft-role: operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type: {type: string}
+                payload: {description: Any JSON value}
+                target: {type: string}
+                metadata: {type: object, description: Reserved platform keys are ignored}
+            example:
+              type: feature.request
+              payload: {title: slugify, description: Add a slugify(text) helper.}
+      responses:
+        "201":
+          description: Published (or held)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Message"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/graphs/{id}/messages:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    get:
+      tags: [messages]
+      operationId: listMessages
+      summary: Message history (newest first; one row per message, channel and consumer group)
+      x-weft-role: viewer
+      parameters:
+        - {name: channel, in: query, schema: {type: string}, description: "`_unrouted` lists dropped messages"}
+        - {name: node, in: query, schema: {type: string}, description: Source or target node}
+        - {name: correlationId, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/MessageStatus"}}
+        - {$ref: "#/components/parameters/Limit"}
+      responses:
+        "200":
+          description: Records
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/MessageRecord"}}
+  /api/v1/messages/{messageId}:
+    get:
+      tags: [messages]
+      operationId: getMessage
+      summary: Every history row of one message
+      x-weft-role: viewer
+      parameters:
+        - {name: messageId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Records
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/MessageRecord"}}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/graphs/{id}/executions:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    get:
+      tags: [executions]
+      operationId: listExecutions
+      summary: Turns (newest first)
+      x-weft-role: viewer
+      parameters:
+        - {name: node, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/ExecutionStatus"}}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, default: 50}
+      responses:
+        "200":
+          description: Executions
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/Execution"}}
+  /api/v1/executions/{executionId}:
+    get:
+      tags: [executions]
+      operationId: getExecution
+      x-weft-role: viewer
+      parameters:
+        - {name: executionId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Execution
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Execution"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/executions/{executionId}/tree:
+    get:
+      tags: [executions]
+      operationId: getExecutionTree
+      x-weft-role: viewer
+      parameters:
+        - {name: executionId, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Persisted root and descendants, bounded to 256 nodes and 16 levels; inclusive parent usage must not be summed with child usage.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rootExecutionId, selectedExecutionId, nodes]
+                properties:
+                  rootExecutionId: {type: string}
+                  selectedExecutionId: {type: string}
+                  budget:
+                    type: object
+                    description: Persisted native tree admission accounting; reported plus conservative unknown charges, counted once per model call. Not a billing guarantee. Absent on historical or non-delegating runs.
+                    required: [limit, charged, reserved, estimated]
+                    properties:
+                      limit: {type: integer}
+                      charged: {type: integer}
+                      reserved: {type: integer}
+                      estimated: {type: integer}
+                  nodes:
+                    type: array
+                    maxItems: 256
+                    items:
+                      type: object
+                      required: [execution]
+                      properties:
+                        execution: {$ref: "#/components/schemas/Execution"}
+                        cancellation: {$ref: "#/components/schemas/ExecutionCancellation"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {description: Inconsistent or oversized execution tree; no partial tree returned.}
+  /api/v1/executions/{executionId}/cancel:
+    post:
+      tags: [executions]
+      operationId: cancelExecution
+      x-weft-role: operator
+      parameters:
+        - {name: executionId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scope, confirm]
+              properties:
+                scope: {type: string, enum: [child, tree]}
+                confirm: {type: boolean, enum: [true]}
+      responses:
+        "202":
+          description: Durable cooperative interruption request; workers own the final outcomes. Repeated requests preserve the first request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request: {$ref: "#/components/schemas/ExecutionCancellation"}
+                  alreadyTerminal: {type: boolean}
+        "200": {description: All target executions already terminal; no new request needed.}
+        "400": {description: Invalid scope, child scope used for a root, or missing confirmation.}
+        "403": {description: Operator or admin role required.}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {description: Inconsistent or oversized execution tree.}
+  /api/v1/graphs/{id}/events:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    get:
+      tags: [events]
+      operationId: listEvents
+      summary: Event log page (ascending by seq)
+      description: Without `after`, returns the latest `limit` events (still ascending). With `after`, returns events with seq > after.
+      x-weft-role: viewer
+      parameters:
+        - {name: after, in: query, schema: {type: integer, format: int64}}
+        - {name: node, in: query, schema: {type: string}}
+        - {name: types, in: query, schema: {type: string}, description: "Comma-separated event types", example: "execution.completed,execution.failed"}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, default: 200}
+      responses:
+        "200":
+          description: Events
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/Event"}}
+  /api/v1/events/stream:
+    get:
+      tags: [events]
+      operationId: streamEvents
+      summary: Live event stream (Server-Sent Events)
+      description: |
+        Frames: `id: <seq>`, `event: <type>`, `data: <Event JSON>`. The stream starts with
+        `retry: 3000` and `: connected`, and sends a `: ping` comment after 15 s without events.
+        Resume with `?after=<seq>` or the `Last-Event-ID` header; with neither, the stream starts
+        at the newest event ("now"). The stream tails the durable log, so it is correct across
+        several control-plane instances.
+      x-weft-role: viewer
+      parameters:
+        - {name: graph, in: query, schema: {type: string}, description: Empty = all graphs}
+        - {name: after, in: query, schema: {type: integer, format: int64}}
+        - {name: node, in: query, schema: {type: string}}
+        - {name: types, in: query, schema: {type: string}}
+        - {name: access_token, in: query, schema: {type: string}, description: Alternative to the Authorization header (GET only)}
+        - {name: Last-Event-ID, in: header, schema: {type: string}}
+      responses:
+        "200":
+          description: text/event-stream
+          content:
+            text/event-stream:
+              schema: {type: string}
+              example: "id: 4211\nevent: execution.completed\ndata: {\"seq\":4211,\"type\":\"execution.completed\",...}\n\n"
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /api/v1/approvals:
+    get:
+      tags: [approvals]
+      operationId: listApprovals
+      summary: Approvals (newest first)
+      x-weft-role: viewer
+      parameters:
+        - {name: graph, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/ApprovalStatus"}}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, default: 200}
+      responses:
+        "200":
+          description: Approvals
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/Approval"}}
+  /api/v1/approvals/{approvalId}/{decision}:
+    parameters:
+      - {name: approvalId, in: path, required: true, schema: {type: string}}
+      - name: decision
+        in: path
+        required: true
+        schema: {enum: [approve, reject]}
+    post:
+      tags: [approvals]
+      operationId: decideApproval
+      summary: Approve or reject (first decision wins)
+      description: |
+        `answer` is the human's reply for `question` approvals, or a replacement payload (valid JSON)
+        for held `message` approvals.
+      x-weft-role: operator
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment: {type: string}
+                answer: {type: string}
+      responses:
+        "200":
+          description: Decided
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Approval"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/v1/providers:
+    get:
+      tags: [providers]
+      operationId: listProviders
+      summary: Configured and console-managed model providers (no secrets)
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Providers in registry order; ETag is the settings revision
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/Provider"}}
+    post:
+      tags: [providers]
+      operationId: createProvider
+      summary: Create a console-managed provider (credential encrypted at rest)
+      x-weft-role: admin
+      parameters:
+        - {$ref: "#/components/parameters/IfMatchRevision"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ProviderInput"}
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Provider"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidProvider"}
+  /api/v1/providers/test:
+    post:
+      tags: [providers]
+      operationId: testProviderDraft
+      summary: Test unsaved provider settings (lists models, sends one short prompt); saves nothing
+      x-weft-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ProviderInput"}
+      responses:
+        "200":
+          description: Test result (ok reflects the inference)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ProviderTestResult"}
+        "422": {$ref: "#/components/responses/InvalidProvider"}
+  /api/v1/providers/{name}:
+    parameters:
+      - {name: name, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [providers]
+      operationId: getProvider
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Provider
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Provider"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    put:
+      tags: [providers]
+      operationId: updateProvider
+      summary: Update a console-managed provider (omit apiKey to keep the stored credential)
+      x-weft-role: admin
+      parameters:
+        - {$ref: "#/components/parameters/IfMatchRevision"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ProviderInput"}
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Provider"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidProvider"}
+    delete:
+      tags: [providers]
+      operationId: deleteProvider
+      summary: Remove a console-managed provider (refused while selected by a graph or default)
+      x-weft-role: admin
+      parameters:
+        - {$ref: "#/components/parameters/IfMatchRevision"}
+      responses:
+        "204": {description: Removed}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidProvider"}
+  /api/v1/providers/{name}/test:
+    parameters:
+      - {name: name, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [providers]
+      operationId: testProvider
+      summary: Test a saved provider through the LLM gateway
+      x-weft-role: operator
+      responses:
+        "200":
+          description: Test result (ok reflects the inference)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ProviderTestResult"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/provider-plugins:
+    get:
+      tags: [providers]
+      operationId: listProviderPlugins
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Installed provider plugins (manifest, capabilities) and the instances built from each
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/ProviderPlugin"}
+  /api/v1/provider-plugins/{id}:
+    put:
+      tags: [providers]
+      operationId: setProviderPluginEnabled
+      x-weft-role: admin
+      description: >-
+        Enables or disables an inference plugin. Plugins start disabled. Disabling keeps the plugin's
+        instances; they report unavailable (and nodes using them fail with that reason) until it is enabled again.
+        A plugin provided by server configuration cannot be disabled here.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {$ref: "#/components/parameters/IfMatchRevision"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled]
+              properties:
+                enabled: {type: boolean}
+      responses:
+        "200":
+          description: The plugin after the change
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ProviderPlugin"}
+        "404": {description: Unknown plugin}
+        "409": {description: Stale If-Match revision}
+        "422": {description: The plugin is provided by server configuration}
+  /api/v1/scm/connections:
+    get:
+      tags: [scm]
+      operationId: listSCMConnections
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Connections without credentials
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/SCMConnection"}}
+    post:
+      tags: [scm]
+      operationId: createSCMConnection
+      x-weft-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SCMConnectionInput"}
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SCMConnection"}
+        "409": {description: No installation key to encrypt the token}
+        "422": {description: Field-level validation errors}
+  /api/v1/scm/connections/{name}:
+    parameters:
+      - {name: name, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [scm]
+      operationId: updateSCMConnection
+      x-weft-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/SCMConnectionInput"}
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SCMConnection"}
+        "404": {description: Unknown connection}
+        "422": {description: Field-level validation errors}
+    delete:
+      tags: [scm]
+      operationId: deleteSCMConnection
+      x-weft-role: admin
+      responses:
+        "204": {description: Deleted}
+        "404": {description: Unknown connection}
+  /api/v1/scm/connections/{name}/test:
+    post:
+      tags: [scm]
+      operationId: testSCMConnection
+      x-weft-role: operator
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: "{ok, identity} or {ok: false, error} with the token redacted"
+  /api/v1/cost/prices:
+    get:
+      tags: [cost]
+      operationId: getPrices
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Current price catalogue (version 0 when none was saved)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PriceCatalogue"}
+    put:
+      tags: [cost]
+      operationId: putPrices
+      x-weft-role: admin
+      parameters:
+        - {$ref: "#/components/parameters/IfMatchRevision"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [currency]
+              properties:
+                currency: {type: string, pattern: "^[A-Za-z]{3}$"}
+                unpriced: {type: string, enum: [allow, refuse]}
+                prices: {type: array, maxItems: 500, items: {$ref: "#/components/schemas/Price"}}
+      responses:
+        "200":
+          description: The new catalogue version
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/PriceCatalogue"}
+        "409": {description: Stale If-Match revision}
+        "422": {description: Field-level validation errors}
+  /api/v1/cost/policy:
+    get:
+      tags: [cost]
+      operationId: getCostPolicy
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Installation cost policy
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CostPolicy"}
+    put:
+      tags: [cost]
+      operationId: putCostPolicy
+      x-weft-role: admin
+      parameters:
+        - {$ref: "#/components/parameters/IfMatchRevision"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                taskRunBudgetMicros: {type: integer, format: int64, minimum: 0, description: Budget each new task run starts with; 0 = none}
+                warningPercent: {type: integer, minimum: 1, maximum: 100}
+      responses:
+        "200":
+          description: The stored policy
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CostPolicy"}
+        "409": {description: Stale If-Match revision}
+        "422": {description: Field-level validation errors}
+  /api/v1/cost/budgets:
+    get:
+      tags: [cost]
+      operationId: getBudgetDefinitions
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Monthly budget definitions and the current period (YYYY-MM, UTC)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/BudgetDefinitions"}
+    put:
+      tags: [cost]
+      operationId: putBudgetDefinitions
+      x-weft-role: admin
+      parameters:
+        - {$ref: "#/components/parameters/IfMatchRevision"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                budgets: {type: array, maxItems: 500, items: {$ref: "#/components/schemas/BudgetDefinition"}}
+      responses:
+        "200":
+          description: The stored definitions
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/BudgetDefinitions"}
+        "409": {description: Stale If-Match revision}
+        "422": {description: Field-level validation errors}
+  /api/v1/cost/budgets/preview:
+    get:
+      tags: [cost]
+      operationId: previewBudgets
+      x-weft-role: viewer
+      parameters:
+        - {name: workflow, in: query, schema: {type: string}}
+        - {name: project, in: query, schema: {type: string}}
+      responses:
+        "200":
+          description: Budgets a new task by the caller would be held to
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taskRunBudgetMicros: {type: integer, format: int64}
+                  currency: {type: string}
+                  budgets: {type: array, items: {$ref: "#/components/schemas/BudgetView"}}
+  /api/v1/cost/ledgers:
+    get:
+      tags: [cost]
+      operationId: listBudgetLedgers
+      x-weft-role: viewer
+      parameters:
+        - {name: period, in: query, schema: {type: string, pattern: "^[0-9]{4}-[0-9]{2}$"}}
+      responses:
+        "200":
+          description: The month's ledgers and task runs a budget refused or paused
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/BudgetView"}}
+  /api/v1/cost/spend:
+    get:
+      tags: [cost]
+      operationId: getSpend
+      x-weft-role: viewer
+      parameters:
+        - {name: period, in: query, schema: {type: string, pattern: "^[0-9]{4}-[0-9]{2}$"}, description: Defaults to the current UTC month}
+        - {name: graph, in: query, schema: {type: string}, description: Only one graph (task run)}
+      responses:
+        "200":
+          description: Spend report
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SpendReport"}
+        "422": {description: Invalid period}
+  /api/v1/cost/budgets/{scope}/{budget}:
+    get:
+      tags: [cost]
+      operationId: getBudget
+      x-weft-role: viewer
+      parameters:
+        - {name: scope, in: path, required: true, schema: {type: string, enum: [run, installation, user, project, workflow]}}
+        - {name: budget, in: path, required: true, schema: {type: string}, description: "For scope run, the task run's execution graph id; for monthly scopes, <id>@<YYYY-MM>"}
+      responses:
+        "200":
+          description: Budget ledger view
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/BudgetView"}
+        "404": {description: No such budget}
+  /api/v1/cost/budgets/{scope}/{budget}/raise:
+    post:
+      tags: [cost]
+      operationId: raiseBudget
+      x-weft-role: admin
+      description: Audited human decision that raises a budget and resumes the run it paused.
+      parameters:
+        - {name: scope, in: path, required: true, schema: {type: string, enum: [run, installation, user, project, workflow]}}
+        - {name: budget, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [limitMicros]
+              properties:
+                limitMicros: {type: integer, format: int64, minimum: 1}
+      responses:
+        "200":
+          description: Budget after the raise
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/BudgetView"}
+        "404": {description: No such budget}
+        "422": {description: The new limit is not higher}
+  /api/v1/provider-settings:
+    get:
+      tags: [providers]
+      operationId: getProviderSettings
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Settings revision, default provider, credential storage status, supported types
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ProviderSettings"}
+    put:
+      tags: [providers]
+      operationId: setDefaultProvider
+      x-weft-role: admin
+      parameters:
+        - {$ref: "#/components/parameters/IfMatchRevision"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [default]
+              properties:
+                default: {type: string, description: Provider name; empty returns to the configuration default}
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ProviderSettings"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/InvalidProvider"}
+  /api/v1/providers/{name}/models:
+    get:
+      tags: [catalog]
+      operationId: listModels
+      x-weft-role: viewer
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string}}
+      responses:
+        "200":
+          description: Models the backend reports (best effort)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: {type: string}
+                    provider: {type: string}
+                    contextSize: {type: integer}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/tools:
+    get:
+      tags: [catalog]
+      operationId: listTools
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Registered tools
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name: {type: string}
+                    capability: {type: string}
+                    description: {type: string}
+                    schema: {type: object}
+  /api/v1/graphs/{id}/files:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    get:
+      tags: [workspace]
+      operationId: listFiles
+      summary: List a workspace directory (worktree of node/replica when it has one)
+      x-weft-role: viewer
+      parameters:
+        - {name: path, in: query, schema: {type: string}}
+        - {name: node, in: query, schema: {type: string}}
+        - {name: replica, in: query, schema: {type: integer}}
+      responses:
+        "200":
+          description: Entries (max 2000, .git hidden)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name: {type: string}
+                    path: {type: string}
+                    dir: {type: boolean}
+                    size: {type: integer}
+                    modTime: {type: string, format: date-time}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /api/v1/graphs/{id}/files/content:
+    parameters: [{$ref: "#/components/parameters/GraphId"}]
+    get:
+      tags: [workspace]
+      operationId: getFileContent
+      summary: Read a workspace file (first 4 MiB, always text/plain with a deny-all CSP)
+      x-weft-role: viewer
+      parameters:
+        - {name: path, in: query, required: true, schema: {type: string}}
+        - {name: node, in: query, schema: {type: string}}
+        - {name: replica, in: query, schema: {type: integer}}
+      responses:
+        "200":
+          description: File bytes
+          content:
+            text/plain: {schema: {type: string}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/graphs/{id}/git/{view}:
+    parameters:
+      - {$ref: "#/components/parameters/GraphId"}
+      - {name: view, in: path, required: true, schema: {type: string, enum: [status, diff, history]}}
+    get:
+      tags: [workspace]
+      operationId: inspectWorkspaceGit
+      summary: Inspect live workspace Git state without modifying it
+      description: >-
+        Diff compares tracked files with HEAD; history returns at most 50 commits.
+        Optional path is literal and relative. Node must identify a worktree-mode
+        agent; replica requires node. Inspection never creates workspaces.
+        Output is limited to 4 MiB per command and inspection to 10 seconds.
+        Unsupported configuration, metadata redirection and oversized metadata
+        fail explicitly. Recent execution context does not prove change authorship.
+      x-weft-role: viewer
+      parameters:
+        - {name: path, in: query, schema: {type: string}}
+        - {name: node, in: query, schema: {type: string}}
+        - {name: replica, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        "200":
+          description: Live inspection; repository is false for a non-repository directory
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [repository, directory, branch, content, attribution, graphId]
+                properties:
+                  repository: {type: boolean}
+                  directory: {type: string}
+                  branch: {type: string}
+                  content: {type: string}
+                  attribution: {type: string, enum: [inconclusive]}
+                  graphId: {type: string}
+                  nodeId: {type: string}
+                  replica: {type: integer, minimum: 0}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {description: Inspection failed; never returned as an empty successful diff}
+  # ---------------------------------------------------------------- callbacks
+  /internal/v1/executions/{executionId}/tools:
+    parameters: [{$ref: "#/components/parameters/ExecutionId"}]
+    get:
+      tags: [runtime-callback]
+      operationId: cbListTools
+      security: [{executionToken: []}]
+      responses:
+        "200":
+          description: Granted tools only
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/ToolSchema"}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /internal/v1/executions/{executionId}/tools/{tool}:
+    parameters:
+      - $ref: "#/components/parameters/ExecutionId"
+      - {name: tool, in: path, required: true, schema: {type: string}, example: filesystem.read}
+    post:
+      tags: [runtime-callback]
+      operationId: cbInvokeTool
+      summary: Invoke a tool under the node's grants
+      description: "Execution failures (and budget exhaustion, invalid arguments) return 200 with `isError` set to true."
+      security: [{executionToken: []}]
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object, description: Tool arguments (see GET /api/v1/tools)}
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ToolResult"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "429":
+          description: Grant rate limit exceeded
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /internal/v1/executions/{executionId}/llm/chat:
+    parameters: [{$ref: "#/components/parameters/ExecutionId"}]
+    post:
+      tags: [runtime-callback]
+      operationId: cbChat
+      summary: Call the node's model (model defaults to the node's; provider keys stay server-side)
+      security: [{executionToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ChatRequest"}
+      responses:
+        "200":
+          description: Completion
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ChatResponse"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "502":
+          description: Provider error or token budget exhausted (code `llm_error`)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+  /internal/v1/executions/{executionId}/emit:
+    parameters: [{$ref: "#/components/parameters/ExecutionId"}]
+    post:
+      tags: [runtime-callback]
+      operationId: cbEmit
+      summary: Queue an output message (published only if the turn succeeds)
+      security: [{executionToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Emit"}
+      responses:
+        "200":
+          description: Queued
+          content:
+            application/json:
+              schema: {type: object, properties: {queued: {const: true}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /internal/v1/executions/{executionId}/state/{key}:
+    parameters:
+      - $ref: "#/components/parameters/ExecutionId"
+      - {name: key, in: path, required: true, schema: {type: string, maxLength: 512}, description: URL-encoded; may contain '/'}
+    get:
+      tags: [runtime-callback]
+      operationId: cbStateGet
+      summary: Read node memory (shared by all replicas of the node)
+      security: [{executionToken: []}]
+      responses:
+        "200":
+          description: Raw bytes
+          content:
+            application/octet-stream: {schema: {type: string, format: binary}}
+        "404": {$ref: "#/components/responses/NotFound"}
+    put:
+      tags: [runtime-callback]
+      operationId: cbStatePut
+      security: [{executionToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary, maxLength: 1048576}
+      responses:
+        "204": {description: Stored}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /internal/v1/executions/{executionId}/output:
+    parameters: [{$ref: "#/components/parameters/ExecutionId"}]
+    post:
+      tags: [runtime-callback]
+      operationId: cbOutput
+      summary: Stream narration to observers (event agent.output, max 8000 chars kept)
+      security: [{executionToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [text], properties: {text: {type: string}}}
+      responses:
+        "204": {description: Recorded}
+  /internal/v1/executions/{executionId}/ask:
+    parameters: [{$ref: "#/components/parameters/ExecutionId"}]
+    post:
+      tags: [runtime-callback]
+      operationId: cbAsk
+      summary: Ask a human; blocks until answered (question approval)
+      security: [{executionToken: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, required: [question], properties: {question: {type: string}}}
+      responses:
+        "200":
+          description: Answer
+          content:
+            application/json:
+              schema: {type: object, properties: {answer: {type: string}}}
+        "409":
+          description: Rejected or expired (code `no_answer`)
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+
+  /api/v1/mcp/history:
+    get:
+      tags: [mcp]
+      operationId: getMCPHistory
+      summary: Filter safe persisted MCP tool and approval outcomes
+      x-weft-role: viewer
+      description: Newest first; at most 500 eligible events scanned per page. An empty page can still have hasMore. No raw arguments, responses, comments or upstream errors.
+      parameters:
+        - in: query
+          name: connection
+          schema: {type: string}
+        - in: query
+          name: graph
+          schema: {type: string}
+        - in: query
+          name: node
+          schema: {type: string}
+        - in: query
+          name: tool
+          schema: {type: string}
+        - in: query
+          name: type
+          schema: {type: string, enum: [tool.invoked, tool.completed, tool.denied, approval.requested, approval.decided]}
+        - in: query
+          name: outcome
+          schema: {type: string, enum: [started, ok, error, denied, unknown, rate_limited, rejected, pending, approved, expired]}
+        - in: query
+          name: since
+          schema: {type: string, format: date-time}
+        - in: query
+          name: until
+          schema: {type: string, format: date-time}
+        - in: query
+          name: before
+          schema: {type: integer, minimum: 0}
+        - in: query
+          name: limit
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+      responses:
+        "200":
+          description: Safe page; continue using before=nextBefore while hasMore is true
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MCPHistoryPage"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "422":
+          description: Invalid filter bounds or enum
+  /api/v1/mcp/connections:
+    get:
+      tags: [mcp]
+      operationId: listMCPConnections
+      summary: List safe MCP connection metadata
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Safe metadata; discovery attempts may report unavailable. No invocation is performed.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/MCPConnection"}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422":
+          description: Invalid connection or MCP grant
+    post:
+      tags: [mcp]
+      operationId: createMCPConnection
+      summary: Register a remote MCP connection
+      x-weft-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MCPConnectionInput"}
+      responses:
+        "201":
+          description: Safe metadata; discovery attempts may report unavailable. No invocation is performed.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MCPConnection"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422":
+          description: Invalid connection or MCP grant
+  /api/v1/mcp/connections/{connection}:
+    get:
+      tags: [mcp]
+      operationId: getMCPConnection
+      summary: Read a safe MCP connection
+      x-weft-role: viewer
+      parameters:
+        - in: path
+          name: connection
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Safe metadata; discovery attempts may report unavailable. No invocation is performed.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MCPConnection"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422":
+          description: Invalid connection or MCP grant
+    put:
+      tags: [mcp]
+      operationId: updateMCPConnection
+      summary: Update a connection with a required current revision
+      x-weft-role: admin
+      parameters:
+        - in: path
+          name: connection
+          required: true
+          schema: {type: string}
+        - in: header
+          name: If-Match
+          required: true
+          schema: {type: integer, minimum: 1}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/MCPConnectionInput"}
+      responses:
+        "200":
+          description: Safe metadata; discovery attempts may report unavailable. No invocation is performed.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MCPConnection"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422":
+          description: Invalid connection or MCP grant
+    delete:
+      tags: [mcp]
+      operationId: deleteMCPConnection
+      summary: Remove disabled local connection and permanently reserve its ID
+      description: Requires prior OAuth revocation when configured. Removes local credentials and catalogue; preserves audit history and obsolete graph references. Does not delete remote applications or registrations or roll back dispatched calls.
+      x-weft-role: admin
+      parameters:
+        - in: path
+          name: connection
+          required: true
+          schema: {type: string}
+        - in: header
+          name: If-Match
+          required: true
+          schema: {type: integer, minimum: 1}
+      responses:
+        "204":
+          description: Local connection deleted; ID permanently reserved
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403":
+          description: Administrator role required
+        "404":
+          description: Connection not found or already deleted
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422":
+          description: Disable the connection and complete local OAuth revocation first
+  /api/v1/mcp/connections/{connection}/test:
+    post:
+      tags: [mcp]
+      operationId: testMCPConnection
+      summary: Test and refresh the discovered catalogue
+      x-weft-role: operator
+      parameters:
+        - in: path
+          name: connection
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Safe metadata; discovery attempts may report unavailable. No invocation is performed.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MCPConnection"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422":
+          description: Invalid connection or MCP grant
+  /api/v1/mcp/connections/{connection}/tools/refresh:
+    post:
+      tags: [mcp]
+      operationId: refreshMCPTools
+      summary: Discover and persist the MCP tool catalogue
+      x-weft-role: operator
+      parameters:
+        - in: path
+          name: connection
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Safe metadata; discovery attempts may report unavailable. No invocation is performed.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/MCPConnection"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422":
+          description: Invalid connection or MCP grant
+  /api/v1/mcp/tools:
+    get:
+      tags: [mcp]
+      operationId: listMCPPermissionTools
+      summary: List currently available MCP tools for explicit agent grants
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Safe metadata; discovery attempts may report unavailable. No invocation is performed.
+          content:
+            application/json:
+              schema: {type: array, items: {type: object}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422":
+          description: Invalid connection or MCP grant
+
+  /api/v1/tasks/{tid}/authorization:
+    parameters:
+      - {name: tid, in: path, required: true, schema: {type: string}}
+    get:
+      summary: Review current task consent and capability scope
+      x-weft-role: viewer
+      responses:
+        '200': {description: Scope digest, reviewed capabilities and optional consent record}
+    put:
+      summary: Confirm draft consent or reduce running task authorization (admin only)
+      x-weft-role: admin
+      parameters:
+        - {name: If-Match, in: header, required: true, schema: {type: integer, minimum: 0}, description: Consent revision; zero creates the initial record}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [mode, scope, confirm]
+              properties:
+                mode: {type: string, enum: [ask, workspace, full]}
+                remember: {type: boolean, default: false, description: Save a project suggestion; never automatic consent}
+                preferenceRevision: {type: integer, minimum: 0}
+                scope: {type: string}
+                confirm: {type: boolean, enum: [true]}
+      responses:
+        '200': {description: Persisted consent; grants and mandatory gates unchanged}
+        '400': {description: Invalid confirmation or unsupported native workspace confinement}
+        '403': {description: Administrator required}
+        '409': {description: Stale task scope or consent revision}
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: Static API token (role from config) or OIDC JWT (RS256/ES256, role claim `weft_role` by default).
+    executionToken:
+      type: http
+      scheme: bearer
+      description: Per-execution token from TurnInput.callback.token; valid only while that turn runs.
+  parameters:
+    GraphId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"}
+    NodeId:
+      name: node
+      in: path
+      required: true
+      schema: {type: string}
+    ExecutionId:
+      name: executionId
+      in: path
+      required: true
+      schema: {type: string}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, default: 100}
+    IfMatchRevision:
+      name: If-Match
+      in: header
+      required: false
+      description: Provider settings revision the caller edited; a stale value returns 409.
+      schema: {type: string}
+  requestBodies:
+    GraphDocument:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Graph"}
+        application/yaml:
+          schema: {$ref: "#/components/schemas/Graph"}
+          example: |
+            apiVersion: weft.io/v1
+            kind: Graph
+            metadata: {name: hello}
+            spec:
+              defaults: {runtime: {kind: echo}}
+              nodes: [{id: a}, {id: b}]
+              channels: [{id: in, to: [a]}, {id: ab, from: a, to: [b]}]
+  responses:
+    BadRequest:
+      description: Malformed request (code `invalid`)
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Unauthorized:
+      description: Missing or invalid credentials (code `unauthorized`)
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Forbidden:
+      description: Role too low, or tool denied/rejected (code `forbidden`)
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    NotFound:
+      description: Not found (code `not_found`)
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Conflict:
+      description: Version conflict, already exists, wrong state, or approval already decided (code `conflict`)
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    Invalid:
+      description: Graph failed validation; `details` holds the report (code `invalid`)
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+    InvalidProvider:
+      description: Provider input failed validation; `details.errors[]` holds `{path, message}` (code `invalid`)
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Error"}
+  schemas:
+    RepositoryImport:
+      type: object
+      properties:
+        authentication: {enum: [anonymous, token, local_git, local_gh], description: Selected mode only; absent for older anonymous records}
+        id: {type: string}
+        url: {type: string}
+        ref: {type: string}
+        state: {enum: [fetching, verifying, publishing, ready, cancel_requested, cancelled, failed, interrupted]}
+        message: {type: string}
+        revision: {type: integer}
+        attempt: {type: string}
+        projectId: {type: string}
+        commit: {type: string}
+        bytes: {type: integer, minimum: 0}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        deadline: {type: string, format: date-time}
+    Project:
+      type: object
+      properties:
+        importId: {type: string}
+        repositoryUrl: {type: string}
+        repositoryRef: {type: string}
+        executionMode: {enum: [workflow, local, sandbox]}
+        id: {type: string}
+        revision: {type: integer}
+        name: {type: string}
+        path: {type: string}
+        head: {type: string}
+        createdAt: {type: string, format: date-time}
+    TaskIssueSource:
+      type: object
+      additionalProperties: false
+      required: [kind, connectionId, reference]
+      description: Reference only; save/review never fetches content or grants tools. The entry agent reads through the gateway during execution.
+      properties:
+        kind: {enum: [github, jira]}
+        connectionId: {type: string, pattern: '^[a-z][a-z0-9_-]{0,63}$'}
+        reference: {type: string, maxLength: 512, description: GitHub owner/repository#number or HTTPS issue URL; Jira KEY-number or HTTPS browse URL without credentials/query/fragment}
+        cloudId: {type: string, format: uuid, description: Required only for Jira; selected cloud UUID is authoritative, URL hostname is not a verified site binding}
+    TaskDraftInput:
+      type: object
+      additionalProperties: false
+      required: [title, request, outcome, graphId, graphVersion, nodeId]
+      properties:
+        source: {$ref: '#/components/schemas/TaskIssueSource'}
+        executionMode: {enum: [workflow, local, sandbox]}
+        title: {type: string, minLength: 1, maxLength: 200, description: Also bounded to 200 UTF-8 bytes}
+        request: {type: string, minLength: 1, maxLength: 16384, description: Also bounded to 16384 UTF-8 bytes; untrusted instructions}
+        outcome: {enum: [understand, implement, investigate, review, freeform]}
+        graphId: {type: string, minLength: 1, maxLength: 128}
+        graphVersion: {type: integer, minimum: 1}
+        nodeId: {type: string, minLength: 1, maxLength: 128}
+        resultNodeId: {type: string, maxLength: 128}
+        channelId: {type: string, maxLength: 128}
+        messageType: {type: string, maxLength: 128}
+        payloadJson: {type: string, maxLength: 16384, description: Valid JSON text sent only through the selected ingress channel}
+        projectId: {type: string}
+        baseCommit: {type: string, description: Full immutable commit identifier; required with projectId}
+    TaskReview:
+      type: object
+      properties:
+        task: {$ref: '#/components/schemas/TaskDraft'}
+        canStart: {type: boolean}
+        blockers: {type: array, items: {type: string}}
+        currentGraphVersion: {type: integer}
+        executionGraphId: {type: string}
+        canPrepareEnvironment: {type: boolean}
+        validation: {type: object, description: Existing graph validation report}
+        agents: {type: array, items: {type: object}, description: Effective agent models, grants and isolation}
+    TaskDraft:
+      type: object
+      required: [id, revision, status, title, request, outcome, graphId, graphVersion, nodeId, createdBy, updatedBy, createdAt, updatedAt]
+      properties:
+        resolution:
+          type: object
+          description: Server-owned interpretation metadata; pending or repair states block task admission until resolved or explicitly repaired and saved.
+          required: [state, message]
+          properties:
+            state: {enum: [pending, needs_model, model_error, invalid_proposal, needs_input, needs_repository, resolved]}
+            message: {type: string}
+            repository: {type: string, description: Untrusted URL quoted from the original request; never fetched by interpretation}
+        id: {type: string}
+        revision: {type: integer, minimum: 1}
+        status: {enum: [draft, preparing, environment_build_requested, environment_pending, environment_cancel_requested, starting, running, interrupted, cancel_requested, cancelled]}
+        executionGraphId: {type: string}
+        launchError: {type: string}
+        observedState: {type: string, description: Optional list projection; persisted admission status is separate}
+        source: {$ref: '#/components/schemas/TaskIssueSource'}
+        executionMode: {enum: [workflow, local, sandbox]}
+        title: {type: string}
+        request: {type: string}
+        outcome: {type: string}
+        graphId: {type: string}
+        graphVersion: {type: integer}
+        nodeId: {type: string}
+        resultNodeId: {type: string}
+        channelId: {type: string}
+        messageType: {type: string}
+        payloadJson: {type: string}
+        projectId: {type: string}
+        baseCommit: {type: string}
+        createdBy: {type: string}
+        updatedBy: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    ExecutionCancellation:
+      type: object
+      required: [executionId, rootExecutionId, scope, actor, requestedAt]
+      properties:
+        executionId: {type: string}
+        rootExecutionId: {type: string}
+        scope: {type: string, enum: [child, tree]}
+        actor: {type: string}
+        requestedAt: {type: string, format: date-time}
+    DelegationPolicy:
+      type: object
+      additionalProperties: false
+      required: [enabled, approvalMode, maxDepth, maxChildrenPerExecution, maxConcurrentChildren, maxDurationSeconds, maxOutputTokens, maxObjectiveBytes, maxResultBytes, maxTreeTokens]
+      properties:
+        enabled: {type: boolean}
+        approvalMode: {type: string, enum: [required, automatic]}
+        maxDepth: {type: integer, const: 1}
+        maxChildrenPerExecution: {type: integer, minimum: 1, maximum: 32}
+        maxConcurrentChildren: {type: integer, minimum: 1, maximum: 32}
+        maxDurationSeconds: {type: integer, minimum: 1, maximum: 600}
+        maxOutputTokens: {type: integer, minimum: 1, maximum: 4096}
+        maxObjectiveBytes: {type: integer, minimum: 1, maximum: 16384}
+        maxResultBytes: {type: integer, minimum: 1, maximum: 65536}
+        maxTreeTokens: {type: integer, minimum: 1, maximum: 10000000, default: 65536}
+    DelegationPolicyView:
+      type: object
+      properties:
+        policy: {$ref: '#/components/schemas/DelegationPolicy'}
+        revision: {type: integer}
+        updatedBy: {type: string}
+    DelegationProfile:
+      type: object
+      additionalProperties: false
+      required: [id, name, instructions, enabled, maxOutputTokens]
+      properties:
+        id: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,62}$'}
+        name: {type: string, description: Nonblank; at most 120 UTF-8 bytes}
+        instructions: {type: string, description: Nonblank valid text without NUL; at most 4096 UTF-8 bytes}
+        enabled: {type: boolean}
+        maxOutputTokens: {type: integer, minimum: 1, maximum: 4096}
+    DelegationProfileView:
+      type: object
+      properties:
+        profile: {$ref: '#/components/schemas/DelegationProfile'}
+        revision: {type: integer}
+        updatedBy: {type: string}
+    DelegationConfig:
+      type: object
+      properties:
+        policy: {$ref: '#/components/schemas/DelegationPolicyView'}
+        profile: {$ref: '#/components/schemas/DelegationProfileView'}
+    MCPHistoryPage:
+      type: object
+      required: [entries, hasMore]
+      properties:
+        hasMore: {type: boolean}
+        nextBefore: {type: integer, description: Exclusive cursor for the next older page}
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              seq: {type: integer}
+              time: {type: string, format: date-time}
+              type: {type: string}
+              connection: {type: string}
+              graph: {type: string}
+              node: {type: string}
+              execution: {type: string}
+              tool: {type: string}
+              outcome: {type: string}
+              durationMs: {type: integer}
+              approval: {type: string}
+              summary: {type: string, description: Platform-owned safe summary}
+    MCPConnectionInput:
+      type: object
+      additionalProperties: false
+      required: [id, name, service, endpoint, enabled]
+      properties:
+        argumentPolicy:
+          type: array
+          maxItems: 64
+          description: "Exact case-sensitive top-level string rules. Rules for a tool are ANDed; unlisted tools are excluded. Empty means no additional restrictions. Values are non-secret metadata, not content filters."
+          items:
+            type: object
+            additionalProperties: false
+            required: [tool, argument, values]
+            properties:
+              tool: {type: string, pattern: "^[a-zA-Z0-9_-]{1,128}$"}
+              argument: {type: string, pattern: "^[a-zA-Z0-9_-]{1,128}$"}
+              values: {type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 256}}
+        atlassianPolicy:
+          type: object
+          additionalProperties: false
+          required: [products, cloudIds]
+          properties:
+            products: {type: array, minItems: 1, maxItems: 2, uniqueItems: true, items: {type: string, enum: [jira, confluence]}}
+            cloudIds: {type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: {type: string, format: uuid}}
+        transportProfile: {type: string, enum: [stateless-2026-07-28], description: "Optional bounded stateless profile; omitted selects session-based MCP 2025-06-18. Not compatible with pinned templates."}
+        callsPerMinute: {type: integer, minimum: 0, maximum: 60000, default: 0, description: "Shared fixed UTC-minute tool-call quota; zero is unlimited. Persisted across restart."}
+        id: {type: string, pattern: "^[a-z][a-z0-9_-]{0,63}$"}
+        name: {type: string, minLength: 1, maxLength: 120}
+        service: {type: string, enum: [generic, github, atlassian, gitlab, bitbucket, jira, confluence, sentry, databricks]}
+        endpoint: {type: string, format: uri, description: "HTTPS; no user info, query or fragment. Discovery denies private networks."}
+        enabled: {type: boolean}
+        credential:
+          type: object
+          writeOnly: true
+          additionalProperties: false
+          properties:
+            value: {type: string, writeOnly: true, maxLength: 16384}
+            clear: {type: boolean}
+    MCPConnection:
+      type: object
+      properties:
+        argumentPolicy:
+          type: array
+          maxItems: 64
+          description: "Exact case-sensitive top-level string rules. Rules for a tool are ANDed; unlisted tools are excluded. Empty means no additional restrictions. Values are non-secret metadata, not content filters."
+          items:
+            type: object
+            additionalProperties: false
+            required: [tool, argument, values]
+            properties:
+              tool: {type: string, pattern: "^[a-zA-Z0-9_-]{1,128}$"}
+              argument: {type: string, pattern: "^[a-zA-Z0-9_-]{1,128}$"}
+              values: {type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 256}}
+        atlassianPolicy:
+          type: object
+          additionalProperties: false
+          required: [products, cloudIds]
+          properties:
+            products: {type: array, minItems: 1, maxItems: 2, uniqueItems: true, items: {type: string, enum: [jira, confluence]}}
+            cloudIds: {type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: {type: string, format: uuid}}
+        transportProfile: {type: string, enum: [stateless-2026-07-28]}
+        callsPerMinute: {type: integer, minimum: 0, maximum: 60000, default: 0, description: "Shared fixed UTC-minute tool-call quota; zero is unlimited. Persisted across restart."}
+        id: {type: string}
+        name: {type: string}
+        service: {type: string}
+        endpoint: {type: string}
+        enabled: {type: boolean}
+        credentialConfigured: {type: boolean}
+        revision: {type: integer}
+        status: {type: string, enum: [untested, ready, disabled, unavailable]}
+        toolsRevision: {type: integer}
+        tools:
+          type: array
+          items:
+            type: object
+            properties:
+              name: {type: string}
+              description: {type: string}
+              inputSchema: {type: object}
+        lastTest: {type: string, format: date-time}
+        error: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        updatedBy: {type: string}
+    Provider:
+      type: object
+      description: A model provider. Never contains a credential or its ciphertext.
+      required: [name, type, default, source, editable, credential, status]
+      properties:
+        name: {type: string}
+        type: {type: string}
+        baseUrl: {type: string}
+        defaultModel: {type: string}
+        default: {type: boolean}
+        timeoutSec: {type: integer}
+        maxRetries: {type: integer}
+        concurrency: {type: integer}
+        source: {enum: [config, managed], description: "config: server configuration (read-only); managed: created through the API"}
+        editable: {type: boolean}
+        credential:
+          type: object
+          properties:
+            configured: {type: boolean}
+            source: {enum: [stored, env, file, none]}
+            env: {type: string, description: Variable name for config providers}
+            updatedAt: {type: string, format: date-time}
+            error: {type: string}
+        status: {enum: [ready, unavailable]}
+        error: {type: string, description: Why the provider is unavailable}
+        lastTest: {$ref: "#/components/schemas/ProviderTestResult"}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        updatedBy: {type: string}
+    ProviderInput:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        name: {type: string, pattern: "^[a-z0-9]([a-z0-9._-]{0,61}[a-z0-9])?$", description: Required on create; cannot change}
+        type: {type: string, description: "openai, anthropic, openrouter, ollama, vllm, lmstudio, huggingface, tgi, mock"}
+        baseUrl: {type: string, format: uri}
+        defaultModel: {type: string, maxLength: 200}
+        timeoutSec: {type: integer, minimum: 0, maximum: 3600}
+        maxRetries: {type: integer, minimum: -1, maximum: 10}
+        concurrency: {type: integer, minimum: 0, maximum: 1000}
+        apiKey:
+          description: Omit to keep the stored credential; value replaces it; clear removes it.
+          type: object
+          additionalProperties: false
+          properties:
+            value: {type: string, writeOnly: true}
+            clear: {type: boolean}
+    ProviderTestResult:
+      type: object
+      properties:
+        provider: {type: string}
+        ok: {type: boolean, description: True when the test inference succeeded}
+        checkedAt: {type: string, format: date-time}
+        durationMs: {type: integer}
+        draft: {type: boolean}
+        model: {type: string}
+        models:
+          type: object
+          properties:
+            ok: {type: boolean}
+            count: {type: integer}
+            error: {type: string}
+            defaultModelListed: {type: boolean}
+        inference:
+          type: object
+          properties:
+            ok: {type: boolean}
+            reply: {type: string}
+            stopReason: {type: string}
+            inputTokens: {type: integer}
+            outputTokens: {type: integer}
+            durationMs: {type: integer}
+            error: {type: string, description: Redacted error message}
+    SCMConnectionInput:
+      type: object
+      additionalProperties: false
+      required: [kind, repository]
+      properties:
+        name: {type: string, description: Create only}
+        kind: {type: string, enum: [github, bitbucket-dc]}
+        repository: {type: string, description: owner/name or project/name}
+        apiUrl: {type: string}
+        gitUrl: {type: string}
+        branchPrefix: {type: string, description: "Default weft/"}
+        requirePullRequestApproval: {type: boolean, description: Default true}
+        token: {type: string, writeOnly: true, description: Omit on update to keep the stored token}
+    SCMConnection:
+      type: object
+      properties:
+        name: {type: string}
+        kind: {type: string}
+        repository: {type: string}
+        apiUrl: {type: string}
+        gitUrl: {type: string}
+        branchPrefix: {type: string}
+        requirePullRequestApproval: {type: boolean}
+        tokenConfigured: {type: boolean}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        updatedBy: {type: string}
+        tokenUpdatedAt: {type: string, format: date-time}
+    Price:
+      type: object
+      required: [model, inputMicrosPerMTok, outputMicrosPerMTok]
+      description: A rate for a provider instance or a plugin type (exactly one) and a model ("*" = any), in micro-units per million tokens.
+      properties:
+        provider: {type: string}
+        type: {type: string}
+        model: {type: string}
+        inputMicrosPerMTok: {type: integer, format: int64, minimum: 0}
+        outputMicrosPerMTok: {type: integer, format: int64, minimum: 0}
+        cacheReadMicrosPerMTok: {type: integer, format: int64, minimum: 0, description: Defaults to the input rate}
+        cacheWriteMicrosPerMTok: {type: integer, format: int64, minimum: 0, description: Defaults to the input rate}
+    BudgetDefinition:
+      type: object
+      required: [scope, limitMicros]
+      properties:
+        scope: {type: string, enum: [installation, user, project, workflow]}
+        id: {type: string, description: "\"*\" for installation; identity name, project id or source graph id"}
+        limitMicros: {type: integer, format: int64, minimum: 1}
+        warningPercent: {type: integer, minimum: 0, maximum: 100}
+        interruptPercent: {type: integer, description: "0 or 101-1000"}
+    BudgetDefinitions:
+      type: object
+      properties:
+        budgets: {type: array, items: {$ref: "#/components/schemas/BudgetDefinition"}}
+        period: {type: string, description: Current UTC month (YYYY-MM)}
+    SpendLine:
+      type: object
+      properties:
+        key: {type: string}
+        model: {type: string}
+        calls: {type: integer}
+        inputTokens: {type: integer, format: int64}
+        outputTokens: {type: integer, format: int64}
+        costMicros: {type: integer, format: int64}
+        estimatedMicros: {type: integer, format: int64}
+        unpricedCalls: {type: integer}
+    SpendReport:
+      type: object
+      properties:
+        period: {type: string}
+        currency: {type: string}
+        total: {$ref: "#/components/schemas/SpendLine"}
+        byProvider: {type: array, items: {$ref: "#/components/schemas/SpendLine"}}
+        byTask: {type: array, items: {$ref: "#/components/schemas/SpendLine"}}
+        byUser: {type: array, items: {$ref: "#/components/schemas/SpendLine"}}
+        byProject: {type: array, items: {$ref: "#/components/schemas/SpendLine"}}
+        byWorkflow: {type: array, items: {$ref: "#/components/schemas/SpendLine"}}
+        truncated: {type: boolean}
+    CostPolicy:
+      type: object
+      properties:
+        taskRunBudgetMicros: {type: integer, format: int64}
+        warningPercent: {type: integer}
+        updatedAt: {type: string, format: date-time}
+        updatedBy: {type: string}
+    BudgetView:
+      type: object
+      properties:
+        scope: {type: string}
+        id: {type: string}
+        currency: {type: string}
+        limitMicros: {type: integer, format: int64}
+        chargedMicros: {type: integer, format: int64}
+        estimatedMicros: {type: integer, format: int64}
+        reservedMicros: {type: integer, format: int64}
+        remainingMicros: {type: integer, format: int64}
+        reached: {type: boolean}
+        paused: {type: boolean}
+        raisedBy: {type: string}
+    PriceCatalogue:
+      type: object
+      required: [version, currency, unpriced, prices]
+      properties:
+        version: {type: integer}
+        currency: {type: string}
+        unpriced: {type: string, enum: [allow, refuse]}
+        prices: {type: array, items: {$ref: "#/components/schemas/Price"}}
+        updatedAt: {type: string, format: date-time}
+        updatedBy: {type: string}
+    ProviderPlugin:
+      type: object
+      required: [id, label, builtin, local, key, capabilities, enabled, instances]
+      properties:
+        id: {type: string, description: Provider type stored on instances}
+        label: {type: string}
+        description: {type: string}
+        builtin: {type: boolean}
+        local: {type: boolean, description: Talks to a model server the operator runs rather than a hosted API}
+        defaultBaseUrl: {type: string}
+        key: {type: string, enum: [required, optional, none]}
+        capabilities:
+          type: object
+          properties:
+            tools: {type: boolean}
+            json: {type: string, enum: [native, instruction]}
+            usage: {type: boolean}
+            modelListing: {type: boolean}
+            streaming: {type: boolean}
+        settings: {type: array, items: {type: string, enum: [contextWindow]}}
+        devOnly: {type: boolean}
+        enabled: {type: boolean}
+        enabledBy: {type: string, enum: [config, console]}
+        updatedAt: {type: string, format: date-time}
+        updatedBy: {type: string}
+        instances: {type: array, items: {type: string}}
+    ProviderSettings:
+      type: object
+      properties:
+        revision: {type: integer}
+        default: {type: string}
+        configDefault: {type: string}
+        secrets:
+          type: object
+          properties:
+            enabled: {type: boolean, description: Whether credentials can be stored}
+            keySource: {enum: [none, env, file, generated]}
+            keyId: {type: string, description: Public identifier of the installation key (not the key)}
+        types:
+          type: array
+          items:
+            type: object
+            properties:
+              type: {type: string}
+              label: {type: string}
+              defaultBaseUrl: {type: string}
+              keyRequired: {type: boolean}
+    Error:
+      type: object
+      required: [error, code]
+      properties:
+        error: {type: string}
+        code: {enum: [invalid, unauthorized, forbidden, not_found, conflict, rate_limited, internal, llm_error, no_answer, secret_key_missing]}
+        details: {description: "ValidationReport for 422"}
+      example: {error: "conflict: graph was modified (expected version 3)", code: conflict}
+    Readiness:
+      type: object
+      properties:
+        storage: {type: string, description: ok or the error}
+        queue: {type: string}
+    Info:
+      type: object
+      properties:
+        version: {type: string}
+        instance: {type: string}
+        queue: {type: string, examples: [nats]}
+        storage: {type: string, examples: [postgres]}
+        providers: {type: array, items: {type: string}}
+        defaultProvider: {type: string}
+        runtimes: {type: array, items: {type: string}}
+        grafanaUrl: {type: string}
+        nativeProfile:
+          type: boolean
+          description: True only when started through the native profile launcher. Does not prove the browser is on the same computer.
+        identity:
+          type: object
+          description: "Caller identity. NOTE: currently serialised with Go field names (Name, Role)."
+          properties:
+            Name: {type: string}
+            Role: {enum: [viewer, operator, admin]}
+    Graph:
+      $ref: "../schemas/graph.schema.json"
+    Message:
+      $ref: "../schemas/message.schema.json"
+    Event:
+      $ref: "../schemas/event.schema.json"
+    Emit:
+      $ref: "../schemas/turn.schema.json#/$defs/Emit"
+    GraphState: {enum: [stopped, running, paused, stopping, failed]}
+    ReplicaState: {enum: [stopped, starting, idle, running, awaiting_approval, paused, stopping, completed, failed]}
+    ExecutionStatus: {enum: [pending, running, awaiting_approval, succeeded, failed, cancelled, interrupted]}
+    MessageStatus: {enum: [published, held, rejected, delivered, acked, nacked, dead_lettered, dropped]}
+    ApprovalStatus: {enum: [pending, approved, rejected, expired]}
+    GraphRecord:
+      type: object
+      properties:
+        id: {type: string}
+        version: {type: integer}
+        desiredState: {$ref: "#/components/schemas/GraphState"}
+        state: {$ref: "#/components/schemas/GraphState"}
+        runId: {type: string}
+        startedAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    GraphSummary:
+      type: object
+      required: [graph, record]
+      properties:
+        graph: {$ref: "#/components/schemas/Graph"}
+        record: {$ref: "#/components/schemas/GraphRecord"}
+    ValidationIssue:
+      type: object
+      properties:
+        path: {type: string, examples: ["spec.channels[2].when"]}
+        message: {type: string}
+    ValidationReport:
+      type: object
+      properties:
+        valid: {type: boolean}
+        errors: {type: array, items: {$ref: "#/components/schemas/ValidationIssue"}}
+        warnings: {type: array, items: {$ref: "#/components/schemas/ValidationIssue"}}
+    ReplicaStatus:
+      $ref: "../schemas/event.schema.json#/$defs/ReplicaStatus"
+    EnvironmentDefinition:
+      type: object
+      properties:
+        image: {type: string}
+        dockerfile: {type: string}
+        target: {type: string, description: Named Dockerfile stage; omitted selects the final stage}
+        context: {type: string, description: Repository-relative build context for an accepted definition.}
+        setup: {type: array, items: {type: string}}
+        network:
+          type: object
+          properties:
+            setup: {type: string, enum: [none, bridge]}
+            run: {type: string, enum: [none, bridge]}
+        caches: {type: array, items: {type: string}}
+        timeout: {type: string}
+        cpu: {type: string}
+        memory: {type: string}
+        origin:
+          type: object
+          required: [source, path, sha256, files]
+          properties:
+            source: {type: string}
+            path: {type: string}
+            sha256: {type: string}
+            service: {type: string}
+            files: {type: object, additionalProperties: {type: string}}
+            target: {type: string, description: Stage chosen during standalone Dockerfile review}
+            dockerfilePath: {type: string}
+            contextSHA256: {type: string}
+    Environment:
+      type: object
+      required: [graph, state, defined, upToDate]
+      properties:
+        graph: {type: string}
+        state: {enum: [absent, building, ready, failed]}
+        defined: {type: boolean, description: The saved graph has spec.environment.}
+        scope: {type: string, description: Hashed repository and daemon scope.}
+        reuseKey: {type: string, description: Installation-scoped compatibility identity for prepared image and immutable cache snapshots.}
+        reused: {type: boolean, description: This build reused a compatible prepared image and cache snapshots.}
+        inputs: {type: string, description: Fingerprint of bounded repository manifests and lockfiles.}
+        currentHash: {type: string, description: Hash of the saved definition.}
+        hash: {type: string, description: Hash of the definition last built.}
+        upToDate: {type: boolean, description: Ready and built from the current definition.}
+        image: {type: string}
+        caches:
+          type: array
+          items: {type: object, properties: {path: {type: string}, volume: {type: string}}}
+        startedAt: {type: string, format: date-time}
+        finishedAt: {type: string, format: date-time}
+        error: {type: string}
+        log: {type: string, description: Tail of the build output (at most 64 KiB).}
+        actor: {type: string}
+        instance: {type: string}
+    GraphStatus:
+      type: object
+      properties:
+        graphId: {type: string}
+        state: {$ref: "#/components/schemas/GraphState"}
+        desiredState: {$ref: "#/components/schemas/GraphState"}
+        runId: {type: string}
+        version: {type: integer}
+        approvalsPending: {type: integer}
+        nodes:
+          type: array
+          items:
+            type: object
+            properties:
+              nodeId: {type: string}
+              name: {type: string}
+              state: {$ref: "#/components/schemas/ReplicaState"}
+              desiredReplicas: {type: integer}
+              replicas: {type: array, items: {$ref: "#/components/schemas/ReplicaStatus"}}
+              pending: {type: integer, description: Messages waiting for this node across its input groups}
+              disabled: {type: boolean}
+              stopped: {type: boolean, description: Operator stopped this node}
+              paused: {type: boolean}
+        channels:
+          type: array
+          items:
+            type: object
+            properties:
+              channelId: {type: string}
+              type: {enum: [queue, topic, fanout, broadcast]}
+              from: {type: string}
+              to: {type: array, items: {type: string}}
+              subject: {type: string, examples: ["software-factory.tasks"]}
+              approval: {type: boolean}
+              when: {type: string}
+              groups:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    group: {type: string}
+                    node: {type: string}
+                    replica: {type: integer}
+                    pending: {type: integer}
+                    inFlight: {type: integer}
+                    dead: {type: integer}
+    MessageRecord:
+      type: object
+      properties:
+        message: {$ref: "#/components/schemas/Message"}
+        graphId: {type: string}
+        channel: {type: string}
+        group: {type: string, description: Empty for publish-side rows}
+        status: {$ref: "#/components/schemas/MessageStatus"}
+        attempt: {type: integer}
+        consumer: {type: string, description: Execution id that consumed or emitted it}
+        error: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    Usage:
+      type: object
+      properties:
+        inputTokens: {type: integer, description: Every prompt token processed, including cached ones}
+        outputTokens: {type: integer}
+        cacheReadTokens: {type: integer, description: Part of inputTokens served from the provider's prompt cache, when reported}
+        cacheWriteTokens: {type: integer, description: Part of inputTokens written to the provider's prompt cache, when reported}
+    Execution:
+      type: object
+      properties:
+        id: {type: string}
+        graphId: {type: string}
+        graphVersion: {type: integer}
+        runId: {type: string}
+        parentExecutionId: {type: string}
+        delegationTemplate: {type: string}
+        delegationConfig: {$ref: "#/components/schemas/DelegationConfig"}
+        delegationObjective: {type: string}
+        delegationModel: {type: object, additionalProperties: true}
+        approvalId: {type: string}
+        nodeId: {type: string}
+        replica: {type: integer}
+        iteration: {type: integer}
+        status: {$ref: "#/components/schemas/ExecutionStatus"}
+        inputIds: {type: array, items: {type: string}}
+        outputIds: {type: array, items: {type: string}}
+        summary: {type: string}
+        error: {type: string}
+        signal: {type: string}
+        usage: {$ref: "#/components/schemas/Usage"}
+        toolCalls: {type: integer}
+        traceId: {type: string}
+        instance: {type: string}
+        startedAt: {type: string, format: date-time}
+        completedAt: {type: string, format: date-time}
+    Approval:
+      type: object
+      properties:
+        id: {type: string}
+        graphId: {type: string}
+        nodeId: {type: string}
+        replica: {type: integer}
+        executionId: {type: string}
+        kind: {enum: [tool, message, turn, question, environment, delegation]}
+        status: {$ref: "#/components/schemas/ApprovalStatus"}
+        title: {type: string}
+        detail: {description: "tool: {tool,args}; message: {graphId,channel,message,onTimeout}; turn: {inputs,onTimeout}; question: {question}"}
+        answer: {type: string}
+        decidedBy: {type: string}
+        comment: {type: string}
+        createdAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        decidedAt: {type: string, format: date-time}
+    OperatorMessage:
+      type: object
+      properties:
+        id: {type: string}
+        graphId: {type: string}
+        nodeId: {type: string}
+        replica: {type: integer}
+        text: {type: string}
+        author: {type: string}
+        createdAt: {type: string, format: date-time}
+        consumedAt: {type: string, format: date-time}
+    ToolSchema:
+      type: object
+      properties:
+        name: {type: string}
+        description: {type: string}
+        parameters: {type: object}
+    HumanReview:
+      type: object
+      required: [id, graphId, nodeId, candidate, state, session, generation, revision, request]
+      properties:
+        id: {type: string}
+        graphId: {type: string}
+        nodeId: {type: string}
+        replica: {type: integer}
+        candidate: {type: string, description: SHA-256 workspace content identity}
+        state: {type: string, enum: [pending, approved, changes_requested, rejected, cancelled, expired, superseded]}
+        session: {type: string, enum: [none, queued, starting, ready, failed, expired, stopped]}
+        generation: {type: integer}
+        revision: {type: integer, description: Generation used for decisions}
+        request: {type: object, description: Title, instructions, command, port, readiness, TTL, reported checks and optional external URL}
+        url: {type: string}
+        createdAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        sessionExpires: {type: string, format: date-time}
+        decidedAt: {type: [string, "null"], format: date-time}
+        decidedBy: {type: string}
+        method: {type: string}
+        comment: {type: string}
+        error: {type: string}
+    ToolResult:
+      type: object
+      properties:
+        yield: {type: boolean, description: Finish this turn immediately and wait for durable continuation}
+        content: {type: string}
+        data: {description: "Optional structured output (e.g. shell.exec returns exitCode, stdout, stderr)"}
+        isError: {type: boolean}
+        truncated: {type: boolean, description: Content capped at 32 KiB}
+    ChatMessage:
+      type: object
+      required: [role]
+      properties:
+        role: {enum: [system, user, assistant, tool]}
+        content: {type: string}
+        toolCalls:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              name: {type: string, description: Platform tool name (dots), e.g. filesystem.read}
+              arguments: {type: object}
+        toolCallId: {type: string}
+        name: {type: string}
+    ChatRequest:
+      type: object
+      required: [messages]
+      properties:
+        model: {type: string, description: Empty = node model}
+        system: {type: string}
+        messages: {type: array, items: {$ref: "#/components/schemas/ChatMessage"}}
+        tools: {type: array, items: {$ref: "#/components/schemas/ToolSchema"}}
+        temperature: {type: number}
+        maxTokens: {type: integer}
+        json: {type: boolean, description: Request a JSON object response}
+        stop: {type: array, items: {type: string}}
+        metadata: {type: object, additionalProperties: {type: string}}
+    ChatResponse:
+      type: object
+      properties:
+        message: {$ref: "#/components/schemas/ChatMessage"}
+        stopReason: {type: string, examples: [stop, tool_calls, length]}
+        model: {type: string}
+        usage: {$ref: "#/components/schemas/Usage"}

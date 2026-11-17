@@ -1,0 +1,14 @@
+.git
+**/node_modules
+**/.npmrc
+web/dist
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+data
+.env
+.env.*
+!.env.example
+*.db
+*.key
+*.pem

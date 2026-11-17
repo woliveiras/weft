@@ -1,0 +1,12 @@
+FROM golang:1.26-alpine AS build
+WORKDIR /src
+COPY server/go.mod server/go.sum ./
+RUN go mod download
+COPY server/internal/domain/ ./internal/domain/
+COPY server/internal/egress/ ./internal/egress/
+COPY server/cmd/weft-egress/ ./cmd/weft-egress/
+RUN CGO_ENABLED=0 go build -trimpath -o /weft-egress ./cmd/weft-egress
+FROM scratch
+COPY --from=build /weft-egress /weft-egress
+USER 10001:10001
+ENTRYPOINT ["/weft-egress"]

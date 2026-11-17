@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "skills": {
+    "sdd-specification": {
+      "source": "woliveiras/storehouse",
+      "sourceType": "github",
+      "skillPath": "skills/sdd-specification/SKILL.md",
+      "computedHash": "831f13a55c093053819a417dcd9768e84549caacae31b921a87a5391b6ee1a3b"
+    }
+  }
+}

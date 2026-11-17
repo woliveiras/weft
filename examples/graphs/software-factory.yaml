@@ -1,0 +1,115 @@
+# Software factory: five framework-agnostic Python agents (Runtime Protocol v1)
+# wired into a graph with two feedback cycles and a human release gate.
+#
+#   requests ─▶ planner ─research.question─▶ researcher
+#                  ▲  ◀────research.done──────────┘          (cycle 1)
+#                  └─task.ready─▶ developer ×N ─code.ready─▶ reviewer
+#                                   ▲   ▲ ◀─changes_requested──┘   (cycle 2)
+#                                   │   └───────qa.failed──────── qa ◀─approved─ reviewer
+#                                   │                              │
+#                                   └ (worktree optional)          └─qa.passed─▶ [HUMAN GATE] ─▶ integrator
+#
+# Inject work:   weft inject software-factory requests feature.request \
+#                  '{"title":"slugify","description":"Add a slugify(text) helper. It lowercases and joins words with dashes."}'
+apiVersion: weft.io/v1
+kind: Graph
+metadata:
+  id: software-factory
+  name: Software Factory
+  description: Planner, researcher, developer cluster, reviewer and QA agents with review/QA feedback loops and a human release gate.
+  labels: {example: "true"}
+spec:
+  workspace: {git: true}
+  maxHops: 40
+  defaults:
+    # Every Python agent is served by one runtime process (compose service
+    # "agents"); the platform keeps tools and model keys on its side.
+    runtime: {kind: external, framework: custom, endpoint: http://agents:8000}
+    model: {provider: "", name: ""}   # platform default provider (mock offline, or e.g. ollama)
+
+  nodes:
+    - id: planner
+      name: Planner
+      description: Breaks a feature request into tasks, asking the researcher first when something is unclear.
+      runtime: {agent: planner}
+      tools:
+        - filesystem.read
+        - {name: filesystem.write, paths: ["plans/**"]}
+      position: {x: 0, y: 160}
+
+    - id: researcher
+      name: Researcher
+      description: Answers open questions and files findings under research/.
+      runtime: {agent: researcher}
+      tools:
+        - {name: filesystem.write, paths: ["research/**"]}
+        - {name: http.fetch, hosts: ["*.wikipedia.org", "docs.python.org"]}
+      position: {x: 260, y: 0}
+
+    - id: developer
+      name: Developer
+      description: Implements tasks; also handles review change requests and QA failures.
+      runtime: {agent: developer}
+      cluster: {mode: autoscale, minReplicas: 1, maxReplicas: 3, scaleDownAfter: 60s}
+      # workspace: {mode: worktree}   # give every replica its own git checkout + branch
+      tools:
+        - filesystem.read
+        - {name: filesystem.write, paths: ["src/**", "tests/**"]}
+        - git.read
+        - git.write
+      limits: {turnTimeout: 20m, maxToolCalls: 60}
+      position: {x: 260, y: 320}
+
+    - id: reviewer
+      name: Reviewer
+      description: Reviews changes (LangGraph StateGraph when the agents image is built with EXTRAS=langgraph).
+      runtime: {agent: reviewer, framework: langgraph}
+      tools: [filesystem.read, git.read]
+      position: {x: 540, y: 320}
+
+    - id: qa
+      name: QA
+      description: Runs the test suite in the sandbox.
+      runtime: {agent: qa}
+      config: {test_command: "python3 -m unittest discover -s tests -v", test_timeout_sec: 300}
+      tools:
+        - filesystem.read
+        - {name: shell.exec, commands: ["python3", "python"]}
+      position: {x: 800, y: 320}
+
+    - id: integrator
+      name: Integrator
+      description: Records the approved release in the repository (native agent, any model).
+      runtime: {kind: native}
+      prompt: |
+        A change passed review and QA and a human approved its release.
+        Use git.status and git.log to confirm the work for the task in @input is committed,
+        then append one line "<task_id>: <title> released" to RELEASES.md and commit it.
+      tools:
+        - git.read
+        - git.write
+        - {name: filesystem.write, paths: ["RELEASES.md"]}
+        - filesystem.read
+      position: {x: 1060, y: 320}
+
+  channels:
+    - {id: requests, to: [planner], label: ingress}
+    - {id: research-questions, from: planner, to: [researcher], type: queue, types: [research.question]}
+    - {id: research-results, from: researcher, to: [planner], types: [research.done]}
+    - {id: tasks, from: planner, to: [developer], types: [task.ready]}
+    - {id: code, from: developer, to: [reviewer], types: [code.ready]}
+    - id: rework
+      from: reviewer
+      to: [developer]
+      types: [review.changes_requested]
+      when: 'metadata.hops < 30'
+    - {id: approved, from: reviewer, to: [qa], types: [review.approved]}
+    - {id: qa-failed, from: qa, to: [developer], types: [qa.failed]}
+    - id: release
+      from: qa
+      to: [integrator]
+      types: [qa.passed]
+      approval: true          # human-in-the-loop release gate
+    # Every review outcome is also published on an audit topic that any node
+    # (or a future one) can subscribe to without the producer knowing.
+    - {id: review-audit, from: reviewer, type: topic, topic: review.audit, types: ["review.*"]}

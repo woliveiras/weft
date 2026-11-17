@@ -1,0 +1,43 @@
+# OpenTelemetry Collector: receives OTLP traces and logs from Weft,
+# derives RED metrics from spans, and fans out to Tempo, Loki and Prometheus.
+receivers:
+  otlp:
+    protocols:
+      grpc: {endpoint: 0.0.0.0:4317}
+      http: {endpoint: 0.0.0.0:4318}
+
+connectors:
+  spanmetrics:
+    dimensions:
+      - name: weft.graph
+      - name: weft.node
+    histogram:
+      explicit: {buckets: [50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s, 10s, 30s, 60s, 120s, 300s]}
+
+processors:
+  memory_limiter: {check_interval: 1s, limit_mib: 256}
+  batch: {}
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls: {insecure: true}
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: otel
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/tempo, spanmetrics]
+    metrics/spans:
+      receivers: [spanmetrics]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/loki]

@@ -1,0 +1,65 @@
+# Weft control-plane configuration used by the container image.
+# Every value can be overridden with environment variables (see
+# docs/configuration.md); docker-compose.yml does exactly that.
+server:
+  addr: ":8080"
+  # How agent runtimes reach this instance's callback API. With several
+  # instances, set it per instance (pod IP / hostname), not to a load balancer.
+  internalUrl: "http://weftd:8080"
+  maxBodyBytes: 8388608
+
+storage:
+  type: sqlite          # fs | sqlite | postgres   (WEFT_STORAGE_TYPE)
+
+queue:
+  type: fs              # fs | nats | redis | rabbitmq | kafka | memory   (WEFT_QUEUE_TYPE)
+
+workspaces:
+  root: /var/lib/weft/workspaces
+
+llm:
+  # Model providers are inference plugins: an administrator enables a plugin
+  # (Ollama, OpenAI, ...) and configures its instances in the console.
+  # devMock adds the offline, deterministic "mock" plugin for development.
+  devMock: false
+
+secrets:
+  # Installation key that encrypts credentials entered in the console.
+  # WEFT_SECRET_KEY (base64 or hex, 32 bytes) wins; otherwise keyFile is
+  # read, and created with a random key on first start when generateKeyFile
+  # is true. Older keys in WEFT_SECRET_KEY_PREVIOUS (comma-separated)
+  # still decrypt and are re-encrypted with the current key at startup.
+  keyEnv: WEFT_SECRET_KEY
+  keyFile: /var/lib/weft/data/secret.key   # WEFT_SECRET_KEY_FILE
+  generateKeyFile: true
+  previousKeysEnv: WEFT_SECRET_KEY_PREVIOUS
+
+auth:
+  # WEFT_ADMIN_TOKEN adds an admin token. Add viewers/operators here:
+  # tokens:
+  #   - {name: ci, role: operator, tokenEnv: WEFT_CI_TOKEN}
+  #   - {name: dashboards, role: viewer, tokenFile: /run/secrets/weft_viewer}
+  tokens: []
+
+runtimes:
+  sharedSecretEnv: WEFT_RUNTIME_SECRET
+
+isolation:
+  docker:
+    bin: docker
+    image: "weft/sandbox:latest"
+    network: none
+    idleTimeout: 5m # stop idle execution containers; 0s disables
+    capacity: {maxActive: 4, totalMemory: 4g, defaultMemory: 1g, totalCPU: "4", defaultCPU: "1"}
+
+observability:
+  serviceName: weft
+  logFormat: json
+  logLevel: info
+  traceSampleRatio: 1.0
+
+engine:
+  leaseTTL: 20s
+  reconcileInterval: 2s
+  retryBackoff: 2s
+  maxConcurrentTurns: 32

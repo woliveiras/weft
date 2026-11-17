@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://weft.io/schemas/v1/event.schema.json",
+  "title": "Weft Event",
+  "description": "An immutable fact in the event log (server/internal/domain/event.go). Attribute naming follows CloudEvents conventions. Fields tagged omitempty in Go are absent when empty — in particular 'replica' is absent when it is 0. See docs/events.md for the catalogue and per-type data shapes.",
+  "type": "object",
+  "required": ["seq", "id", "type", "time"],
+  "properties": {
+    "seq":         {"type": "integer", "minimum": 1, "description": "Store-assigned, strictly increasing position. SSE 'id:' field and resume cursor."},
+    "id":          {"type": "string", "description": "'evt_' prefixed unique id."},
+    "type":        {"$ref": "#/$defs/EventType"},
+    "time":        {"type": "string", "format": "date-time"},
+    "graphId":     {"type": "string"},
+    "nodeId":      {"type": "string"},
+    "replica":     {"type": "integer", "description": "Replica index; absent means 0. -1 means 'the node as a whole' (node actions, scaling)."},
+    "executionId": {"type": "string"},
+    "messageId":   {"type": "string"},
+    "actor":       {"type": "string", "description": "User/token name, 'agent:<node>#<n>', 'bootstrap…' or 'system'."},
+    "traceId":     {"type": "string", "description": "32-hex OpenTelemetry trace id, when known."},
+    "level":       {"type": "string"},
+    "data":        {"description": "Type-specific payload; see allOf below and docs/events.md."}
+  },
+  "allOf": [
+    {"if": {"properties": {"type": {"const": "replica.state_changed"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/ReplicaStatus"}}}},
+    {"if": {"properties": {"type": {"enum": ["approval.requested", "approval.decided"]}}}, "then": {"properties": {"data": {"type": "object", "required": ["id", "kind", "status"]}}}},
+    {"if": {"properties": {"type": {"enum": ["agent.output", "agent.broadcast"]}}}, "then": {"properties": {"data": {"type": "object", "required": ["text"]}}}},
+    {"if": {"properties": {"type": {"enum": ["tool.invoked", "tool.completed", "tool.denied"]}}}, "then": {"properties": {"data": {"type": "object", "required": ["tool", "outcome", "durationMs"], "properties": {"tool": {"type": "string"}, "outcome": {"enum": ["started", "ok", "error", "denied", "rejected", "rate_limited", "unknown"]}, "durationMs": {"type": "integer"}, "args": {}, "error": {"type": "string"}}}}}},
+    {"if": {"properties": {"type": {"const": "message.published"}}}, "then": {"properties": {"data": {"type": "object", "required": ["channel", "type", "source", "consumers"]}}}}
+  ],
+  "$defs": {
+    "EventType": {
+      "enum": [
+        "graph.created", "graph.updated", "graph.deleted", "graph.started", "graph.stopping", "graph.stopped", "graph.paused",
+        "graph.resumed", "graph.failed", "node.scaled", "replica.state_changed", "execution.started",
+        "execution.completed", "execution.failed", "message.published", "message.delivered", "message.acked",
+        "message.nacked", "message.dead_lettered", "message.dropped", "message.held", "message.injected",
+        "tool.invoked", "tool.completed", "tool.denied", "workspace.observed", "approval.requested", "approval.decided",
+        "operator.message", "agent.output", "agent.broadcast", "log"
+      ]
+    },
+    "ReplicaStatus": {
+      "type": "object",
+      "required": ["graphId", "nodeId", "replica", "state", "iteration", "runIteration", "updatedAt"],
+      "properties": {
+        "graphId": {"type": "string"}, "nodeId": {"type": "string"}, "replica": {"type": "integer"},
+        "state": {"enum": ["stopped", "starting", "idle", "running", "awaiting_approval", "paused", "stopping", "completed", "failed"]},
+        "iteration": {"type": "integer"}, "runIteration": {"type": "integer"},
+        "executionId": {"type": "string"}, "instance": {"type": "string"}, "detail": {"type": "string"},
+        "workdir": {"type": "string"}, "branch": {"type": "string"},
+        "deadline": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

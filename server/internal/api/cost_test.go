@@ -1,0 +1,232 @@
+package api_test
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/storage"
+	"github.com/woliveiras/weft/server/internal/taskconfig"
+	"github.com/woliveiras/weft/server/internal/taskrun"
+)
+
+func TestPriceCatalogueThroughAPI(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	var cat struct {
+		Version  int    `json:"version"`
+		Currency string `json:"currency"`
+		Unpriced string `json:"unpriced"`
+		Prices   []struct {
+			Type                string `json:"type"`
+			Model               string `json:"model"`
+			OutputMicrosPerMTok int64  `json:"outputMicrosPerMTok"`
+		} `json:"prices"`
+	}
+	if c := call(t, srv, "GET", "/api/v1/cost/prices", viewerTok, "", "", &cat); c != 200 || cat.Version != 0 || cat.Currency != "USD" {
+		t.Fatalf("default: %d %+v", c, cat)
+	}
+	body := `{"currency":"USD","unpriced":"allow","prices":[{"type":"openai","model":"*","inputMicrosPerMTok":2500000,"outputMicrosPerMTok":10000000}]}`
+	for _, tok := range []string{viewerTok, operatorTok} {
+		if c := call(t, srv, "PUT", "/api/v1/cost/prices", tok, "application/json", body, nil); c != 403 {
+			t.Fatalf("non-admin put: %d", c)
+		}
+	}
+	var bad apiError
+	if c := call(t, srv, "PUT", "/api/v1/cost/prices", adminTok, "application/json", `{"currency":"US","prices":[]}`, &bad); c != 422 || len(bad.Details.Errors) != 1 || bad.Details.Errors[0].Path != "currency" {
+		t.Fatalf("invalid: %d %+v", c, bad)
+	}
+	if c := call(t, srv, "PUT", "/api/v1/cost/prices", adminTok, "application/json", `{"currency":"USD","extra":1}`, nil); c != 400 {
+		t.Fatalf("unknown field: %d", c)
+	}
+	code, hdr, out := rawCall(t, "PUT", srv.URL+"/api/v1/cost/prices", adminTok, body, nil)
+	if code != 200 || !strings.Contains(out, `"version":1`) || hdr.Get("ETag") == "" {
+		t.Fatalf("put: %d %s", code, out)
+	}
+	if c, _, _ := rawCall(t, "PUT", srv.URL+"/api/v1/cost/prices", adminTok, body, map[string]string{"If-Match": `"999"`}); c != 409 {
+		t.Fatalf("stale: %d", c)
+	}
+	if c, _, _ := rawCall(t, "PUT", srv.URL+"/api/v1/cost/prices", adminTok, body, map[string]string{"If-Match": hdr.Get("ETag")}); c != 200 {
+		t.Fatalf("matching revision: %d", c)
+	}
+	if c := call(t, srv, "GET", "/api/v1/cost/prices", viewerTok, "", "", &cat); c != 200 || cat.Version != 2 || len(cat.Prices) != 1 || cat.Prices[0].OutputMicrosPerMTok != 10_000_000 {
+		t.Fatalf("after put: %+v", cat)
+	}
+	evs, _ := a.Store.ListEvents(t.Context(), storage.EventFilter{Types: []domain.EventType{domain.EvPricesChanged}})
+	if len(evs) != 2 || evs[0].Actor != "admin" {
+		t.Fatalf("audit = %+v", evs)
+	}
+}
+
+// A task run that reaches its monetary budget is paused before the model is
+// called; only a person can raise the budget, which resumes the run.
+func TestTaskRunBudgetPausesAndAHumanRaiseResumes(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	nativeGraph := `{"metadata":{"id":"priced-fixture","name":"Priced fixture"},"spec":{"nodes":[{"id":"reader","prompt":"Summarise the request in one line.","runtime":{"kind":"native"},"model":{"provider":"mock"},"loop":{"mode":"once"},"tools":[]}]}}`
+	if c, _, b := rawCall(t, "POST", srv.URL+"/api/v1/graphs", adminTok, nativeGraph, nil); c != 201 {
+		t.Fatal(c, b)
+	}
+	prices := `{"currency":"USD","prices":[{"type":"mock","model":"*","inputMicrosPerMTok":1000000,"outputMicrosPerMTok":1000000}]}`
+	if c := call(t, srv, "PUT", "/api/v1/cost/prices", adminTok, "application/json", prices, nil); c != 200 {
+		t.Fatalf("prices: %d", c)
+	}
+	if c := call(t, srv, "PUT", "/api/v1/cost/policy", operatorTok, "application/json", `{"taskRunBudgetMicros":1}`, nil); c != 403 {
+		t.Fatalf("operator policy: %d", c)
+	}
+	if c := call(t, srv, "PUT", "/api/v1/cost/policy", adminTok, "application/json", `{"taskRunBudgetMicros":-1}`, nil); c != 422 {
+		t.Fatalf("invalid policy: %d", c)
+	}
+	if c := call(t, srv, "PUT", "/api/v1/cost/policy", adminTok, "application/json", `{"taskRunBudgetMicros":1}`, nil); c != 200 {
+		t.Fatalf("policy: %d", c)
+	}
+	body := `{"title":"Read code","request":"Explain architecture","outcome":"understand","graphId":"priced-fixture","graphVersion":1,"nodeId":"reader","resultNodeId":"reader"}`
+	var d taskconfig.Draft
+	if c := call(t, srv, "POST", "/api/v1/tasks", operatorTok, "application/json", body, &d); c != 201 {
+		t.Fatal(c)
+	}
+	if c := taskStart(t, srv.URL, d.ID, adminTok, d.Revision); c != 202 {
+		t.Fatal(c)
+	}
+	gid := taskrun.ExecutionID(d.ID)
+	type view struct {
+		LimitMicros, ChargedMicros, ReservedMicros int64
+		Reached, Paused                            bool
+		RaisedBy                                   string
+	}
+	var v view
+	waitFor(t, 10*time.Second, "budget reached and run paused", func() bool {
+		return call(t, srv, "GET", "/api/v1/cost/budgets/run/"+gid, viewerTok, "", "", &v) == 200 && v.Reached && v.Paused
+	})
+	if v.LimitMicros != 1 || v.ChargedMicros != 0 || v.ReservedMicros != 0 {
+		t.Fatalf("refused call must cost nothing: %+v", v)
+	}
+	if _, rec, err := a.Engine.GetGraph(t.Context(), gid, 0); err != nil || rec.DesiredState != domain.GraphPaused {
+		t.Fatalf("run must be paused: %+v %v", rec, err)
+	}
+	if evs, _ := a.Store.ListEvents(t.Context(), storage.EventFilter{GraphID: gid, Types: []domain.EventType{domain.EvBudgetReached}}); len(evs) != 1 {
+		t.Fatalf("budget.reached = %d", len(evs))
+	}
+	// The model was never called for this run.
+	if evs, _ := a.Store.ListEvents(t.Context(), storage.EventFilter{GraphID: gid, Types: []domain.EventType{domain.EvCostRecorded}}); len(evs) != 0 {
+		t.Fatalf("a refused call reached the provider: %+v", evs)
+	}
+
+	if c := call(t, srv, "POST", "/api/v1/cost/budgets/run/"+gid+"/raise", operatorTok, "application/json", `{"limitMicros":10000000}`, nil); c != 403 {
+		t.Fatalf("operator raise: %d", c)
+	}
+	if c := call(t, srv, "POST", "/api/v1/cost/budgets/run/"+gid+"/raise", adminTok, "application/json", `{"limitMicros":1}`, nil); c != 422 {
+		t.Fatalf("raise must increase the limit: %d", c)
+	}
+	if c := call(t, srv, "POST", "/api/v1/cost/budgets/run/nope/raise", adminTok, "application/json", `{"limitMicros":5}`, nil); c != 404 {
+		t.Fatalf("missing budget: %d", c)
+	}
+	if c := call(t, srv, "POST", "/api/v1/cost/budgets/run/"+gid+"/raise", adminTok, "application/json", `{"limitMicros":10000000}`, &v); c != 200 || v.Reached || v.Paused || v.LimitMicros != 10_000_000 || v.RaisedBy != "admin" {
+		t.Fatalf("raise: %d %+v", c, v)
+	}
+	if _, rec, err := a.Engine.GetGraph(t.Context(), gid, 0); err != nil || rec.DesiredState != domain.GraphRunning {
+		t.Fatalf("raise must resume the run: %+v %v", rec, err)
+	}
+	if evs, _ := a.Store.ListEvents(t.Context(), storage.EventFilter{GraphID: gid, Types: []domain.EventType{domain.EvBudgetRaised}}); len(evs) != 1 || evs[0].Actor != "admin" {
+		t.Fatalf("budget.raised audit: %+v", evs)
+	}
+}
+
+// Monthly budgets: reaching the installation budget pauses the run, refuses
+// new task starts, and a raise of that month's ledger resumes the run.
+func TestMonthlyBudgetPausesRunsAndRefusesNewTasks(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	nativeGraph := `{"metadata":{"id":"priced-fixture","name":"Priced fixture"},"spec":{"nodes":[{"id":"reader","prompt":"Summarise the request in one line.","runtime":{"kind":"native"},"model":{"provider":"mock"},"loop":{"mode":"once"},"tools":[]}]}}`
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", nativeGraph, nil); c != 201 {
+		t.Fatal(c)
+	}
+	if c := call(t, srv, "PUT", "/api/v1/cost/prices", adminTok, "application/json", `{"currency":"USD","prices":[{"type":"mock","model":"*","inputMicrosPerMTok":1000000,"outputMicrosPerMTok":1000000}]}`, nil); c != 200 {
+		t.Fatal(c)
+	}
+	if c := call(t, srv, "PUT", "/api/v1/cost/budgets", operatorTok, "application/json", `{"budgets":[]}`, nil); c != 403 {
+		t.Fatalf("operator budgets: %d", c)
+	}
+	var bad apiError
+	if c := call(t, srv, "PUT", "/api/v1/cost/budgets", adminTok, "application/json", `{"budgets":[{"scope":"team","id":"x","limitMicros":1}]}`, &bad); c != 422 || bad.Details.Errors[0].Path != "budgets[0].scope" {
+		t.Fatalf("invalid budgets: %d %+v", c, bad)
+	}
+	if c := call(t, srv, "PUT", "/api/v1/cost/budgets", adminTok, "application/json", `{"budgets":[{"scope":"installation","limitMicros":1}]}`, nil); c != 200 {
+		t.Fatalf("budgets: %d", c)
+	}
+	var defs struct {
+		Budgets []struct{ Scope, ID string } `json:"budgets"`
+		Period  string                       `json:"period"`
+	}
+	if c := call(t, srv, "GET", "/api/v1/cost/budgets", viewerTok, "", "", &defs); c != 200 || len(defs.Budgets) != 1 || defs.Budgets[0].ID != "*" || defs.Period == "" {
+		t.Fatalf("definitions: %d %+v", c, defs)
+	}
+	body := `{"title":"Read code","request":"Explain architecture","outcome":"understand","graphId":"priced-fixture","graphVersion":1,"nodeId":"reader","resultNodeId":"reader"}`
+	start := func() (taskconfig.Draft, int) {
+		var d taskconfig.Draft
+		if c := call(t, srv, "POST", "/api/v1/tasks", operatorTok, "application/json", body, &d); c != 201 {
+			t.Fatal(c)
+		}
+		return d, taskStart(t, srv.URL, d.ID, adminTok, d.Revision)
+	}
+	d, c := start()
+	if c != 202 {
+		t.Fatal(c)
+	}
+	gid := taskrun.ExecutionID(d.ID)
+	ledger := "/api/v1/cost/budgets/installation/" + "*@" + defs.Period
+	var v struct {
+		Reached, Paused bool
+		LimitMicros     int64
+	}
+	waitFor(t, 10*time.Second, "installation budget reached", func() bool {
+		return call(t, srv, "GET", ledger, viewerTok, "", "", &v) == 200 && v.Reached && v.Paused
+	})
+	if _, rec, err := a.Engine.GetGraph(t.Context(), gid, 0); err != nil || rec.DesiredState != domain.GraphPaused {
+		t.Fatalf("run must be paused: %+v %v", rec, err)
+	}
+	if _, c := start(); c != 409 {
+		t.Fatalf("a reached monthly budget must refuse new task starts: %d", c)
+	}
+	if c := call(t, srv, "POST", ledger+"/raise", adminTok, "application/json", `{"limitMicros":100000000}`, &v); c != 200 || v.Reached || v.Paused {
+		t.Fatalf("raise: %d %+v", c, v)
+	}
+	if _, rec, err := a.Engine.GetGraph(t.Context(), gid, 0); err != nil || rec.DesiredState != domain.GraphRunning {
+		t.Fatalf("raise must resume the run: %+v %v", rec, err)
+	}
+	if _, c := start(); c != 202 {
+		t.Fatalf("new tasks start after the raise: %d", c)
+	}
+}
+
+func TestCostReportingEndpoints(t *testing.T) {
+	srv, _ := setupApp(t, nil)
+	var rep struct {
+		Period string              `json:"period"`
+		Total  struct{ Calls int } `json:"total"`
+	}
+	if c := call(t, srv, "GET", "/api/v1/cost/spend", viewerTok, "", "", &rep); c != 200 || len(rep.Period) != 7 {
+		t.Fatalf("spend: %d %+v", c, rep)
+	}
+	if c := call(t, srv, "GET", "/api/v1/cost/spend?period=bad", viewerTok, "", "", nil); c != 422 {
+		t.Fatalf("bad period: %d", c)
+	}
+	var ledgers []any
+	if c := call(t, srv, "GET", "/api/v1/cost/ledgers", viewerTok, "", "", &ledgers); c != 200 || len(ledgers) != 0 {
+		t.Fatalf("ledgers: %d %+v", c, ledgers)
+	}
+	if c := call(t, srv, "PUT", "/api/v1/cost/budgets", adminTok, "application/json", `{"budgets":[{"scope":"user","id":"operator","limitMicros":700}]}`, nil); c != 200 {
+		t.Fatal(c)
+	}
+	var preview struct {
+		Budgets []struct {
+			Scope           string
+			RemainingMicros int64
+		}
+	}
+	// The preview is for the caller: the operator's own budget applies.
+	if c := call(t, srv, "GET", "/api/v1/cost/budgets/preview?workflow=factory", operatorTok, "", "", &preview); c != 200 || len(preview.Budgets) != 1 || preview.Budgets[0].RemainingMicros != 700 {
+		t.Fatalf("preview: %d %+v", c, preview)
+	}
+	if c := call(t, srv, "GET", "/api/v1/cost/budgets/preview", viewerTok, "", "", &preview); c != 200 || len(preview.Budgets) != 0 {
+		t.Fatalf("viewer preview: %d %+v", c, preview)
+	}
+}
