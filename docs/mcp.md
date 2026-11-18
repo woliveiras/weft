@@ -577,7 +577,7 @@ tool request is sent. Storage failure/corruption fails closed. The existing
 15-second operation deadline and response bounds remain unchanged. Concurrent
 in-flight limits and provider-specific daily/billing quotas are not implemented.
 
-**Connections → View history across connections** queries persisted tool and approval events,
+**Connections → MCP connections → View connection history** queries persisted tool and approval events,
 newest first, filtered by connection ID, graph, agent, exact qualified tool,
 event type, outcome and time range. Apply filters explicitly; older-page requests
 use the last applied filters. Results are safe summaries and correlation IDs,

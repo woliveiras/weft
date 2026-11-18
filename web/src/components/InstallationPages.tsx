@@ -25,8 +25,9 @@ const titles: Record<AdministrationSection, string> = {
 export function ConnectionsPage({ info, connectionID, connectionTab = 'overview', create, history, connectQuery, oauthQuery }: { info?: Info; connectionID?: string; connectionTab?: ConnectionTab; create?: boolean; history?: boolean; connectQuery?: string; oauthQuery?: string }) {
   // Legacy integration and OAuth/template links retain their reviewed setup flow.
   const legacy = location.hash.startsWith('#/integrations') || oauthQuery !== undefined;
-  return <div className="page installation-page"><header className="page-head" hidden={connectionID !== undefined}><div><h1>Connections</h1>
-    <p className="muted">Manage installation MCP connections. Agent tool permissions are granted separately.</p></div></header>
+  const overview = !history && !legacy && !create && connectQuery === undefined && connectionID === undefined;
+  return <div className={`page installation-page${overview ? ' connections-overview' : ''}`}><header className="page-head" hidden={connectionID !== undefined}><div><h1>Connections</h1>
+    {overview && <p className="muted">Manage agent tool integrations and source control connections for this installation.</p>}</div></header>
     {history ? <><a href="#/connections">Back to connections</a><MCPHistory /></> : legacy || create || connectQuery !== undefined || connectionID !== undefined
       ? <MCPSection key={connectionID ?? connectQuery ?? (create ? 'new' : 'manual')} role={info?.identity?.role} connectQuery={connectQuery} oauthQuery={oauthQuery} presentation={legacy ? undefined : create || connectQuery !== undefined ? 'create' : 'detail'} connectionID={connectionID} tab={connectionTab} />
       : <><ConnectionsList role={info?.identity?.role} /><SCMConnectionsSection role={info?.identity?.role} /></>}

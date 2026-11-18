@@ -12,8 +12,15 @@ it('lists and filters connections without loading setup or mutating permissions'
  render(<ConnectionsList role="admin"/>);
  expect((await screen.findByRole('link',{name:'Team'})).getAttribute('href')).toBe('#/connections/c/team/overview');
  expect(screen.getByRole('link',{name:'Add connection'})).toBeTruthy();
+ expect(screen.getByRole('link',{name:'View connection history'}).getAttribute('href')).toBe('#/connections/history');
+ expect(screen.getByRole('status').textContent).toBe('1 of 1 connections');
  await userEvent.type(screen.getByLabelText('Search connections'),'missing');
+ await userEvent.selectOptions(screen.getByLabelText('Connection status'), 'disabled');
  expect(screen.getByText('No connections match these filters.')).toBeTruthy();
+ expect(screen.getByRole('status').textContent).toBe('0 of 1 connections');
+ await userEvent.click(screen.getByRole('button',{name:'Clear filters'}));
+ expect(screen.getByLabelText('Search connections')).toBe(document.activeElement);
+ expect(screen.getByRole('link',{name:'Team'})).toBeTruthy();
  expect(backend.calls.map(c=>c.method)).toEqual(['GET']);
 });
 it('distinguishes list failures from empty results and retries for viewers',async()=>{

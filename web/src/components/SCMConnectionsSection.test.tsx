@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiError, fakeApi } from '../test/fakeApi';
@@ -26,8 +26,8 @@ describe('SCMConnectionsSection', () => {
     vi.stubGlobal('confirm', () => true);
     const user = userEvent.setup();
     render(<SCMConnectionsSection role="admin" />);
-    const card = await screen.findByRole('listitem', { name: 'Source control gh' });
-    expect(card.textContent).toContain('pull requests need approval');
+    const card = await screen.findByRole('row', { name: /gh/ });
+    expect(within(card).getByRole('cell', { name: 'Required' })).toBeTruthy();
     await user.click(within(card).getByRole('button', { name: 'Test connection' }));
     expect((await within(card).findByRole('status')).textContent).toBe('Works as bot; default branch main; can push.');
     await user.click(screen.getByRole('button', { name: 'Add source control connection' }));
@@ -39,9 +39,9 @@ describe('SCMConnectionsSection', () => {
     await user.click(within(form).getByRole('button', { name: 'Save connection' }));
     await waitFor(() => expect(api.find('POST', '/api/v1/scm/connections')).toHaveLength(1));
     expect(api.find('POST', '/api/v1/scm/connections')[0].body).toEqual({ name: 'team', kind: 'github', repository: 'acme/other', requirePullRequestApproval: false, token: 'secret-token' });
-    expect(await screen.findByRole('listitem', { name: 'Source control team' })).toBeTruthy();
+    expect(await screen.findByRole('row', { name: /team/ })).toBeTruthy();
     expect(document.body.textContent).not.toContain('secret-token');
-    await user.click(within(screen.getByRole('listitem', { name: 'Source control gh' })).getByRole('button', { name: 'Remove' }));
+    await user.click(within(screen.getByRole('row', { name: /gh/ })).getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(api.find('DELETE', '/api/v1/scm/connections/gh')).toHaveLength(1));
   });
 
@@ -57,8 +57,30 @@ describe('SCMConnectionsSection', () => {
     expect(await screen.findByText(/use owner\/name/)).toBeTruthy();
     view.unmount();
     render(<SCMConnectionsSection role="viewer" />);
-    const card = await screen.findByRole('listitem', { name: 'Source control gh' });
+    const card = await screen.findByRole('row', { name: /gh/ });
     expect(within(card).queryByRole('button')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add source control connection' })).toBeNull();
+  });
+
+  it('separates registry errors from empty results and shows a pending connection test', async () => {
+    let listUnavailable = true;
+    let finishTest!: (response: Response) => void;
+    const backend = fakeApi({
+      'GET /api/v1/scm/connections': () => listUnavailable ? apiError(503, 'Registry unavailable', 'unavailable') : [gh],
+      'POST /api/v1/scm/connections/gh/test': () => new Promise<Response>(resolve => { finishTest = resolve; }),
+    });
+    render(<SCMConnectionsSection role="operator" />);
+    expect((await screen.findByRole('alert')).textContent).toContain('Registry unavailable');
+    expect(screen.queryByText('No source control connection yet.')).toBeNull();
+    listUnavailable = false;
+    await userEvent.click(screen.getByRole('button', { name: 'Reload source control connections' }));
+    const testButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Test connection' });
+    await userEvent.click(testButton);
+    expect(await screen.findByText('Testing connection…')).toBeTruthy();
+    expect(testButton.disabled).toBe(true);
+    await act(async () => finishTest(apiError(503, 'Service unavailable', 'unavailable')));
+    expect(await screen.findByText('Test could not run: Service unavailable')).toBeTruthy();
+    expect(testButton.disabled).toBe(false);
+    expect(backend.find('POST', '/api/v1/scm/connections/gh/test')).toHaveLength(1);
   });
 });

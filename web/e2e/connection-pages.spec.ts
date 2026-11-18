@@ -34,6 +34,16 @@ test('creates a connection and navigates scoped tools, history and settings', as
  await page.getByLabel('Search connections').fill('Pages fixture');
  await page.getByLabel('Connection status').selectOption('disabled');
  await expect(page.getByRole('link',{name:'Pages fixture',exact:true})).toBeVisible();
+ await page.getByLabel('Search connections').fill('Missing connection');
+ await expect(page.getByText('No connections match these filters.')).toBeVisible();
+ await page.getByRole('button',{name:'Clear filters',exact:true}).click();
+ await expect(page.getByRole('link',{name:'Pages fixture',exact:true})).toBeVisible();
+ await expect(page.getByLabel('Search connections')).toBeFocused();
+ await page.setViewportSize({width:390,height:844});
+ await expect(page.getByRole('region',{name:'MCP connection list'})).toBeVisible();
+ expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+ await page.getByRole('link',{name:'View connection history',exact:true}).click();
+ await expect(page).toHaveURL(/connections\/history$/);
  const saved=await page.request.get('/api/v1/mcp/connections/pages',{headers});
  expect(await saved.text()).not.toContain('fixture-mcp-token');
 });

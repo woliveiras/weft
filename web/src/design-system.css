@@ -153,6 +153,53 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 .tasks-table td > time { white-space: nowrap; }
 .tasks-table td:first-child { min-inline-size: 15rem; }
 .tasks-pagination { margin-block-start: var(--space-4); }
+
+.connections-overview { max-inline-size: none; }
+.connections-overview .connections-panel + .connections-panel { margin-block-start: var(--space-section); }
+.connections-panel {
+  display: grid;
+  gap: var(--space-4);
+  min-inline-size: 0;
+}
+.connections-panel > .connections-panel-head, .connections-toolbar {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+.connections-panel > .connections-panel-head { align-items: center; }
+.connections-panel-head h2 { margin: 0; }
+.connections-panel-head p { margin: var(--space-1) 0 0; }
+.connections-panel-head .btn { text-decoration: none; }
+.connections-toolbar { align-items: end; }
+.connections-toolbar .btn-row { align-items: center; }
+.connections-panel .connection-filters { margin: 0; gap: var(--space-3); }
+.connections-panel .connection-filters label { min-inline-size: min(11rem, 100%); }
+.connections-panel .connection-filters :is(input, select) { min-inline-size: 0; max-inline-size: 100%; }
+.connections-panel .connections-count { margin: 0; }
+.connections-count:empty { display: none; }
+.connections-table { position: relative; min-inline-size: 0; }
+.connections-table:focus-visible { outline-offset: 2px; }
+.connections-table td { vertical-align: top; overflow-wrap: anywhere; }
+.connections-table td:first-child { inline-size: 24%; min-inline-size: 10rem; }
+.connections-table :is(time, .btn) { white-space: nowrap; }
+.connection-meta { display: block; margin-block-start: var(--space-1); }
+.connection-test-result { margin: var(--space-2) 0 0; }
+.connections-load-error .btn { margin-block-start: var(--space-2); }
+.connections-panel .connections-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  max-width: none;
+  border-block: 1px solid var(--border);
+  padding-block: var(--space-4);
+}
+.connections-form > :is(h3, .error-box, .checkbox, .btn-row, .connection-token) { grid-column: 1 / -1; }
+.connections-form > h3 { margin: 0; }
+@media (max-width: 720px) {
+  .connections-panel .connections-form { grid-template-columns: minmax(0, 1fr); }
+}
+
 .task-activity .page-head, .task-activity .page-head .btn-row { align-items: center; }
 .task-activity-controls {
   display: flex;

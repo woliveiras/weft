@@ -8,12 +8,18 @@ test('administrators add a source control connection and tasks choose it as thei
   await page.reload();
   await page.getByRole('button', { name: 'Add source control connection', exact: true }).click();
   const form = page.getByRole('form', { name: 'Add source control connection' });
-  await form.getByLabel('Name').fill('e2e-github');
-  await form.getByLabel('Repository').fill('acme/app');
-  await form.getByLabel('Token').fill('synthetic-scm-token');
+  await form.getByLabel('Name', { exact: true }).fill('e2e-github');
+  await form.getByLabel('Repository', { exact: true }).fill('acme/app');
+  await form.getByLabel('Token', { exact: true }).fill('synthetic-scm-token');
   await form.getByRole('button', { name: 'Save connection', exact: true }).click();
-  const card = page.getByRole('listitem', { name: 'Source control e2e-github' });
-  await expect(card).toContainText('acme/app · branches weft/* · pull requests need approval');
+  const card = page.getByRole('row', { name: /e2e-github/ });
+  await expect(card).toContainText('acme/app');
+  await expect(card).toContainText('weft/*');
+  await expect(card.getByRole('cell', { name: 'Required', exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('region', { name: 'Source control connection list' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.setViewportSize({ width: 1280, height: 720 });
   // The token never comes back to the browser.
   const listed = await (await page.request.get('/api/v1/scm/connections', { headers: admin })).text();
   expect(listed).not.toContain('synthetic-scm-token');
@@ -33,6 +39,6 @@ test('administrators add a source control connection and tasks choose it as thei
   // Clean up for later journeys.
   page.on('dialog', (d) => void d.accept());
   await page.goto('/#/connections');
-  await page.getByRole('listitem', { name: 'Source control e2e-github' }).getByRole('button', { name: 'Remove' }).click();
-  await expect(page.getByRole('listitem', { name: 'Source control e2e-github' })).toHaveCount(0);
+  await page.getByRole('row', { name: /e2e-github/ }).getByRole('button', { name: 'Remove' }).click();
+  await expect(page.getByRole('row', { name: /e2e-github/ })).toHaveCount(0);
 });
