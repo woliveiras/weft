@@ -452,8 +452,8 @@ export function NodeSettings({
   toolsOnly?: boolean;
 }) {
   const node = summary.graph.spec.nodes.find((n) => n.id === nodeId)!;
-  const defaults = summary.graph.spec.defaults ?? {};
-  const usesGraphDefaults = node.tools === undefined;
+  const defaults: NonNullable<GraphSummary['graph']['spec']['defaults']> = node.agent ? { loop: summary.graph.spec.defaults?.loop } : summary.graph.spec.defaults ?? {};
+  const usesGraphDefaults = !node.agent && node.tools === undefined;
   const tools = usesGraphDefaults ? (defaults.tools ?? []) : (node.tools ?? []);
   const toolCatalog = useAsync(() => api.tools(), []);
   const [toolSearch, setToolSearch] = useState('');
@@ -519,7 +519,7 @@ export function NodeSettings({
           {!toolCatalog.loading && toolCatalog.data?.length === 0 && (
             <p className="muted small">No tools are available in this installation.</p>
           )}
-          <div className="tool-options" role="group" aria-label="Available tools">
+          <div className="tool-options" role="group" aria-label="Available tools" tabIndex={0}>
             {visibleTools.map((tool) => {
               const grant = tools.find((item) => grantName(item) === tool.name);
               return (
@@ -732,15 +732,19 @@ export function AgentEditor({
   onUpdateNode,
   issues,
   section,
+  definitionOnly = false,
+  sharedReadOnly = false,
 }: {
   summary: GraphSummary;
   nodeId: string;
   onUpdateNode: (nodeId: string, update: Partial<GraphNode>) => void;
   issues?: ElementIssue[];
   section?: 'general' | 'tools' | 'advanced';
+  definitionOnly?: boolean;
+  sharedReadOnly?: boolean;
 }) {
   const node = summary.graph.spec.nodes.find((n) => n.id === nodeId)!;
-  const defaults = summary.graph.spec.defaults ?? {};
+  const defaults: NonNullable<GraphSummary['graph']['spec']['defaults']> = node.agent ? { loop: summary.graph.spec.defaults?.loop } : summary.graph.spec.defaults ?? {};
   const update = (patch: Partial<GraphNode>) => onUpdateNode(nodeId, patch);
   const runtime = { ...defaults.runtime, ...node.runtime };
   const loop = node.loop ?? defaults.loop ?? {};
@@ -762,8 +766,9 @@ export function AgentEditor({
 
   return (
     <section className="form node-editor" aria-label="Agent configuration">
-      <h3>Agent configuration</h3>
+      {!definitionOnly && <h3>Agent configuration</h3>}
       <div hidden={!!section && section !== 'general'}>
+      {!definitionOnly && <>
       <label>
         ID
         <input value={node.id} readOnly aria-describedby={`${nodeId}-id-hint`} />
@@ -772,6 +777,7 @@ export function AgentEditor({
         Channels refer to agents by ID, so it is fixed once created.
       </span>
       <FieldIssues issues={issues} field="id" />
+      </>}
       <label>
         Name
         <input value={node.name ?? ''} onChange={(event) => update({ name: event.target.value || undefined })} />
@@ -780,7 +786,7 @@ export function AgentEditor({
       <label>
         Description
         <textarea
-          rows={2}
+          rows={definitionOnly ? 4 : 2}
           value={node.description ?? ''}
           onChange={(event) => update({ description: event.target.value || undefined })}
         />
@@ -788,7 +794,7 @@ export function AgentEditor({
 
       </div>
       <fieldset hidden={!!section && section !== 'general'}>
-        <legend>Runtime</legend>
+        <legend className="sr-only">Runtime and model</legend>
         <label>
           Runtime
           <select
@@ -958,7 +964,7 @@ export function AgentEditor({
         </label>
       </fieldset>
 
-      <fieldset hidden={!!section && section !== 'tools'}>
+      <fieldset hidden={!!section && section !== 'tools'} disabled={sharedReadOnly}>
         <legend>Command sandbox</legend>
         <label>
           Isolation
@@ -1067,7 +1073,7 @@ export function AgentEditor({
         <FieldIssues issues={issues} field="limits.maxTokens" />
       </fieldset>
 
-      <fieldset hidden={!!section && section !== 'tools'}>
+      <fieldset hidden={definitionOnly || (!!section && section !== 'tools')}>
         <legend>Permissions</legend>
         <p className="muted tiny">Tool grants are chosen below; these gates hold the agent for a human decision.</p>
         <label className="check">

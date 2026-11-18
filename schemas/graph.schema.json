@@ -219,12 +219,23 @@
       "anyOf": [{"required": ["id"]}, {"required": ["name"]}],
       "properties": {
         "repositoryGuidance": {"$ref":"#/$defs/RepositoryGuidance", "description":"Inherits the graph and can only disable or add source blocks."},
+        "agent": {
+          "type": "object",
+          "required": ["id", "version"],
+          "additionalProperties": false,
+          "properties": {
+            "id": {"type":"string","pattern":"^[a-z0-9][a-z0-9-]{0,63}$"},
+            "version": {"type":"integer","minimum":1},
+            "parameters": {"type":"object","additionalProperties":{"type":"string"}}
+          }
+        },
         "skillIds": {"type":["array","null"], "uniqueItems":true, "items":{"$ref":"#/$defs/DNSLabel"}, "description":"Null/absent inherits graph skillIds; [] selects none; otherwise a subset of graph skillIds."},
         "id": {"$ref": "#/$defs/DNSLabel"},
         "name": {"type": "string"},
         "description": {"type": "string"},
         "runtime": {"$ref": "#/$defs/Runtime"},
         "model": {"$ref": "#/$defs/Model"},
+        "localInstructions": {"type":"string", "description":"Instructions appended for this node in this workflow."},
         "prompt": {"type": "string", "description": "Required for native nodes. @param tokens are substituted; @input/@output/@workspace/@project/@loop are defined by the platform preamble."},
         "tools": {"type": "array", "items": {"$ref": "#/$defs/ToolGrant"}, "description": "Default deny: no grants = no tools (except emit/state/finish for native agents)."},
         "loop": {"$ref": "#/$defs/Loop"},

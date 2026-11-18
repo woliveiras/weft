@@ -929,11 +929,12 @@ section {
 }
 .tool-options {
   display: grid;
-  gap: 6px;
-  max-height: 280px;
+  max-block-size: min(17.5rem, 42vh);
   overflow: auto;
-  padding-right: 3px;
+  padding: var(--space-1);
 }
+.tool-options:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.tool-options code { overflow-wrap: anywhere; }
 .tool-option {
   display: flex;
   flex-direction: row !important;
@@ -949,6 +950,8 @@ section {
   border-color: color-mix(in srgb, var(--primary) 38%, var(--border));
   background: color-mix(in srgb, var(--primary-soft) 48%, var(--surface-raised));
 }
+.tool-options .tool-option { border: 0; border-radius: 0; }
+.tool-options > :not(:last-child) { border-block-end: 1px solid var(--border); }
 .tool-option > input[type='checkbox'] {
   flex: none;
   margin: 2px 0 0;

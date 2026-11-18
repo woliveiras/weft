@@ -166,6 +166,11 @@ func (s *Server) routes() {
 		{"GET /healthz", "", s.healthz},
 		{"GET /readyz", "", s.readyz},
 		{"GET /api/v1/info", R, s.info},
+		{"GET /api/v1/agents", R, s.agentCatalog},
+		{"POST /api/v1/agents", A, s.agentCatalog},
+		{"GET /api/v1/agents/source", R, s.agentSource},
+		{"GET /api/v1/agents/{agent}", R, s.agentCatalog},
+		{"PUT /api/v1/agents/{agent}", A, s.agentCatalog},
 		{"GET /api/v1/graphs", R, s.listGraphs},
 		{"POST /api/v1/graphs", A, s.createGraph},
 		{"POST /api/v1/graphs/validate", R, s.validateGraph},
@@ -616,6 +621,15 @@ func (s *Server) createGraph(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) validateGraph(w http.ResponseWriter, r *http.Request) error {
 	g, unknown, err := decodeGraph(r)
 	if err != nil {
+		return err
+	}
+	if err := s.Engine.ResolveAgentBindings(r.Context(), g); err != nil {
+		var invalid *engine.ValidationError
+		if errors.As(err, &invalid) {
+			invalid.Report.Errors = append(unknown, invalid.Report.Errors...)
+			writeJSON(w, 200, invalid.Report)
+			return nil
+		}
 		return err
 	}
 	rep := s.Engine.Validate(g)

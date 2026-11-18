@@ -26,6 +26,8 @@ export function ModelFields({
   const def = list.find((p) => p.default);
   const effectiveName = selected || inherited?.provider || def?.name || '';
   const effective = list.find((p) => p.name === effectiveName);
+  const defaultModel = inherited?.name || effective?.defaultModel;
+  const showingDefault = !model?.name && !!defaultModel;
   const [models, setModels] = useState<{ provider: string; ids: string[]; error?: string }>();
 
   useEffect(() => {
@@ -87,19 +89,29 @@ export function ModelFields({
         )}
       </label>
       <label>
-        Model
+        <span id={`${listId}-label`}>Model</span>
         <input
+          className="agent-model-input"
           value={model?.name ?? ''}
           list={listId}
+          aria-labelledby={`${listId}-label`}
+          aria-describedby={[
+            showingDefault && `${listId}-default`,
+            modelHint && `${listId}-hint`,
+          ].filter(Boolean).join(' ') || undefined}
+          data-showing-default={showingDefault || undefined}
           onChange={(e) => update({ name: e.target.value || undefined })}
-          placeholder={inherited?.name || effective?.defaultModel || 'provider default'}
+          placeholder={defaultModel || 'provider default'}
         />
         <datalist id={listId}>
           {(models?.provider === effectiveName ? models.ids : []).map((id) => (
             <option key={id} value={id} />
           ))}
         </datalist>
-        {modelHint && <span className="field-hint">{modelHint}</span>}
+        {showingDefault && <span id={`${listId}-default`} className="field-hint agent-model-default">
+          Default model. <span className="agent-model-edit-hint">Type a model name to change it.</span>
+        </span>}
+        {modelHint && <span id={`${listId}-hint`} className="field-hint">{modelHint}</span>}
       </label>
     </>
   );

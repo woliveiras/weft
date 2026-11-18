@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -495,9 +496,9 @@ func (r *replica) buildInput(ctx context.Context, gr *graphRun, n *domain.Node, 
 		ExecutionID: x.ID, GraphID: gr.g.Metadata.ID, GraphName: gr.g.Metadata.Name,
 		NodeID: n.ID, NodeName: n.DisplayName(), Replica: r.index, Replicas: gr.replicaCount(n.ID),
 		Iteration: x.Iteration, Agent: n.Runtime.Agent,
-		Prompt: graph.Substitute(n.Prompt, gr.params), Inputs: inputs,
+		Prompt: workflowPrompt(gr, n), Inputs: inputs,
 		Model: n.Model, PendingStop: pendingStop, Workdir: workdir, Branch: branch,
-		Parameters: gr.params, Config: n.Config, MaxToolCalls: n.Limits.MaxToolCalls,
+		Parameters: promptParams(gr, n), Config: n.Config, MaxToolCalls: n.Limits.MaxToolCalls,
 	}
 	if in.Inputs == nil {
 		in.Inputs = []*domain.Message{}
@@ -1017,4 +1018,26 @@ func (e *Engine) reportExternalUsage(ctx context.Context, graph, node, execution
 	}
 	reporter.ReportExternal(context.WithoutCancel(ctx), llm.Call{Usage: u,
 		Metadata: map[string]string{"graph": graph, "node": node, "execution": execution}})
+}
+
+func promptParams(gr *graphRun, node *domain.Node) map[string]string {
+	if node.Agent != nil {
+		return graph.NodeParameters(node)
+	}
+	return gr.params
+}
+
+func workflowPrompt(gr *graphRun, node *domain.Node) string {
+	shared := graph.Substitute(node.Prompt, promptParams(gr, node))
+	if strings.TrimSpace(node.LocalInstructions) == "" {
+		return shared
+	}
+	parameters := make(map[string]string, len(gr.params)+len(graph.NodeParameters(node)))
+	maps.Copy(parameters, gr.params)
+	maps.Copy(parameters, graph.NodeParameters(node))
+	local := graph.Substitute(node.LocalInstructions, parameters)
+	if strings.TrimSpace(shared) == "" {
+		return local
+	}
+	return shared + "\n\nWorkflow instructions:\n" + local
 }

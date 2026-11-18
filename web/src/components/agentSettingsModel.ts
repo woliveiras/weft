@@ -8,9 +8,9 @@ export function agentSection(value?: string | null): AgentSection {
 }
 /** Mirror graph default resolution; an explicit isolation mode replaces the default block. */
 export function agentBoundaries(graph: Graph, node: GraphNode) {
-  const isolation = node.isolation?.mode ? node.isolation : graph.spec.defaults?.isolation;
+  const isolation = node.agent || node.isolation?.mode ? node.isolation : graph.spec.defaults?.isolation;
   return { isolation: isolation?.mode || 'process', network: graph.spec.environment?.network?.run ?? isolation?.network ?? 'none',
-    readOnly: !!node.workspace?.readOnly, tools: node.tools ?? graph.spec.defaults?.tools ?? [], loop: effectiveLoopMode(graph,node) };
+    readOnly: !!node.workspace?.readOnly, tools: node.tools ?? (node.agent ? [] : graph.spec.defaults?.tools ?? []), loop: effectiveLoopMode(graph,node) };
 }
 /** List every changed document path without copying potentially sensitive field values. */
 export function changedGraphFields(before: unknown, after: unknown, path = ''): string[] {

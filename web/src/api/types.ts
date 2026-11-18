@@ -177,6 +177,7 @@ export interface IsolationSpec {
 }
 
 export interface GraphNode {
+  agent?: import("./agents").AgentBinding;
   skillIds?: string[] | null;
   repositoryGuidance?: import("./instructions").RepositoryGuidancePolicy;
   id: string;
@@ -185,6 +186,7 @@ export interface GraphNode {
   runtime?: RuntimeRef;
   model?: ModelRef;
   prompt?: string;
+  localInstructions?: string;
   // Grants may come back as bare strings from hand-written documents.
   tools?: (ToolGrant | string)[];
   loop?: LoopSpec;

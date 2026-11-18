@@ -1,3 +1,4 @@
+import type { Agent, AgentDefinition, AgentSummary } from './agents';
 import type {TaskInput, TaskDraft, TaskPage, TaskReview, TaskProgress, Project} from './tasks';
 import type { ExecutionTree, CancelScope, Cancellation } from './executionTree';
 import type { ActivityQuery, ActivityView, HealthQuery, HealthView } from './activity';
@@ -175,6 +176,12 @@ function graphBody(g: GraphInput): Pick<RequestOptions, 'body' | 'raw'> {
 }
 
 export const api = {
+  agents: () => request<AgentSummary[]>(`${V1}/agents`),
+  agent: (id: string) => request<Agent>(`${V1}/agents/${enc(id)}`),
+  publishAgent: (id: string, definition: AgentDefinition, version?: number) =>
+    request<Agent>(version ? `${V1}/agents/${enc(id)}` : `${V1}/agents`, {
+      method: version ? 'PUT' : 'POST', body: {id, definition}, headers: version ? {'If-Match': String(version)} : undefined,
+    }),
   projects: () => request<Project[]>(`${V1}/projects`),
   saveProjectPreference: (id:string,revision:number,executionMode:string)=>request<Project>(`${V1}/projects/${enc(id)}/preferences`,{method:'PUT',headers:{'If-Match':String(revision)},body:{executionMode}}),
   createProject: (input:{name:string;path:string}) => request<Project>(`${V1}/projects`,{method:'POST',body:input}),

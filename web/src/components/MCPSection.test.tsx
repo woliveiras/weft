@@ -27,13 +27,32 @@ it('creates, discovers and edits with write-only credentials and optimistic conc
 });
 it('shows dependency errors without claiming an empty successful catalogue',async()=>{fakeApi({'GET /api/v1/mcp/connections':()=>apiError(503,'Storage unavailable','unavailable')});render(<MCPSection role="viewer"/>);expect(await screen.findByText('Storage unavailable')).toBeTruthy();expect(screen.queryByText('No MCP connections configured.')).toBeNull();expect(screen.queryByRole('button',{name:'Save MCP connection'})).toBeNull();});
 it('limits operators to discovery and displays discovery failures',async()=>{fakeApi({'GET /api/v1/mcp/connections':()=>[{...connection,status:'unavailable',error:'Discovery failed'}]});render(<MCPSection role="operator"/>);expect(await screen.findByText('Discovery failed')).toBeTruthy();expect(screen.getByRole('button',{name:'Test Team'})).toBeTruthy();expect(screen.queryByRole('button',{name:'Edit Team'})).toBeNull();});
-it('adds exact grants, preserves existing restrictions and removes stale grants',async()=>{
- fakeApi({'GET /api/v1/mcp/tools':()=>[{name:'mcp.team.search',description:'Search',schema:{},capability:'mcp'}]});
+it('filters MCP tools by name while preserving grants and allowing stale grants to be removed',async()=>{
+ fakeApi({'GET /api/v1/mcp/tools':()=>[
+  {name:'mcp.team.search',description:'Search',schema:{},capability:'mcp'},
+  {name:'mcp.team.read_issue',description:'Read an issue',schema:{},capability:'mcp'},
+ ]});
+ const user=userEvent.setup();
  let latest:(ToolGrant|string)[]=[];
  function Host(){const [grants,set]=useState<(ToolGrant|string)[]>([{name:'filesystem.read',paths:['src/**']},'mcp.removed.search']);latest=grants;return <MCPGrants grants={grants} onChange={set}/>;}
  render(<Host/>);const region=screen.getByRole('region',{name:'MCP permissions'});
- await userEvent.click(await within(region).findByRole('checkbox',{name:'mcp.team.search'}));expect(latest).toContainEqual({name:'mcp.team.search'});expect(latest).toContainEqual({name:'filesystem.read',paths:['src/**']});
- await userEvent.click(within(region).getByRole('checkbox',{name:/mcp.removed.search/}));expect(latest).not.toContain('mcp.removed.search');
+ await within(region).findByRole('checkbox',{name:'mcp.team.read_issue'});
+ const search=within(region).getByRole('searchbox',{name:'Search MCP tools'});
+ await user.type(search,' TEAM.S ');
+ expect(within(region).queryByRole('checkbox',{name:'mcp.team.read_issue'})).toBeNull();
+ expect(within(region).queryByRole('checkbox',{name:/mcp.removed.search/})).toBeNull();
+ await user.click(within(region).getByRole('checkbox',{name:'mcp.team.search',description:'Search'}));
+ expect(latest).toContainEqual({name:'mcp.team.search'});
+ expect(latest).toContainEqual({name:'filesystem.read',paths:['src/**']});
+ expect(latest).toContain('mcp.removed.search');
+ await user.clear(search);
+ expect(within(region).getByRole('checkbox',{name:'mcp.team.read_issue'})).toBeTruthy();
+ await user.type(search,'not present');
+ expect(within(region).getByRole('status').textContent).toBe('No MCP tools match your search.');
+ await user.clear(search);
+ await user.type(search,'removed');
+ await user.click(within(region).getByRole('checkbox',{name:/mcp.removed.search/}));
+ expect(latest).not.toContain('mcp.removed.search');
 });
 it('prepares known services explicitly, validates GitLab domains and saves public OAuth without secrets',async()=>{
  const backend=fakeApi({'GET /api/v1/mcp/connections':()=>[], 'GET /api/v1/mcp/oauth/config':()=>({callbackUrl:'https://weft.example/api/v1/mcp/oauth/callback'}),'POST /api/v1/mcp/connections':()=>connection});

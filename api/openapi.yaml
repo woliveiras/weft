@@ -846,6 +846,99 @@ paths:
             application/json:
               schema: {$ref: "#/components/schemas/Info"}
         "401": {$ref: "#/components/responses/Unauthorized"}
+  /api/v1/agents:
+    get:
+      tags: [catalog]
+      operationId: listAgents
+      summary: List summaries of reusable agents
+      x-weft-role: viewer
+      responses:
+        "200":
+          description: Agent summaries
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/AgentSummary"}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+    post:
+      tags: [catalog]
+      operationId: createAgent
+      summary: Publish version 1 of a reusable agent
+      x-weft-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, definition]
+              additionalProperties: false
+              properties:
+                id: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,63}$'}
+                definition: {$ref: "#/components/schemas/AgentDefinition"}
+      responses:
+        "201": {$ref: "#/components/responses/AgentEntry"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/Invalid"}
+  /api/v1/agents/source:
+    get:
+      tags: [catalog]
+      operationId: getAgentSource
+      summary: Read the effective settings of an inline workflow agent
+      x-weft-role: viewer
+      parameters:
+        - {name: workflow, in: query, required: true, schema: {type: string}}
+        - {name: node, in: query, required: true, schema: {type: string}}
+        - {name: version, in: query, required: true, schema: {type: integer, minimum: 1}}
+      responses:
+        "200":
+          description: Effective definition from the saved graph version
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AgentDefinition"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/agents/{agent}:
+    parameters:
+      - {name: agent, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [catalog]
+      operationId: getAgent
+      summary: Read a reusable agent and its version history
+      x-weft-role: viewer
+      responses:
+        "200": {$ref: "#/components/responses/AgentEntry"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    put:
+      tags: [catalog]
+      operationId: publishAgentVersion
+      summary: Publish a new immutable version without changing any workflow
+      x-weft-role: admin
+      parameters:
+        - {name: If-Match, in: header, required: true, schema: {type: string}, description: Current latest version number}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [definition]
+              additionalProperties: false
+              properties:
+                id: {type: string, description: Must match the path when present}
+                definition: {$ref: "#/components/schemas/AgentDefinition"}
+      responses:
+        "200": {$ref: "#/components/responses/AgentEntry"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "422": {$ref: "#/components/responses/Invalid"}
   /api/v1/graphs:
     get:
       tags: [graphs]
@@ -2589,6 +2682,11 @@ components:
               nodes: [{id: a}, {id: b}]
               channels: [{id: in, to: [a]}, {id: ab, from: a, to: [b]}]
   responses:
+    AgentEntry:
+      description: Reusable agent and its immutable versions
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/AgentEntry"}
     BadRequest:
       description: Malformed request (code `invalid`)
       content:
@@ -3205,6 +3303,65 @@ components:
           properties:
             Name: {type: string}
             Role: {enum: [viewer, operator, admin]}
+    AgentOrigin:
+      type: object
+      required: [workflow, node]
+      properties:
+        workflow: {type: string}
+        node: {type: string}
+    AgentSummary:
+      type: object
+      required: [id, name, latest]
+      properties:
+        id: {type: string}
+        origin: {$ref: "#/components/schemas/AgentOrigin"}
+        name: {type: string}
+        description: {type: string}
+        latest: {type: integer, minimum: 1}
+    AgentDefinition:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: {type: string}
+        description: {type: string}
+        prompt: {type: string}
+        runtime: {$ref: '../schemas/graph.schema.json#/$defs/Runtime'}
+        model: {$ref: '../schemas/graph.schema.json#/$defs/Model'}
+        isolation: {$ref: '../schemas/graph.schema.json#/$defs/Isolation'}
+        readOnly: {type: boolean}
+        tools:
+          type: array
+          items: {$ref: '../schemas/graph.schema.json#/$defs/ToolGrant'}
+        skillIds: {type: [array, "null"], items: {type: string}}
+        repositoryGuidance: {$ref: '../schemas/graph.schema.json#/$defs/RepositoryGuidance'}
+        parameters:
+          type: array
+          items:
+            type: object
+            required: [name]
+            additionalProperties: false
+            properties:
+              name: {type: string}
+              description: {type: string}
+              default: {type: string}
+              required: {type: boolean}
+    AgentEntry:
+      type: object
+      required: [id, versions]
+      properties:
+        id: {type: string}
+        origin: {$ref: "#/components/schemas/AgentOrigin"}
+        versions:
+          type: array
+          items:
+            type: object
+            required: [version, definition, createdAt, createdBy]
+            properties:
+              version: {type: integer, minimum: 1}
+              definition: {$ref: "#/components/schemas/AgentDefinition"}
+              createdAt: {type: string, format: date-time}
+              createdBy: {type: string}
     Graph:
       $ref: "../schemas/graph.schema.json"
     Message:

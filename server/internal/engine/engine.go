@@ -144,12 +144,13 @@ type Engine struct {
 	turns chan struct{} // global turn semaphore (nil = unlimited)
 
 	// Only the graph reconcile loop writes sweep state.
-	budgetSweepAt        time.Time
-	brokerCleanupSweepAt time.Time
-	brokerCleanupRetries map[string]brokerCleanupRetry
-	wake                 chan struct{}
-	stop                 context.CancelFunc
-	done                 chan struct{}
+	budgetSweepAt            time.Time
+	agentRegistrationPending atomic.Bool
+	brokerCleanupSweepAt     time.Time
+	brokerCleanupRetries     map[string]brokerCleanupRetry
+	wake                     chan struct{}
+	stop                     context.CancelFunc
+	done                     chan struct{}
 
 	invalidLedgerWarningAt  atomic.Int64
 	budgetConflictWarningAt atomic.Int64
@@ -205,6 +206,7 @@ func (e *Engine) Start(ctx context.Context) error {
 	if err := e.recover(ctx); err != nil {
 		return err
 	}
+	e.syncAgentCatalog(ctx)
 	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	e.stop = cancel
 	e.done = make(chan struct{})
@@ -317,6 +319,9 @@ func (e *Engine) interrupt(ctx context.Context, x *domain.Execution, why string)
 func (e *Engine) reconcile(ctx context.Context) {
 	if time.Since(e.budgetSweepAt) >= time.Minute {
 		e.budgetSweepAt = time.Now()
+		if e.agentRegistrationPending.Load() {
+			e.syncAgentCatalog(ctx)
+		}
 		if err := (delegation.Manager{Store: e.store}).ReconcileBudgets(ctx, e.budgetSweepAt); err != nil {
 			e.log.Error("reconcile tree token budgets", "err", err)
 		}

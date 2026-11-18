@@ -107,7 +107,7 @@ func (m Manager) PrepareEnvironment(ctx context.Context, id string, revision int
 			return fail(err)
 		}
 	}
-	if _, _, err = m.Engine.SaveGraph(ctx, g, 0, actor); err != nil {
+	if _, _, err = m.Engine.SaveTaskGraph(ctx, g, actor); err != nil {
 		return fail(err)
 	}
 	return m.buildPreparedEnvironment(ctx, d, g, actor)

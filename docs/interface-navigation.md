@@ -136,6 +136,24 @@ optional end-to-end check using explicit grants and the selected model.
 Developer usability validation and installation activation remain separate from
 automated test coverage.
 
+## Agents
+
+Open **Configuration → Agents** to find agents by name or description. Every
+saved workflow agent appears as a reusable card, including agents from earlier
+workflows. An agent's **Workflows** tab, next to **Parameters**, lists where it
+is used and links directly to the agent configuration in each workflow.
+
+When creating a workflow, choose **Add existing agent**. The canvas also has
+**Add from catalog**. Search the catalog, select a version and supply its
+parameter values. Publishing a version in the catalog leaves saved workflow
+versions pinned. Select **Choose agent version** in a workflow to adopt an
+update through a graph review.
+
+Edit **Workflow instructions** in the workflow's agent configuration under
+**Instructions**. This text runs after the shared instructions and applies to
+that instance. The workflow owns channels, loop, replicas, workspace and run
+limits. Installation policy and task consent apply to the resolved configuration.
+
 ## Agent configuration
 
 Open **Agent configuration** in a graph, or **Configure agent** in its canvas
@@ -147,7 +165,8 @@ remain in memory and are not persisted across a page reload.
 
 General contains identity, runtime and model fields. Instructions edits the prompt
 directly in the graph draft. Tools & permissions reuses the existing grant pickers,
-approval gates and isolation fields. Advanced contains loop, replica/workspace and
+approval gates and isolation fields. Search MCP tools by name or browse their
+scrollable list. Advanced contains loop, replica/workspace and
 turn-limit settings. The boundary summary distinguishes default grants from agent
 overrides and shows read-only workspace access and configured isolation. It is a
 draft summary, not proof of currently effective runtime access: installation policy,

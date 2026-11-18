@@ -322,7 +322,7 @@ func (m Manager) Start(ctx context.Context, id string, revision int64, actor str
 			return fail(e)
 		}
 	}
-	if _, _, err = m.Engine.SaveGraph(ctx, g, 0, actor); err != nil {
+	if _, _, err = m.Engine.SaveTaskGraph(ctx, g, actor); err != nil {
 		return fail(err)
 	}
 	if err = (taskauth.Manager{Store: m.Store}).Bind(ctx, d.ID, g); err != nil {

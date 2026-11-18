@@ -1,3 +1,5 @@
+import { AgentPicker } from './AgentBinding';
+import { nodeWithAgent, type AgentBinding, type AgentDefinition } from '../api/agents';
 import { AgentList } from './AgentList';
 import { RunsView } from './RunsView';
 import type { RunSection } from './runPresentation';
@@ -93,6 +95,8 @@ export function GraphWorkspace({
   });
   const [error, setError] = useState<string>();
   const [saveConflict, setSaveConflict] = useState(false);
+  const [catalogPicker, setCatalogPicker] = useState(false);
+  const canBindAgent = info?.identity?.role === 'admin';
   const [reviewOpen, setReviewOpen] = useState(false);
   const canEditAgent = info?.identity?.role === 'admin' || info?.identity?.role === 'operator';
   const [saving, setSaving] = useState(false);
@@ -243,12 +247,14 @@ export function GraphWorkspace({
     }
   };
 
-  const addNode = (position: { x: number; y: number }, positions: Record<string, { x: number; y: number }>) => {
+  const addNode = (position: { x: number; y: number }, positions: Record<string, { x: number; y: number }>, selection?: {binding:AgentBinding; definition:AgentDefinition}) => {
     let added: string | undefined;
     changeGraph((graph) => {
       const result = addAgent(graph, position, positions);
       added = result.id;
-      return result.graph;
+      if (!selection) return result.graph;
+      const node = result.graph.spec.nodes.find(n => n.id === result.id);
+      return node ? updateNode(result.graph, result.id, nodeWithAgent(node, selection.binding, selection.definition)) : result.graph;
     });
     if (added) {
       setSelection({ kind: 'node', id: added });
@@ -442,6 +448,7 @@ export function GraphWorkspace({
       )}
       {tab === 'canvas' && (
         <div className={`floor ${selection && panelOpen ? 'with-panel' : ''}`}>
+          {canBindAgent && <Btn disabled={saving} onClick={()=>setCatalogPicker(true)}>Add from catalog</Btn>}
           <AgentList graph={draftGraph} status={status} statusError={statusError} selected={selection?.kind==='node'?selection.id:undefined}
             onSelect={id=>{setSelection({kind:'node',id});setPanelOpen(true);}} onConfigure={id=>configureAgent(id)}/>
           <GraphCanvas
@@ -489,7 +496,7 @@ export function GraphWorkspace({
                     onSaved(saved);
                   }}
                   issues={issues?.nodes.get(selection.id)}
-                  onUpdateNode={(nodeId, update) => changeGraph((graph) => updateNode(graph, nodeId, update))}
+                  onUpdateNode={draftGraph.spec.nodes.find(n=>n.id===selection.id)?.agent ? undefined : (nodeId, update) => changeGraph((graph) => updateNode(graph, nodeId, update))}
                   onStatus={setStatus}
                 />
               ) : (
@@ -540,7 +547,12 @@ export function GraphWorkspace({
       {tab === 'agent' && <AgentConfiguration summary={currentSummary} nodeId={configuredId} section={agentSection}
         onSection={section => configureAgent(configuredId,section)} onSelect={id => configureAgent(id)}
         onUpdateNode={canEditAgent ? (id,patch) => changeGraph(graph => updateNode(graph,id,patch)) : undefined}
-        issues={issues?.nodes.get(configuredId)} dirty={draftDirty}/>}
+        issues={issues?.nodes.get(configuredId)} dirty={draftDirty} canBind={canBindAgent}/>}
+      {catalogPicker && <AgentPicker onCancel={()=>setCatalogPicker(false)} onSelect={(binding,definition)=>{
+        setCatalogPicker(false);
+        const rightEdge = Math.max(0,...draftGraph.spec.nodes.map(node=>node.position?.x ?? 0));
+        addNode({x:rightEdge+280,y:0},{},{binding,definition});
+      }}/>}
       {reviewOpen && <Modal title="Review graph changes" onClose={() => !saving && setReviewOpen(false)}>
         <p>Save the entire graph draft based on version {draftBase.record.version}, including other agents, channels and graph settings.</p>
         <p>Changed fields are listed below without copying their values. Review the relevant sections or Definition for their contents.</p>

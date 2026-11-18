@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Icon, type IconName } from './common';
 
-export type NavigationDestination = 'activity' | 'tasks' | 'projects' | 'graphs' | 'approvals' | 'connections' | 'models' | 'skills' | 'administration';
+export type NavigationDestination = 'activity' | 'tasks' | 'projects' | 'graphs' | 'agents' | 'approvals' | 'connections' | 'models' | 'skills' | 'administration';
 
 const configuration: { destination: NavigationDestination; label: string; icon: IconName }[] = [
   { destination: 'graphs', label: 'Workflows', icon: 'workflows' },
+  { destination: 'agents', label: 'Agents', icon: 'agents' },
   { destination: 'connections', label: 'Connections', icon: 'connections' },
   { destination: 'models', label: 'Models', icon: 'models' },
   { destination: 'skills', label: 'Skills & instructions', icon: 'skills' },

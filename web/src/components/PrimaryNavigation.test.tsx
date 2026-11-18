@@ -39,7 +39,7 @@ it('omits an empty count and sends exact configuration destinations', async () =
   const navigate = vi.fn();
   render(<PrimaryNavigation active="approvals" pending={0} onNavigate={navigate}/>);
   expect(screen.getByRole('button', {name:'Approvals'}).getAttribute('aria-current')).toBe('page');
-  for (const [label, destination] of [['Workflows','graphs'],['Connections','connections'],['Models','models'],['Skills & instructions','skills'],['Administration','administration']]) {
+  for (const [label, destination] of [['Workflows','graphs'],['Agents','agents'],['Connections','connections'],['Models','models'],['Skills & instructions','skills'],['Administration','administration']]) {
     await userEvent.click(screen.getByRole('button', {name:label}));
     expect(navigate).toHaveBeenLastCalledWith(destination);
   }

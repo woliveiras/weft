@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/agentcatalog"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/graph"
 	"github.com/woliveiras/weft/server/internal/observability"
@@ -133,9 +134,26 @@ func (e *Engine) preflight(ctx context.Context, g *domain.Graph, only string) *g
 // The document is stored as written: defaults are applied when it is read
 // for validation or execution, not copied into every node, so changing
 // spec.defaults later still reaches nodes that do not set their own value.
-// Only identity derived from names (graph, node and channel ids) is kept.
+// Pinned agent definitions are materialized before this step so historical
+// graph versions retain their reviewed instructions and grants.
 // The returned graph is the stored document.
 func (e *Engine) SaveGraph(ctx context.Context, g *domain.Graph, expectedVersion int, actor string) (*domain.Graph, *domain.GraphRecord, error) {
+	if err := e.ResolveAgentBindings(ctx, g); err != nil {
+		return nil, nil, err
+	}
+	return e.saveGraphDocument(ctx, g, expectedVersion, actor)
+}
+
+// SaveTaskGraph persists the already reviewed execution copy. Its task-owned
+// augmentations must survive without reapplying the reusable definition.
+func (e *Engine) SaveTaskGraph(ctx context.Context, g *domain.Graph, actor string) (*domain.Graph, *domain.GraphRecord, error) {
+	if !strings.HasPrefix(g.Metadata.ID, domain.TaskRunGraphPrefix) || g.Metadata.Labels[domain.LabelTask] == "" {
+		return nil, nil, fmt.Errorf("%w: expected a task execution copy", ErrInvalid)
+	}
+	return e.saveGraphDocument(ctx, g, 0, actor)
+}
+
+func (e *Engine) saveGraphDocument(ctx context.Context, g *domain.Graph, expectedVersion int, actor string) (*domain.Graph, *domain.GraphRecord, error) {
 	authored, err := cloneGraph(g)
 	if err != nil {
 		return nil, nil, err
@@ -205,6 +223,10 @@ func (e *Engine) saveGraph(ctx context.Context, g, effective *domain.Graph, expe
 	}
 	if err := e.store.PutGraphRecord(ctx, rec); err != nil {
 		return nil, nil, err
+	}
+	if err := (agentcatalog.Manager{Store: e.store}).RegisterWorkflow(ctx, effective, actor); err != nil {
+		e.agentRegistrationPending.Store(true)
+		e.log.Warn("register workflow agents", "graph", g.Metadata.ID, "err", err)
 	}
 	// Declare topology now, so work injected before the first start is kept.
 	effective.Metadata.Version = v
@@ -852,4 +874,25 @@ func (e *Engine) groupStatus(ctx context.Context, g *domain.Graph, c *domain.Cha
 // environment: docker isolation without an image of its own.
 func UsesEnvironment(g *domain.Graph, n *domain.Node) bool {
 	return g.Spec.Environment != nil && n.Isolation.Mode == domain.IsolationDocker && n.Isolation.Image == ""
+}
+
+// ResolveAgentBindings materializes pinned agent settings before validation.
+func (e *Engine) ResolveAgentBindings(ctx context.Context, g *domain.Graph) error {
+	issues, err := (agentcatalog.Manager{Store: e.store}).Resolve(ctx, g)
+	if err != nil {
+		return err
+	}
+	if len(issues) > 0 {
+		return &ValidationError{Report: &graph.Report{Errors: issues, Warnings: []graph.Issue{}}}
+	}
+	return nil
+}
+
+// syncAgentCatalog registers older workflows and retries any interrupted registration.
+func (e *Engine) syncAgentCatalog(ctx context.Context) {
+	e.agentRegistrationPending.Store(false)
+	if err := (agentcatalog.Manager{Store: e.store}).RegisterExistingWorkflows(ctx); err != nil {
+		e.agentRegistrationPending.Store(true)
+		e.log.Warn("sync workflow agents", "err", err)
+	}
 }

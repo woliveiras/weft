@@ -68,10 +68,15 @@ describe('ModelFields', () => {
   });
 
   it('uses graph defaults as the inherited choice', async () => {
-    setup(undefined, { provider: 'team', name: 'gpt-y' });
+    const { onChange } = setup(undefined, { provider: 'team', name: 'gpt-y' });
     const select = (await screen.findByRole('combobox', { name: /Provider/ })) as HTMLSelectElement;
     expect(select.options[0].textContent).toBe('Graph default (team)');
-    expect((screen.getByRole('combobox', { name: /Model/ }) as HTMLInputElement).placeholder).toBe('gpt-y');
+    const input = screen.getByRole<HTMLInputElement>('combobox', { name: 'Model' });
+    expect(input.placeholder).toBe('gpt-y');
+    expect(input.value).toBe('');
+    expect(screen.getByText('Type a model name to change it.')).toBeTruthy();
+    await userEvent.setup().type(input, 'z');
+    expect(onChange).toHaveBeenLastCalledWith({ name: 'z' });
   });
 
   it('reports a model listing failure as a hint, not a blocker', async () => {

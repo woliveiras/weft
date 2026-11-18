@@ -124,3 +124,5 @@ func (e *Event) WithExecution(id string) *Event { e.ExecutionID = id; return e }
 func (e *Event) WithMessage(id string) *Event   { e.MessageID = id; return e }
 func (e *Event) WithActor(a string) *Event      { e.Actor = a; return e }
 func (e *Event) WithTrace(id string) *Event     { e.TraceID = id; return e }
+
+const EvAgentVersionPublished EventType = "agent.version_published"

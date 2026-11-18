@@ -1,6 +1,9 @@
 import { useState } from 'react';
-import { parse } from 'yaml';
+import { parse, parseDocument } from 'yaml';
 import { ApiError, api, errorMessage } from '../api/client';
+import { nodeWithAgent } from '../api/agents';
+import { AgentPicker } from './AgentBinding';
+import { addAgent, updateNode } from './canvas/edit';
 import type { Graph, GraphAction, GraphSummary } from '../api/types';
 import { Badge, Btn, Empty, ErrorBox, Icon, Modal, StateDot, fmtDateTime } from './common';
 
@@ -200,6 +203,7 @@ function CreateDialog({
   onCreated: (id: string) => void;
 }) {
   const [text, setText] = useState(initial);
+  const [picker, setPicker] = useState(false);
   const [error, setError] = useState<string>();
   const [issues, setIssues] = useState<string[]>([]);
 
@@ -236,11 +240,37 @@ function CreateDialog({
     if (f) setText(await f.text());
   };
 
+  if (picker) return <AgentPicker onCancel={() => setPicker(false)} onSelect={(binding, definition) => {
+    setPicker(false);
+    try {
+      const json = text.trimStart().startsWith('{');
+      const document = json ? undefined : parseDocument(text);
+      if (document?.errors.length) throw document.errors[0];
+      const source: Graph = document ? document.toJS() : JSON.parse(text);
+      if (!source?.spec || !Array.isArray(source.spec.nodes)) throw new Error('Add a spec.nodes list before selecting an agent.');
+      const rightEdge = Math.max(0, ...source.spec.nodes.map(node => node.position?.x ?? 0));
+      const {graph, id} = addAgent(source, {x: rightEdge + 280, y: 0});
+      const node = graph.spec.nodes.find(item => item.id === id);
+      if (!node) throw new Error('Could not add the selected agent.');
+      const linked = nodeWithAgent(node, binding, definition);
+      if (document) {
+        document.addIn(['spec', 'nodes'], linked);
+        setText(document.toString());
+      } else {
+        setText(JSON.stringify(updateNode(graph, id, linked), null, 2));
+      }
+      setIssues([]);
+      setError(undefined);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    }
+  }} />;
+
   return (
     <Modal title={title} onClose={onClose}>
       <p className="muted small">Paste or upload a graph document (YAML or JSON).</p>
       <input type="file" accept=".yaml,.yml,.json" onChange={(e) => void onFile(e.target.files?.[0])} />
-      <textarea className="code-editor mono" rows={18} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
+      <textarea className="code-editor mono" aria-label="Workflow document" rows={18} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
       {issues.length > 0 && (
         <ul className="small">
           {issues.map((i, k) => (
@@ -250,6 +280,7 @@ function CreateDialog({
       )}
       <ErrorBox error={error} />
       <div className="btn-row">
+        <Btn onClick={() => setPicker(true)}>Add existing agent</Btn>
         <Btn onClick={validate}>Validate</Btn>
         <Btn tone="primary" onClick={create}>
           Create

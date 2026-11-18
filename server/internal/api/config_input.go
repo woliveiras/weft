@@ -331,14 +331,23 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 		if len(issues) > 0 {
 			return p, unknownFieldsError(issues)
 		}
-		var authored domain.Graph
-		_ = json.Unmarshal(raw, &authored)
+		if err := s.Engine.ResolveAgentBindings(ctx, g); err != nil {
+			return p, err
+		}
+		authored, err := json.Marshal(g)
+		if err != nil {
+			return p, err
+		}
 		rep := graph.Validate(g, s.Engine.KnownRuntimes())
 		if !rep.Valid {
 			return p, fmt.Errorf("spec: %s", graphErrors(rep))
 		}
-		authored.Metadata.ID = g.Metadata.ID
-		g = &authored
+		id := g.Metadata.ID
+		g = &domain.Graph{}
+		if err := json.Unmarshal(authored, g); err != nil {
+			return p, err
+		}
+		g.Metadata.ID = id
 		p.Input = g
 		safe := installation.Map(g)
 		p.Doc.Spec = safe["spec"].(map[string]any)

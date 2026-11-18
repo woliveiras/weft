@@ -1,3 +1,4 @@
+import { AgentsPage } from './components/AgentsPage';
 import {ProjectsPage} from './components/ProjectsPage';
 import { ActivityPage } from './components/ActivityPage';
 import { activityHash, parseActivityState, type ActivityRouteState } from './components/activityView';
@@ -32,6 +33,7 @@ import { ThemeSwitcher } from './components/ThemeSwitcher';
  */
 type Route =
   | { view: 'graphs' }
+  | { view: 'agents'; agentId?: string; create?: boolean }
   | { view: 'activity'; activity: ActivityRouteState }
   | { view: 'projects' }
   | { view: 'tasks'; taskId?: string; create?: boolean }
@@ -46,6 +48,9 @@ export function parseRoute(hash: string): Route {
   const [path, qs] = hash.replace(/^#/, '').split('?');
   const parts = path.split('/').filter(Boolean);
   if (parts[0] === 'activity') return { view: 'activity', activity: parseActivityState(qs) };
+  if (parts[0] === 'agents') {
+    return {view:'agents', ...(parts[1] === 'new' ? {create:true} : parts[1] ? {agentId:decodeURIComponent(parts[1])} : {})};
+  }
   if (parts[0] === 'projects') return {view:'projects'};
   if (parts[0] === 'tasks') return {view:'tasks', ...(parts[1] === 'new' ? {create:true} : parts[1] ? {taskId:decodeURIComponent(parts[1])} : {})};
   if (parts[0] === 'approvals') return { view: 'approvals' };
@@ -78,6 +83,9 @@ export function parseRoute(hash: string): Route {
 
 export function routeHash(r: Route): string {
   if (r.view === 'activity') return activityHash(r.activity);
+  if (r.view === 'agents') {
+    return r.create ? '#/agents/new' : r.agentId ? `#/agents/${encodeURIComponent(r.agentId)}` : '#/agents';
+  }
   if (r.view === 'projects') return '#/projects';
   if (r.view === 'tasks') return r.create ? '#/tasks/new' : r.taskId ? `#/tasks/${encodeURIComponent(r.taskId)}` : '#/tasks';
   if (r.view === 'approvals') return '#/approvals';
@@ -224,6 +232,8 @@ function Shell() {
               onChanged={() => void graphs.reload()}
             />
           )}
+          {route.view === 'agents' && <AgentsPage key={routeHash(route)} id={route.agentId} create={route.create}
+            workflows={workflows} workflowsLoading={graphs.loading} workflowsError={graphs.error} onReloadWorkflows={graphs.reload} canEdit={info.data?.identity?.role==='admin'}/>}
           {route.view === 'skills' && <SkillsView role={info.data?.identity?.role} onChanged={() => void graphs.reload()} />}
           {route.view === 'approvals' && <ApprovalsView onChanged={() => void approvals.reload()} />}
           {route.view === 'connections' && <ConnectionsPage info={info.data} connectionID={route.connectionID} connectionTab={route.connectionTab} create={route.create} history={route.history} connectQuery={route.connectQuery} oauthQuery={route.oauthQuery} />}

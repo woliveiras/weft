@@ -694,6 +694,34 @@ The optional port overrides the normal 18089 disposable server. This journey
 uses real SQLite, the native tool gateway, temporary Git repositories and an
 artificial model response; no shared Docker daemon or external provider is used.
 
+## Agent catalog
+
+| Method and path | Role | Result |
+| --- | --- | --- |
+| `GET /api/v1/agents` | viewer | List agent summaries with their latest version number |
+| `GET /api/v1/agents/{agent}` | viewer | Read one catalog entry and all its versions |
+| `GET /api/v1/agents/source?workflow=…&version=…&node=…` | viewer | Get a definition from a saved inline workflow agent |
+| `POST /api/v1/agents` | admin | Publish the first version from `{id, definition}` |
+| `PUT /api/v1/agents/{agent}` | admin | Append a version from `{definition}` with the latest version number in `If-Match` |
+
+A catalog entry has an `id` and a `versions` array. Entries registered from a
+saved workflow also have an `origin` identifying its `workflow` and `node`.
+The initial snapshot excludes workflow parameter values and local instructions.
+Each version contains its
+numeric `version`, `definition`, `createdAt`, and `createdBy`. A definition includes its name, instructions,
+model and runtime settings, grants, isolation settings and declared parameters.
+
+A workflow node selects a version with
+`"agent": {"id":"pr-reviewer","version":1,"parameters":{"owner":"example"}}`.
+Parameter values are strings. Omit optional values to use the definition defaults.
+The server materializes the selected definition into the graph version. Saving a
+new catalog version leaves existing graph versions unchanged. Use the node's
+`localInstructions` to append instructions scoped to that workflow instance.
+Local text can refer to graph parameters and values on the instance, which take
+precedence over a graph parameter of the same name. A saved graph
+can report validation errors if an authored binding references an unknown agent or version,
+omits required values, or supplies undeclared parameters.
+
 ## Skills and instructions
 
 See [Skills and steering](instructions.md) for registry CRUD, mandatory revision headers, graph/agent associations and inspection endpoints.

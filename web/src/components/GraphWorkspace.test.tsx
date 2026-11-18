@@ -451,7 +451,7 @@ describe('GraphWorkspace editor', () => {
     // The status follows the build until it is ready.
     expect(await within(settingsNav()).findByRole('link', { name: 'Environment · building' })).toBeTruthy();
     expect(await within(status).findByText('Ready', {}, { timeout: 4000 })).toBeTruthy();
-    expect(within(settingsNav()).getByRole('link', { name: 'Environment · ready' })).toBeTruthy();
+    expect(await within(settingsNav()).findByRole('link', { name: 'Environment · ready' }, { timeout: 4000 })).toBeTruthy();
   });
 
   it('offers to build the environment when a start is refused for it', async () => {

@@ -72,7 +72,9 @@ func Normalize(g *domain.Graph) {
 			n.ID = Slug(n.Name)
 		}
 		if n.Runtime.Kind == "" {
-			n.Runtime = mergeRuntime(n.Runtime, d.Runtime)
+			if n.Agent == nil {
+				n.Runtime = mergeRuntime(n.Runtime, d.Runtime)
+			}
 			if n.Runtime.Kind == "" {
 				n.Runtime.Kind = domain.RuntimeNative
 			}
@@ -80,23 +82,27 @@ func Normalize(g *domain.Graph) {
 		if n.Runtime.Kind == domain.RuntimeExternal && n.Runtime.Agent == "" {
 			n.Runtime.Agent = n.ID
 		}
-		if n.Model.Provider == "" {
-			n.Model.Provider = d.Model.Provider
-		}
-		if n.Model.Name == "" {
-			n.Model.Name = d.Model.Name
-		}
-		if n.Model.Temperature == nil {
-			n.Model.Temperature = d.Model.Temperature
-		}
-		if n.Model.MaxTokens == 0 {
-			n.Model.MaxTokens = d.Model.MaxTokens
-		}
-		if n.Tools == nil && d.Tools != nil {
-			n.Tools = append([]domain.ToolGrant(nil), d.Tools...)
+		if n.Agent == nil {
+			if n.Model.Provider == "" {
+				n.Model.Provider = d.Model.Provider
+			}
+			if n.Model.Name == "" {
+				n.Model.Name = d.Model.Name
+			}
+			if n.Model.Temperature == nil {
+				n.Model.Temperature = d.Model.Temperature
+			}
+			if n.Model.MaxTokens == 0 {
+				n.Model.MaxTokens = d.Model.MaxTokens
+			}
+			if n.Tools == nil && d.Tools != nil {
+				n.Tools = append([]domain.ToolGrant(nil), d.Tools...)
+			}
 		}
 		if n.Isolation.Mode == "" {
-			n.Isolation = d.Isolation
+			if n.Agent == nil {
+				n.Isolation = d.Isolation
+			}
 			if n.Isolation.Mode == "" {
 				n.Isolation.Mode = domain.IsolationProcess
 			}
@@ -387,10 +393,17 @@ func Validate(g *domain.Graph, knownRuntimes map[domain.RuntimeKind]bool) *Repor
 			}
 		}
 		for _, tok := range PromptTokens(n.Prompt) {
-			if reserved[tok] || params[tok] {
+			_, bound := NodeParameters(n)[tok]
+			if reserved[tok] || bound || (n.Agent == nil && params[tok]) {
 				continue
 			}
 			r.warnf(path+".prompt", "@%s is neither a parameter nor a reserved name; it is left as written", tok)
+		}
+		for _, tok := range PromptTokens(n.LocalInstructions) {
+			_, bound := NodeParameters(n)[tok]
+			if !reserved[tok] && !bound && !params[tok] {
+				r.warnf(path+".localInstructions", "@%s is neither a parameter nor a reserved name; it is left as written", tok)
+			}
 		}
 		for j, s := range n.Subscribe {
 			if s == "" {
@@ -534,4 +547,12 @@ func Params(g *domain.Graph) map[string]string {
 		m[p.Name] = p.Value
 	}
 	return m
+}
+
+// NodeParameters are resolved against the selected revision when a graph is saved.
+func NodeParameters(n *domain.Node) map[string]string {
+	if n.Agent == nil {
+		return nil
+	}
+	return n.Agent.Parameters
 }

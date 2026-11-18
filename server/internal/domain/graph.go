@@ -163,21 +163,23 @@ type NodeDefaults struct {
 
 // Node is an agent placed in the graph.
 type Node struct {
+	Agent              *AgentBinding             `json:"agent,omitempty" yaml:"agent,omitempty"`
 	RepositoryGuidance *RepositoryGuidancePolicy `json:"repositoryGuidance,omitempty" yaml:"repositoryGuidance,omitempty"`
 	SkillIDs           SkillSelection            `json:"skillIds" yaml:"skillIds"`
 
-	ID          string        `json:"id" yaml:"id"`
-	Name        string        `json:"name,omitempty" yaml:"name,omitempty"`
-	Description string        `json:"description,omitempty" yaml:"description,omitempty"`
-	Runtime     RuntimeRef    `json:"runtime,omitempty" yaml:"runtime,omitempty"`
-	Model       ModelRef      `json:"model,omitempty" yaml:"model,omitempty"`
-	Prompt      string        `json:"prompt,omitempty" yaml:"prompt,omitempty"`
-	Tools       []ToolGrant   `json:"tools,omitempty" yaml:"tools,omitempty"`
-	Loop        LoopSpec      `json:"loop,omitempty" yaml:"loop,omitempty"`
-	Cluster     ClusterSpec   `json:"cluster,omitempty" yaml:"cluster,omitempty"`
-	Isolation   IsolationSpec `json:"isolation,omitempty" yaml:"isolation,omitempty"`
-	Workspace   NodeWorkspace `json:"workspace,omitempty" yaml:"workspace,omitempty"`
-	Approval    ApprovalSpec  `json:"approval,omitempty" yaml:"approval,omitempty"`
+	ID                string        `json:"id" yaml:"id"`
+	Name              string        `json:"name,omitempty" yaml:"name,omitempty"`
+	Description       string        `json:"description,omitempty" yaml:"description,omitempty"`
+	Runtime           RuntimeRef    `json:"runtime,omitempty" yaml:"runtime,omitempty"`
+	Model             ModelRef      `json:"model,omitempty" yaml:"model,omitempty"`
+	Prompt            string        `json:"prompt,omitempty" yaml:"prompt,omitempty"`
+	LocalInstructions string        `json:"localInstructions,omitempty" yaml:"localInstructions,omitempty"`
+	Tools             []ToolGrant   `json:"tools,omitempty" yaml:"tools,omitempty"`
+	Loop              LoopSpec      `json:"loop,omitempty" yaml:"loop,omitempty"`
+	Cluster           ClusterSpec   `json:"cluster,omitempty" yaml:"cluster,omitempty"`
+	Isolation         IsolationSpec `json:"isolation,omitempty" yaml:"isolation,omitempty"`
+	Workspace         NodeWorkspace `json:"workspace,omitempty" yaml:"workspace,omitempty"`
+	Approval          ApprovalSpec  `json:"approval,omitempty" yaml:"approval,omitempty"`
 	// Subscribe lists topic names (wildcards allowed: "research.*") this node
 	// consumes without the producer having to name it.
 	Subscribe []string `json:"subscribe,omitempty" yaml:"subscribe,omitempty"`

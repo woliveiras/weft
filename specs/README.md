@@ -202,4 +202,4 @@ items can progress in parallel, subject to the dependencies below.
 ## Release 2
 
 - [RELEASE-2 — Reusable graph components](./reusable-components/spec.md) —
-  `deferred` until Release 1 is complete and stable and the maintainer authorizes it.
+  `in-progress` for the approved agent catalog. Subgraph reuse remains deferred.
