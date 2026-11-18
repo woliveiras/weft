@@ -8,7 +8,7 @@ import type { ConnectionTab } from './mcpNavigation';
 import { MCPSection } from './MCPSection';
 import { ProvidersSection, type ProvidersHandle } from './ProvidersSection';
 import { CostsSection } from './CostsSection';
-import { SCMConnectionsSection } from './SCMConnectionsSection';
+import { SCMConnectionCreate, SCMConnectionsSection } from './SCMConnectionsSection';
 import { IntegrationsView } from './IntegrationsView';
 import { NetworkPolicySection } from './NetworkPolicySection';
 import { HistoryRetentionSection } from './HistoryRetentionSection';
@@ -22,14 +22,15 @@ const titles: Record<AdministrationSection, string> = {
   retention: 'History retention', tools: 'Tool catalog', delegation: 'Delegation',
 };
 
-export function ConnectionsPage({ info, connectionID, connectionTab = 'overview', create, history, connectQuery, oauthQuery }: { info?: Info; connectionID?: string; connectionTab?: ConnectionTab; create?: boolean; history?: boolean; connectQuery?: string; oauthQuery?: string }) {
+export function ConnectionsPage({ info, connectionID, connectionTab = 'overview', create, sourceControlCreate, history, connectQuery, oauthQuery }: { info?: Info; connectionID?: string; connectionTab?: ConnectionTab; create?: boolean; sourceControlCreate?: boolean; history?: boolean; connectQuery?: string; oauthQuery?: string }) {
   // Legacy integration and OAuth/template links retain their reviewed setup flow.
   const legacy = location.hash.startsWith('#/integrations') || oauthQuery !== undefined;
-  const overview = !history && !legacy && !create && connectQuery === undefined && connectionID === undefined;
-  return <div className={`page installation-page${overview || history || (connectionID !== undefined && !legacy) ? ' connections-page-wide' : ''}`}><header className="page-head" hidden={connectionID !== undefined}><div><h1>Connections</h1>
+  const creating = !legacy && (create || connectQuery !== undefined);
+  const overview = !history && !legacy && !creating && !sourceControlCreate && connectionID === undefined;
+  return <div className="page installation-page connections-page"><header className="page-head" hidden={connectionID !== undefined || creating || sourceControlCreate}><div><h1>Connections</h1>
     {overview && <p className="muted">Manage agent tool integrations and source control connections for this installation.</p>}</div></header>
-    {history ? <><a href="#/connections">Back to connections</a><MCPHistory /></> : legacy || create || connectQuery !== undefined || connectionID !== undefined
-      ? <MCPSection key={connectionID ?? connectQuery ?? (create ? 'new' : 'manual')} role={info?.identity?.role} connectQuery={connectQuery} oauthQuery={oauthQuery} presentation={legacy ? undefined : create || connectQuery !== undefined ? 'create' : 'detail'} connectionID={connectionID} tab={connectionTab} />
+    {sourceControlCreate ? <SCMConnectionCreate role={info?.identity?.role} /> : history ? <><a href="#/connections">Back to connections</a><MCPHistory /></> : legacy || create || connectQuery !== undefined || connectionID !== undefined
+      ? <MCPSection key={connectionID ?? connectQuery ?? (create ? 'new' : 'manual')} role={info?.identity?.role} connectQuery={connectQuery} oauthQuery={oauthQuery} presentation={legacy ? undefined : creating ? 'create' : 'detail'} connectionID={connectionID} tab={connectionTab} />
       : <><ConnectionsList role={info?.identity?.role} /><SCMConnectionsSection role={info?.identity?.role} /></>}
   </div>;
 }

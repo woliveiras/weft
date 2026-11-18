@@ -1,8 +1,39 @@
 import { test, expect } from '@playwright/test';
 const headers={Authorization:'Bearer e2e-admin-token'};
+test('keeps the new connection form compact and opens a template for review', async ({ page }) => {
+ await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+ await page.setViewportSize({ width: 1280, height: 720 });
+ await page.goto('/#/connections/new');
+ await expect(page.getByRole('heading', { name: 'New connection', level: 1 })).toBeVisible();
+ await expect(page.getByRole('spinbutton', { name: 'Connection calls per minute' })).toBeHidden();
+ const pane = page.locator('.installation-page');
+ expect(await pane.evaluate(el => el.scrollHeight)).toBe(await pane.evaluate(el => el.clientHeight));
+ await page.setViewportSize({ width: 1700, height: 470 });
+ const layout = await pane.evaluate(el => ({
+  right: el.getBoundingClientRect().right,
+  mainRight: el.closest('main')?.getBoundingClientRect().right,
+  overflows: el.scrollHeight > el.clientHeight,
+ }));
+ expect(layout.right).toBe(layout.mainRight);
+ expect(layout.overflows).toBe(true);
+ await page.setViewportSize({ width: 390, height: 844 });
+ await expect(page.getByRole('form', { name: 'New MCP connection' })).toBeVisible();
+ expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+ await page.getByText('Browse MCP templates', { exact: true }).click();
+ await expect(page.getByRole('link', { name: 'DeepWiki · v1', exact: true })).toBeVisible();
+ const cardHeights = await page.locator('.mcp-template-list a').evaluateAll(links =>
+  links.map(link => Math.round(link.getBoundingClientRect().height)),
+ );
+ expect(cardHeights.length).toBeGreaterThan(1);
+ expect(new Set(cardHeights).size).toBe(1);
+ await page.getByRole('link', { name: 'DeepWiki · v1', exact: true }).click();
+ await expect(page.getByRole('article', { name: 'Review MCP template' })).toBeVisible();
+ await expect(page.getByLabel('Connection ID', { exact: true })).toHaveValue('');
+});
+
 test('creates a connection and navigates scoped tools, history and settings', async({page})=>{
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
- await page.goto('/#/connections');await page.getByRole('link',{name:'Add connection',exact:true}).click();
+ await page.goto('/#/connections');await page.getByRole('region',{name:'MCP connections',exact:true}).getByRole('link',{name:'Add connection',exact:true}).click();
  await page.getByLabel('Connection ID',{exact:true}).fill('pages');
  await page.getByLabel('Connection name',{exact:true}).fill('Pages fixture');
  await page.getByLabel('MCP endpoint',{exact:true}).fill('https://mcp.fixture.invalid/mcp');

@@ -15,7 +15,7 @@ describe('installation pages through the real API client', () => {
     expect(await screen.findByText('No MCP connections configured.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save MCP connection' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Model providers' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Add source control connection' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Add connection' })).toBeNull();
     // Connections holds MCP and source control connections; nothing else is loaded.
     expect(fixture.calls.every(c => c.path.startsWith('/api/v1/mcp/') || c.path.startsWith('/api/v1/scm/'))).toBe(true);
   });

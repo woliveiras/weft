@@ -26,7 +26,9 @@ test('reviews a pinned template upgrade and parameters without granting tools or
  await page.getByRole('button',{name:'Save MCP connection',exact:true}).click();
  await expect.poll(async()=>(await read()).template.version).toBe(2);
  const saved=await read();expect(saved.enabled).toBe(false);expect(saved.tools).toEqual([]);expect(saved.templateParameters).toEqual({toolset:'repos'});expect(saved.credentialConfigured).toBe(false);
- await page.reload();await expect(page.getByText('Template: github v2')).toBeVisible();
+ await expect(page).toHaveURL(/connections\/c\/template-upgrade\/overview$/);
+ await page.reload();
+ await expect(page.getByRole('region',{name:'Connection overview'}).getByText('github v2',{exact:true})).toBeVisible();
 });
 
 test('GitLab template reviews an instance and keeps authorization pending without contacting it',async({page})=>{
@@ -55,6 +57,7 @@ test('Sentry template keeps consent and agent grants separate from configuration
  await page.getByRole('button',{name:'Use template defaults'}).click();
  await expect(page.getByLabel('MCP endpoint',{exact:true})).toHaveValue('https://mcp.sentry.dev/mcp');
  await expect(page.getByLabel('OAuth issuer',{exact:true})).toHaveValue('https://mcp.sentry.dev');
+ await page.getByText('Provider setup guide',{exact:true}).click();
  await expect(page.getByRole('link',{name:'Sentry MCP setup',exact:true})).toBeVisible();
  await page.getByLabel('OAuth client ID',{exact:true}).fill('fixture-client');
  await page.getByLabel('Connection ID',{exact:true}).fill('sentry-template');

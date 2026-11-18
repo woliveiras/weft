@@ -8,6 +8,7 @@ for(const profile of ['dbt','langsmith'] as const){
   await page.getByLabel('Connection ID',{exact:true}).fill(id);
   await page.getByLabel('Connection name',{exact:true}).fill(id);
   await page.getByLabel('MCP endpoint',{exact:true}).fill('https://'+profile+'.fixture.example/mcp');
+  await page.getByText('Advanced settings',{exact:true}).click();
   if(profile==='langsmith'){
    await page.getByLabel('Credential type',{exact:true}).selectOption('langsmith');
    await page.getByLabel('LangSmith API key',{exact:true}).fill('fixture-mcp-token');
@@ -17,6 +18,10 @@ for(const profile of ['dbt','langsmith'] as const){
   }else{
    await page.getByLabel('Bearer token',{exact:true}).fill('fixture-mcp-token');
    await page.getByText('dbt environment settings (optional)',{exact:true}).click();
+   const production = await page.getByLabel('dbt production environment ID',{exact:true}).boundingBox();
+   const development = await page.getByLabel('dbt development environment ID',{exact:true}).boundingBox();
+   expect(production).not.toBeNull();
+   expect(development!.y - (production!.y + production!.height)).toBeGreaterThan(20);
    await page.getByLabel('dbt production environment ID',{exact:true}).fill('123');
   }
   await page.getByRole('button',{name:'Save MCP connection',exact:true}).click();

@@ -98,9 +98,12 @@ has no finished run.
 
 ## Connection pages
 
-`#/connections` lists installation connections with name/service/ID search and a
-status filter. Administrators start creation with **Add connection** at
-`#/connections/new`; template links use `#/connections/connect?...`.
+`#/connections` lists installation connections. The MCP section supports
+name/service/ID search and a status filter. Its **Add connection** link opens
+`#/connections/new`, and template links use `#/connections/connect?...`.
+**Add connection** under Source control opens `#/connections/source-control/new`.
+Saving or cancelling returns to the list. A source control test reports its
+progress and whether the authenticated identity can push to the repository.
 Saving an enabled connection automatically discovers tools when authentication is
 available. OAuth connections awaiting consent require authorization first, then
 perform discovery. Disabled connections remain inactive. Saving and discovery have

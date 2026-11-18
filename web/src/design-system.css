@@ -154,8 +154,7 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 .tasks-table td:first-child { min-inline-size: 15rem; }
 .tasks-pagination { margin-block-start: var(--space-4); }
 
-.connections-page-wide { max-inline-size: none; }
-.connections-page-wide .connections-panel + .connections-panel { margin-block-start: var(--space-section); }
+.connections-page .connections-panel + .connections-panel { margin-block-start: var(--space-section); }
 .connections-panel {
   display: grid;
   gap: var(--space-4);
@@ -185,25 +184,28 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 .connections-table :is(time, .btn) { white-space: nowrap; }
 .connection-meta { display: block; margin-block-start: var(--space-1); }
 .connection-test-result { margin: var(--space-2) 0 0; }
+.connection-test-spinner { animation: connection-test-spin .9s linear infinite; }
+@keyframes connection-test-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .connection-test-spinner { animation: none; }
+}
 .connections-load-error .btn { margin-block-start: var(--space-2); }
-.connections-panel .connections-form {
+.connections-page .connections-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
   max-width: none;
-  border-block: 1px solid var(--border);
-  padding-block: var(--space-4);
 }
 .connections-form > :is(h3, .error-box, .checkbox, .btn-row, .connection-token) { grid-column: 1 / -1; }
 .connections-form > h3 { margin: 0; }
 @media (max-width: 720px) {
-  .connections-panel .connections-form { grid-template-columns: minmax(0, 1fr); }
+  .connections-page .connections-form { grid-template-columns: minmax(0, 1fr); }
 }
 
 .page-head.connection-detail-head { display: flex; align-items: center; flex-wrap: wrap; }
 .connection-detail-head h1 { margin: var(--space-2) 0 0; overflow-wrap: anywhere; }
 .connection-panels { display: grid; gap: var(--space-section); }
-.connections-page-wide .connection-panels > .connections-panel { margin: 0; }
+.connections-page .connection-panels > .connections-panel { margin: 0; }
 .connections-panel > :is(h2, p), .connection-discovery :is(h3, p) { margin: 0; }
 .connection-facts {
   display: grid;
@@ -253,6 +255,81 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 .mcp-history-table { position: relative; min-inline-size: 0; }
 .mcp-history-table td { vertical-align: top; overflow-wrap: anywhere; }
 .mcp-history-table time { white-space: nowrap; }
+
+.mcp-create .page-head, .mcp-create > :is(.mcp-setup-disclosure, .mcp-template-review) {
+  margin-block-end: var(--space-4);
+}
+.mcp-create .page-head p { margin-block-start: var(--space-1); }
+.page .mcp-create .mcp-setup-disclosure { padding-block: var(--space-2); }
+.mcp-setup-disclosure > summary { cursor: pointer; font-weight: 600; }
+.mcp-template-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  grid-auto-rows: 1fr;
+  gap: var(--space-2);
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+}
+.mcp-template-list a {
+  display: flex;
+  align-items: center;
+  block-size: 100%;
+  min-block-size: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.mcp-setup-group, .mcp-form-footer, .mcp-oauth-controls { display: contents; }
+.installation-page .mcp-create-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  row-gap: var(--space-3);
+  column-gap: var(--space-section);
+  max-width: none;
+}
+.mcp-create-form .mcp-setup-group {
+  display: grid;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+.mcp-create-form .mcp-setup-group > p { margin: 0; }
+.mcp-create-form .mcp-oauth-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+.mcp-create-form .mcp-oauth-controls .help-field { align-self: center; }
+.mcp-create-form > :not(.mcp-setup-group) { grid-column: 1 / -1; }
+.mcp-create-form .mcp-form-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--border);
+}
+.mcp-create-form .mcp-advanced-settings {
+  padding-block-start: var(--space-2);
+  border-block-start: 1px solid var(--border);
+}
+.mcp-advanced-settings :where(details) { border-block-start: 1px solid var(--border); padding-block-start: var(--space-2); }
+.mcp-advanced-settings[open] > :not(summary),
+.mcp-advanced-settings details[open] > :not(summary) { margin-block: var(--space-3) 0; }
+@media (max-width: 900px) {
+  .installation-page .mcp-create-form { grid-template-columns: minmax(0, 1fr); }
+}
+@media (min-width: 901px) and (max-height: 760px) {
+  .connections-page:has(> .mcp-create) { padding-block: var(--space-4); }
+  .mcp-create { margin-block-start: 0; }
+  .mcp-create .page-head { margin-block-end: var(--space-3); }
+  .page .mcp-create-form { padding-block: var(--space-4); }
+  .mcp-create-form .mcp-setup-group { gap: var(--space-2); }
+}
 
 .task-activity .page-head, .task-activity .page-head .btn-row { align-items: center; }
 .task-activity-controls {
@@ -366,9 +443,19 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 }
 .primary-navigation .nav-item .count { margin-left: auto; }
 
-/* Page content stays readable on wide screens; editors keep full width. */
-main > .page:not(.fill) { width: 100%; max-width: var(--content-max); margin-inline: auto; }
-main > .page.task-request-page { max-width: none; }
+/* Keep the scroll viewport full width and center narrower content with padding. */
+main > .page { scrollbar-width: thin; }
+main > .page:not(.fill) {
+  --page-inline-padding: var(--space-8);
+  width: 100%;
+  padding-inline: max(var(--page-inline-padding), calc((100% - var(--content-max)) / 2 + var(--page-inline-padding)));
+}
+main > .page:is(.task-request-page, .installation-page, .administration-page) {
+  padding-inline: var(--page-inline-padding, var(--space-8));
+}
+@media (max-width: 760px) {
+  main > .page:not(.fill) { --page-inline-padding: var(--space-4); }
+}
 .task-request-page :is(.task-request-form, .repository-import-form) { max-width: none; }
 .task-back-link { display: inline-block; margin-block-end: var(--space-3); }
 .task-request-form > fieldset:not([hidden]),

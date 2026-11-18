@@ -1,48 +1,55 @@
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { apiError, fakeApi } from '../test/fakeApi';
-import { SCMConnectionsSection } from './SCMConnectionsSection';
+import { apiError, fakeApi, json } from '../test/fakeApi';
+import { SCMConnectionCreate, SCMConnectionsSection, scmCreateLink } from './SCMConnectionsSection';
 
 const gh = { name: 'gh', kind: 'github', repository: 'acme/app', tokenConfigured: true };
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  history.replaceState(null, '', '/');
 });
 
 describe('SCMConnectionsSection', () => {
-  it('adds a connection sending the token once, tests and removes it', async () => {
-    let list = [gh];
+  it('reports a connected repository and allows admins to remove it', async () => {
     const api = fakeApi({
-      'GET /api/v1/scm/connections': () => list,
-      'POST /api/v1/scm/connections': (c) => {
-        list = [...list, { ...(c.body as typeof gh), tokenConfigured: true }];
-        return new Response(JSON.stringify(list[1]), { status: 201, headers: { 'content-type': 'application/json' } });
-      },
+      'GET /api/v1/scm/connections': () => [gh],
       'POST /api/v1/scm/connections/gh/test': () => ({ ok: true, identity: { user: 'bot', repository: 'acme/app', defaultBranch: 'main', canPush: true } }),
       'DELETE /api/v1/scm/connections/gh': () => new Response(null, { status: 204 }),
     });
     vi.stubGlobal('confirm', () => true);
     const user = userEvent.setup();
     render(<SCMConnectionsSection role="admin" />);
-    const card = await screen.findByRole('row', { name: /gh/ });
-    expect(within(card).getByRole('cell', { name: 'Required' })).toBeTruthy();
-    await user.click(within(card).getByRole('button', { name: 'Test connection' }));
-    expect((await within(card).findByRole('status')).textContent).toBe('Works as bot; default branch main; can push.');
-    await user.click(screen.getByRole('button', { name: 'Add source control connection' }));
+    const row = await screen.findByRole('row', { name: /gh/ });
+    expect(within(row).getByRole('cell', { name: 'Required' })).toBeTruthy();
+    expect(within(row).getByText('Not tested')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Add connection' }).getAttribute('href')).toBe(scmCreateLink);
+    await user.click(within(row).getByRole('button', { name: 'Test connection' }));
+    expect(await within(row).findByText('Connected')).toBeTruthy();
+    expect(within(row).getByText('Signed in as bot. Default branch is main. Can push.')).toBeTruthy();
+    await user.click(within(row).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(api.find('DELETE', '/api/v1/scm/connections/gh')).toHaveLength(1));
+  });
+
+  it('saves the dedicated form with the token once and returns to Connections', async () => {
+    history.replaceState(null, '', scmCreateLink);
+    const api = fakeApi({
+      'POST /api/v1/scm/connections': () => json({ name: 'team', tokenConfigured: true }, 201),
+    });
+    const user = userEvent.setup();
+    render(<SCMConnectionCreate role="admin" />);
     const form = screen.getByRole('form', { name: 'Add source control connection' });
     await user.type(within(form).getByLabelText('Name'), 'team');
     await user.type(within(form).getByLabelText('Repository'), 'acme/other');
     await user.click(within(form).getByRole('checkbox', { name: /approval/ }));
     await user.type(within(form).getByLabelText('Token'), 'secret-token');
     await user.click(within(form).getByRole('button', { name: 'Save connection' }));
-    await waitFor(() => expect(api.find('POST', '/api/v1/scm/connections')).toHaveLength(1));
+    await waitFor(() => expect(location.hash).toBe('#/connections'));
+    expect(api.find('POST', '/api/v1/scm/connections')).toHaveLength(1);
     expect(api.find('POST', '/api/v1/scm/connections')[0].body).toEqual({ name: 'team', kind: 'github', repository: 'acme/other', requirePullRequestApproval: false, token: 'secret-token' });
-    expect(await screen.findByRole('row', { name: /team/ })).toBeTruthy();
     expect(document.body.textContent).not.toContain('secret-token');
-    await user.click(within(screen.getByRole('row', { name: /gh/ })).getByRole('button', { name: 'Remove' }));
-    await waitFor(() => expect(api.find('DELETE', '/api/v1/scm/connections/gh')).toHaveLength(1));
   });
 
   it('shows validation errors and keeps viewers read-only', async () => {
@@ -51,15 +58,18 @@ describe('SCMConnectionsSection', () => {
       'POST /api/v1/scm/connections': () => apiError(422, 'invalid SCM connection: repository: use owner/name', 'invalid'),
     });
     const user = userEvent.setup();
-    const view = render(<SCMConnectionsSection role="admin" />);
-    await user.click(await screen.findByRole('button', { name: 'Add source control connection' }));
+    const view = render(<SCMConnectionCreate role="admin" />);
+    await user.type(screen.getByLabelText('Name'), 'keep-draft');
     await user.click(screen.getByRole('button', { name: 'Save connection' }));
     expect(await screen.findByText(/use owner\/name/)).toBeTruthy();
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('keep-draft');
+    view.rerender(<SCMConnectionCreate role="viewer" />);
+    expect(screen.queryByRole('form')).toBeNull();
     view.unmount();
     render(<SCMConnectionsSection role="viewer" />);
     const card = await screen.findByRole('row', { name: /gh/ });
     expect(within(card).queryByRole('button')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Add source control connection' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Add connection' })).toBeNull();
   });
 
   it('separates registry errors from empty results and shows a pending connection test', async () => {
@@ -76,11 +86,18 @@ describe('SCMConnectionsSection', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Reload source control connections' }));
     const testButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Test connection' });
     await userEvent.click(testButton);
-    expect(await screen.findByText('Testing connection…')).toBeTruthy();
+    expect(await screen.findByText('Checking connection')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Testing…' })).toBe(testButton);
     expect(testButton.disabled).toBe(true);
     await act(async () => finishTest(apiError(503, 'Service unavailable', 'unavailable')));
-    expect(await screen.findByText('Test could not run: Service unavailable')).toBeTruthy();
+    expect(await screen.findByText('Connection failed')).toBeTruthy();
+    expect(screen.getByText('Service unavailable')).toBeTruthy();
     expect(testButton.disabled).toBe(false);
-    expect(backend.find('POST', '/api/v1/scm/connections/gh/test')).toHaveLength(1);
+    await userEvent.click(testButton);
+    await act(async () => finishTest(json({ ok: true, identity: { user: 'bot', canPush: false } })));
+    expect(await screen.findByText('Limited access')).toBeTruthy();
+    expect(screen.getByText(/Cannot push/)).toBeTruthy();
+    expect(screen.queryByText('Connection failed')).toBeNull();
+    expect(backend.find('POST', '/api/v1/scm/connections/gh/test')).toHaveLength(2);
   });
 });

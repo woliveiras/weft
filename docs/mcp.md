@@ -8,10 +8,12 @@ MCP supports registration, discovery and remote tool invocation through the gate
 Native agents and external runtime callbacks use the same authorization boundary.
 Models receive only the currently available tools explicitly granted to their agent.
 
-In **Connections → Add connection**, an administrator can create or edit multiple
-connections, set a bearer credential, and disable/re-enable a connection. IDs are
-stable; edits require the current revision. A blank credential preserves the
-stored value; explicit clear removes it. Changing the endpoint requires replacing
+In **Connections → Add connection**, an administrator can create a connection
+manually or open **Browse MCP templates** to review a versioned configuration.
+Use **Advanced settings** for the call quota, transport profile and tool
+restrictions. IDs are stable, and edits require the current revision. On edit,
+a blank credential preserves the stored value. The clear option removes it.
+Changing the endpoint requires replacing
 or clearing an existing credential so it cannot be forwarded accidentally.
 Credentials use the installation's existing AES-GCM secret box and are bound to
 the connection ID. Read responses expose only `credentialConfigured`.

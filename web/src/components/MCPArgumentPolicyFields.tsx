@@ -28,8 +28,10 @@ export function MCPArgumentPolicyFields({input,onChange}:{input:MCPConnectionInp
    </>}
    <Btn onClick={()=>change(rules.filter((_,i)=>i!==index))}>Remove rule {index+1}</Btn>
   </fieldset>)}
-  <Btn disabled={rules.length>=64} onClick={()=>change([...rules,{tool:'',argument:'',values:[]}])}>Add argument rule</Btn>
-  <Btn disabled={rules.length>=64} onClick={()=>change([...rules,{tool:'',arguments:['workspace','repo'],combinations:[['','']]}])}>Add combination rule</Btn>
+  <div className="btn-row">
+   <Btn disabled={rules.length>=64} onClick={()=>change([...rules,{tool:'',argument:'',values:[]}])}>Add argument rule</Btn>
+   <Btn disabled={rules.length>=64} onClick={()=>change([...rules,{tool:'',arguments:['workspace','repo'],combinations:[['','']]}])}>Add combination rule</Btn>
+  </div>
   {rules.length>0&&<p>Saving policy changes clears discovery. Review the refreshed catalogue; tools with missing or non-string argument schemas are excluded.</p>}
  </details>;
 }

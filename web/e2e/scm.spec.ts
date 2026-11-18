@@ -6,12 +6,20 @@ test('administrators add a source control connection and tasks choose it as thei
   await page.goto('/#/connections');
   await page.evaluate(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
   await page.reload();
-  await page.getByRole('button', { name: 'Add source control connection', exact: true }).click();
+  const add = page.getByRole('region', { name: 'Source control', exact: true }).getByRole('link', { name: 'Add connection', exact: true });
+  await add.click();
+  await expect(page).toHaveURL(/#\/connections\/source-control\/new$/);
+  await expect(page.getByRole('table', { name: 'Source control connections' })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Cancel', exact: true }).click();
+  await expect(page).toHaveURL(/#\/connections$/);
+  await add.click();
   const form = page.getByRole('form', { name: 'Add source control connection' });
   await form.getByLabel('Name', { exact: true }).fill('e2e-github');
   await form.getByLabel('Repository', { exact: true }).fill('acme/app');
+  await form.getByLabel('API URL', { exact: true }).fill(new URL('/api/v1/scm-fixture-unavailable', page.url()).href);
   await form.getByLabel('Token', { exact: true }).fill('synthetic-scm-token');
   await form.getByRole('button', { name: 'Save connection', exact: true }).click();
+  await expect(page).toHaveURL(/#\/connections$/);
   const card = page.getByRole('row', { name: /e2e-github/ });
   await expect(card).toContainText('acme/app');
   await expect(card).toContainText('weft/*');
@@ -20,6 +28,22 @@ test('administrators add a source control connection and tasks choose it as thei
   await expect(page.getByRole('region', { name: 'Source control connection list' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(card.getByText('Not tested', { exact: true })).toBeVisible();
+  let releaseTest!: () => void;
+  const waitForPending = new Promise<void>(resolve => { releaseTest = resolve; });
+  await page.route('**/api/v1/scm/connections/e2e-github/test', async route => {
+    await waitForPending;
+    await route.continue();
+  });
+  await card.getByRole('button', { name: 'Test connection' }).click();
+  try {
+    await expect(card.getByRole('status')).toContainText('Checking connection');
+    await expect(card.getByRole('button', { name: 'Testing…' })).toBeDisabled();
+  } finally {
+    releaseTest();
+  }
+  await expect(card.getByRole('status')).toContainText('Connection failed');
+  await expect(card.getByRole('button', { name: 'Test connection' })).toBeEnabled();
   // The token never comes back to the browser.
   const listed = await (await page.request.get('/api/v1/scm/connections', { headers: admin })).text();
   expect(listed).not.toContain('synthetic-scm-token');

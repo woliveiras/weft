@@ -1913,7 +1913,7 @@ section {
 .shared-resource input[type='checkbox'] { margin-right: 6px; }
 
 /* Installation destinations keep configuration scope visible without mounting unrelated forms. */
-.installation-page, .administration-page { max-width: 1200px; margin-inline: auto; }
+.installation-page, .administration-page { min-width: 0; }
 .installation-page h1, .administration-page > .page-head h1 { font-size: 28px; letter-spacing: -0.025em; }
 .installation-page h3, .administration-page h3 { font-size: 15px; text-transform: none; letter-spacing: normal; }
 .section-navigation { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 24px; }

@@ -89,6 +89,7 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
   async function discover(id:string,action:'test'|'tools/refresh'){setBusy(true);setError(undefined);try{await api.refreshMCP(id,action);await list.reload();}catch(e){setError(errorMessage(e));}finally{setBusy(false);}}
   async function remove(){if(!deleting||deleteID!==deleting.id)return;setBusy(true);setError(undefined);try{await api.deleteMCP(deleting.id,deleting.revision);if(input.id===deleting.id)edit();setDeleting(undefined);setDeleteID('');await list.reload();if(presentation)location.hash='#/connections';}catch(e){setError(errorMessage(e));setDeleting(undefined);setDeleteID('');await list.reload();}finally{setBusy(false);}}
   const detail = presentation === 'detail';
+  const creating = presentation === 'create';
   const current = detail ? list.data?.find(c => c.id === connectionID) : undefined;
   const reloadButton = <Btn onClick={() => void list.reload()} disabled={list.loading}>Reload MCP connections</Btn>;
   const discoveryButtons = (c: MCPConnection) => operator && <>
@@ -98,7 +99,18 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
   const deleteButton = (c: MCPConnection) => <Btn tone="danger"
     disabled={busy || c.enabled || !!(c.oauth && (c.oauth.status !== 'revoked' || c.oauth.revocation === 'pending'))}
     onClick={() => { setDeleting(c); setDeleteID(''); setError(undefined); }}>Delete {c.name}</Btn>;
-  return <section className={detail ? 'connection-detail' : 'integration-section'} aria-label="MCP connections">
+  const advancedFields = <>
+      <HelpField label={"Connection calls per minute"} help={"Caps tool calls for this connection across workflows. Zero leaves this connection without its own rate cap; other limits still apply."}><input type="number" min={0} max={60000} step={1} value={input.callsPerMinute??0} onChange={e=>setInput({...input,callsPerMinute:Number(e.target.value)})}/></HelpField>
+      <p className="muted">Zero leaves calls uncapped. The UTC-minute quota is shared by all agents and replicas. Admitted calls count even if they fail.</p>
+      {!input.localProcess && <>
+      <HelpField label={"Transport profile"} help={"Choose the protocol behavior expected by the remote server. Use the service default unless your MCP server requires a specific profile."}><select aria-label="Transport profile" disabled={!!input.template||busy} value={input.transportProfile??''} onChange={e=>setInput({...input,transportProfile:e.target.value? 'stateless-2026-07-28':undefined})}><option value="">Session-based MCP 2025-06-18</option><option value="stateless-2026-07-28">Stateless MCP 2026-07-28 (bounded support)</option></select></HelpField>
+      {input.transportProfile&&<p>Explicit protocol selection. Additional input requests and custom parameter headers are unsupported. Changing profiles clears discovery and requires OAuth authorization again. Tool access still requires an explicit agent grant; this setting does not limit query costs.</p>}
+        <MCPAtlassianPolicyFields input={input} onChange={setInput} />
+        <MCPArgumentPolicyFields input={input} onChange={setInput} />
+        <MCPMetadataFields input={input} onChange={setInput} />
+      </>}
+  </>;
+  return <section className={detail ? 'connection-detail' : creating ? 'mcp-create' : 'integration-section'} aria-label="MCP connections">
     {detail ? <header className="page-head connection-detail-head">
       <div><a href="#/connections">Connections</a>
         {current && <><h1>{current.name}</h1><p className="muted">
@@ -106,13 +118,17 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
         </p></>}
       </div>
       {reloadButton}
-    </header> : presentation?<p><a href="#/connections">Connections</a> / {presentation==='create'?'New connection':list.data?.find(c=>c.id===connectionID)?.name??connectionID}</p>:<h2>MCP connections</h2>}
-    {presentation!=='detail'&&<><p>Register remote HTTPS Streamable HTTP servers and discover their tools. Only public network destinations are supported. Credentials stay encrypted in Weft.</p>
+    </header> : creating ? <header className="page-head connection-detail-head">
+      <div><a href="#/connections">Connections</a><h1>New connection</h1>
+        <p className="muted">Connect a tool server to Weft. Review agent permissions after discovery.</p>
+      </div>
+    </header> : <h2>MCP connections</h2>}
+    {!presentation && <><p>Register remote HTTPS Streamable HTTP servers and discover their tools. Only public network destinations are supported. Credentials stay encrypted in Weft.</p>
     <p>Assign tools to agents in the graph editor to allow calls through the gateway. OAuth supports manual registration, DCR and CIMD with PKCE; templates provide reviewed public defaults.</p></>}
     {oauthQuery!==undefined&&<MCPOAuthReturn key={oauthQuery} query={oauthQuery} canManage={admin} onChanged={list.reload}/> }
     {presentation!=='detail'&&<MCPTemplates connectionRoutes={!!presentation} query={connectQuery} canManage={admin} onSelect={t=>{edit();setInput({id:t.id,name:t.name,service:t.service,endpoint:t.endpoint,enabled:true,template:{id:t.id,version:t.version},oauth:t.authenticationModes?.length===1&&t.authenticationModes[0]==='oauth'?oauthDefaults(t.service).oauth:undefined});}} />}
-    {!detail && reloadButton}
-    <ErrorBox error={list.error}/><ErrorBox error={error}/>
+    {!presentation && reloadButton}
+    <ErrorBox error={creating ? undefined : list.error}/><ErrorBox error={error}/>
     {saveProgress&&<p role="status">{saveProgress}</p>}
     {savedID&&!busy&&saveProgress&&<a href={connectionLink(savedID)}>Open saved connection</a>}
     {deleting&&<section role="dialog" aria-label={`Delete MCP ${deleting.name}`}>
@@ -123,40 +139,45 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
       <Btn disabled={busy||deleteID!==deleting.id} onClick={()=>void remove()}>Confirm deletion</Btn>
       <Btn disabled={busy} onClick={()=>{setDeleting(undefined);setDeleteID('');}}>Cancel deletion</Btn>
     </section>}
-    {list.loading&&<p role="status">Loading connections…</p>}
-    {!detail&&!list.loading&&!list.error&&!list.data?.length&&<p>No MCP connections configured.</p>}
+    {!creating&&list.loading&&<p role="status">Loading connections…</p>}
+    {!presentation&&!list.loading&&!list.error&&!list.data?.length&&<p>No MCP connections configured.</p>}
     {presentation==='detail'&&!list.loading&&!list.error&&!list.data?.some(c=>c.id===connectionID)&&<p role="alert">Connection not found. It may have been deleted.</p>}
     {current && <nav className="section-navigation" aria-label="Connection sections">{connectionTabs.map(t =>
       <a key={t} href={connectionLink(current.id, t)} aria-current={tab === t ? 'page' : undefined}>{connectionTabTitles[t]}</a>
     )}</nav>}
     {presentation==='create'&&!admin&&<p>An administrator must create this connection.</p>}
-    {admin&&editing&&(presentation!=='detail'||tab==='settings')&&<form className={detail ? "card form connection-editor" : "form"} onSubmit={e=>{e.preventDefault();void save();}}>
-      <h3>{revision?'Edit connection':'New connection'}</h3>
+    {admin&&editing&&(presentation!=='detail'||tab==='settings')&&<form aria-label={creating ? "New MCP connection" : undefined} className={creating ? "card form mcp-create-form" : detail ? "card form connection-editor" : "form"} onSubmit={e=>{e.preventDefault();void save();}}
+      onInvalid={e => {
+        if (!(e.target instanceof HTMLElement)) return;
+        for (let disclosure = e.target.closest('details'); disclosure; disclosure = disclosure.parentElement?.closest('details') ?? null) {
+          disclosure.open = true;
+        }
+      }}>
+      {!creating && <h3>{revision ? 'Edit connection' : 'New connection'}</h3>}
       {input.template&&<MCPTemplateSettings key={`${input.template.id}-${input.template.version}-${revision??'new'}`} input={input} onChange={value=>{setInput(value);setToken('');setCredentialEmail('');setClientSecret('');}}/>}
+      <div className="mcp-setup-group">
+      {creating && <h2>Connection details</h2>}
       <HelpField label={"Connection ID"} help={"A stable identifier used in MCP tool names, such as mcp.github.pull_request_read. Use an ID that distinguishes this connection from others."}><input required pattern="[a-z][a-z0-9_-]{0,63}" value={input.id} disabled={!!revision||busy} onChange={e=>setInput({...input,id:e.target.value})}/></HelpField>
-      <HelpField label={"Connection calls per minute"} help={"Caps tool calls for this connection across workflows. Zero leaves this connection without its own rate cap; other limits still apply."}><input type="number" min={0} max={60000} step={1} value={input.callsPerMinute??0} onChange={e=>setInput({...input,callsPerMinute:Number(e.target.value)})}/></HelpField>
-      <p>0 means unlimited. A fixed UTC-minute quota is shared by all agents and replicas using this connection. Admitted calls count even if they fail; approval refusals do not consume it.</p>
       <HelpField label={"Connection name"} help={"A display name for the connection. Include the team or workspace when you have multiple connections to the same service."}><input required maxLength={120} value={input.name} onChange={e=>setInput({...input,name:e.target.value})}/></HelpField>
       {!revision&&info.data?.nativeProfile&&<HelpField label={"Connection transport"} help={"HTTP connects to a remote MCP server. A local stdio connection starts a process on the Weft host and is available in the native profile."}><select value={input.localProcess?'stdio':'http'} onChange={e=>{setInput({...empty,id:input.id,name:input.name,...(e.target.value==='stdio'?{localProcess:{command:'',args:[],directory:''}}:{})});setEnvironment('');setReviewedProcess('');setToken('');setClear(false);}}><option value="http">Remote HTTP</option><option value="stdio">Local process (stdio)</option></select></HelpField>}
-      {input.localProcess?<LocalMCPFields value={input.localProcess} onChange={localProcess=>setInput({...input,localProcess})} environment={environment} onEnvironment={setEnvironment} reviewed={reviewedProcess===processFingerprint} onReview={checked=>setReviewedProcess(checked?processFingerprint:'')} storedKeys={list.data?.find(c=>c.id===input.id)?.environmentKeys}/>:<>
+      {input.localProcess ? <LocalMCPFields value={input.localProcess} onChange={localProcess=>setInput({...input,localProcess})} environment={environment} onEnvironment={setEnvironment} reviewed={reviewedProcess===processFingerprint} onReview={checked=>setReviewedProcess(checked?processFingerprint:'')} storedKeys={list.data?.find(c=>c.id===input.id)?.environmentKeys}/> : <>
       <HelpField label={"Service"} help={"Select the service the connection integrates with. Weft uses this to offer provider-specific configuration and review."}><select disabled={!!input.template} value={input.service} onChange={e=>setInput({...input,service:e.target.value})}>{serviceOptions.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></HelpField>
-      <MCPServiceGuide service={input.service}/>
-      <MCPAtlassianPolicyFields input={input} onChange={setInput}/>
-      <MCPArgumentPolicyFields input={input} onChange={setInput}/>
-      {!input.template&&<>
-        {input.service==='gitlab'&&<HelpField label={"GitLab instance URL"} help={"The origin of the GitLab instance you want to connect to, such as https://gitlab.com. Use HTTPS and leave out the repository path."}><input type="url" value={gitlabInstance} onChange={e=>setGitlabInstance(e.target.value)}/></HelpField>}
-        <p>Apply defaults to prepare OAuth fields. This clears the client registration fields in the form; review and save to change the connection.</p>
-        <Btn disabled={busy} onClick={applyDefaults}>Use OAuth defaults</Btn>
-      </>}
-      <HelpField label={"Transport profile"} help={"Choose the protocol behavior expected by the remote server. Use the service default unless your MCP server requires a specific profile."}><select aria-label="Transport profile" disabled={!!input.template||busy} value={input.transportProfile??''} onChange={e=>setInput({...input,transportProfile:e.target.value? 'stateless-2026-07-28':undefined})}><option value="">Session-based MCP 2025-06-18</option><option value="stateless-2026-07-28">Stateless MCP 2026-07-28 (bounded support)</option></select></HelpField>
-      {input.transportProfile&&<p>Explicit protocol selection. Additional input requests and custom parameter headers are unsupported. Changing profiles clears discovery and requires OAuth authorization again. Tool access still requires an explicit agent grant; this setting does not limit query costs.</p>}
       <HelpField label={"MCP endpoint"} help={"The server URL that handles MCP requests. It must be reachable by Weft. Use the service documentation for the exact URL."}><input type="url" required placeholder="https://mcp.example.com/mcp" readOnly={!!input.template} value={input.endpoint} onChange={e=>setInput({...input,endpoint:e.target.value})}/></HelpField>
+      </>}
+      </div>
+      {!input.localProcess && <div className="mcp-setup-group">
+      {creating && <h2>Authentication</h2>}
+      {!input.template && input.service === 'gitlab' && <HelpField label={"GitLab instance URL"} help={"The origin of the GitLab instance you want to connect to, such as https://gitlab.com. Use HTTPS and leave out the repository path."}><input type="url" value={gitlabInstance} onChange={e=>setGitlabInstance(e.target.value)}/></HelpField>}
+      {!input.template && (!creating || input.oauth) && <p className="muted">OAuth defaults replace this form’s client registration fields.</p>}
+      <div className="mcp-oauth-controls">
       <HelpField label="Use browser OAuth" help="Sign in with the service to grant its OAuth scopes to this connection. Use the service’s registered callback URL and choose only the scopes you need.">
           <input type="checkbox" checked={!!input.oauth} onChange={e=>{setInput({...input,credentialType:undefined,oauth:e.target.checked?(input.service==='databricks'?oauthDefaults('databricks').oauth:{issuer:'',clientId:'',scopes:[]}):undefined});setToken('');setCredentialEmail('');setClear(false);setClientSecret('');setClearClientSecret(false);}}/>
         </HelpField>
+        {!input.template && <Btn disabled={busy} onClick={applyDefaults}>Use OAuth defaults</Btn>}
+      </div>
       {input.oauth?<fieldset><legend>OAuth client registration</legend>
         <MCPOAuthCallbackURL/><p>Review the issuer and scopes before saving.</p>{(!input.oauth.registrationMode||input.oauth.registrationMode==='manual')&&!input.oauth.clientId&&<p role="status">Configuration pending: enter a pre-registered OAuth client ID.</p>}
-        <HelpField label={"Client registration method"} help={"Manual uses a client ID registered with the service. Automatic asks a compatible OAuth server to register a client during setup."}><select value={input.oauth.registrationMode||'manual'} onChange={e=>{setInput({...input,oauth:{...input.oauth!,registrationMode:e.target.value,clientId:''}});setClientSecret('');setClearClientSecret(true);}}>
+        <HelpField label={"Client registration method"} help={"Manual uses a client ID registered with the service. Automatic asks a compatible OAuth server to register a client during setup."}><select value={input.oauth.registrationMode||'manual'} onChange={e=>{setInput({...input,oauth:{...input.oauth!,registrationMode:e.target.value,clientId:''}});setClientSecret('');setClearClientSecret(!creating);}}>
           <option value="manual">Manual — pre-registered client</option><option value="auto">Automatic — prefer CIMD, then DCR</option><option value="dcr">DCR — register with provider</option><option value="cimd">CIMD — public client metadata</option>
         </select></HelpField>
         {input.oauth.registrationMode&&input.oauth.registrationMode!=='manual'&&<p>Save, then review the available mechanism before authorizing. CIMD needs a public HTTPS installation URL reachable by the provider; localhost can use DCR or manual setup. Registration never assigns agent tools.</p>}
@@ -164,22 +185,26 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
         {(!input.oauth.registrationMode||input.oauth.registrationMode==='manual')&&<HelpField label={"OAuth client ID"} help={"Identifies the registered OAuth application. Copy the public client ID, then register the callback URL shown in Weft with that application."}><input required value={input.oauth.clientId} onChange={e=>setInput({...input,oauth:{...input.oauth!,clientId:e.target.value}})}/></HelpField>}
         <HelpField label={"OAuth scopes (space separated)"} help={"Lists the access the application requests during sign-in. Choose only the scopes needed for the tools the connection will use."}><input value={input.oauth.scopes.join(' ')} onChange={e=>setInput({...input,oauth:{...input.oauth!,scopes:e.target.value.split(' ')}})}/></HelpField>
         {(!input.oauth.registrationMode||input.oauth.registrationMode==='manual')&&<><HelpField label={"OAuth client secret (optional)"} help={"Used when the service requires a confidential OAuth client. Weft stores it encrypted; enter a new value only when adding or replacing it."}><input type="password" autoComplete="new-password" disabled={clearClientSecret} value={clientSecret} onChange={e=>setClientSecret(e.target.value)}/></HelpField>
-        <p>Blank preserves an existing client secret. Public clients do not need one.</p>
-        <label><input type="checkbox" checked={clearClientSecret} onChange={e=>{setClearClientSecret(e.target.checked);setClientSecret('');}}/>Clear OAuth client secret</label></>}
+        {!creating && <><p>Blank preserves an existing client secret. Public clients do not need one.</p>
+        <label><input type="checkbox" checked={clearClientSecret} onChange={e=>{setClearClientSecret(e.target.checked);setClientSecret('');}}/>Clear OAuth client secret</label></>}</>}
       </fieldset>:<>
       <HelpField label={"Credential type"} help={"Select the authentication scheme expected by the service. The selected scheme determines which fields you need to supply."}><select aria-label="Credential type" value={input.credentialType||'bearer'} onChange={e=>{setInput({...input,metadataHeaders:undefined,credentialType:e.target.value as 'bearer'|'basic'|'langsmith'});setToken('');setCredentialEmail('');setClear(false);}}><option value="bearer">Bearer token</option>{(['atlassian','jira','confluence','bitbucket'].includes(input.service)||/^https:\/\/mcp\.atlassian\.com\//i.test(input.endpoint)||input.credentialType==='basic')&&<option value="basic">Atlassian personal API token (Basic)</option>}{input.service==='generic'&&<option value="langsmith">Standalone LangSmith API key</option>}</select></HelpField>
       {input.credentialType==='basic'&&<><HelpField label={"API token owner email"} help={"The email of the account that issued the token. Basic authentication uses that email and the token together."}><input type="email" autoComplete="off" value={credentialEmail} disabled={clear} onChange={e=>setCredentialEmail(e.target.value)}/></HelpField><p>Enter the email and token together to replace the credential. Both are encrypted and never returned after saving. Organization admin enablement is required; use agent-interface scopes and supply cloudId where required. Service account keys use Bearer instead.</p></>}
       <HelpField label={input.credentialType==='basic'?'Personal API token':input.credentialType==='langsmith'?'LangSmith API key':'Bearer token'} help="Use a credential issued by this service for the selected authentication scheme. Give it only the access the connection needs. Leave it blank while editing to retain the stored credential."><input type="password" autoComplete="new-password" value={token} disabled={clear} onChange={e=>setToken(e.target.value)}/></HelpField>
-      <p className="muted small">Leave blank to keep the existing credential. Changing the endpoint requires replacing or clearing its credential.</p>
-      <HelpField label="Clear stored credential" help="Removes the saved credential when you save the connection. The tools need valid authentication again if the service requires it.">
+      {!creating && <><p className="muted small">Leave blank to keep the existing credential. Changing the endpoint requires replacing or clearing its credential.</p>
+        <HelpField label="Clear stored credential" help="Removes the saved credential when you save the connection. The tools need valid authentication again if the service requires it.">
           <input type="checkbox" checked={clear} onChange={e=>{setClear(e.target.checked);setToken('');setCredentialEmail('');}}/>
-        </HelpField></>}
-      <MCPMetadataFields input={input} onChange={setInput}/>
-      </>}
+        </HelpField>
+      </>}</>}
+      {creating ? <details><summary>Provider setup guide</summary><MCPServiceGuide service={input.service} /></details> : <MCPServiceGuide service={input.service} />}
+      </div>}
+      {creating ? <details className="mcp-advanced-settings"><summary>Advanced settings</summary>{advancedFields}</details> : advancedFields}
+      <footer className="mcp-form-footer">
       <HelpField label="Connection enabled" help="Controls whether this connection can supply tools to agents. The connection also needs successful discovery and a workflow grant before it can be used.">
           <input type="checkbox" checked={input.enabled} onChange={e=>setInput({...input,enabled:e.target.checked})}/>
         </HelpField>
       <div className="btn-row"><Btn type="submit" disabled={busy||!!input.localProcess&&reviewedProcess!==processFingerprint} tone="primary">Save MCP connection</Btn>{revision&&<Btn disabled={busy} onClick={()=>edit()}>Cancel connection edit</Btn>}{presentation==='create'&&<a href="#/connections">Cancel</a>}</div>
+      </footer>
     </form>}
     {current && <div className="connection-panels">
       {tab === 'overview' && <>

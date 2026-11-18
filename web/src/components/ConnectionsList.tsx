@@ -13,7 +13,7 @@ export function ConnectionsList({ role }: { role?: string }) {
   return <section aria-labelledby="mcp-connections-heading" className="card connections-panel">
     <header className="connections-panel-head">
       <div><h2 id="mcp-connections-heading">MCP connections</h2><p className="muted">Connect external tool servers. Grant tools to each agent in its permissions.</p></div>
-      {role === 'admin' && <a className="btn btn-primary" href="#/connections/new">Add connection</a>}
+      {role === 'admin' && <a className="btn btn-primary" href="#/connections/new" aria-describedby="mcp-connections-heading">Add connection</a>}
     </header>
     <div className="connections-toolbar">
       <div className="connection-filters">

@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it } from 'vitest';
 import { fakeApi, apiError } from '../test/fakeApi';
@@ -7,6 +7,26 @@ import { MCPSection } from './MCPSection';
 import { ConnectionGrants } from './ConnectionGrants';
 const connection={id:'team',name:'Team',service:'github',endpoint:'https://example.com/mcp',enabled:true,status:'ready',revision:1,credentialConfigured:true,tools:[{name:'search',description:'Search repositories',inputSchema:{type:'object'}}],toolsRevision:1,updatedAt:'2026-10-16T10:00:00Z',updatedBy:'admin'};
 afterEach(cleanup);
+it('shows only create actions by default and reveals an invalid field in advanced settings', async () => {
+  const backend = fakeApi({
+    'GET /api/v1/info': () => ({ nativeProfile: false }),
+    'GET /api/v1/mcp/connections': () => [],
+    'GET /api/v1/mcp/templates': () => [],
+  });
+  render(<MCPSection role="admin" presentation="create" />);
+  const form = screen.getByRole('form', { name: 'New MCP connection' });
+  expect(within(form).queryByLabelText('Clear stored credential')).toBeNull();
+  const advanced = within(form).getByText('Advanced settings').closest('details');
+  expect(advanced?.open).toBe(false);
+  fireEvent.invalid(within(form).getByLabelText('Connection calls per minute'));
+  expect(advanced?.open).toBe(true);
+  await userEvent.click(within(form).getByRole('checkbox', { name: 'Use browser OAuth' }));
+  const method = within(form).getByLabelText('Client registration method');
+  await userEvent.selectOptions(method, 'auto');
+  await userEvent.selectOptions(method, 'manual');
+  expect((within(form).getByLabelText('OAuth client secret (optional)') as HTMLInputElement).disabled).toBe(false);
+  expect(backend.calls.every(call => call.method === 'GET')).toBe(true);
+});
 it('lists and filters connections without loading setup or mutating permissions',async()=>{
  const backend=fakeApi({'GET /api/v1/mcp/connections':()=>[connection]});
  render(<ConnectionsList role="admin"/>);
