@@ -75,14 +75,16 @@ export function YamlEditor({
   };
 
   return (
-    <div className="page fill split">
+    <div className="page fill split graph-definition">
       <div className="split-main">
-        <div className="page-head">
-          <h2>Definition</h2>
-          <span className="muted small">
-            based on version {summary.record.version}
-            {dirty ? ' · unsaved changes' : ''}
-          </span>
+        <div className="page-head definition-header">
+          <div className="definition-heading">
+            <h2>Definition</h2>
+            <span className="muted small">
+              based on version {summary.record.version}
+              {dirty ? ' · unsaved changes' : ''}
+            </span>
+          </div>
           <Btn small tone="ghost" onClick={() => void download(gid).catch((e) => setError(errorMessage(e)))}>
             Export saved
           </Btn>

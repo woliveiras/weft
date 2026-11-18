@@ -311,7 +311,7 @@ export function GraphWorkspace({
   const running = state === 'running' || state === 'paused' || state === 'stopping';
 
   return (
-    <div className={tab === 'settings' ? 'workspace workspace-settings' : 'workspace'}>
+    <div className="workspace">
       <div className="toolbar">
         <div className="tabs" role="tablist">
           {(['canvas', 'agent', 'runs', 'activity', 'files', 'events', 'messages', 'yaml', 'settings'] as GraphTab[]).map((t) => (

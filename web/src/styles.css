@@ -572,8 +572,8 @@ main {
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
-.split {
-  flex-direction: row !important;
+.page.fill.split {
+  flex-direction: row;
   gap: 16px;
 }
 .split-main {
@@ -653,6 +653,8 @@ main {
 .toolbar {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
   gap: 14px;
   padding: 10px 20px;
   border-bottom: 1px solid var(--border);
@@ -663,7 +665,8 @@ main {
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  flex: 1;
+  flex: 1 0 auto;
+  max-inline-size: 100%;
   flex-wrap: wrap;
   min-height: 40px;
 }
@@ -689,13 +692,17 @@ main {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  flex: none;
+  flex: 0 1 auto;
+  max-inline-size: 100%;
+  flex-wrap: wrap;
   white-space: nowrap;
 }
 .tabs {
   display: flex;
   gap: 4px;
 }
+.toolbar > .tabs { max-inline-size: 100%; overflow-x: auto; }
+.toolbar > .tabs > button { flex-shrink: 0; }
 .floor {
   flex: 1;
   min-height: 0;
@@ -2109,7 +2116,6 @@ button, summary, a { touch-action: manipulation; }
 .activity-links { display: flex; flex-wrap: wrap; gap: 4px 10px; }
 @media (prefers-reduced-motion: reduce) { .activity-counter { transition: none; } }
 
-.workspace-settings > .toolbar { flex-shrink: 0; }
 .graph-settings {
   flex: 1;
   min-height: 0;
@@ -2118,7 +2124,7 @@ button, summary, a { touch-action: manipulation; }
   grid-template-columns: minmax(175px, 220px) minmax(0, 1fr);
   gap: var(--space-5);
   align-items: start;
-  padding: var(--space-5);
+  padding: var(--space-6) var(--space-8);
 }
 .graph-settings > nav {
   display: grid;
@@ -2155,20 +2161,21 @@ button, summary, a { touch-action: manipulation; }
   color: var(--text);
 }
 .graph-settings .node-editor fieldset { padding: var(--space-4); }
+.graph-settings .node-editor > fieldset { padding: 0; }
+.graph-settings .node-editor > fieldset > legend {
+  padding-inline: 0;
+  margin-block-end: var(--space-2);
+}
+.graph-settings .node-editor > fieldset > .check > input[type='checkbox'] { margin-inline-start: 0; }
 .graph-settings .node-editor .tiny { font-size: var(--font-size-sm, 13px); }
 .graph-settings .node-editor select { max-width: 100%; }
-
-@media (max-width: 900px) {
-  .toolbar > .tabs { max-width: 100%; overflow-x: auto; }
-  .toolbar > .tabs > button { flex-shrink: 0; }
-  .workspace-settings .toolbar-run-controls { max-width: 100%; }
-}
 
 @media (max-width: 760px) {
   .graph-settings {
     grid-template-columns: minmax(0, 1fr);
     grid-auto-rows: max-content;
     align-content: start;
+    padding: var(--space-4);
   }
   .graph-settings > nav {
     display: flex;

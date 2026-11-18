@@ -243,6 +243,25 @@ main > .page:not(.fill) { width: 100%; max-width: var(--content-max); margin-inl
 .events-controls { flex-wrap: wrap; margin-inline-start: auto; }
 .events-controls label { gap: var(--space-1); }
 .events-controls input[type='checkbox'] { margin: 0; }
+.definition-header, .definition-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.definition-header { margin-block-end: var(--space-2); }
+.definition-header > .btn { margin-inline-start: auto; }
+@media (max-width: 760px) {
+  .page.fill.graph-definition { flex-direction: column; }
+  .graph-definition .split-main { flex: none; overflow: visible; }
+  .graph-definition .split-side.narrow {
+    width: auto;
+    overflow: visible;
+    border-inline-start: 0;
+    border-block-start: 1px solid var(--border);
+    padding-inline-start: 0;
+  }
+}
 .page-head p, .page > p.muted { color: var(--text-muted); }
 .section-navigation a, .section-navigation button { border-radius: var(--radius-sm); }
 .section-navigation a[aria-current='page'], .section-navigation button[aria-current=page] { position: relative; }

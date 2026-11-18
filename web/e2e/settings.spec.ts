@@ -13,7 +13,7 @@ test('opens settings by section, preserves the graph draft in history and links 
   await page.goto(`${base}/settings/workspace`);
   const nav = page.getByRole('navigation', { name: 'Graph settings sections' });
   const workspace = page.getByRole('region', { name: 'Workspace' });
-  const repository = workspace.getByLabel('Repository URL');
+  const repository = workspace.getByRole('textbox', { name: 'Repository URL', exact: true });
   await expect(page.getByRole('tab', { name: 'Settings' })).toHaveAttribute('aria-selected', 'true');
   await expect(workspace.getByRole('heading')).toBeFocused();
   await expect(page.locator('.react-flow')).toHaveCount(0);
@@ -41,8 +41,41 @@ test('opens settings by section, preserves the graph draft in history and links 
 
   await page.setViewportSize({ width: 390, height: 844 });
   await nav.getByRole('link', { name: 'General' }).click();
-  const maxHops = page.getByLabel('Max hops');
+  const maxHops = page.getByRole('spinbutton', { name: 'Max hops', exact: true });
   await maxHops.scrollIntoViewIfNeeded();
   await expect(maxHops).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('fits the workflow toolbar and aligns Definition and Settings on wide and narrow screens', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  const created = await page.request.post('/api/v1/graphs', {
+    headers: { Authorization: 'Bearer e2e-admin-token' },
+    data: { metadata: { name: 'Workflow layout' }, spec: { nodes: [{ id: 'echo', runtime: { kind: 'echo' } }] } },
+  });
+  expect(created.ok()).toBe(true);
+  const { graph } = await created.json();
+  await page.goto(`/#/g/${graph.metadata.id}/settings/general`);
+
+  const settings = page.getByRole('region', { name: 'General' });
+  const title = await settings.getByRole('heading').boundingBox();
+  const name = await settings.getByRole('textbox', { name: 'Name' }).boundingBox();
+  expect(name?.x).toBe(title?.x);
+  await expect(page.getByRole('button', { name: 'Kill', exact: true })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1280);
+
+  await page.getByRole('tab', { name: 'Definition', exact: true }).click();
+  const yaml = page.getByRole('textbox', { name: 'Graph YAML' });
+  const versions = page.getByRole('heading', { name: 'Versions', exact: true });
+  await expect(page.getByRole('button', { name: 'Export saved' })).toBeInViewport();
+  expect((await versions.boundingBox())!.x).toBeGreaterThan((await yaml.boundingBox())!.x);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1280);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const editor = (await yaml.boundingBox())!;
+  const history = (await versions.boundingBox())!;
+  expect(history.y).toBeGreaterThan(editor.y + editor.height);
+  expect(history.x).toBe(editor.x);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
