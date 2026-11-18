@@ -10,7 +10,7 @@ test('connects from a template link through OAuth consent, renewal and revocatio
  await page.getByRole('button',{name:'Customize without template'}).click();
  await page.getByLabel('Connection ID',{exact:true}).fill('oauth-browser');await page.getByLabel('Connection name',{exact:true}).fill('Browser OAuth');
  await page.getByLabel('MCP endpoint',{exact:true}).fill(config.endpoint);
- await page.getByLabel('Use browser OAuth').check();
+ await page.getByRole('checkbox',{name:'Use browser OAuth',exact:true}).check();
  await page.getByLabel('OAuth issuer',{exact:true}).fill(config.oauth.issuer);await page.getByLabel('OAuth client ID',{exact:true}).fill('fixture-client');await page.getByLabel('OAuth scopes (space separated)',{exact:true}).fill('read');
  await page.getByRole('button',{name:'Save MCP connection',exact:true}).click();
  await page.getByRole('button',{name:'Authorize Browser OAuth',exact:true}).click();
@@ -66,7 +66,7 @@ test('GitHub contract: confidential consent, comma scopes, renewal, errors and l
  await page.getByLabel('Connection name',{exact:true}).fill('GitHub OAuth browser');
  await page.getByRole('combobox',{name:/^Service/}).selectOption('github');
  await page.getByLabel('MCP endpoint',{exact:true}).fill(config.endpoint);
- await page.getByLabel('Use browser OAuth').check();
+ await page.getByRole('checkbox',{name:'Use browser OAuth',exact:true}).check();
  await page.getByLabel('OAuth issuer',{exact:true}).fill(config.oauth.issuer);
  await page.getByLabel('OAuth client ID',{exact:true}).fill('fixture-client');
  await page.getByLabel('OAuth scopes (space separated)',{exact:true}).fill('read:user read:org');
@@ -114,7 +114,7 @@ test('keeps personal, corporate and GitLab OAuth connections and agent grants in
  for(const [id,name,service] of connections){
   await page.goto('/#/integrations');await page.reload();
   await page.getByRole('combobox',{name:/^Service/}).selectOption(service);
-  if(service==='gitlab')await page.getByLabel('GitLab instance URL').fill('https://gitlab.fixture.example');
+  if(service==='gitlab')await page.getByRole('textbox',{name:'GitLab instance URL',exact:true}).fill('https://gitlab.fixture.example');
   await page.getByRole('button',{name:'Use OAuth defaults',exact:true}).click();
   await expect(page.getByLabel('MCP endpoint',{exact:true})).toHaveValue(configurations[service].endpoint+(service==='atlassian'?'?tools=all':''));
   await expect(page.getByText(new URL('/api/v1/mcp/oauth/callback',page.url()).href,{exact:true})).toBeVisible();

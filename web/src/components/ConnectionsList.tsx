@@ -2,14 +2,7 @@ import { useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAsync } from '../hooks/useData';
 import { Badge, Btn, Empty, ErrorBox, fmtDateTime, stateLabel } from './common';
-import { connectionLink, matchingConnections } from './mcpNavigation';
-
-const statuses: Record<string, { label: string; tone?: string }> = {
-  ready: { label: 'Ready', tone: 'ok' },
-  untested: { label: 'Untested' },
-  unavailable: { label: 'Unavailable', tone: 'bad' },
-  disabled: { label: 'Disabled' },
-};
+import { connectionLink, connectionStatuses, matchingConnections } from './mcpNavigation';
 
 export function ConnectionsList({ role }: { role?: string }) {
   const list = useAsync(api.mcpConnections, []);
@@ -27,7 +20,7 @@ export function ConnectionsList({ role }: { role?: string }) {
         <label>Search connections<input ref={searchField} type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Name, service or ID" /></label>
         <label>Connection status<select value={status} onChange={e => setStatus(e.target.value)}>
           <option value="">All statuses</option>
-          {Object.entries(statuses).map(([key, { label }]) => <option key={key} value={key}>{label}</option>)}
+          {Object.entries(connectionStatuses).map(([key, { label }]) => <option key={key} value={key}>{label}</option>)}
         </select></label>
         {(search || status) && <Btn tone="ghost" onClick={() => {
           setSearch('');
@@ -51,7 +44,7 @@ export function ConnectionsList({ role }: { role?: string }) {
         <thead><tr><th scope="col">Connection</th><th scope="col">Service</th><th scope="col">Status</th><th scope="col">Authorization</th><th scope="col">Last discovery</th></tr></thead>
         <tbody>{matches.map(c => <tr key={c.id}>
           <td><a href={connectionLink(c.id)}>{c.name}</a><span className="muted small connection-meta">{c.id}</span></td>
-          <td>{c.service}</td><td><Badge tone={statuses[c.status]?.tone}>{statuses[c.status]?.label ?? c.status}</Badge></td>
+          <td>{c.service}</td><td><Badge tone={connectionStatuses[c.status]?.tone}>{connectionStatuses[c.status]?.label ?? c.status}</Badge></td>
           <td>{c.oauth ? `OAuth · ${stateLabel(c.oauth.status).replaceAll('_', ' ')}` : c.credentialConfigured ? 'Credential configured' : 'No credential'}</td>
           <td>{c.lastTest ? <time dateTime={c.lastTest}>{fmtDateTime(c.lastTest)}</time> : <span className="muted">Not checked</span>}</td>
         </tr>)}</tbody>

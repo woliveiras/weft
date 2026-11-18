@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it } from 'vitest';
 import { fakeApi, apiError } from '../test/fakeApi';
@@ -37,6 +37,17 @@ it('scopes tools and settings to one connection and preserves viewer restriction
  const view=render(<MCPSection role="viewer" presentation="detail" connectionID="team" tab="tools"/>);
  expect(await screen.findByText('mcp.team.search')).toBeTruthy();expect(screen.queryByRole('article',{name:'MCP Other'})).toBeNull();
  expect(screen.queryByRole('button',{name:'Refresh tools for Team'})).toBeNull();
+ const search = screen.getByRole('searchbox', { name: 'Search tools' });
+ await userEvent.type(search, 'MCP.TEAM.SEARCH');
+ const toolList = screen.getByRole('region', { name: 'Discovered tools' });
+ expect(toolList.getAttribute('tabindex')).toBe('0');
+ expect(within(toolList).getByText('mcp.team.search')).toBeTruthy();
+ await userEvent.click(within(toolList).getByRole('button', { name: 'Input schema' }));
+ expect(within(toolList).getByText(/"type": "object"/)).toBeTruthy();
+ await userEvent.clear(search);
+ await userEvent.type(search, 'repositories');
+ expect(within(toolList).getByText('Search repositories')).toBeTruthy();
+ await userEvent.clear(search);
  await userEvent.type(screen.getByLabelText('Search tools'),'absent');expect(screen.getByText('No tools match this search.')).toBeTruthy();
  view.rerender(<MCPSection role="viewer" presentation="detail" connectionID="team" tab="settings"/>);
  expect(screen.getByText('Only administrators can edit connection settings.')).toBeTruthy();
@@ -63,6 +74,11 @@ it('shows explicit and inherited saved grants, without treating empty grants as 
  render(<ConnectionGrants connectionID="team"/>);
  expect(await screen.findByRole('link',{name:'inherited'})).toBeTruthy();expect(screen.getByRole('link',{name:'explicit'})).toBeTruthy();
  expect(screen.queryByRole('link',{name:'empty'})).toBeNull();expect(screen.queryByRole('link',{name:'other'})).toBeNull();
+ const row = screen.getByRole('row', { name: /inherited/ });
+ expect(within(row).getByText('Graph')).toBeTruthy();
+ expect(within(row).getByText('1 tool').closest('details')?.open).toBe(false);
+ await userEvent.click(within(row).getByText('1 tool'));
+ expect(within(row).getByText('1 tool').closest('details')?.open).toBe(true);
 });
 it('does not report absent grants on a graph API failure',async()=>{
  fakeApi({'GET /api/v1/graphs':()=>apiError(403,'Forbidden','forbidden')});

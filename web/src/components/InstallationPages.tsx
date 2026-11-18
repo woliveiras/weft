@@ -26,7 +26,7 @@ export function ConnectionsPage({ info, connectionID, connectionTab = 'overview'
   // Legacy integration and OAuth/template links retain their reviewed setup flow.
   const legacy = location.hash.startsWith('#/integrations') || oauthQuery !== undefined;
   const overview = !history && !legacy && !create && connectQuery === undefined && connectionID === undefined;
-  return <div className={`page installation-page${overview ? ' connections-overview' : ''}`}><header className="page-head" hidden={connectionID !== undefined}><div><h1>Connections</h1>
+  return <div className={`page installation-page${overview || history || (connectionID !== undefined && !legacy) ? ' connections-page-wide' : ''}`}><header className="page-head" hidden={connectionID !== undefined}><div><h1>Connections</h1>
     {overview && <p className="muted">Manage agent tool integrations and source control connections for this installation.</p>}</div></header>
     {history ? <><a href="#/connections">Back to connections</a><MCPHistory /></> : legacy || create || connectQuery !== undefined || connectionID !== undefined
       ? <MCPSection key={connectionID ?? connectQuery ?? (create ? 'new' : 'manual')} role={info?.identity?.role} connectQuery={connectQuery} oauthQuery={oauthQuery} presentation={legacy ? undefined : create || connectQuery !== undefined ? 'create' : 'detail'} connectionID={connectionID} tab={connectionTab} />

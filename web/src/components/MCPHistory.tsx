@@ -22,10 +22,10 @@ export function MCPHistory({connectionID}:{connectionID?:string} = {}){
   }catch(e){if(ticket===generation.current)setError(errorMessage(e));}
   finally{if(ticket===generation.current)setBusy(false);}
  }
- return <section className="integration-section" aria-label="MCP call history">
+ return <section className="card connections-panel mcp-history" aria-label="MCP call history">
   <h2>MCP call history</h2>
-  <p>Newest events first. Results show outcomes, not raw arguments, responses or approval comments. History follows installation event retention and includes deleted connections.</p>
-  <form className="form" onSubmit={e=>{e.preventDefault();void load();}}>
+  <p className="muted">Newest events first. History records outcomes and follows the installation’s retention policy.{connectionID === undefined && ' It includes deleted connections.'}</p>
+  <form className="form mcp-history-form" onSubmit={e=>{e.preventDefault();void load();}}>
    <fieldset disabled={busy}><legend>History filters</legend>
     {(['connection','graph','node','tool'] as const).map(key=><label key={key}>{({connection:'History connection ID',graph:'History graph ID',node:'History agent ID',tool:'History tool name'})[key]}<input readOnly={key==='connection'&&connectionID!==undefined} value={filters[key]} onChange={e=>setFilters({...filters,[key]:e.target.value})}/></label>)}
     <label>History outcome<select value={filters.outcome} onChange={e=>setFilters({...filters,outcome:e.target.value})}><option value="">All outcomes</option>{['started','ok','error','denied','unknown','rate_limited','rejected','pending','approved','expired'].map(x=><option key={x} value={x}>{x}</option>)}</select></label>
@@ -33,8 +33,10 @@ export function MCPHistory({connectionID}:{connectionID?:string} = {}){
     <label>History since<input type="datetime-local" value={filters.since} onChange={e=>setFilters({...filters,since:e.target.value})}/></label>
     <label>History until<input type="datetime-local" value={filters.until} onChange={e=>setFilters({...filters,until:e.target.value})}/></label>
    </fieldset>
-   <Btn type="submit" disabled={busy}>Apply history filters</Btn>
-   <Btn disabled={busy} onClick={()=>{setFilters({...initial,connection:connectionID??''});setPage(undefined);setApplied('');setError(undefined);}}>Clear history filters</Btn>
+   <div className="btn-row">
+    <Btn type="submit" tone="primary" disabled={busy}>Apply history filters</Btn>
+    <Btn disabled={busy} onClick={()=>{setFilters({...initial,connection:connectionID??''});setPage(undefined);setApplied('');setError(undefined);}}>Clear history filters</Btn>
+   </div>
   </form>
   <ErrorBox error={error}/>
   {busy&&<p role="status">Loading MCP history…</p>}
@@ -42,10 +44,12 @@ export function MCPHistory({connectionID}:{connectionID?:string} = {}){
   {page&&<>
    <p>Showing the last successfully applied query. Edit filters and apply to update.</p>
    {!page.entries.length&&<p>{page.hasMore?'No matches in this scanned page; older events remain.':'No matching events in this page.'}</p>}
-   {page.entries.length>0&&<table><caption>MCP events</caption><thead><tr>{['Time','Connection / tool','Graph / agent','Event / outcome','Duration','Result','References'].map(x=><th key={x} scope="col">{x}</th>)}</tr></thead><tbody>{page.entries.map(e=><tr key={e.seq}>
-    <td>{fmtDateTime(e.time)}</td><td>{e.connection}<br/>{e.tool}</td><td>{e.graph}<br/>{e.node}</td><td>{e.type}<br/>{e.outcome}</td><td>{e.durationMs} ms</td><td>{e.summary}</td><td>{e.execution}{e.approval&&<><br/>{e.approval}</>}</td>
-   </tr>)}</tbody></table>}
-   <Btn disabled={busy||!page.hasMore} onClick={()=>void load(true)}>Older MCP events</Btn>
+   {page.entries.length>0&&<div className="connection-table mcp-history-table" role="region" aria-label="MCP history results" tabIndex={0}>
+    <table><caption className="sr-only">MCP events</caption><thead><tr>{['Time','Connection / tool','Graph / agent','Event / outcome','Duration','Result','References'].map(x=><th key={x} scope="col">{x}</th>)}</tr></thead><tbody>{page.entries.map(e=><tr key={e.seq}>
+     <td><time dateTime={e.time}>{fmtDateTime(e.time)}</time></td><td>{e.connection}<br/>{e.tool}</td><td>{e.graph}<br/>{e.node}</td><td>{e.type}<br/>{e.outcome}</td><td>{e.durationMs} ms</td><td>{e.summary}</td><td>{e.execution}{e.approval&&<><br/>{e.approval}</>}</td>
+    </tr>)}</tbody></table>
+   </div>}
+   <div className="btn-row"><Btn disabled={busy||!page.hasMore} onClick={()=>void load(true)}>Older MCP events</Btn></div>
   </>}
  </section>;
 }

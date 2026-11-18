@@ -5,8 +5,9 @@ import {MCPAtlassianPolicyFields} from './MCPAtlassianPolicyFields';
 import { MCPMetadataFields } from './MCPMetadataFields';
 import { canDiscover, saveAndDiscover } from './mcpDiscovery';
 import { ConnectionGrants } from './ConnectionGrants';
-import { connectionTabs, connectionTabTitles, connectionLink, type ConnectionTab } from './mcpNavigation';
+import { connectionTabs, connectionTabTitles, connectionLink, connectionStatuses, type ConnectionTab } from './mcpNavigation';
 import { MCPHistory } from './MCPHistory';
+import { MCPToolCatalogue } from './MCPToolCatalogue';
 import { MCPServiceGuide } from './MCPServiceGuide';
 import { oauthDefaults, serviceOptions } from './mcpServices';
 import { MCPOAuthReturn, MCPOAuthActions, MCPOAuthCallbackURL } from './MCPOAuth';
@@ -17,6 +18,27 @@ import { api, errorMessage } from '../api/client';
 import type { MCPConnection, MCPConnectionInput } from '../api/types';
 import { useAsync } from '../hooks/useData';
 import { Badge, Btn, ErrorBox, JsonView, fmtDateTime } from './common';
+function DiscoveryStatus({ connection: c }: { connection: MCPConnection }) {
+  if (c.status === 'ready') return <p role="status">{c.tools.length} tools discovered. Grant access to agents before they can use them.</p>;
+  if (!c.enabled) return <p>Connection disabled. Discovery is paused.</p>;
+  if (c.oauth && c.oauth.status !== 'authorized') return <p>Authorize this connection to discover its tools.</p>;
+  return <p>Tools are not ready. Test the connection or refresh tools to retry discovery.</p>;
+}
+
+function ConnectionFacts({ connection: c }: { connection: MCPConnection }) {
+  return <dl className="connection-facts">
+    <div><dt>{c.localProcess ? 'Local process' : 'Endpoint'}</dt><dd>{c.localProcess?.command ?? c.endpoint}</dd></div>
+    <div><dt>Authorization</dt><dd>{c.localProcess ? (c.environmentKeys?.length ? 'Environment configured' : 'No environment values') : c.oauth ? `OAuth · ${c.oauth.status.replaceAll('_', ' ')}` : c.credentialConfigured ? 'Credential configured' : 'No credential'}</dd></div>
+    <div><dt>Connection quota</dt><dd>{c.callsPerMinute ? `${c.callsPerMinute} calls per UTC minute` : 'Unlimited'}</dd></div>
+    <div><dt>Last discovery</dt><dd>{c.lastTest ? <time dateTime={c.lastTest}>{fmtDateTime(c.lastTest)}</time> : 'Not checked'}</dd></div>
+    <div><dt>Configuration revision</dt><dd>{c.revision}</dd></div>
+    <div><dt>Catalogue revision</dt><dd>{c.toolsRevision}</dd></div>
+    {c.template && <div><dt>Template</dt><dd>{c.template.id} v{c.template.version}</dd></div>}
+    {!!c.argumentPolicy?.length && <div><dt>Tool argument restrictions</dt><dd>{c.argumentPolicy.length} rules. Only listed tools with matching arguments are eligible.</dd></div>}
+    {c.atlassianPolicy && <div><dt>Atlassian read boundary</dt><dd>{c.atlassianPolicy.products.join(', ')} · {c.atlassianPolicy.cloudIds.length} allowed sites. Exact agent grants remain required.</dd></div>}
+  </dl>;
+}
+
 const empty: MCPConnectionInput = {id:'',name:'',service:'generic',endpoint:'',enabled:true};
 export function MCPSection({role,connectQuery,oauthQuery,presentation,connectionID,tab='overview'}:{role?:string;connectQuery?:string;oauthQuery?:string;presentation?:'create'|'detail';connectionID?:string;tab?:ConnectionTab}) {
   const list=useAsync(api.mcpConnections,[]);
@@ -66,13 +88,30 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
   }
   async function discover(id:string,action:'test'|'tools/refresh'){setBusy(true);setError(undefined);try{await api.refreshMCP(id,action);await list.reload();}catch(e){setError(errorMessage(e));}finally{setBusy(false);}}
   async function remove(){if(!deleting||deleteID!==deleting.id)return;setBusy(true);setError(undefined);try{await api.deleteMCP(deleting.id,deleting.revision);if(input.id===deleting.id)edit();setDeleting(undefined);setDeleteID('');await list.reload();if(presentation)location.hash='#/connections';}catch(e){setError(errorMessage(e));setDeleting(undefined);setDeleteID('');await list.reload();}finally{setBusy(false);}}
-  return <section className="integration-section" aria-label="MCP connections">
-    {presentation?<p><a href="#/connections">Connections</a> / {presentation==='create'?'New connection':list.data?.find(c=>c.id===connectionID)?.name??connectionID}</p>:<h2>MCP connections</h2>}
+  const detail = presentation === 'detail';
+  const current = detail ? list.data?.find(c => c.id === connectionID) : undefined;
+  const reloadButton = <Btn onClick={() => void list.reload()} disabled={list.loading}>Reload MCP connections</Btn>;
+  const discoveryButtons = (c: MCPConnection) => operator && <>
+    <Btn disabled={busy || !c.enabled} onClick={() => void discover(c.id, 'test')}>Test {c.name}</Btn>
+    <Btn disabled={busy || !c.enabled} onClick={() => void discover(c.id, 'tools/refresh')}>Refresh tools for {c.name}</Btn>
+  </>;
+  const deleteButton = (c: MCPConnection) => <Btn tone="danger"
+    disabled={busy || c.enabled || !!(c.oauth && (c.oauth.status !== 'revoked' || c.oauth.revocation === 'pending'))}
+    onClick={() => { setDeleting(c); setDeleteID(''); setError(undefined); }}>Delete {c.name}</Btn>;
+  return <section className={detail ? 'connection-detail' : 'integration-section'} aria-label="MCP connections">
+    {detail ? <header className="page-head connection-detail-head">
+      <div><a href="#/connections">Connections</a>
+        {current && <><h1>{current.name}</h1><p className="muted">
+          <Badge tone={connectionStatuses[current.status]?.tone}>{connectionStatuses[current.status]?.label ?? current.status}</Badge> {current.service}
+        </p></>}
+      </div>
+      {reloadButton}
+    </header> : presentation?<p><a href="#/connections">Connections</a> / {presentation==='create'?'New connection':list.data?.find(c=>c.id===connectionID)?.name??connectionID}</p>:<h2>MCP connections</h2>}
     {presentation!=='detail'&&<><p>Register remote HTTPS Streamable HTTP servers and discover their tools. Only public network destinations are supported. Credentials stay encrypted in Weft.</p>
     <p>Assign tools to agents in the graph editor to allow calls through the gateway. OAuth supports manual registration, DCR and CIMD with PKCE; templates provide reviewed public defaults.</p></>}
     {oauthQuery!==undefined&&<MCPOAuthReturn key={oauthQuery} query={oauthQuery} canManage={admin} onChanged={list.reload}/> }
     {presentation!=='detail'&&<MCPTemplates connectionRoutes={!!presentation} query={connectQuery} canManage={admin} onSelect={t=>{edit();setInput({id:t.id,name:t.name,service:t.service,endpoint:t.endpoint,enabled:true,template:{id:t.id,version:t.version},oauth:t.authenticationModes?.length===1&&t.authenticationModes[0]==='oauth'?oauthDefaults(t.service).oauth:undefined});}} />}
-    <Btn onClick={()=>void list.reload()} disabled={list.loading}>Reload MCP connections</Btn>
+    {!detail && reloadButton}
     <ErrorBox error={list.error}/><ErrorBox error={error}/>
     {saveProgress&&<p role="status">{saveProgress}</p>}
     {savedID&&!busy&&saveProgress&&<a href={connectionLink(savedID)}>Open saved connection</a>}
@@ -85,12 +124,13 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
       <Btn disabled={busy} onClick={()=>{setDeleting(undefined);setDeleteID('');}}>Cancel deletion</Btn>
     </section>}
     {list.loading&&<p role="status">Loading connections…</p>}
-    {!list.loading&&!list.error&&!list.data?.length&&<p>No MCP connections configured.</p>}
+    {!detail&&!list.loading&&!list.error&&!list.data?.length&&<p>No MCP connections configured.</p>}
     {presentation==='detail'&&!list.loading&&!list.error&&!list.data?.some(c=>c.id===connectionID)&&<p role="alert">Connection not found. It may have been deleted.</p>}
-    {presentation==='detail'&&list.data?.filter(c=>c.id===connectionID).map(c=><header className="connection-heading" key={c.id}><h1>{c.name}</h1><p><Badge>{c.status}</Badge> {c.service} · Installation connection</p></header>)}
-    {presentation==='detail'&&<nav className="section-navigation" aria-label="Connection sections">{connectionTabs.map(t=><a key={t} href={connectionLink(connectionID??'',t)} aria-current={tab===t?'page':undefined}>{connectionTabTitles[t]}</a>)}</nav>}
+    {current && <nav className="section-navigation" aria-label="Connection sections">{connectionTabs.map(t =>
+      <a key={t} href={connectionLink(current.id, t)} aria-current={tab === t ? 'page' : undefined}>{connectionTabTitles[t]}</a>
+    )}</nav>}
     {presentation==='create'&&!admin&&<p>An administrator must create this connection.</p>}
-    {admin&&editing&&(presentation!=='detail'||tab==='settings')&&<form className="form" onSubmit={e=>{e.preventDefault();void save();}}>
+    {admin&&editing&&(presentation!=='detail'||tab==='settings')&&<form className={detail ? "card form connection-editor" : "form"} onSubmit={e=>{e.preventDefault();void save();}}>
       <h3>{revision?'Edit connection':'New connection'}</h3>
       {input.template&&<MCPTemplateSettings key={`${input.template.id}-${input.template.version}-${revision??'new'}`} input={input} onChange={value=>{setInput(value);setToken('');setCredentialEmail('');setClientSecret('');}}/>}
       <HelpField label={"Connection ID"} help={"A stable identifier used in MCP tool names, such as mcp.github.pull_request_read. Use an ID that distinguishes this connection from others."}><input required pattern="[a-z][a-z0-9_-]{0,63}" value={input.id} disabled={!!revision||busy} onChange={e=>setInput({...input,id:e.target.value})}/></HelpField>
@@ -141,30 +181,73 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
         </HelpField>
       <div className="btn-row"><Btn type="submit" disabled={busy||!!input.localProcess&&reviewedProcess!==processFingerprint} tone="primary">Save MCP connection</Btn>{revision&&<Btn disabled={busy} onClick={()=>edit()}>Cancel connection edit</Btn>}{presentation==='create'&&<a href="#/connections">Cancel</a>}</div>
     </form>}
-    <div className={presentation ? "connection-detail" : "cards"}>{(list.data??[]).filter(c=>!presentation||(presentation==='detail'&&c.id===connectionID)).map(c=><article className="card" key={c.id} aria-label={`MCP ${c.name}`}>
-      {presentation ? <h2>{tab==='settings'?'Connection settings':tab==='overview'?'Connection overview':connectionTabTitles[tab]}</h2> : <h3>{c.name} <Badge>{c.status}</Badge></h3>}<p>{c.localProcess?'Local process · '+c.localProcess.command:c.service+' · '+c.endpoint}</p>{c.template&&<p>Template: {c.template.id} v{c.template.version}</p>}
-      <p>{c.localProcess?(c.environmentKeys?.length?'Environment configured':'No environment values'):(c.credentialConfigured?'Credential configured':'No credential')} · revision {c.revision} · catalogue {c.toolsRevision}</p>
-      {!!c.argumentPolicy?.length&&<p>Tool argument restrictions: {c.argumentPolicy.length} rules. Only listed tools with matching arguments are eligible.</p>}
-      {c.atlassianPolicy&&<p>Atlassian read boundary: {c.atlassianPolicy.products.join(', ')} · {c.atlassianPolicy.cloudIds.length} allowed sites. Exact agent grants remain required.</p>}
-      <p>Connection quota: {c.callsPerMinute?`${c.callsPerMinute} calls per UTC minute`:'Unlimited'}</p>
-      {(!presentation||tab==='overview')&&c.oauth&&<MCPOAuthActions key={c.revision} connection={c} canManage={admin} onChanged={list.reload}/>}
-      {(!presentation||tab==='overview'||tab==='tools')&&<section aria-label="Connection readiness">
+    {current && <div className="connection-panels">
+      {tab === 'overview' && <>
+        <section className="card connections-panel" aria-label="Connection overview">
+          <h2>Connection overview</h2>
+          <ConnectionFacts connection={current} />
+          <ErrorBox error={current.error} />
+          <section aria-label="Connection readiness" className="connection-discovery">
+            <div><h3>Tool discovery</h3><DiscoveryStatus connection={current} />
+              <a href={connectionLink(current.id, 'tools')}>View discovered tools</a>
+            </div>
+            {operator && <div className="btn-row">{discoveryButtons(current)}</div>}
+          </section>
+          {current.oauth && <MCPOAuthActions key={current.revision} connection={current} canManage={admin} onChanged={list.reload} />}
+        </section>
+        <ConnectionGrants connectionID={current.id} />
+      </>}
+      {tab === 'tools' && <>
+        <section aria-label="Connection readiness" className="card connections-panel">
+          <header className="connections-panel-head">
+            <div><h2>Tool discovery</h2><DiscoveryStatus connection={current} />
+              <p className="muted">Discovery fetches the tool catalogue without invoking tools.{current.localProcess && ' Weft launches the reviewed local process to fetch it.'}</p>
+            </div>
+            {operator && <div className="btn-row">{discoveryButtons(current)}</div>}
+          </header>
+          <ErrorBox error={current.error} />
+        </section>
+        <MCPToolCatalogue key={current.id} connection={current} />
+      </>}
+      {tab === 'history' && <MCPHistory key={current.id} connectionID={current.id} />}
+      {tab === 'settings' && <>
+        {!editing && <section className="card connections-panel" aria-label="Connection settings">
+          <header className="connections-panel-head">
+            <div><h2>Connection settings</h2><p className="muted">{admin ? 'Edit the endpoint, authentication and connection policies.' : 'Only administrators can edit connection settings.'}</p></div>
+            {admin && <Btn tone="primary" disabled={busy} onClick={() => edit(current)}>Edit {current.name}</Btn>}
+          </header>
+          <ErrorBox error={current.error} />
+        </section>}
+        {admin && !editing && <section className="card connections-panel" aria-label="Delete connection">
+          <header className="connections-panel-head">
+            <div><h2>Delete connection</h2><p className="muted">To delete, disable the connection and revoke any OAuth access first. Deleted IDs cannot be reused.</p></div>
+            {deleteButton(current)}
+          </header>
+        </section>}
+      </>}
+    </div>}
+    {!presentation && <div className="cards">{(list.data ?? []).map(c => <article className="card" key={c.id} aria-label={`MCP ${c.name}`}>
+      <h3>{c.name} <Badge>{c.status}</Badge></h3><p>{c.localProcess ? 'Local process · ' + c.localProcess.command : c.service + ' · ' + c.endpoint}</p>
+      {c.template && <p>Template: {c.template.id} v{c.template.version}</p>}
+      <p>{c.localProcess ? (c.environmentKeys?.length ? 'Environment configured' : 'No environment values') : (c.credentialConfigured ? 'Credential configured' : 'No credential')} · revision {c.revision} · catalogue {c.toolsRevision}</p>
+      {!!c.argumentPolicy?.length && <p>Tool argument restrictions: {c.argumentPolicy.length} rules. Only listed tools with matching arguments are eligible.</p>}
+      {c.atlassianPolicy && <p>Atlassian read boundary: {c.atlassianPolicy.products.join(', ')} · {c.atlassianPolicy.cloudIds.length} allowed sites. Exact agent grants remain required.</p>}
+      <p>Connection quota: {c.callsPerMinute ? `${c.callsPerMinute} calls per UTC minute` : 'Unlimited'}</p>
+      {c.oauth && <MCPOAuthActions key={c.revision} connection={c} canManage={admin} onChanged={list.reload} />}
+      <section aria-label="Connection readiness">
         <p>Connection checks discover available tools. No agent is needed and no tool is called. Local connections launch the reviewed process for discovery.</p>
-        {c.status==='ready'?<p role="status">{c.tools.length} tools discovered. Grant access to agents before they can use them.</p>:
-         !c.enabled?<p>Connection disabled. Discovery is paused.</p>:
-         c.oauth&&c.oauth.status!=='authorized'?<p>Authorize this connection to discover its tools.</p>:
-         <p>Tools are not ready. Test the connection or refresh tools to retry discovery.</p>}
-        {presentation&&tab==='overview'&&<a href={connectionLink(c.id,'tools')}>View discovered tools</a>}
-      </section>}
-      {c.lastTest&&<p>Last discovery: {fmtDateTime(c.lastTest)}</p>}<ErrorBox error={c.error}/>
-      <div className="btn-row">{admin&&(!presentation||tab==='settings')&&<Btn disabled={busy} onClick={()=>edit(c)}>Edit {c.name}</Btn>}{operator&&(!presentation||tab==='overview'||tab==='tools')&&<><Btn disabled={busy||!c.enabled} onClick={()=>void discover(c.id,'test')}>Test {c.name}</Btn><Btn disabled={busy||!c.enabled} onClick={()=>void discover(c.id,'tools/refresh')}>Refresh tools for {c.name}</Btn></>}</div>
-      {admin&&(!presentation||tab==='settings')&&<><p>To delete, disable the connection and revoke OAuth access first. Deleted IDs cannot be reused.</p><Btn disabled={busy||c.enabled||!!(c.oauth&&(c.oauth.status!=='revoked'||c.oauth.revocation==='pending'))} onClick={()=>{setDeleting(c);setDeleteID('');setError(undefined);}}>Delete {c.name}</Btn></>}
-      {(!presentation||tab==='tools')&&<><label>Search tools<input type="search" value={toolSearch} onChange={e=>setToolSearch(e.target.value)}/></label><ul>{c.tools.filter(t=>[t.name,t.description].some(value=>(value??'').toLowerCase().includes(toolSearch.toLowerCase()))).map(t=><li key={t.name}><code>mcp.{c.id}.{t.name}</code><p>{t.description}</p><JsonView label="Input schema" value={t.inputSchema}/></li>)}</ul>
-      {c.status==='ready'&&!c.tools.length&&<p>The server returned no tools.</p>}{!!c.tools.length&&!c.tools.some(t=>[t.name,t.description].some(value=>(value??'').toLowerCase().includes(toolSearch.toLowerCase())))&&<p>No tools match this search.</p>}</>}
-      {presentation&&tab==='overview'&&<ConnectionGrants connectionID={c.id}/>}
-      {presentation&&tab==='history'&&<MCPHistory key={c.id} connectionID={c.id}/>}
-      {presentation&&tab==='settings'&&!admin&&<p>Only administrators can edit connection settings.</p>}
-    </article>)}</div>
-    {!presentation&&<MCPHistory/>}
+        <DiscoveryStatus connection={c} />
+      </section>
+      {c.lastTest && <p>Last discovery: {fmtDateTime(c.lastTest)}</p>}<ErrorBox error={c.error} />
+      <div className="btn-row">{admin && <Btn disabled={busy} onClick={() => edit(c)}>Edit {c.name}</Btn>}{discoveryButtons(c)}</div>
+      {admin && <><p>To delete, disable the connection and revoke OAuth access first. Deleted IDs cannot be reused.</p>{deleteButton(c)}</>}
+      <label>Search tools<input type="search" value={toolSearch} onChange={e => setToolSearch(e.target.value)} /></label>
+      <ul>{c.tools.filter(t => [t.name, t.description].some(value => (value ?? '').toLowerCase().includes(toolSearch.toLowerCase()))).map(t =>
+        <li key={t.name}><code>mcp.{c.id}.{t.name}</code><p>{t.description}</p><JsonView label="Input schema" value={t.inputSchema} /></li>
+      )}</ul>
+      {c.status === 'ready' && !c.tools.length && <p>The server returned no tools.</p>}
+      {!!c.tools.length && !c.tools.some(t => [t.name, t.description].some(value => (value ?? '').toLowerCase().includes(toolSearch.toLowerCase()))) && <p>No tools match this search.</p>}
+    </article>)}</div>}
+    {!presentation && <MCPHistory />}
   </section>;
 }

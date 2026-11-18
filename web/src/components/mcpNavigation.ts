@@ -12,3 +12,10 @@ export function matchingConnections(connections: MCPConnection[], search: string
   return connections.filter(c => (!status || c.status === status) &&
     [c.id, c.name, c.service].some(value => value.toLowerCase().includes(query)));
 }
+
+export const connectionStatuses: Record<string, { label: string; tone?: string }> = {
+  ready: { label: 'Ready', tone: 'ok' },
+  untested: { label: 'Untested' },
+  unavailable: { label: 'Unavailable', tone: 'bad' },
+  disabled: { label: 'Disabled' },
+};
