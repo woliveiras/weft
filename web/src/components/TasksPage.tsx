@@ -16,7 +16,6 @@ import {useOptionalEventStream} from '../hooks/useEventStream';
 import {Btn, ErrorBox} from './common';
 import {TaskCleanup} from './TaskCleanup';
 import {WorkspaceHandoff} from './WorkspaceHandoff';
-import {SyntheticTaskExample} from './SyntheticTaskExample';
 import {TaskEvidence} from './TaskEvidence';
 import {TaskPlan} from './TaskPlan';
 import {TaskCheckpoints} from './TaskCheckpoints';
@@ -48,7 +47,6 @@ export function TasksPage({id,create,info,graphs}: {id?:string;create?:boolean;i
     </header>
     {noModel&&!id&&!create&&<NoModelProvider admin={info?.identity?.role==='admin'}/>}
     {id||create ? <TaskEditor key={id??'new'} draft={detail.data} noModel={noModel} admin={info?.identity?.role==='admin'} graphs={graphs.filter(g=>!g.graph.metadata.id.startsWith('task-run-'))} nativeProfile={info?.nativeProfile===true} canStart={info?.identity?.role==='admin'} canEdit={info?.identity?.role==='admin'||info?.identity?.role==='operator'}/> : <>
-      {info?.identity?.role==='admin'&&<SyntheticTaskExample/>}
       <ErrorBox error={list.error}/>
       <Btn onClick={()=>void list.reload()} disabled={list.loading}>Refresh tasks</Btn>
       {!list.loading&&!list.error&&list.data?.items.length===0&&<p>No task drafts yet. Create a request using one of your existing workflows.</p>}

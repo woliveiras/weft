@@ -796,18 +796,6 @@ to detect an installed editor. Browser tests inspect the link without launching
 an external application.
 
 
-### Synthetic first task
-
-Administrators can explicitly prepare an echo-only example from Tasks. The page
-previews the behavior and requires confirmation before saving an example workflow
-and task draft through the existing authorized APIs. It neither starts the graph
-nor calls a model/tool/account. Normal task review and start confirmation still
-apply. Partial preparation errors retain records and direct users to inspect them;
-there is no automatic retry of uncertain writes. The example is labeled synthetic
-throughout and does not claim repository analysis. Operators/viewers do not receive
-a shortcut around the existing graph-creation permission.
-
-
 ### Task review evidence
 
 Task progress embeds the existing read-only Git inspection on demand: current

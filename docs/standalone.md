@@ -70,11 +70,8 @@ Ctrl-C and start it again to retain state. SQLite and filesystem queues need no
 separate services. Preview serving is initially disabled; optional preview/sandbox
 qualification remains pending. No Docker services or existing volumes are changed.
 
-For a first synthetic test, open Tasks → Preview example, confirm preparation,
-then Review requirements → Start task. This saves an echo-only workflow and draft;
-it uses no model, repository, tools or connected account and does not perform AI
-analysis. Nothing starts during preparation. If preparation fails, inspect Tasks
-and the linked example workflow before retrying; partial records are retained.
+To run an echo-only task, open Tasks → New task and select a saved workflow with
+an echo agent. Save the draft, then choose Review requirements → Start task.
 
 ## Terminal feedback and stopping
 
@@ -216,8 +213,8 @@ HTTP integration restores a stopped profile and verifies its draft, pending queu
 message and approval, then processes the retained messages after restart. These
 checks use disposable fixtures only, not the existing installation.
 
-Latest native task evidence: offline backup/recovery, explicit VS Code handoff,
-synthetic first-use preparation and task-local Git inspection are implemented.
+Historical native task evidence covered offline backup/recovery, explicit VS Code
+handoff, the former synthetic shortcut and task-local Git inspection.
 The final changed-code suite passed 312 frontend tests plus Go/Python, lint/build,
 nine relevant browser cases and two native production-binary journeys. Earlier
 full browser regression in this delivery passed 86 main cases plus hosted CIMD

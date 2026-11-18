@@ -32,7 +32,7 @@ Interpreted settings and generated payload suggestions are reviewable and preser
 
 ### AC-003 — Task journey and first example
 
-A user sees current stage and next action, durable outcomes and decision history after reload. The synthetic example requires an explicit save and ordinary reviewed admission.
+A user sees current stage and next action, durable outcomes and decision history after reload. The Tasks list opens saved tasks and offers the standard New task flow to authorized users. Previously saved examples remain available through the ordinary task journey and require reviewed admission before starting.
 
 ## Explicit exclusions
 
@@ -45,6 +45,7 @@ A user sees current stage and next action, durable outcomes and decision history
 ## History
 
 - 2026-10-19. FLOW-03a established persisted drafts. Phase A added structured suggestions and a synthetic first task. PROMPT-01/02/05/06/07 introduced the prompt-first journey and qualified it with fixtures.
+- 2026-11-18. The maintainer retired the synthetic task shortcut from Tasks and kept the ordinary task journey for any saved examples.
 
 ## Reconciliation
 

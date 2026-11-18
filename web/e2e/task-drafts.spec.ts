@@ -107,16 +107,26 @@ test('reviews structured channel input and reports the declared result with reta
  await expect(page.getByText('echoed 1 message(s)',{exact:true})).toBeVisible();
 });
 
-test('previews a synthetic example and runs it only after explicit review',async({page})=>{
+test('opens a previously saved echo example and runs it only after explicit review',async({page})=>{
+ const graphId='saved-echo-example';
+ const graphResponse=await page.request.post('/api/v1/graphs',{headers,data:{
+  metadata:{id:graphId,name:'Saved echo example'},
+  spec:{nodes:[{id:'example',runtime:{kind:'echo'},loop:{mode:'once'},tools:[]}]},
+ }});
+ expect(graphResponse.status()).toBe(201);
+ const taskResponse=await page.request.post('/api/v1/tasks',{headers,data:{
+  title:'Previously saved echo example',request:'Echo this example.',outcome:'freeform',graphId,graphVersion:1,
+  nodeId:'example',resultNodeId:'example',
+ }});
+ expect(taskResponse.status()).toBe(201);
+ const {id}=await taskResponse.json();
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
  await page.goto('/#/tasks');
- await page.getByRole('button',{name:'Preview example'}).click();
- await expect(page.getByRole('button',{name:'Prepare example'})).toBeDisabled();
- await page.getByRole('checkbox',{name:'Create the synthetic workflow and task draft.'}).check();
- await page.getByRole('button',{name:'Prepare example'}).click();
- await expect(page).toHaveURL(/#\/tasks\/tsk_/);
+ await expect(page.getByRole('link',{name:'New task',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Try the task flow'})).toHaveCount(0);
+ await page.getByRole('link',{name:'Previously saved echo example',exact:true}).click();
+ await expect(page).toHaveURL(new RegExp(`#/tasks/${id}$`));
  await expect(page.getByRole('status')).toHaveText('Draft saved. No agents have been started.');
- const id=page.url().split('/').pop()!;
  const draft=await(await page.request.get(`/api/v1/tasks/${id}`,{headers})).json();
  expect(draft.status).toBe('draft');
  expect(await(await page.request.get(`/api/v1/graphs/${draft.graphId}/executions`,{headers})).json()).toEqual([]);
