@@ -10,15 +10,20 @@ test('follows a task through human approval, execution, result, events and files
   const injected=await page.request.post('/api/v1/graphs/activity-approve/channels/tasks/messages',{headers:{Authorization:'Bearer e2e-admin-token'},data:{type:'inspection.request',payload:{instruction:'Inspect the task workspace'}}});
   expect(injected.ok()).toBeTruthy();
   await page.getByRole('button',{name:'Run all',exact:true}).click();
+  await page.getByRole('group',{name:'Activity views'}).getByRole('button',{name:/^Approvals/}).click();
   const approvals=page.getByRole('region',{name:'Task approvals'});
   await expect(approvals.getByRole('button',{name:'Approve',exact:true})).toBeVisible();
   await approvals.getByRole('button',{name:'Approve',exact:true}).click();
+  await page.getByRole('group',{name:'Activity views'}).getByRole('button',{name:/^Overview/}).click();
   await expect(page.getByRole('region',{name:'Executions and results'})).toContainText('Inspection task finished');
+  await page.getByRole('group',{name:'Activity views'}).getByRole('button',{name:/^Events/}).click();
   await expect(page.getByRole('region',{name:'Task events'})).toContainText('execution.completed');
+  await page.getByRole('group',{name:'Activity views'}).getByRole('button',{name:/^Messages/}).click();
   await expect(page.getByRole('region',{name:'Task messages'})).toContainText('inspection.request');
   const options=activity.getByRole('combobox',{name:'Execution',exact:true}).locator('option');
   await expect(options).toHaveCount(2);
   await activity.getByRole('combobox',{name:'Execution',exact:true}).selectOption({index:1});
+  await page.getByRole('group',{name:'Activity views'}).getByRole('button',{name:/^Events/}).click();
   await expect(page.getByRole('region',{name:'Task events'})).toContainText('execution.completed');
   await page.reload();
   await expect(activity).toContainText('Inspection task finished');
@@ -30,23 +35,35 @@ test('follows a task through human approval, execution, result, events and files
 test('keeps rejection visible without claiming a completed result', async ({page}) => {
   await page.goto('/#/g/activity-reject/activity');
   await page.getByRole('button',{name:'Run all',exact:true}).click();
+  await page.getByRole('group',{name:'Activity views'}).getByRole('button',{name:/^Approvals/}).click();
   const approvals=page.getByRole('region',{name:'Task approvals'});
   await approvals.getByRole('button',{name:'Reject',exact:true}).click();
   await expect(approvals).toContainText('rejected');
+  await page.getByRole('group',{name:'Activity views'}).getByRole('button',{name:/^Events/}).click();
   await expect(page.getByRole('region',{name:'Task events'})).toContainText('approval.decided');
+  await page.getByRole('group',{name:'Activity views'}).getByRole('button',{name:/^Overview/}).click();
   await expect(page.getByRole('region',{name:'Executions and results'})).not.toContainText('Inspection task finished');
 });
 
 test('reports a failed history request and recovers without hiding other sections', async ({page}) => {
   await page.route('**/api/v1/graphs/activity-reject/events?*', route => route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Activity history temporarily unavailable',code:'unavailable'})}));
   await page.goto('/#/g/activity-reject/activity');
-  await expect(page.getByText('events: Activity history temporarily unavailable')).toBeVisible();
   await expect(page.getByRole('region',{name:'Graph progress'})).toContainText('Graph:');
+  await page.getByRole('group',{name:'Activity views'}).getByRole('button',{name:/^Events/}).click();
+  await expect(page.getByText('events: Activity history temporarily unavailable')).toBeVisible();
   await page.unroute('**/api/v1/graphs/activity-reject/events?*');
   const response=page.waitForResponse(r=>r.url().includes('/graphs/activity-reject/events?') && r.status()===200);
   await page.getByRole('button',{name:'Refresh activity',exact:true}).click();
   await response;
   await expect(page.getByText('events: Activity history temporarily unavailable')).toHaveCount(0);
-  await expect(page.getByRole('region',{name:'Task events'})).toContainText('graph.created');
+  const events = page.getByRole('region', { name: 'Task events' });
+  const table = events.getByRole('table');
+  await expect(table).toBeVisible();
+  const older = events.getByRole('button', { name: 'Next page' });
+  if (await older.isVisible()) await older.click();
+  const created = table.getByRole('row').filter({ hasText: 'graph.created' });
+  await expect(created).toBeVisible();
+  await expect(created.getByRole('button', { name: 'Event data' })).toHaveAttribute('aria-expanded', 'false');
+  await page.getByRole('group',{name:'Activity views'}).getByRole('button',{name:/^Approvals/}).click();
   await expect(page.getByText('reviews: Human reviews are not configured on this installation.')).toBeVisible();
 });

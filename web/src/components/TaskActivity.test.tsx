@@ -18,16 +18,23 @@ function routes() { return {
   'GET /api/v1/reviews': () => [{id:'r',graphId:'other',request:{title:'Other graph private review'}}],
 }; }
 function view(role='admin', graphId='g') { return <EventStreamProvider token="fixture"><TaskActivity key={graphId} graphId={graphId} role={role} /></EventStreamProvider>; }
+function openView(name: string) {
+  return userEvent.click(within(screen.getByRole('group', { name: 'Activity views' })).getByRole('button', { name: new RegExp('^' + name) }));
+}
 it('integrates real client responses, results, wait reasons and explicit execution filtering', async () => {
   fakeApi(routes()); render(view());
   expect(await screen.findByText('Partial result')).toBeTruthy();
   expect(screen.getByText(/Waiting for CPU capacity/)).toBeTruthy();
   expect(screen.getByText('Provider unavailable')).toBeTruthy();
   expect(screen.queryByText('Other graph private review')).toBeNull();
+  await openView('Messages');
   expect(screen.getByText('Unlinked message')).toBeTruthy();
   await userEvent.selectOptions(screen.getByLabelText('Execution'), 'e');
   expect(screen.getByText('Linked message')).toBeTruthy();
   expect(screen.queryByText('Unlinked message')).toBeNull();
+  await openView('Events');
+  expect(screen.getByText('execution.failed')).toBeTruthy();
+  expect(screen.queryByText('operator.message')).toBeNull();
   expect(screen.queryByText(/Graph instruction/)).toBeNull();
   expect(screen.getByRole('link',{name:'Inspect files and diff'}).getAttribute('href')).toBe('#/g/g/files');
 });
@@ -35,8 +42,9 @@ it('keeps healthy sections usable on dependency failure and retries explicitly',
   let failed=true;
   fakeApi({...routes(),'GET /api/v1/graphs/g/messages':()=>failed ? apiError(503,'Broker unavailable','unavailable'):[]});
   render(view());
+  expect(await screen.findByText('Partial result')).toBeTruthy();
+  await openView('Messages');
   expect(await screen.findByText('messages: Broker unavailable')).toBeTruthy();
-  expect(screen.getByText('Partial result')).toBeTruthy();
   expect(within(screen.getByRole('region',{name:'Task messages'})).queryByText(/No messages/)).toBeNull();
   failed=false; await userEvent.click(screen.getByRole('button',{name:'Refresh activity'}));
   expect(await screen.findByText(/No messages in this recent scope/)).toBeTruthy();
@@ -46,7 +54,7 @@ it('handles approval rejection errors and refreshes the persisted decision', asy
   let decided=false; let fail=true;
   const backend=fakeApi({...routes(),'GET /api/v1/approvals':()=>[{...approval,status:decided?'rejected':'pending'}],
     'POST /api/v1/approvals/a/reject':()=> { if(fail)return apiError(409,'Already changed; refresh','conflict'); decided=true;return {...approval,status:'rejected'}; }});
-  render(view()); await screen.findByText('Allow operation');
+  render(view()); await openView('Approvals'); await screen.findByText('Allow operation');
   await userEvent.click(screen.getByRole('button',{name:'Reject'}));
   expect(await screen.findByText('Already changed; refresh')).toBeTruthy();
   fail=false; await userEvent.click(screen.getByRole('button',{name:'Reject'}));
@@ -55,7 +63,7 @@ it('handles approval rejection errors and refreshes the persisted decision', asy
 });
 it('shows approval state without mutation controls for viewers', async () => {
   const backend=fakeApi(routes());render(view('viewer'));
-  await screen.findByText('Allow operation');
+  await openView('Approvals'); await screen.findByText('Allow operation');
   expect(screen.queryByRole('button',{name:'Approve'})).toBeNull();
   expect(screen.queryByRole('button',{name:'Reject'})).toBeNull();
   expect(backend.calls.every(c=>c.method==='GET')).toBe(true);
@@ -72,14 +80,14 @@ it('clears previous graph data immediately and ignores its delayed responses', a
 });
 it.each(['operator','viewer'])('keeps environment decisions admin-only for %s', async role => {
   fakeApi({...routes(),'GET /api/v1/approvals':()=>[{...approval,kind:'environment'}]});
-  render(view(role)); await screen.findByText('Allow operation');
+  render(view(role)); await openView('Approvals'); await screen.findByText('Allow operation');
   expect(screen.queryByRole('button',{name:'Approve'})).toBeNull();
 });
 it('allows an administrator to approve an environment through the existing endpoint', async () => {
   let approved=false;
   const backend=fakeApi({...routes(),'GET /api/v1/approvals':()=>[{...approval,kind:'environment',status:approved?'approved':'pending'}],
     'POST /api/v1/approvals/a/approve':()=>{approved=true;return {...approval,status:'approved'};}});
-  render(view());await screen.findByText('Allow operation');
+  render(view());await openView('Approvals'); await screen.findByText('Allow operation');
   await userEvent.click(screen.getByRole('button',{name:'Approve'}));
   expect(await screen.findByText('approved')).toBeTruthy();
   expect(backend.find('POST','/api/v1/approvals/a/approve')).toHaveLength(1);
@@ -87,7 +95,33 @@ it('allows an administrator to approve an environment through the existing endpo
 it.each([[404,'Human reviews are not configured on this installation.'],[403,'Your role cannot access human reviews.']])('explains unavailable reviews (%s) without claiming an empty history', async (status, explanation) => {
   fakeApi({...routes(),'GET /api/v1/reviews':()=>apiError(Number(status),'storage: not found','unavailable')});
   render(view());
+  expect(await screen.findByText('Partial result')).toBeTruthy();
+  await openView('Approvals');
   expect(await screen.findByText(`reviews: ${explanation}`)).toBeTruthy();
-  expect(screen.getByText('Partial result')).toBeTruthy();
   expect(screen.queryByText('No human reviews for this graph.')).toBeNull();
+});
+
+it('paginates recent events in descending order and reveals technical data on demand', async () => {
+  const events = Array.from({ length: 13 }, (_, index) => ({
+    id: `ev-${index}`, seq: index + 1, graphId: 'g',
+    type: index === 12 ? 'workspace.observed' : `fixture.event.${index + 1}`,
+    time: '2026-10-16T10:00:00Z',
+    data: { status: 'partial', reason: 'fixture_workspace_reason' },
+  }));
+  fakeApi({ ...routes(), 'GET /api/v1/graphs/g/events': () => events });
+  render(view());
+  expect(await screen.findByText('Partial result')).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Task events' })).toBeNull();
+  await openView('Events');
+  const table = screen.getByRole('table');
+  expect(within(table).getAllByRole('row')).toHaveLength(13);
+  const latest = within(table).getAllByRole('row')[1];
+  expect(within(latest).getByText('Workspace observation recorded with incomplete file information.')).toBeTruthy();
+  expect(screen.queryByText(/fixture_workspace_reason/)).toBeNull();
+  await userEvent.click(within(latest).getByRole('button', { name: 'Event data' }));
+  expect(within(latest).getByText(/fixture_workspace_reason/)).toBeTruthy();
+  await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  expect(within(table).getAllByRole('row')).toHaveLength(2);
+  expect(within(table).getByText('fixture.event.1')).toBeTruthy();
+  expect(screen.queryByText('Partial result')).toBeNull();
 });

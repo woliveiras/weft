@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/storage"
@@ -93,7 +94,47 @@ func (unavailableList) ListSettings(context.Context, string) ([]*storage.Setting
 	return nil, errors.New("unavailable")
 }
 func TestListFailure(t *testing.T) {
-	if _, err := (Manager{Store: unavailableList{}}).List(t.Context(), "", 50); err == nil {
+	manager := Manager{Store: unavailableList{}}
+	if _, err := manager.List(t.Context(), "", 50); err == nil {
 		t.Fatal("failure hidden")
+	}
+	if _, err := manager.ListRecentlyUpdated(t.Context(), "", 50); err == nil {
+		t.Fatal("failure hidden for recently updated tasks")
+	}
+}
+
+func TestRecentlyUpdatedTaskPagination(t *testing.T) {
+	store, err := fsstore.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := t.Context()
+	if err = store.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	manager := Manager{Store: store}
+	now := time.Date(2026, 10, 16, 12, 0, 0, 123456789, time.UTC)
+	write := func(id string, updatedAt time.Time, revision int64) {
+		t.Helper()
+		payload, err := json.Marshal(Draft{ID: id, UpdatedAt: updatedAt})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = store.PutSetting(ctx, prefix+id, payload, revision, "operator"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("tsk_a", now, 0)
+	write("tsk_b", now, 0)
+	write("tsk_z", now.Add(-time.Hour), 0)
+	first, err := manager.ListRecentlyUpdated(ctx, "", 1)
+	if err != nil || len(first.Items) != 1 || first.Items[0].ID != "tsk_b" || first.Next == "" {
+		t.Fatalf("first page: %+v, %v", first, err)
+	}
+	write("tsk_b", now.Add(time.Minute), 1)
+	second, err := manager.ListRecentlyUpdated(ctx, first.Next, 2)
+	if err != nil || len(second.Items) != 2 || second.Items[0].ID != "tsk_a" || second.Items[1].ID != "tsk_z" || second.Next != "" {
+		t.Fatalf("second page: %+v, %v", second, err)
 	}
 }

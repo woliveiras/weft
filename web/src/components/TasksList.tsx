@@ -76,7 +76,7 @@ export function TasksList({ graphs, role, children }: {
           <caption className="sr-only">Task history</caption>
           <thead><tr>
             <th scope="col">Task</th><th scope="col">Status</th><th scope="col">Workflow</th>
-            <th scope="col">Issue</th><th scope="col">Created</th><th scope="col">Updated</th>
+            <th scope="col">Issue</th><th scope="col">Created</th><th scope="col" aria-sort="descending">Updated <span aria-hidden="true">↓</span></th>
           </tr></thead>
           <tbody>{rows.map(task => {
             const state = taskStatus(task);

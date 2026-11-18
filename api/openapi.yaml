@@ -321,9 +321,10 @@ paths:
       parameters:
         - {in: query, name: after, schema: {type: string}, description: Opaque cursor returned by the preceding page}
         - {in: query, name: limit, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+        - {in: query, name: order, schema: {type: string, enum: [updated_desc]}, description: Optional most recently updated first order. Use the same order for every page.}
       responses:
         '200':
-          description: Draft page in stable ID order
+          description: Draft page in stable ID order by default or descending update time and ID when requested
           content:
             application/json:
               schema:
@@ -332,6 +333,7 @@ paths:
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/TaskDraft'}}
                   next: {type: string}
+        '400': {description: Unknown order or malformed limit}
         '422': {description: Invalid cursor or limit}
     post:
       summary: Save a new task draft without starting agents or changing grants

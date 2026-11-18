@@ -153,6 +153,28 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 .tasks-table td > time { white-space: nowrap; }
 .tasks-table td:first-child { min-inline-size: 15rem; }
 .tasks-pagination { margin-block-start: var(--space-4); }
+.task-activity .page-head, .task-activity .page-head .btn-row { align-items: center; }
+.task-activity-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+  padding-block-end: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.task-activity-controls .section-navigation { margin: 0; padding: 0; border: 0; }
+.task-activity-controls [aria-pressed='true'] { background: var(--primary-soft); color: var(--primary); }
+.task-activity-controls label { min-inline-size: 0; inline-size: min(100%, 28rem); }
+.task-activity-controls select { display: block; inline-size: 100%; }
+.task-activity > section, .task-activity-records { margin-block: var(--space-4); }
+.task-activity section > h3 { margin: 0 0 var(--space-3); }
+.task-activity-records { display: grid; gap: var(--space-3); }
+.task-activity-records article > p { margin-block: var(--space-1); overflow-wrap: anywhere; }
+.task-activity-table td { vertical-align: top; overflow-wrap: anywhere; }
+.task-activity-table td > span.small { display: block; margin-block-start: var(--space-1); }
+.task-activity-table time { white-space: nowrap; }
+.task-activity-pages { align-items: center; justify-content: flex-end; margin-block-start: var(--space-3); }
 
 /* dialogs */
 .modal { border-radius: var(--radius-lg); box-shadow: var(--shadow-2); }

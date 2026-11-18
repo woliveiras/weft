@@ -21,6 +21,16 @@ test('finds a saved task by its ID and workflow and opens the matching draft', a
   await page.goto('/#/tasks');
   const table = page.getByRole('table', { name: 'Task history' });
   await expect(table.getByRole('link', { name: 'Evaluate incoming change', exact: true })).toHaveCount(2);
+  await expect(table.getByRole('columnheader', { name: 'Updated' })).toHaveAttribute('aria-sort', 'descending');
+  const matchingRows = table.getByRole('row').filter({ hasText: 'Evaluate incoming change' });
+  await expect(matchingRows.first()).toContainText(ids[1]);
+  const response = await page.request.get('/api/v1/tasks', { headers, params: { order: 'updated_desc', limit: 1 } });
+  expect(response.ok()).toBeTruthy();
+  const first = await response.json();
+  expect(first.items.map((item: { id: string }) => item.id)).toEqual([ids[1]]);
+  const next = await page.request.get('/api/v1/tasks', { headers, params: { order: 'updated_desc', limit: 1, after: first.next } });
+  expect(next.ok()).toBeTruthy();
+  expect((await next.json()).items.map((item: { id: string }) => item.id)).toEqual([ids[0]]);
   await page.getByRole('combobox', { name: 'Workflow', exact: true }).selectOption(graphIds[1]);
   await page.getByRole('searchbox', { name: 'Search tasks' }).fill(ids[1]);
   await page.getByRole('combobox', { name: 'Task status' }).selectOption('failed');

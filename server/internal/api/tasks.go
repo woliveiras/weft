@@ -32,7 +32,18 @@ func (s *Server) listTasks(w http.ResponseWriter, r *http.Request) error {
 		}
 		limit = n
 	}
-	page, err := (taskconfig.Manager{Store: s.Store}).List(r.Context(), r.URL.Query().Get("after"), limit)
+	manager := taskconfig.Manager{Store: s.Store}
+	after := r.URL.Query().Get("after")
+	var page taskconfig.Page
+	var err error
+	switch r.URL.Query().Get("order") {
+	case "":
+		page, err = manager.List(r.Context(), after, limit)
+	case "updated_desc":
+		page, err = manager.ListRecentlyUpdated(r.Context(), after, limit)
+	default:
+		return badRequest("invalid task order")
+	}
 	if err != nil {
 		return taskError(err)
 	}

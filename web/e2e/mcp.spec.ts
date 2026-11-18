@@ -151,7 +151,13 @@ test('enforces a shared connection quota and filters approval and result history
  for(const id of ['quota-approved','quota-limited']){
   const created=await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id,name:id},spec:{nodes:[{id:'worker',runtime:{kind:'native'},model:{provider:'e2e',name:'fixture'},isolation:{mode:'process'},loop:{mode:'once'},prompt:'mcp-quota-fixture',tools:[{name:'mcp.quota-browser.search',requiresApproval:id==='quota-approved'}]}]}}});expect(created.status(),await created.text()).toBe(201);
   await page.goto(`/#/g/${id}/activity`);await page.getByRole('button',{name:'Run all',exact:true}).click();
-  if(id==='quota-approved'){await page.getByRole('region',{name:'Task approvals',exact:true}).getByRole('button',{name:'Approve',exact:true}).click();await expect(page.getByRole('region',{name:'Executions and results',exact:true})).toContainText('MCP fixture search completed');}
+  if (id === 'quota-approved') {
+    const views = page.getByRole('group', { name: 'Activity views' });
+    await views.getByRole('button', { name: /^Approvals/ }).click();
+    await page.getByRole('region', { name: 'Task approvals' }).getByRole('button', { name: 'Approve', exact: true }).click();
+    await views.getByRole('button', { name: 'Overview' }).click();
+    await expect(page.getByRole('region', { name: 'Executions and results' })).toContainText('MCP fixture search completed');
+  }
   else {await expect.poll(async()=>{const r=await page.request.get(`/api/v1/graphs/${id}/events`,{headers});return(await r.json()).some((e:{type:string;data:{outcome?:string}})=>e.type==='tool.denied'&&e.data.outcome==='rate_limited');}).toBe(true);}
  }
  await page.goto('/#/integrations');const history=page.getByRole('region',{name:'MCP call history',exact:true});

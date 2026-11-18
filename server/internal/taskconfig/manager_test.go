@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/storage"
@@ -86,6 +87,31 @@ func TestDecodeLegacyResultDefault(t *testing.T) {
 		d, err := decode(&storage.Setting{Value: []byte(tc.raw), Revision: 3})
 		if err != nil || d.ResultNodeID != tc.want || d.Revision != 3 {
 			t.Fatalf("decode %s: %+v %v", tc.raw, d, err)
+		}
+	}
+}
+
+func TestUpdatedTaskOrder(t *testing.T) {
+	now := time.Now()
+	older := &Draft{ID: "tsk_z", UpdatedAt: now.Add(-time.Second)}
+	newer := &Draft{ID: "tsk_a", UpdatedAt: now}
+	tied := &Draft{ID: "tsk_b", UpdatedAt: now}
+	if compareUpdatedTasks(newer, older) >= 0 || compareUpdatedTasks(older, newer) <= 0 ||
+		compareUpdatedTasks(tied, newer) >= 0 || compareUpdatedTasks(tied, tied) != 0 {
+		t.Fatal("expected descending timestamp followed by descending ID")
+	}
+}
+
+func TestListRecentlyUpdatedRejectsInvalidPagination(t *testing.T) {
+	manager := Manager{}
+	for _, after := range []string{"tsk_legacy", "bad~tsk_x", "2026-10-16T10:00:00Z~bad"} {
+		if _, err := manager.ListRecentlyUpdated(t.Context(), after, 1); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("cursor %q: %v", after, err)
+		}
+	}
+	for _, limit := range []int{0, 101} {
+		if _, err := manager.ListRecentlyUpdated(t.Context(), "", limit); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("limit %d: %v", limit, err)
 		}
 	}
 }

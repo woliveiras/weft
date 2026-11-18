@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -159,6 +160,54 @@ func (m Manager) List(ctx context.Context, after string, limit int) (Page, error
 		page.Items = append(page.Items, d)
 	}
 	return page, nil
+}
+
+// ListRecentlyUpdated orders tasks by their recorded lifecycle or draft update.
+// The cursor captures the timestamp and ID so a moved or deleted boundary row
+// does not change which records precede it.
+func (m Manager) ListRecentlyUpdated(ctx context.Context, after string, limit int) (Page, error) {
+	page := Page{Items: []*Draft{}}
+	if limit < 1 || limit > 100 {
+		return page, fmt.Errorf("%w: limit must be between 1 and 100", ErrInvalid)
+	}
+	var boundary Draft
+	if after != "" {
+		stamp, id, ok := strings.Cut(after, "~")
+		at, err := time.Parse(time.RFC3339Nano, stamp)
+		if !ok || err != nil || !validID.MatchString(id) {
+			return page, fmt.Errorf("%w: invalid update cursor", ErrInvalid)
+		}
+		boundary = Draft{ID: id, UpdatedAt: at}
+	}
+	records, err := m.Store.ListSettings(ctx, prefix)
+	if err != nil {
+		return page, err
+	}
+	var eligible []*Draft
+	for _, record := range records {
+		draft, err := decode(record)
+		if err != nil {
+			return Page{}, err
+		}
+		if after == "" || compareUpdatedTasks(draft, &boundary) > 0 {
+			eligible = append(eligible, draft)
+		}
+	}
+	slices.SortFunc(eligible, compareUpdatedTasks)
+	if len(eligible) > limit {
+		last := eligible[limit-1]
+		page.Next = last.UpdatedAt.Format(time.RFC3339Nano) + "~" + last.ID
+		eligible = eligible[:limit]
+	}
+	page.Items = append(page.Items, eligible...)
+	return page, nil
+}
+
+func compareUpdatedTasks(a, b *Draft) int {
+	if order := b.UpdatedAt.Compare(a.UpdatedAt); order != 0 {
+		return order
+	}
+	return strings.Compare(b.ID, a.ID)
 }
 func (m Manager) Save(ctx context.Context, id string, in Input, revision int64, actor string) (*Draft, error) {
 	return m.save(ctx, id, in, revision, actor, "")

@@ -185,7 +185,7 @@ export const api = {
   projects: () => request<Project[]>(`${V1}/projects`),
   saveProjectPreference: (id:string,revision:number,executionMode:string)=>request<Project>(`${V1}/projects/${enc(id)}/preferences`,{method:'PUT',headers:{'If-Match':String(revision)},body:{executionMode}}),
   createProject: (input:{name:string;path:string}) => request<Project>(`${V1}/projects`,{method:'POST',body:input}),
-  tasks: (after?: string) => request<TaskPage>(`${V1}/tasks`, {query:{after,limit:50}}),
+  tasks: (after?: string) => request<TaskPage>(`${V1}/tasks`, {query:{after,limit:50,order:'updated_desc'}}),
   task: (id: string) => request<TaskDraft>(`${V1}/tasks/${enc(id)}`),
   taskAuthorization: (id:string) => request<import('./tasks').TaskAuthorization>(`${V1}/tasks/${encodeURIComponent(id)}/authorization`),
   saveTaskAuthorization: (id:string,mode:import('./tasks').AuthorizationMode,scope:string,revision:number,remember=false,preferenceRevision=0) => request(`${V1}/tasks/${encodeURIComponent(id)}/authorization`,{method:'PUT',headers:{'If-Match':String(revision)},body:{mode,scope,confirm:true,remember,preferenceRevision}}),

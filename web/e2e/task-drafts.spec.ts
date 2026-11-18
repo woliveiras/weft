@@ -163,6 +163,7 @@ test('keeps task approvals contextual and preserves viewer restrictions and deci
   await page.reload();await expect(page.getByRole('status')).toHaveText(`Task status: ${decision==='approve'?'succeeded':'failed'}`);
   await page.getByText('Activity and diagnostics',{exact:true}).click();
   await expect(page.getByRole('heading',{name:'Task activity',exact:true})).toBeVisible();
+  await page.getByRole('group',{name:'Activity views'}).getByRole('button',{name:/^Events/}).click();
   await expect(page.getByRole('region',{name:'Task events'})).toBeVisible();
  }
  const viewerResponse=await page.request.post('/api/v1/tasks',{headers,data:{title:'Viewer decision',request:'Explain fixture',outcome:'freeform',graphId:'task-decision-flow',graphVersion:1,nodeId:'worker',resultNodeId:'worker',channelId:'requests',messageType:'feature.request',payloadJson:'{}'}});
