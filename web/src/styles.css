@@ -1950,7 +1950,11 @@ section {
 @media(max-width:850px) { .agent-settings-layout { grid-template-columns:1fr; } .agent-configuration-page { padding:16px; } }
 .agent-fields .node-editor > div:not([hidden]) { display:grid; gap:12px; }
 .agent-fields .node-editor h3 { font-size:1.1rem; letter-spacing:normal; text-transform:none; }
-.agent-fields .node-editor fieldset:not([hidden]) { padding:16px; margin-top:16px; }
+.agent-fields .node-editor > fieldset > legend:not(.sr-only) {
+  padding-inline: 0;
+  margin-block-end: var(--space-2);
+}
+.agent-fields .node-editor .field-help-caption > input[type='checkbox'] { margin-inline-start: 0; }
 .agent-configuration-page .section-navigation button:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
 .run-detail .card { margin-block:20px; }
 .run-detail h1 { font-size:1.8rem; letter-spacing:-.04em; }
