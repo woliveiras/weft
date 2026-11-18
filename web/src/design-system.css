@@ -233,6 +233,27 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 
 /* Page content stays readable on wide screens; editors keep full width. */
 main > .page:not(.fill) { width: 100%; max-width: var(--content-max); margin-inline: auto; }
+main > .page.task-request-page { max-width: none; }
+.task-request-page :is(.task-request-form, .repository-import-form) { max-width: none; }
+.task-back-link { display: inline-block; margin-block-end: var(--space-3); }
+.task-request-form > fieldset:not([hidden]),
+.repository-import-form > fieldset:not([hidden]) { gap: var(--space-4); }
+.task-review-fields {
+  display: grid;
+  gap: var(--space-4);
+  min-inline-size: 0;
+  margin-block-start: var(--space-2);
+  align-self: stretch;
+}
+.form .task-review-fields > p { margin: 0; color: var(--text-muted); font-size: 13px; max-inline-size: 72ch; }
+.task-review-fields > .btn { justify-self: start; }
+.task-request-form > details > .repository-import-form { margin-block-start: var(--space-2); }
+.task-request-status:empty { position: absolute; inset-block-start: 0; }
+.repository-import-form label.repository-import-consent {
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.repository-import-consent > input { flex: none; margin: var(--space-1) 0 0; }
 .page { padding: var(--space-6) var(--space-8); }
 .page-head { margin-bottom: var(--space-6); }
 .events-header, .events-heading, .events-controls, .events-controls label {

@@ -19,7 +19,7 @@ export function RepositoryImport({canEdit,canSelect=canEdit,initialURL='',native
  const start=async(retry=false)=>{setBusy(true);setError(undefined);try{update(await api.importRepository({url,ref,confirmed,retry,revision:retry?record?.revision:undefined,authentication:authMode==='anonymous'?undefined:{mode:authMode,...(authMode==='token'?{username,token}:{})}}));setConfirmed(false);}catch(e){setError(errorMessage(e));}finally{setToken('');setBusy(false);}};
  const cancel=async()=>{if(!record)return;setBusy(true);setError(undefined);try{update(await api.cancelRepositoryImport(record.id,record.revision));}catch(e){setError(errorMessage(e));}finally{setBusy(false);}};
  const useProject=async()=>{if(!record?.projectId)return;setBusy(true);setError(undefined);try{const projects=await api.projects();const project=projects.find(p=>p.id===record.projectId);if(!project)throw new Error('The imported project is unavailable. Refresh and retry.');onProject(project);}catch(e){setError(errorMessage(e));}finally{setBusy(false);}};
- return <section className="card form" aria-label="Import repository">
+ return <section className="card form repository-import-form" aria-label="Import repository">
   <h2>Import repository</h2>
   <p>Download an HTTPS Git snapshot into Weft-managed storage. Existing checkouts stay untouched. Import does not start agents or change their permissions.</p>
   {!canEdit&&<p>An administrator must import repositories. Existing project selection and agent permissions are unchanged.</p>}
@@ -31,7 +31,10 @@ export function RepositoryImport({canEdit,canSelect=canEdit,initialURL='',native
    {!nativeProfile&&<p>Server imports use the explicitly supplied token. Host Git configuration, GitHub CLI and MCP credentials are not copied into the container.</p>}
    <HelpField label={"Base reference"} help={"The branch, tag or commit to import. Leaving it blank uses the repository default branch."}><input maxLength={256} value={ref} onChange={e=>{setRef(e.target.value);setSelected(undefined);setConfirmed(false);}}/></HelpField>
    <p>Use HEAD, refs/heads/main, refs/tags/v1.0 or a full commit hash. The imported commit is pinned; reusing an import never silently fetches a newer branch tip.</p>
-   <label><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>Authorize the selected Git authentication and download on the Weft server (up to 128 MiB transfer and three minutes).</label>
+   <label className="check repository-import-consent">
+    <input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>
+    <span>Authorize the selected Git authentication and download on the Weft server (up to 128 MiB transfer and three minutes).</span>
+   </label>
    <Btn disabled={!confirmed||!url||!ref||(authMode==='token'&&(!username||!token))||busy||!!record&&active(record.state)} onClick={()=>void start(false)}>Import repository</Btn>
   </fieldset>
   <ErrorBox error={error}/>

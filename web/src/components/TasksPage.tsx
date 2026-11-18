@@ -41,7 +41,8 @@ export function TasksPage({id,create,info,graphs}: {id?:string;create?:boolean;i
   const noModel = !!providers.data && !providers.data.some(p=>p.status==='ready');
   if (id && detail.loading) return <p className="page">Loading task…</p>;
   if (id && detail.error) return <section className="page"><a href="#/tasks">Back to tasks</a><ErrorBox error={detail.error}/><Btn onClick={()=>void detail.reload()}>Retry</Btn></section>;
-  return <section className="page installation-page" aria-label="Tasks">
+  const editing = create || detail.data?.status === 'draft';
+  return <section className={`page installation-page${editing ? ' task-request-page' : ''}`} aria-label="Tasks">
     <header className="page-head"><div><h1>{create?'New task':id?'Task':'Tasks'}</h1><p className="muted">Prepare a request and review the workflow before execution.</p></div>
       {!create&&!id&&info?.identity?.role!=='viewer'&&info?.identity?.role&&<a className="btn primary" href="#/tasks/new">New task</a>}
     </header>
@@ -176,12 +177,12 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
   };
   if(saved&&saved.status!=='draft')return <TaskTracking task={saved} canControl={canStart} canDecide={canEdit} nativeProfile={nativeProfile}/>;
   return <>
-    <a href="#/tasks">Back to tasks</a>
+    <a className="task-back-link" href="#/tasks">Back to tasks</a>
     {saved?.environmentApprovalId&&<p>Environment preparation requires a decision in <a href="#/approvals">Approvals</a>. The issue remains in progress.</p>}
     {saved?.launchError&&<p role="alert">{saved.launchError}</p>}
     {modelBlocked&&<NoModelProvider admin={admin}/>}
     {input.graphId&&<TaskBudgetPreview workflow={input.graphId} project={input.projectId}/>}
-    <form className="card form" aria-label="Task request" onInvalidCapture={e=>{
+    <form className="card form task-request-form" aria-label="Task request" onInvalidCapture={e=>{
       const details=(e.target as HTMLElement).closest('details');
       if(details){details.open=true;setSettingsOpen(true);}
     }} onSubmit={e=>{e.preventDefault();void save();}}>
@@ -205,14 +206,15 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
         <ErrorBox error={projects.error}/>
         <details open={settingsOpen} onToggle={e=>setSettingsOpen(e.currentTarget.open)}>
           <summary>Review settings</summary>
-        <HelpField label={"Goal"} help={"Select the expected delivery format. Use it to make clear whether the task should present findings, make changes or hand off a result."}><select value={input.outcome} onChange={e=>change({outcome:e.target.value,request:outcomeRequest(input,e.target.value),...(!customTitle?{title:promptTitle(outcomeRequest(input,e.target.value))}:{})})}>{taskOutcomes.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}</select></HelpField>
-        <p>{taskOutcomes.find(o=>o.id===input.outcome)?.description}</p>
+          <div className="task-review-fields">
+        <HelpField label={"Goal"} help={"Select the expected delivery format. Use it to make clear whether the task should present findings, make changes or hand off a result."}><select value={input.outcome} onChange={e=>change({outcome:e.target.value,request:outcomeRequest(input,e.target.value),...(!customTitle?{title:promptTitle(outcomeRequest(input,e.target.value))}:{})})}>{taskOutcomes.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}</select><small className="muted">{taskOutcomes.find(o=>o.id===input.outcome)?.description}</small></HelpField>
         <label>Title<input maxLength={200} required value={input.title} onChange={e=>{setCustomTitle(true);change({title:e.target.value});}}/></label>
         <HelpField label={"Project"} help={"Links the task to a registered repository and its preferences. Choose the project whose files the task should use."}><select value={input.projectId??''} onChange={e=>{const p=projects.data?.find(p=>p.id===e.target.value);change({projectId:p?.id,baseCommit:p?.head,executionMode:p?.executionMode??'workflow'});}}>
           <option value="">No repository (managed workspace)</option>{projects.data?.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-        </select></HelpField>
-        {input.projectId&&<p>Base commit: <code>{input.baseCommit}</code>. A separate worktree will be created on the Weft server. Uncommitted source files are not copied.</p>}
-        <p>Use a registered project or import a public repository below. The source checkout is retained; each task gets a separate worktree at the selected commit.</p>
+        </select>
+          {input.projectId&&<small className="muted">Base commit: <code>{input.baseCommit}</code>. A separate worktree will be created on the Weft server. Uncommitted source files are not copied.</small>}
+          <small className="muted">Use a registered project or import a public repository below. The source checkout is retained; each task gets a separate worktree at the selected commit.</small>
+        </HelpField>
         <p className="muted">Unambiguous workflow inputs and result agents are suggested below. Review them before saving. Models and permissions are unchanged.</p>
         <HelpField label={"Input delivery"} help={"Choose how to send the request to the workflow. A channel delivers a structured message to eligible receivers; direct entry targets the selected agent."}><select value={input.channelId??''} onChange={e=>{const c=selected?.spec.channels?.find(c=>c.id===e.target.value);change({channelId:c?.id,messageType:c?(c.types?.length===1&&!/[?*]/.test(c.types[0])?c.types[0]:''):undefined,payloadJson:c?JSON.stringify({title:input.title,description:input.request},null,2):undefined,...(c?{nodeId:c.to?.[0]??''}:{})});}}>
           <option value="">Direct agent instruction</option>{selected?.spec.channels?.filter(c=>!c.from&&c.to?.length===1&&(!c.type||c.type==='queue')&&!c.when).map(c=><option key={c.id} value={c.id}>{c.id} → {c.to?.[0]}</option>)}
@@ -230,13 +232,14 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
         <SCMHandOffField value={input.scmConnection??''} onChange={scmConnection=>change({scmConnection:scmConnection||undefined})}/>
         <p className="muted">Version {input.graphVersion||'not selected'}. Saving a request does not change the workflow or grant tools.</p>
         {selected&&selected.metadata.version!==input.graphVersion&&<Btn onClick={()=>change({graphVersion:selected.metadata.version??0})}>Use current workflow version</Btn>}
+          </div>
         </details>
       </fieldset>
       <details open={importOpen} onToggle={e=>setImportOpen(e.currentTarget.open)}><summary>Import repository from URL</summary>{importOpen&&<RepositoryImport nativeProfile={nativeProfile} canEdit={canStart} canSelect={canEdit} initialURL={saved?.resolution?.repository} onProject={project=>{change({projectId:project.id,baseCommit:project.head});void projects.reload();setSettingsOpen(true);}}/>}</details>
       {saved?.resolution?.state==='needs_repository'&&!importOpen&&<Btn onClick={()=>setImportOpen(true)}>Prepare repository</Btn>}
       <ErrorBox error={error}/>
       <div className="row"><Btn type="submit" tone="primary" disabled={!canEdit||busy}>Save draft</Btn><Btn disabled={!saved||dirty||busy} onClick={()=>void inspect()}>Review requirements</Btn></div>
-      <p role="status">{dirty?'Unsaved changes':saved?'Draft saved. No agents have been started.':'Save this request to resume it later.'}</p>
+      <p className="task-request-status" role="status">{dirty?'Unsaved changes':saved?'Draft saved. No agents have been started.':''}</p>
     </form>
     {saved&&<TaskAuthorization key={`${saved.id}:${saved.revision}`} taskId={saved.id} canEdit={canStart} onChanged={()=>{setReview(undefined);setConfirmed(false);}}/>}
     {review&&<article className="card" aria-label="Task requirements"><h2>Requirements</h2>
