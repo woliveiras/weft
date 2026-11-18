@@ -1132,6 +1132,10 @@ section {
   padding: 6px 8px;
   background: var(--surface-raised);
 }
+.msg-list .msg-trace-card { cursor: pointer; }
+.msg-list .msg-trace-card:hover,
+.msg-list .msg-trace-card:focus-within { border-color: var(--primary); }
+.msg-trace-card pre { cursor: text; }
 .msg-head {
   display: flex;
   gap: 6px;

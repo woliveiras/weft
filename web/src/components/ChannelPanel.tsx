@@ -202,9 +202,18 @@ export function MessageList({
   return (
     <ul className="msg-list">
       {records.map((r) => {
-        const corr = r.message.metadata?.correlation_id as string | undefined;
+        const correlationId = r.message.metadata?.correlation_id;
+        const trace = typeof correlationId === 'string' && correlationId && onShowCorrelation
+          ? () => onShowCorrelation(correlationId)
+          : undefined;
         return (
-          <li key={`${r.message.id}:${r.channel}:${r.group ?? ''}`}>
+          <li key={`${r.message.id}:${r.channel}:${r.group ?? ''}`} className={trace ? 'msg-trace-card' : undefined}
+            onClick={trace && (event => {
+              if (event.target instanceof Element && event.target.closest('button, pre')) return;
+              const selection = event.currentTarget.ownerDocument.getSelection();
+              if (selection && !selection.isCollapsed && event.currentTarget.contains(selection.anchorNode)) return;
+              trace();
+            })}>
             <div className="msg-head">
               <StateDot state={r.status} />
               <code>{r.message.type}</code>
@@ -218,9 +227,9 @@ export function MessageList({
             {r.error && <div className="bad small">{r.error}</div>}
             <JsonView value={r.message.payload} label="payload" />
             <JsonView value={r.message.metadata} label="metadata" />
-            {corr && onShowCorrelation && (
-              <button type="button" className="link small" onClick={() => onShowCorrelation(corr)}>
-                trace workflow {corr.slice(0, 18)}…
+            {trace && typeof correlationId === 'string' && (
+              <button type="button" className="link small" onClick={trace}>
+                trace workflow {correlationId.slice(0, 18)}…
               </button>
             )}
           </li>
