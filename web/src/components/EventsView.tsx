@@ -63,37 +63,41 @@ export function EventsView({ graph, info }: { graph: Graph; info?: Info }) {
 
   return (
     <div className="page fill">
-      <div className="page-head">
-        <h2>Events</h2>
-        <span className={`conn ${connected ? 'on' : ''}`}>{connected ? 'live' : 'reconnecting…'}</span>
-        <label>
-          type{' '}
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-            <option value="">all</option>
-            {types.map((t) => (
-              <option key={t} value={t}>
-                {t}.*
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          node{' '}
-          <select value={nodeFilter} onChange={(e) => setNodeFilter(e.target.value)}>
-            <option value="">all</option>
-            {graph.spec.nodes.map((n) => (
-              <option key={n.id} value={n.id}>
-                {n.name || n.id}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="small">
-          <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> autoscroll
-        </label>
-        <Btn small onClick={() => setPaused(!paused)}>
-          {paused ? `Resume (${queued.current.length})` : 'Pause'}
-        </Btn>
+      <div className="page-head events-header">
+        <div className="events-heading">
+          <h2>Events</h2>
+          <span className={`conn ${connected ? 'on' : ''}`}>{connected ? 'live' : 'reconnecting…'}</span>
+        </div>
+        <div className="events-controls">
+          <label>
+            type
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+              <option value="">all</option>
+              {types.map((t) => (
+                <option key={t} value={t}>
+                  {t}.*
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            node
+            <select value={nodeFilter} onChange={(e) => setNodeFilter(e.target.value)}>
+              <option value="">all</option>
+              {graph.spec.nodes.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.name || n.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="small">
+            <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> autoscroll
+          </label>
+          <Btn small onClick={() => setPaused(!paused)}>
+            {paused ? `Resume (${queued.current.length})` : 'Pause'}
+          </Btn>
+        </div>
       </div>
       <div className="timeline" ref={box}>
         {shown.map((e) => (

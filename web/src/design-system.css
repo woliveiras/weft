@@ -235,6 +235,14 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 main > .page:not(.fill) { width: 100%; max-width: var(--content-max); margin-inline: auto; }
 .page { padding: var(--space-6) var(--space-8); }
 .page-head { margin-bottom: var(--space-6); }
+.events-header, .events-heading, .events-controls, .events-controls label {
+  display: flex;
+  align-items: center;
+}
+.events-heading, .events-controls { gap: var(--space-3); }
+.events-controls { flex-wrap: wrap; margin-inline-start: auto; }
+.events-controls label { gap: var(--space-1); }
+.events-controls input[type='checkbox'] { margin: 0; }
 .page-head p, .page > p.muted { color: var(--text-muted); }
 .section-navigation a, .section-navigation button { border-radius: var(--radius-sm); }
 .section-navigation a[aria-current='page'], .section-navigation button[aria-current=page] { position: relative; }
