@@ -34,6 +34,8 @@ Interpreted settings and generated payload suggestions are reviewable and preser
 
 A user sees current stage and next action, durable outcomes and decision history after reload. The Tasks list opens saved tasks and offers the standard New task flow to authorized users. Previously saved examples remain available through the ordinary task journey and require reviewed admission before starting.
 
+The Tasks table shows the recorded task ID, status, workflow version, issue, and dates where available. Search by title, ID or issue and filters by status and workflow apply to the current page. The displayed match count and pagination identify the scope of the results.
+
 ## Explicit exclusions
 
 - Consent rules and execution admission belong to TASK-006 and TASK-007. Repository imports belong to ENV-001.

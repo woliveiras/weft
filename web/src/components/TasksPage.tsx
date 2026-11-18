@@ -16,6 +16,7 @@ import {useOptionalEventStream} from '../hooks/useEventStream';
 import {Btn, ErrorBox} from './common';
 import {TaskCleanup} from './TaskCleanup';
 import {WorkspaceHandoff} from './WorkspaceHandoff';
+import {TasksList} from './TasksList';
 import {TaskEvidence} from './TaskEvidence';
 import {TaskPlan} from './TaskPlan';
 import {TaskCheckpoints} from './TaskCheckpoints';
@@ -33,28 +34,19 @@ export const taskOutcomes = [
 const empty: TaskInput = {title:'',request:'',outcome:'freeform',graphId:'',graphVersion:0,nodeId:''};
 
 export function TasksPage({id,create,info,graphs}: {id?:string;create?:boolean;info?:Info;graphs:GraphSummary[]}) {
-  const [after,setAfter] = useState<string>();
-  const list = useAsync(()=>api.tasks(after),[after]);
   const detail = useAsync(()=>id?api.task(id):Promise.resolve(undefined),[id]);
   const providers = useAsync(api.providers,[]);
   // Only a loaded list with no ready provider blocks; a failed load does not.
   const noModel = !!providers.data && !providers.data.some(p=>p.status==='ready');
+  if (!id && !create) return <TasksList graphs={graphs} role={info?.identity?.role}>
+    {noModel&&<NoModelProvider admin={info?.identity?.role==='admin'}/>}
+  </TasksList>;
   if (id && detail.loading) return <p className="page">Loading task…</p>;
   if (id && detail.error) return <section className="page"><a href="#/tasks">Back to tasks</a><ErrorBox error={detail.error}/><Btn onClick={()=>void detail.reload()}>Retry</Btn></section>;
   const editing = create || detail.data?.status === 'draft';
   return <section className={`page installation-page${editing ? ' task-request-page' : id ? ' task-detail-page' : ''}`} aria-label="Tasks">
-    <header className="page-head"><div><h1>{create?'New task':id?(editing?'Task draft':detail.data?.title || 'Task'):'Tasks'}</h1>{(!id || editing)&&<p className="muted">Prepare a request and review the workflow before execution.</p>}</div>
-      {!create&&!id&&info?.identity?.role!=='viewer'&&info?.identity?.role&&<a className="btn primary" href="#/tasks/new">New task</a>}
-    </header>
-    {noModel&&!id&&!create&&<NoModelProvider admin={info?.identity?.role==='admin'}/>}
-    {id||create ? <TaskEditor key={id??'new'} draft={detail.data} noModel={noModel} admin={info?.identity?.role==='admin'} graphs={graphs.filter(g=>!g.graph.metadata.id.startsWith('task-run-'))} nativeProfile={info?.nativeProfile===true} canStart={info?.identity?.role==='admin'} canEdit={info?.identity?.role==='admin'||info?.identity?.role==='operator'}/> : <>
-      <ErrorBox error={list.error}/>
-      <Btn onClick={()=>void list.reload()} disabled={list.loading}>Refresh tasks</Btn>
-      {!list.loading&&!list.error&&list.data?.items.length===0&&<p>No task drafts yet. Create a request using one of your existing workflows.</p>}
-      <ul className="task-list">{list.data?.items.map(task=><li key={task.id}><a href={`#/tasks/${encodeURIComponent(task.id)}`}>{task.title}</a><p>{task.resolution&&task.resolution.state!=='resolved'?task.resolution.message:(task.observedState??task.status)}{task.graphId&&<> · Workflow {task.graphId} · Version {task.graphVersion}</>}</p></li>)}</ul>
-      {after&&<Btn onClick={()=>setAfter(undefined)}>First page</Btn>}
-      {list.data?.next&&<Btn onClick={()=>setAfter(list.data?.next)}>Next page</Btn>}
-    </>}
+    <header className="page-head"><div><h1>{create?'New task':editing?'Task draft':detail.data?.title || 'Task'}</h1>{editing&&<p className="muted">Prepare a request and review the workflow before execution.</p>}</div></header>
+    <TaskEditor key={id??'new'} draft={detail.data} noModel={noModel} admin={info?.identity?.role==='admin'} graphs={graphs.filter(g=>!g.graph.metadata.id.startsWith('task-run-'))} nativeProfile={info?.nativeProfile===true} canStart={info?.identity?.role==='admin'} canEdit={info?.identity?.role==='admin'||info?.identity?.role==='operator'}/>
   </section>;
 }
 /** Workflows whose agents call a model (everything except echo agents). */

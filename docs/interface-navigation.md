@@ -6,7 +6,7 @@ introduce roles or change API permissions.
 | Group | Destination | Scope |
 | --- | --- | --- |
 | Work | Activity (`#/activity`) | What is running, what needs a person and recent executions across all workflows, and per agent/workflow health; see below |
-| Work | Tasks (`#/tasks`) | Request drafts, requirements review, authorized execution and task progress; see [task workflows](task-workflows.md). Runs remains agent execution history. |
+| Work | Tasks (`#/tasks`) | Find saved requests in the task history table. Search by title, ID or issue and filter the current page by status or workflow. Open a row's task link for requirements, execution and progress. See [task workflows](task-workflows.md). |
 | Work | Projects (`#/projects`) | Registered repositories and task worktrees; see [registered projects](task-workflows.md#registered-project-worktrees-2026-10-19). |
 | Work | Approvals | Existing approval and application-review flows, including pending count |
 | Configuration | Workflows (`#/graphs`) | Existing graph editor, activity, files, messages and advanced YAML |

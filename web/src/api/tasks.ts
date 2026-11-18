@@ -19,6 +19,7 @@ export interface TaskInput {
   scmConnection?: string;
 }
 export interface TaskDraft extends TaskInput {
+  triggerGitHubIssue?: string;
  submitted?:boolean;
  resolution?: {state:string;message:string;repository?:string};
   id: string;

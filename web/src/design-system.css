@@ -141,6 +141,18 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 .table th, .table td { padding: var(--space-2) var(--space-3); }
 .connection-table th, .connection-table td { padding: var(--space-3) var(--space-4); }
 .table tbody tr:hover, .connection-table tbody tr:hover { background: color-mix(in srgb, var(--surface-sunken) 60%, transparent); }
+.tasks-list-page .page-head { align-items: center; }
+.tasks-list-page .btn-primary { text-decoration: none; }
+.tasks-filters { margin-block: 0 var(--space-3); }
+.tasks-filters label { min-inline-size: min(12rem, 100%); max-inline-size: 100%; }
+.tasks-filters :is(input, select) { min-inline-size: 0; max-inline-size: 100%; }
+.task-list-count { min-block-size: 1.5em; margin: 0 0 var(--space-3); }
+.tasks-table { flex-shrink: 0; position: relative; }
+.tasks-table td { vertical-align: top; overflow-wrap: anywhere; }
+.tasks-table td > :is(code, .muted) { display: block; margin-block-start: var(--space-1); }
+.tasks-table td > time { white-space: nowrap; }
+.tasks-table td:first-child { min-inline-size: 15rem; }
+.tasks-pagination { margin-block-start: var(--space-4); }
 
 /* dialogs */
 .modal { border-radius: var(--radius-lg); box-shadow: var(--shadow-2); }
