@@ -247,13 +247,44 @@ main > .page.task-request-page { max-width: none; }
 }
 .form .task-review-fields > p { margin: 0; color: var(--text-muted); font-size: 13px; max-inline-size: 72ch; }
 .task-review-fields > .btn { justify-self: start; }
-.task-request-form > details > .repository-import-form { margin-block-start: var(--space-2); }
+.task-request-form .task-review-fields > fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.task-review-fields > fieldset > legend { padding: 0; margin-block-end: var(--space-2); }
+.task-request-form details[open] { display: block; }
+.task-request-form > details > .repository-import-form {
+  inline-size: 100%;
+  padding: var(--space-4) 0 0;
+  margin-block-start: var(--space-2);
+  border: 0;
+  border-block-start: 1px solid var(--border);
+  border-radius: 0;
+}
 .task-request-status:empty { position: absolute; inset-block-start: 0; }
 .repository-import-form label.repository-import-consent {
   align-items: flex-start;
   gap: var(--space-2);
 }
 .repository-import-consent > input { flex: none; margin: var(--space-1) 0 0; }
+.task-detail-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.task-detail-layout > * { grid-column: 1 / -1; margin: 0; min-inline-size: 0; }
+.task-detail-layout > :is(.task-progress-summary, .task-result) { grid-column: auto; }
+.task-detail-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.task-detail-layout .card > p { margin: 0; }
+.task-request-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-authorization > .btn { align-self: flex-start; }
+.task-workflow-details summary { cursor: pointer; font-weight: 600; }
+.task-workflow-details dl { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); }
+.task-workflow-details dt { color: var(--text-muted); }
+.task-workflow-details dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 800px) {
+  .task-detail-layout { grid-template-columns: minmax(0, 1fr); }
+}
 .page { padding: var(--space-6) var(--space-8); }
 .page-head { margin-bottom: var(--space-6); }
 .events-header, .events-heading, .events-controls, .events-controls label {

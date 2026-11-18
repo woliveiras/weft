@@ -21,10 +21,16 @@ test('uses the available task form width and aligns expanded fields and import c
   expect(project.x).toBe(title.x);
   expect(project.width).toBe(title.width);
   expect(project.y - title.y - title.height).toBeGreaterThanOrEqual(16);
+  const issue = (await form.getByRole('combobox', { name: 'Issue service', exact: true }).boundingBox())!;
+  expect(issue.x).toBe(title.x);
+  expect(issue.width).toBe(title.width);
 
   await form.getByText('Import repository from URL', { exact: true }).click();
   const checkbox = form.getByRole('checkbox', { name: /Authorize the selected Git authentication/ });
   await expect(checkbox).toBeVisible();
+  const clone = (await form.getByRole('textbox', { name: 'Clone URL', exact: true }).boundingBox())!;
+  expect(clone.x).toBe(title.x);
+  expect(clone.width).toBe(title.width);
   const consentGeometry = () => checkbox.evaluate(input => {
     const box = input.getBoundingClientRect();
     const text = input.nextElementSibling!.getBoundingClientRect();

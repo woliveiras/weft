@@ -2,7 +2,7 @@ import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react';
 import {afterEach,beforeEach,describe,it,expect,vi} from 'vitest';
 import {TaskAuthorization} from './TaskAuthorization';
 import {api} from '../api/client';
-vi.mock('../api/client',()=>({api:{taskAuthorization:vi.fn(),saveTaskAuthorization:vi.fn()},errorMessage:(e:Error)=>e.message}));
+vi.mock('../api/client',async importOriginal=>({...(await importOriginal<typeof import('../api/client')>()),api:{taskAuthorization:vi.fn(),saveTaskAuthorization:vi.fn()}}));
 afterEach(cleanup);
 beforeEach(()=>{vi.clearAllMocks();vi.mocked(api.taskAuthorization).mockResolvedValue({scope:'reviewed',capabilities:[{id:'worker',isolation:'process',grants:[{name:'shell.exec'}]}]});vi.mocked(api.saveTaskAuthorization).mockResolvedValue({});});
 describe('Task authorization',()=>{
@@ -19,6 +19,14 @@ describe('Task authorization',()=>{
  vi.mocked(api.taskAuthorization).mockRejectedValue(new Error('Offline'));
  render(<TaskAuthorization taskId="tsk_1" canEdit={false} onChanged={()=>{}}/>);
  await screen.findByText('Offline');expect(screen.queryByRole('checkbox')).toBeNull();expect(api.saveTaskAuthorization).not.toHaveBeenCalled();
+ expect(screen.getByText('Could not load reviewed agent details.')).toBeTruthy();
+ expect(screen.queryByText('Reviewed agents, tools and execution boundaries')).toBeNull();
+ });
+ it('explains a successful response with no reviewed agents',async()=>{
+ vi.mocked(api.taskAuthorization).mockResolvedValue({scope:'reviewed',capabilities:[]});
+ render(<TaskAuthorization taskId="tsk_1" canEdit={false} onChanged={()=>{}}/>);
+ await screen.findByText('No reviewed agent details are available for this task.');
+ expect(screen.queryByText('Reviewed agents, tools and execution boundaries')).toBeNull();
  });
  it('keeps a failed save visible and never reports a change',async()=>{
  const changed=vi.fn();vi.mocked(api.saveTaskAuthorization).mockRejectedValue(new Error('Stale scope'));

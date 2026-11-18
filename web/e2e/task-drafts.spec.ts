@@ -115,7 +115,7 @@ test('opens a previously saved echo example and runs it only after explicit revi
  }});
  expect(graphResponse.status()).toBe(201);
  const taskResponse=await page.request.post('/api/v1/tasks',{headers,data:{
-  title:'Previously saved echo example',request:'Echo this example.',outcome:'freeform',graphId,graphVersion:1,
+  title:'Previously saved echo example',request:JSON.stringify({notice:'Internal task context',issue:'example/repo#10',title:'Echo example',body:'Echo this example.',replies:['Clarification from the issue.']}),outcome:'freeform',graphId,graphVersion:1,
   nodeId:'example',resultNodeId:'example',
  }});
  expect(taskResponse.status()).toBe(201);
@@ -137,6 +137,12 @@ test('opens a previously saved echo example and runs it only after explicit revi
  await page.getByRole('button',{name:'Start task',exact:true}).click();
  await expect(page.getByRole('status')).toHaveText('Task status: succeeded');
  await page.reload();await expect(page.getByRole('status')).toHaveText('Task status: succeeded');
+ const request=page.getByRole('region',{name:'Request',exact:true});
+ await expect(request).toContainText('Echo this example.');
+ await expect(request).not.toContainText('Internal task context');
+ await request.getByText('Issue replies (1)',{exact:true}).click();
+ await expect(request.getByText('Clarification from the issue.')).toBeVisible();
+ await expect(page.getByRole('link',{name:'Task details',exact:true})).toHaveCount(0);
 });
 
 test('keeps task approvals contextual and preserves viewer restrictions and decision outcomes',async({page})=>{

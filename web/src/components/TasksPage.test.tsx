@@ -220,6 +220,23 @@ it('shows historical spend without an active budget pause on a cancelled task',a
  expect(screen.queryByText(/paused because|Runs paused|Resume pending/)).toBeNull();
  expect(screen.queryByRole('button',{name:'Raise budget'})).toBeNull();
 });
+
+it('renders a tracked issue as text with separate replies and no link back to itself', async () => {
+ const task={id:'tsk_issue',revision:2,status:'cancelled',title:'Repair task output',outcome:'freeform',graphId:'factory',graphVersion:2,nodeId:'worker',resultNodeId:'worker',
+  request:JSON.stringify({notice:'Internal task context',issue:'example/repo#10',title:'Repair task output',body:'Repair this output.\n\nKeep <b>literal text</b>.',replies:['Existing issue reply.']})};
+ fakeApi({'GET /api/v1/tasks/tsk_issue':()=>task,
+  'GET /api/v1/tasks/tsk_issue/progress':()=>({task,state:'cancelled',blockers:[],executions:[],pendingApprovals:[]}),
+  'GET /api/v1/tasks/tsk_issue/authorization':()=>apiError(409,'storage: conflict','conflict')});
+ render(<TasksPage id="tsk_issue" info={info} graphs={graphs}/>);
+ await screen.findByRole('heading',{level:1,name:'Repair task output'});
+ const request=screen.getByRole('region',{name:'Request'});
+ expect(within(request).getByText('example/repo#10')).toBeTruthy();
+ expect(request.textContent).toContain('Repair this output.\n\nKeep <b>literal text</b>.');
+ expect(request.textContent).not.toContain('Internal task context');
+ expect(within(request).getByText('Issue replies (1)')).toBeTruthy();
+ expect(await screen.findByText(/This task uses a different workflow version/)).toBeTruthy();
+ expect(screen.queryByRole('link',{name:'Task details'})).toBeNull();
+});
 it('offers Same as entry when the result is omitted',async()=>{
  fakeApi({'GET /api/v1/projects':()=>[],'GET /api/v1/tasks':()=>({items:[]})});
  render(<TasksPage create info={info} graphs={graphs}/>);

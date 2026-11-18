@@ -1,20 +1,30 @@
 import { HelpField } from './FieldHelp';
 import {useState} from 'react';
-import {api,errorMessage} from '../api/client';
+import {api,ApiError,errorMessage} from '../api/client';
 import type {AuthorizationMode} from '../api/tasks';
 import {useAsync} from '../hooks/useData';
 import {Btn,ErrorBox} from './common';
 export function TaskAuthorization({taskId,canEdit,onChanged,running=false}:{taskId:string;canEdit:boolean;onChanged:()=>void;running?:boolean}) {
- const state=useAsync(()=>api.taskAuthorization(taskId),[taskId]);
+ const state=useAsync(async()=>{
+  try{return await api.taskAuthorization(taskId);}
+  catch(cause){
+   if(cause instanceof ApiError && cause.status===409) {
+    throw new Error('This task uses a different workflow version from the current one. Its authorization review is unavailable.');
+   }
+   throw cause;
+  }
+ },[taskId]);
  const [mode,setMode]=useState<AuthorizationMode>('ask');
  const [remember,setRemember]=useState(false);
  const [confirmed,setConfirmed]=useState(false);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState<string>();
  const save=async()=>{if(!state.data||!confirmed)return;setBusy(true);setError(undefined);try{await api.saveTaskAuthorization(taskId,mode,state.data.scope,state.data.record?.revision??0,remember,state.data.preference?.revision??0);await state.reload();setConfirmed(false);onChanged();}catch(e){setError(errorMessage(e));}finally{setBusy(false);}};
- return <section className="card" aria-label="Task authorization"><h2>Authorization</h2>
+ const capabilities=state.data?.capabilities;
+ return <section className="card task-authorization" aria-label="Task authorization"><h2>Authorization</h2>
  <p>Current mode: {state.error?'unavailable':state.data?.record?.mode??(running?'Existing workflow approvals (legacy task)':'Ask for approval (default)')}. Tool grants and mandatory approvals remain unchanged.</p>
- <details><summary>Reviewed agents, tools and execution boundaries</summary>{state.data?.capabilities?.map(agent=><section key={agent.id}><h3>{agent.id}</h3><p>Isolation: {agent.isolation}</p><pre>{JSON.stringify(agent.grants,null,2)}</pre></section>)}</details>
+ {capabilities?.length ? <details><summary>Reviewed agents, tools and execution boundaries</summary>{capabilities.map(agent=><section key={agent.id}><h3>{agent.id}</h3><p>Isolation: {agent.isolation}</p><pre>{JSON.stringify(agent.grants ?? [],null,2)}</pre></section>)}</details>
+  : <p className="muted">{state.loading?'Loading authorization details…':state.error?'Could not load reviewed agent details.':'No reviewed agent details are available for this task.'}</p>}
  <ErrorBox error={state.error||error}/>
  {state.data?.record&&state.data.record.scope!==state.data.scope&&<p role="alert">Saved authorization is stale. Review the current scope and confirm again before starting.</p>}
  <Btn disabled={busy} onClick={()=>{setConfirmed(false);void state.reload();}}>Refresh authorization</Btn>

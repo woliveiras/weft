@@ -42,8 +42,8 @@ export function TasksPage({id,create,info,graphs}: {id?:string;create?:boolean;i
   if (id && detail.loading) return <p className="page">Loading task…</p>;
   if (id && detail.error) return <section className="page"><a href="#/tasks">Back to tasks</a><ErrorBox error={detail.error}/><Btn onClick={()=>void detail.reload()}>Retry</Btn></section>;
   const editing = create || detail.data?.status === 'draft';
-  return <section className={`page installation-page${editing ? ' task-request-page' : ''}`} aria-label="Tasks">
-    <header className="page-head"><div><h1>{create?'New task':id?'Task':'Tasks'}</h1><p className="muted">Prepare a request and review the workflow before execution.</p></div>
+  return <section className={`page installation-page${editing ? ' task-request-page' : id ? ' task-detail-page' : ''}`} aria-label="Tasks">
+    <header className="page-head"><div><h1>{create?'New task':id?(editing?'Task draft':detail.data?.title || 'Task'):'Tasks'}</h1>{(!id || editing)&&<p className="muted">Prepare a request and review the workflow before execution.</p>}</div>
       {!create&&!id&&info?.identity?.role!=='viewer'&&info?.identity?.role&&<a className="btn primary" href="#/tasks/new">New task</a>}
     </header>
     {noModel&&!id&&!create&&<NoModelProvider admin={info?.identity?.role==='admin'}/>}
@@ -262,6 +262,27 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
   </>;
 }
 
+function TaskRequestContent({request}: {request:string}) {
+  let issue: {key:string; body:string; replies:string[]} | undefined;
+  try {
+    const parsed = JSON.parse(request);
+    if (parsed && typeof parsed.notice === 'string' && typeof parsed.issue === 'string'
+      && typeof parsed.title === 'string' && typeof parsed.body === 'string') {
+      issue = {key:parsed.issue, body:parsed.body, replies:Array.isArray(parsed.replies)
+        ? parsed.replies.filter((reply:unknown): reply is string => typeof reply === 'string') : []};
+    }
+  } catch {
+    // Ordinary task requests are plain text.
+  }
+  return <>
+    {issue && <p className="muted">Issue <code>{issue.key}</code></p>}
+    <p className="task-request-text">{issue ? (issue.body || 'No description was provided for this issue.') : request}</p>
+    {!!issue?.replies.length && <details><summary>Issue replies ({issue.replies.length})</summary>
+      <ul>{issue.replies.map((reply,index)=><li className="task-request-text" key={index}>{reply}</li>)}</ul>
+    </details>}
+  </>;
+}
+
 function TaskTracking({task,canControl,canDecide,nativeProfile}:{task:TaskDraft;canControl:boolean;canDecide:boolean;nativeProfile:boolean}) {
   const [progress,setProgress]=useState<TaskProgress>();
   const [showDiagnostics,setShowDiagnostics]=useState(false);
@@ -282,28 +303,34 @@ function TaskTracking({task,canControl,canDecide,nativeProfile}:{task:TaskDraft;
   const current=progress?.task??task;
   const graph=current.executionGraphId;
   return <>
-    <a href="#/tasks">Back to tasks</a>
-    <article className="card" aria-label="Task progress">
-      <h2>{task.title}</h2><p>{task.request}</p>
+    <a className="task-back-link" href="#/tasks">Back to tasks</a>
+    <article className="task-detail-layout" aria-label="Task progress">
+      <section className="card task-progress-summary" aria-label="Status">
+      <div className="task-detail-heading"><h2>Status</h2><Btn small onClick={()=>setRefresh(x=>x+1)}>Refresh task</Btn></div>
       <p role="status">{progress?`Task status: ${progress.state}`:'Loading progress…'}</p>
       <TaskJourney progress={progress} error={error}/>
-      <ErrorBox error={error}/><Btn onClick={()=>setRefresh(x=>x+1)}>Refresh task</Btn>
-      <TaskAuthorization taskId={task.id} canEdit={canControl&&["running","starting","environment_pending"].includes(current.status)} running={current.status!=="environment_pending"} onChanged={()=>setRefresh(x=>x+1)}/>
+      <ErrorBox error={error}/>
       {current.launchError&&<p>{current.launchError}</p>}
       {progress?.blockers.map(b=><p key={b}>{b}</p>)}
+      </section>
+      <section className="card task-result" aria-label="Result">
+        <h2>Result</h2><p className="task-request-text" aria-label="Agent summary">{progress?.result?.summary||'No result recorded yet.'}</p>
+        {progress?.result?.summary&&<p className="muted small">Agent output is generated content. Inspect tool outcomes and test evidence before accepting changes.</p>}
+        {progress?.delivery&&<TaskDeliveryView delivery={progress.delivery}/>}
+      </section>
+      <section className="card task-detail-request" aria-label="Request"><h2>Request</h2><TaskRequestContent request={task.request}/></section>
+      <TaskAuthorization taskId={task.id} canEdit={canControl&&["running","starting","environment_pending"].includes(current.status)} running={current.status!=="environment_pending"} onChanged={()=>setRefresh(x=>x+1)}/>
       {graph&&<TaskRunBudget graph={graph} canRaise={canControl} active={progress?.state==='running'}/>}
-      {progress?.delivery&&<TaskDeliveryView delivery={progress.delivery}/>}
       {graph&&<TaskDecisions graphId={graph} approvals={error?undefined:progress?.pendingApprovals} canDecide={canDecide} canAdmin={canControl} onChanged={()=>setRefresh(x=>x+1)}/>}
       {progress?.workspacePath&&<WorkspaceHandoff path={progress.workspacePath} nativeProfile={nativeProfile}/>}
       {canControl&&progress?.state==='cancelled'&&current.projectId&&<TaskCleanup taskId={task.id} workspaces={progress.workspaces??[]} onChanged={()=>setRefresh(x=>x+1)}/>}
       {progress?.environment&&<TaskEnvironment key={task.id} task={current} environment={progress.environment} canControl={canControl} onChanged={()=>setRefresh(x=>x+1)}/>}
       {graph&&<TaskPlan key={`plan-${graph}`} graphId={graph}/>}
-      <h3>Result</h3><p aria-label="Agent summary">{progress?.result?.summary||'No result recorded yet.'}</p><p><a href={`#/tasks/${encodeURIComponent(task.id)}`}>Task details</a></p>
-      <p>Agent output is generated content. Inspect tool outcomes and test evidence before accepting changes.</p>
       {graph&&<TaskEvidence key={graph} graphId={graph} workspaces={progress?.workspaces??[]} nativeProfile={nativeProfile} executions={progress?.executions??[]} role={canControl?'admin':canDecide?'operator':'viewer'}/>}
       {graph&&<TaskCheckpoints key={`checkpoints:${graph}`} graphId={graph} canRestore={canControl}/>}
       {graph&&<nav aria-label="Task evidence"><a href={`#/g/${encodeURIComponent(graph)}/runs`}>Execution details</a> · <a href={`#/g/${encodeURIComponent(graph)}/files`}>Workspace files</a> · <a href="#/approvals">Approvals</a></nav>}
-      <details><summary>Workflow and executions</summary><p>Source: {task.graphId} · Version {task.graphVersion} · Execution copy: {graph||'not prepared'}</p>
+      <details className="card task-workflow-details"><summary>Workflow and executions</summary>
+        <dl><div><dt>Source workflow</dt><dd>{task.graphId}</dd></div><div><dt>Version</dt><dd>{task.graphVersion}</dd></div><div><dt>Execution copy</dt><dd>{graph||'Not prepared'}</dd></div></dl>
         <ul>{progress?.executions.map(x=><li key={x.id}><a href={`#/g/${encodeURIComponent(x.graphId)}/runs?execution=${encodeURIComponent(x.id)}&section=result`}>{x.nodeId}: {x.status}</a></li>)}</ul>
       </details>
       {graph&&<details onToggle={e=>setShowDiagnostics(e.currentTarget.open)}><summary>Activity and diagnostics</summary>{showDiagnostics&&<TaskActivity graphId={graph} role={canControl?'admin':canDecide?'operator':'viewer'}/>}</details>}
