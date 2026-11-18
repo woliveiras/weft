@@ -1,7 +1,7 @@
 import { HelpField } from './FieldHelp';
 import { useState } from 'react';
 import { api } from '../api/client';
-import { nodeWithAgent, type AgentDefinition, type AgentBinding } from '../api/agents';
+import { nodeWithAgent, nodeWithAgentVersion, type AgentDefinition, type AgentBinding } from '../api/agents';
 import type { GraphNode, GraphSummary } from '../api/types';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
@@ -11,7 +11,7 @@ export function AgentPicker({node, onCancel, onSelect}: {
   onCancel: () => void;
   onSelect: (binding: AgentBinding, definition: AgentDefinition) => void;
 }) {
-  const [id,setId] = useState(node?.agent?.id ?? '');
+  const [id,setId] = useState('');
   const [version,setVersion] = useState('');
   const [values,setValues] = useState<Record<string,string>>({});
   const [search, setSearch] = useState('');
@@ -21,11 +21,10 @@ export function AgentPicker({node, onCancel, onSelect}: {
   const definition = selected?.definition;
   const parameters = definition?.parameters ?? [];
   const valid = !!id && !!selected && parameters.every(p => !p.required || (values[p.name] ?? p.default ?? '').trim());
-  const isUpdate = !!node?.agent;
   const query = search.trim().toLowerCase();
   const matches = (catalog.data ?? []).filter(agent => agent.id === id ||
     [agent.name, agent.id, agent.description, agent.origin?.workflow].some(value => value?.toLowerCase().includes(query)));
-  return <Modal title={isUpdate ? 'Choose an agent version' : 'Select a reusable agent'} onClose={onCancel} keyboard>
+  return <Modal title="Select a reusable agent" onClose={onCancel} keyboard>
     <div className="form">
       <label>Search agents<input autoFocus type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
       <HelpField label={"Reusable agent"} help={"Choose a catalog definition to reuse for this node. Review its instructions and grants before saving the workflow."}><select value={id} disabled={catalog.loading && !catalog.data} onChange={e=>{
@@ -43,14 +42,10 @@ export function AgentPicker({node, onCancel, onSelect}: {
       {id && details.data?.id === id && <HelpField label={"Agent version"} help={"Pins the node to one published definition. Future versions become available to select without changing the version already used by this workflow."}><select value={version} onChange={e=>{
         setVersion(e.target.value);
         const next = details.data?.versions.find(v=>v.version===Number(e.target.value));
-        setValues(Object.fromEntries((next?.definition.parameters ?? []).map(p=>[p.name,
-          node?.agent?.id === id ? (node.agent.parameters?.[p.name] ?? p.default ?? '') : (p.default ?? ''),
-        ])));
+        setValues(Object.fromEntries((next?.definition.parameters ?? []).map(p=>[p.name, p.default ?? ''])));
       }}>
         <option value="">Choose a version</option>
-        {details.data.versions.map(v=><option key={v.version} value={v.version}>
-          Version {v.version}{node?.agent?.id===id && node.agent.version===v.version ? ' (in use)' : ''}
-        </option>)}
+        {details.data.versions.map(v=><option key={v.version} value={v.version}>Version {v.version}</option>)}
       </select></HelpField>}
       {definition && <ParameterFields parameters={parameters} values={values} onChange={setValues}/>}
       {definition && <DefinitionChange node={node} definition={definition}/>}
@@ -110,27 +105,38 @@ export function AgentInstance({node, summary, canEdit, onUpdate}: {
     const agents = await api.agents();
     return agents.find(agent => agent.origin?.workflow === summary.graph.metadata.id && agent.origin.node === node.id);
   }, [binding?.id, summary.graph.metadata.id, summary.record.version, node.id]);
-  const parameters = details.data?.id === binding?.id
-    ? details.data?.versions.find(version => version.version === binding?.version)?.definition.parameters ?? []
-    : [];
+  const agent = binding && details.data?.id === binding.id ? details.data : undefined;
+  const current = agent?.versions.find(version => version.version === binding?.version);
+  const parameters = current?.definition.parameters ?? [];
   const agentId = binding?.id ?? origin.data?.id;
-  const agentName = binding ? details.data?.versions.find(version => version.version === binding.version)?.definition.name : origin.data?.name;
+  const agentName = binding ? current?.definition.name : origin.data?.name;
 
   return <section className="card form" aria-label="Agent definition">
     {agentId && <p>
       <a href={`#/agents/${encodeURIComponent(agentId)}`}>{agentName || node.name || node.id} configuration</a>
-      {binding ? ` · Version ${binding.version}` : ' · Origin workflow'}
+      {!binding && ' · Origin workflow'}
     </p>}
     {binding && <>
-      {details.loading && <p role="status">Loading parameter definitions…</p>}
+      <HelpField label={"Agent version"} help={"Choose a published version of this agent. The workflow keeps using its saved version until you review and save the draft."}>
+        <select value={binding.version} disabled={!canEdit || details.loading || !!details.error || !agent?.versions.some(version => version.version !== binding.version)}
+          onChange={event => {
+            if (!canEdit || !agent) return;
+            const updated = nodeWithAgentVersion(node, agent, Number(event.target.value));
+            if (updated !== node) onUpdate(updated);
+          }}>
+          {!current && <option value={binding.version}>Version {binding.version}</option>}
+          {agent?.versions.map(version => <option key={version.version} value={version.version}>Version {version.version}</option>)}
+        </select>
+      </HelpField>
+      {details.loading && <p role="status">Loading agent versions…</p>}
       <ParameterFields parameters={parameters} values={binding.parameters ?? {}}
         onChange={canEdit ? values => onUpdate({...node, agent:{...binding, parameters:values}}) : undefined} />
     </>}
     <ErrorBox error={binding ? details.error : origin.error} />
     {(binding ? details.error : origin.error) &&
       <Btn onClick={() => void (binding ? details.reload() : origin.reload())}>Retry loading definition</Btn>}
-    {canEdit && <Btn onClick={() => setPicker(true)}>Choose agent version</Btn>}
-    {picker && <AgentPicker node={node} onCancel={() => setPicker(false)} onSelect={(selection, definition) => {
+    {canEdit && !binding && <Btn onClick={() => setPicker(true)}>Link an agent</Btn>}
+    {picker && !binding && <AgentPicker node={node} onCancel={() => setPicker(false)} onSelect={(selection, definition) => {
       onUpdate(nodeWithAgent(node, selection, definition));
       setPicker(false);
     }} />}

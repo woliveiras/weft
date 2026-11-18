@@ -161,6 +161,27 @@ spec:
   await sections.getByRole('button', {name:'Workflows', exact:true}).click();
   await page.getByRole('link', {name:'Catalog review target / Catalog reviewer'}).click();
   const binding = page.getByRole('region', {name:'Agent definition', exact:true});
-  await expect(binding.getByText('Version 1')).toBeVisible();
+  const agentVersion = binding.getByRole('combobox', {name:'Agent version', exact:true});
+  await expect(agentVersion).toHaveValue('1');
+  await expect(agentVersion.getByRole('option')).toHaveText(['Version 1', 'Version 2']);
+  await agentVersion.selectOption('2');
+  await expect(agentVersion).toHaveValue('2');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(binding.getByRole('textbox', {name:/repository/})).toHaveValue('other/project');
+  const beforeSave = await (await page.request.get('/api/v1/graphs/catalog-review-target', {headers})).json() as GraphSummary;
+  expect(beforeSave.graph.spec.nodes[0].agent?.version).toBe(1);
+  await page.getByRole('button', {name:'Review & save'}).click();
+  const adoption = page.waitForResponse(response => response.url().endsWith('/api/v1/graphs/catalog-review-target')
+    && response.request().method() === 'PUT');
+  await page.getByRole('button', {name:'Save graph draft'}).click();
+  const adopted = await adoption;
+  expect(adopted.ok()).toBe(true);
+  const updated = await adopted.json() as GraphSummary;
+  expect(updated.graph.spec.nodes[0]).toMatchObject({
+    prompt:'Review @repository with the revised checklist.', localInstructions:'Inspect only API changes.',
+    agent:{id:agent!.id,version:2,parameters:{repository:'other/project'}},
+  });
+  await page.reload();
+  await expect(agentVersion).toHaveValue('2');
   expect(await page.getByRole('link', {name:'Save as reusable'}).count()).toBe(0);
 });

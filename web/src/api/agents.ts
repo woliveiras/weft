@@ -58,3 +58,13 @@ export function nodeWithAgent(node: GraphNode, binding: AgentBinding, definition
     workspace: {...node.workspace, readOnly: node.workspace?.readOnly || readOnly},
   };
 }
+
+export function nodeWithAgentVersion(node: GraphNode, agent: Agent, version: number): GraphNode {
+  const binding = node.agent;
+  if (!binding || agent.id !== binding.id || binding.version === version) return node;
+  const selected = agent.versions.find(candidate => candidate.version === version);
+  if (!selected) return node;
+  const declared = new Set(selected.definition.parameters?.map(parameter => parameter.name));
+  const parameters = Object.fromEntries(Object.entries(binding.parameters ?? {}).filter(([name]) => declared.has(name)));
+  return nodeWithAgent(node, {...binding, version, parameters}, selected.definition);
+}

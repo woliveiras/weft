@@ -146,8 +146,9 @@ is used and links directly to the agent configuration in each workflow.
 When creating a workflow, choose **Add existing agent**. The canvas also has
 **Add from catalog**. Search the catalog, select a version and supply its
 parameter values. Publishing a version in the catalog leaves saved workflow
-versions pinned. Select **Choose agent version** in a workflow to adopt an
-update through a graph review.
+versions pinned. In the workflow's agent configuration, **Agent version**
+shows the pinned version and lists the published versions of that agent.
+Select a version, then review and save the workflow to adopt it.
 
 Agent settings share a draft across tabs. **Unpublished changes** appears
 beside **Publish** whenever the draft differs from the published version.
