@@ -238,6 +238,7 @@ main > .page:not(.fill) { width: 100%; max-width: var(--content-max); margin-inl
 .page-head p, .page > p.muted { color: var(--text-muted); }
 .section-navigation a, .section-navigation button { border-radius: var(--radius-sm); }
 .section-navigation a[aria-current='page'], .section-navigation button[aria-current=page] { position: relative; }
+.agent-configuration-page > .card + .section-navigation { margin-block-start: var(--space-section); }
 
 /* ---- graph workspace ---- */
 .toolbar { padding: var(--space-2) var(--space-5); gap: var(--space-3); min-height: 56px; }
