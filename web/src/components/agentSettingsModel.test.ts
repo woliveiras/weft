@@ -1,11 +1,22 @@
 import { expect, it } from 'vitest';
 import type { Graph } from '../api/types';
-import { agentBoundaries, agentSection, changedGraphFields } from './agentSettingsModel';
+import { agentBoundaries, agentDefinitionChanged, agentSection, changedGraphFields } from './agentSettingsModel';
 const graph = {spec:{defaults:{tools:[{name:'filesystem.read',paths:['src/**']}],isolation:{mode:'docker',network:'bridge'}},nodes:[],channels:[]}} as unknown as Graph;
 it('resolves inherited tools and isolation without broadening explicit overrides',()=>{
  expect(agentBoundaries(graph,{id:'a'})).toMatchObject({isolation:'docker',readOnly:false,tools:graph.spec.defaults?.tools});
  expect(agentBoundaries(graph,{id:'a',tools:[],isolation:{mode:'process'},workspace:{readOnly:true}})).toMatchObject({isolation:'process',readOnly:true,tools:[]});
  expect(agentBoundaries({...graph,spec:{nodes:[]}}, {id:'a'})).toMatchObject({isolation:'process',tools:[],loop:'once'});
+});
+
+it('detects edits across agent sections and treats cleared optional fields like the saved definition', () => {
+  const saved = { name: 'Reviewer', parameters: [{ name: 'repository' }] };
+  expect(agentDefinitionChanged(saved, { ...saved, name: 'Release reviewer' })).toBe(true);
+  expect(agentDefinitionChanged(saved, { ...saved, readOnly: true })).toBe(true);
+  expect(agentDefinitionChanged(saved, { ...saved, tools: ['filesystem.read'] })).toBe(true);
+  expect(agentDefinitionChanged(saved, {
+    ...saved, description: '', prompt: '', readOnly: false, tools: [],
+    parameters: [{ name: 'repository', description: '', default: '', required: false }],
+  })).toBe(false);
 });
 it('handles unknown sections and identifies every changed graph path without exposing values',()=>{
  expect(agentSection('tools')).toBe('tools');expect(agentSection('invalid')).toBe('general');

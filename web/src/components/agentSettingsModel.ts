@@ -1,4 +1,5 @@
 import type { Graph, GraphNode } from '../api/types';
+import type { AgentDefinition } from '../api/agents';
 import { effectiveLoopMode } from './canvas/model';
 export const agentSections = ['general', 'instructions', 'tools', 'advanced'] as const;
 export type AgentSection = typeof agentSections[number];
@@ -20,4 +21,22 @@ export function changedGraphFields(before: unknown, after: unknown, path = ''): 
     return [...new Set([...Object.keys(left), ...Object.keys(right)])].sort().flatMap(key => changedGraphFields(left[key], right[key], Array.isArray(before) ? `${path}[${key}]` : path ? `${path}.${key}` : key));
   }
   return [path || 'document'];
+}
+
+export function agentDefinitionChanged(initial: AgentDefinition, draft: AgentDefinition): boolean {
+  // Match the catalog's persisted representation for optional values cleared in the form.
+  const comparable = (definition: AgentDefinition): AgentDefinition => ({
+    ...definition,
+    description: definition.description || undefined,
+    prompt: definition.prompt || undefined,
+    readOnly: definition.readOnly || undefined,
+    tools: definition.tools?.length ? definition.tools : undefined,
+    parameters: definition.parameters?.length ? definition.parameters.map(parameter => ({
+      ...parameter,
+      description: parameter.description || undefined,
+      default: parameter.default || undefined,
+      required: parameter.required || undefined,
+    })) : undefined,
+  });
+  return changedGraphFields(comparable(initial), comparable(draft)).length > 0;
 }

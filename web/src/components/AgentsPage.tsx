@@ -5,6 +5,7 @@ import { workflowAgentLink, type Agent, type AgentDefinition } from '../api/agen
 import type { GraphNode, GraphSummary } from '../api/types';
 import { useAsync } from '../hooks/useData';
 import { AgentEditor, NodeSettings } from './NodePanel';
+import { agentDefinitionChanged } from './agentSettingsModel';
 import { Btn, ErrorBox, Icon } from './common';
 
 interface InventoryProps {
@@ -131,6 +132,9 @@ function DefinitionEditor({initial, initialId, currentVersion, canEdit, onPublis
   const [saving,setSaving] = useState(false);
   const [error,setError] = useState<string>();
   const [section, setSection] = useState<DefinitionSection>('general');
+  const agentId = id.trim();
+  const dirty = agentId !== initialId || agentDefinitionChanged(initial, definition);
+  const canPublish = canEdit && dirty && !saving && /^[a-z0-9][a-z0-9-]{0,63}$/.test(agentId) && !!definition.name.trim();
   const sections: DefinitionSection[] = ['general', 'instructions', 'tools', 'parameters'];
   if (workflowsPanel) sections.push('workflows');
   const {readOnly, parameters, ...fields} = definition;
@@ -144,20 +148,27 @@ function DefinitionEditor({initial, initialId, currentVersion, canEdit, onPublis
   }));
   return <form className="card form catalog-definition" onSubmit={async event => {
     event.preventDefault();
-    if (!canEdit || saving || section === 'workflows') return;
+    if (!canPublish) return;
     setError(undefined); setSaving(true);
-    try { onPublished(await api.publishAgent(id.trim(),definition,currentVersion)); }
+    try { onPublished(await api.publishAgent(agentId,definition,currentVersion)); }
     catch (cause) { setError(errorMessage(cause)); }
     finally { setSaving(false); }
   }}>
-    <nav className="section-navigation" aria-label="Agent definition sections">
-      {sections.map(item => <button type="button" key={item} aria-current={section === item ? 'page' : undefined} onClick={() => setSection(item)}>
-        {definitionSections[item]}
-      </button>)}
-    </nav>
+    <div className="catalog-definition-toolbar">
+      <nav className="section-navigation" aria-label="Agent definition sections">
+        {sections.map(item => <button type="button" key={item} aria-current={section === item ? 'page' : undefined} onClick={() => setSection(item)}>
+          {definitionSections[item]}
+        </button>)}
+      </nav>
+      {canEdit && <div className="catalog-definition-actions">
+        <span className="muted small" role="status">{saving ? 'Publishing…' : dirty ? 'Unpublished changes' : ''}</span>
+        <Btn type="submit" tone="primary" disabled={!canPublish}>Publish</Btn>
+      </div>}
+    </div>
+    <ErrorBox error={error} />
     {section === 'workflows' ? workflowsPanel : <>
     {section === 'general' && <HelpField label={"Agent ID"} help={"A stable catalog identifier used by workflow bindings. Use lowercase letters, digits and hyphens. The ID is fixed after publication."}><input value={id} onChange={event => setId(event.target.value)}
-      readOnly={!!currentVersion || !canEdit} required pattern="[a-z0-9][a-z0-9-]{0,63}" /></HelpField>}
+      readOnly={!!currentVersion || !canEdit} required pattern={'[a-z0-9][a-z0-9\\-]{0,63}'} /></HelpField>}
     <fieldset className="catalog-fields" disabled={!canEdit || saving}>
       {(section === 'general' || section === 'tools') && <AgentEditor summary={summary} nodeId={node.id} section={section} onUpdateNode={updateNode} definitionOnly />}
       {section === 'tools' && <>
@@ -186,10 +197,6 @@ function DefinitionEditor({initial, initialId, currentVersion, canEdit, onPublis
         <Btn onClick={() => setDefinition({...definition,parameters:[...(parameters ?? []),{name:''}]})}>Add parameter</Btn>
       </>}
     </fieldset>
-    <ErrorBox error={error} />
-    {canEdit && <button className="btn btn-primary" type="submit" disabled={saving || !id.trim() || !definition.name.trim()}>
-      {saving ? 'Publishing…' : currentVersion ? 'Publish new version' : 'Publish version 1'}
-    </button>}
     </>}
   </form>;
 }

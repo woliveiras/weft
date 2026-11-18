@@ -128,10 +128,36 @@ spec:
   expect(source.graph.spec.channels?.[0].to).toEqual(['reviewer']);
 
   await page.goto(`/#/agents/${agent!.id}`);
+  const publish = page.getByRole('button', {name:'Publish', exact:true});
+  const pending = page.getByText('Unpublished changes', {exact:true});
+  await expect(publish).toBeDisabled();
+  const agentName = page.getByRole('textbox', {name:'Name', exact:true});
+  await agentName.fill('Release reviewer');
+  await expect(pending).toBeVisible();
+  await agentName.fill('Catalog reviewer');
+  await expect(pending).toHaveCount(0);
+  await expect(publish).toBeDisabled();
+  await agentName.fill('Release reviewer');
+  await sections.getByRole('button', {name:'Tools & permissions', exact:true}).click();
+  await expect(pending).toBeVisible();
+  await checkbox.check();
   await sections.getByRole('button', {name:'Instructions', exact:true}).click();
   await page.getByRole('textbox', {name:'Agent instructions'}).fill('Review @repository with the revised checklist.');
-  await page.getByRole('button', {name:'Publish new version'}).click();
+  await sections.getByRole('button', {name:'Workflows', exact:true}).click();
+  await expect(pending).toBeVisible();
+  const publication = page.waitForResponse(response => response.url().endsWith(`/api/v1/agents/${agent!.id}`)
+    && response.request().method() === 'PUT');
+  await publish.click();
+  const published = await publication;
+  expect(published.ok()).toBe(true);
+  const { versions } = await published.json();
+  expect(versions).toHaveLength(2);
+  expect(versions[1].definition).toMatchObject({
+    name:'Release reviewer', readOnly:true, prompt:'Review @repository with the revised checklist.',
+  });
   await expect(page.getByRole('combobox', {name:'Version', exact:true})).toHaveValue('2');
+  await expect(pending).toHaveCount(0);
+  await expect(publish).toBeDisabled();
   await sections.getByRole('button', {name:'Workflows', exact:true}).click();
   await page.getByRole('link', {name:'Catalog review target / Catalog reviewer'}).click();
   const binding = page.getByRole('region', {name:'Agent definition', exact:true});

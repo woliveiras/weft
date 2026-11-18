@@ -149,6 +149,10 @@ parameter values. Publishing a version in the catalog leaves saved workflow
 versions pinned. Select **Choose agent version** in a workflow to adopt an
 update through a graph review.
 
+Agent settings share a draft across tabs. **Unpublished changes** appears
+beside **Publish** whenever the draft differs from the published version.
+Select **Publish** to include all edits in a single version.
+
 Edit **Workflow instructions** in the workflow's agent configuration under
 **Instructions**. This text runs after the shared instructions and applies to
 that instance. The workflow owns channels, loop, replicas, workspace and run
