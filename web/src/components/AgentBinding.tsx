@@ -81,7 +81,7 @@ function ParameterFields({parameters, values, onChange}: {
   values: Record<string,string>;
   onChange?: (values: Record<string,string>) => void;
 }) {
-  return parameters.length > 0 && <fieldset disabled={!onChange}>
+  return parameters.length > 0 && <fieldset className="workflow-parameters" disabled={!onChange}>
     <legend>Workflow parameters</legend>
     {parameters.map(p=><HelpField key={p.name} label={p.name + (p.required ? ' (required)' : '')}
       help={p.description || `Supplies @${p.name} for this node. Use the value the shared instructions expect for this workflow.`}>
