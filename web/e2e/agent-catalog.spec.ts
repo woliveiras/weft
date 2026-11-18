@@ -184,4 +184,16 @@ spec:
   await page.reload();
   await expect(agentVersion).toHaveValue('2');
   expect(await page.getByRole('link', {name:'Save as reusable'}).count()).toBe(0);
+
+  await page.setViewportSize({width:1440, height:700});
+  const settings = page.getByRole('region', {name:'Agent settings', exact:true});
+  const scroll = await settings.evaluate(panel => {
+    const documentScroll = panel.ownerDocument.scrollingElement!;
+    const panelOverflow = panel.scrollHeight - panel.clientHeight;
+    panel.scrollTop = panelOverflow;
+    return {documentOverflow:documentScroll.scrollHeight - documentScroll.clientHeight, panelOverflow, panelTop:panel.scrollTop};
+  });
+  expect(scroll.documentOverflow).toBe(0);
+  expect(scroll.panelOverflow).toBeGreaterThan(0);
+  expect(scroll.panelTop).toBe(scroll.panelOverflow);
 });

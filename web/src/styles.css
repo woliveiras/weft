@@ -1936,7 +1936,7 @@ section {
 .connection-heading { margin:1.5rem 0; }
 .connection-heading h1 { margin:0 0 .5rem; font-size:1.8rem; letter-spacing:-.04em; }
 .page-head[hidden] { display:none; }
-.agent-configuration-page { padding:24px; overflow:auto; }
+.agent-configuration-page { position:relative; padding:24px; overflow:auto; }
 .agent-selector { display:flex; align-items:center; gap:12px; max-width:480px; }
 .agent-settings-layout { display:grid; grid-template-columns:minmax(0, 2fr) minmax(240px, 1fr); gap:24px; align-items:start; }
 .agent-fields { border:0; margin:0; padding:0; min-width:0; }
