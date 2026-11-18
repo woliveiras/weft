@@ -196,4 +196,25 @@ spec:
   expect(scroll.documentOverflow).toBe(0);
   expect(scroll.panelOverflow).toBeGreaterThan(0);
   expect(scroll.panelTop).toBe(scroll.panelOverflow);
+
+  await page.getByRole('tab', {name:'Graph', exact:true}).click();
+  await expect(page.getByRole('button', {name:'Add from catalog', exact:true})).toHaveCount(0);
+  await page.getByRole('button', {name:'Add agent', exact:true}).click();
+  const drawer = page.getByRole('complementary', {name:'Add agent', exact:true});
+  await drawer.getByRole('button', {name:'Choose from catalog', exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await drawer.getByRole('searchbox', {name:'Search agents'}).fill('Release reviewer');
+  await drawer.getByRole('combobox', {name:'Reusable agent'}).selectOption(agent!.id);
+  const add = drawer.getByRole('button', {name:'Add to workflow'});
+  await expect(add).toBeDisabled();
+  await drawer.getByRole('combobox', {name:'Agent version'}).selectOption('1');
+  await expect(add).toBeDisabled();
+  await drawer.getByRole('textbox', {name:/repository/}).fill('drawer/project');
+  await add.click();
+  await expect(drawer).toHaveCount(0);
+  await page.getByRole('button', {name:'Save graph', exact:true}).click();
+  await expect.poll(async () => (await (await page.request.get('/api/v1/graphs/catalog-review-target', {headers})).json() as GraphSummary)
+    .graph.spec.nodes.find(node => node.agent?.parameters?.repository === 'drawer/project')?.agent).toEqual({
+    id:agent!.id, version:1, parameters:{repository:'drawer/project'},
+  });
 });

@@ -143,9 +143,9 @@ saved workflow agent appears as a reusable card, including agents from earlier
 workflows. An agent's **Workflows** tab, next to **Parameters**, lists where it
 is used and links directly to the agent configuration in each workflow.
 
-When creating a workflow, choose **Add existing agent**. The canvas also has
-**Add from catalog**. Search the catalog, select a version and supply its
-parameter values. Publishing a version in the catalog leaves saved workflow
+When creating a workflow, choose **Add existing agent**. On the canvas, open
+**Add agent** and choose **Choose from catalog** in the side panel. Search the
+catalog, select a version and supply its parameter values. Publishing a version in the catalog leaves saved workflow
 versions pinned. In the workflow's agent configuration, **Agent version**
 shows the pinned version and lists the published versions of that agent.
 Select a version, then review and save the workflow to adopt it.

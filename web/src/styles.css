@@ -750,6 +750,7 @@ main {
 .panel-body {
   padding: 14px 16px 30px;
 }
+.add-agent-panel h2 { padding-inline-end: var(--space-8); }
 .files-view {
   flex: 1;
   min-height: 0;

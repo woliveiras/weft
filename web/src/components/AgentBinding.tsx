@@ -6,11 +6,19 @@ import type { GraphNode, GraphSummary } from '../api/types';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 
-export function AgentPicker({node, onCancel, onSelect}: {
+type AgentPickerProps = {
   node?: GraphNode;
   onCancel: () => void;
   onSelect: (binding: AgentBinding, definition: AgentDefinition) => void;
-}) {
+};
+
+export function AgentPicker(props: AgentPickerProps) {
+  return <Modal title="Select a reusable agent" onClose={props.onCancel} keyboard>
+    <AgentPickerFields {...props} />
+  </Modal>;
+}
+
+export function AgentPickerFields({node, onCancel, onSelect}: AgentPickerProps) {
   const [id,setId] = useState('');
   const [version,setVersion] = useState('');
   const [values,setValues] = useState<Record<string,string>>({});
@@ -24,8 +32,7 @@ export function AgentPicker({node, onCancel, onSelect}: {
   const query = search.trim().toLowerCase();
   const matches = (catalog.data ?? []).filter(agent => agent.id === id ||
     [agent.name, agent.id, agent.description, agent.origin?.workflow].some(value => value?.toLowerCase().includes(query)));
-  return <Modal title="Select a reusable agent" onClose={onCancel} keyboard>
-    <div className="form">
+  return <div className="form">
       <label>Search agents<input autoFocus type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
       <HelpField label={"Reusable agent"} help={"Choose a catalog definition to reuse for this node. Review its instructions and grants before saving the workflow."}><select value={id} disabled={catalog.loading && !catalog.data} onChange={e=>{
         setId(e.target.value); setVersion(''); setValues({});
@@ -55,8 +62,7 @@ export function AgentPicker({node, onCancel, onSelect}: {
           if (selected && valid) onSelect({id,version:selected.version,parameters:values},selected.definition);
         }}>{node ? 'Use this version' : 'Add to workflow'}</Btn>
       </div>
-    </div>
-  </Modal>;
+  </div>;
 }
 
 function DefinitionChange({node, definition}: {node?: GraphNode; definition: AgentDefinition}) {

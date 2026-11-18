@@ -184,6 +184,9 @@ describe('GraphWorkspace editor', () => {
     renderWorkspace();
 
     await user.click(await screen.findByRole('button', { name: 'Add agent' }));
+    const drawer = screen.getByRole('complementary', { name: 'Add agent' });
+    expect(screen.queryByText('unsaved graph changes')).toBeNull();
+    await user.click(within(drawer).getByRole('button', { name: 'Create new agent' }));
     // The new agent is selected so it can be configured right away.
     const name = within(agentEditor()).getByLabelText('Name') as HTMLInputElement;
     expect(name.value).toBe('Agent 3');
@@ -210,6 +213,19 @@ describe('GraphWorkspace editor', () => {
     });
     await waitFor(() => expect(screen.queryByText('unsaved graph changes')).toBeNull());
     expect(screen.getByText('v2')).toBeTruthy();
+  });
+
+  it('closes the add drawer with Escape without changing the graph', async () => {
+    const user = userEvent.setup();
+    const { puts } = backend();
+    renderWorkspace();
+    const opener = await screen.findByRole('button', { name: 'Add agent' });
+    await user.click(opener);
+    expect(screen.getByRole('complementary', { name: 'Add agent' })).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('complementary', { name: 'Add agent' })).toBeNull();
+    expect(document.activeElement).toBe(opener);
+    expect(puts()).toHaveLength(0);
   });
 
   it('shows validation errors next to the agent and field, and clears them once fixed', async () => {

@@ -66,6 +66,7 @@ test('creates agents, drags connections, validates, cancels and confirms Delete,
   await move(page, 'source', 0.15, 0.25);
   for (const agent of ['agent-2', 'agent-3']) {
     await page.getByRole('button', { name: 'Add agent', exact: true }).click();
+    await page.getByRole('button', { name: 'Create new agent', exact: true }).click();
     const config = page.getByRole('region', { name: 'Agent configuration' });
     await expect(config.getByLabel('ID', { exact: true })).toHaveValue(agent);
     await config.getByRole('combobox', { name: 'Runtime', exact: true }).selectOption('echo');

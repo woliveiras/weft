@@ -1,4 +1,4 @@
-import { AgentPicker } from './AgentBinding';
+import { AgentPickerFields } from './AgentBinding';
 import { nodeWithAgent, type AgentBinding, type AgentDefinition } from '../api/agents';
 import { AgentList } from './AgentList';
 import { RunsView } from './RunsView';
@@ -20,6 +20,7 @@ import {
   updateChannel,
   updateNode,
   type EdgeRef,
+  type Point,
 } from './canvas/edit';
 import { GraphCanvas, type Selection } from './canvas/GraphCanvas';
 import { EnvironmentBlocker, environmentIssue } from './EnvironmentBlocker';
@@ -95,7 +96,9 @@ export function GraphWorkspace({
   });
   const [error, setError] = useState<string>();
   const [saveConflict, setSaveConflict] = useState(false);
+  const [agentPlacement, setAgentPlacement] = useState<{position: Point; positions: Record<string, Point>}>();
   const [catalogPicker, setCatalogPicker] = useState(false);
+  const addAgentOpener = useRef<HTMLElement | null>(null);
   const canBindAgent = info?.identity?.role === 'admin';
   const [reviewOpen, setReviewOpen] = useState(false);
   const canEditAgent = info?.identity?.role === 'admin' || info?.identity?.role === 'operator';
@@ -116,7 +119,10 @@ export function GraphWorkspace({
   const lastSettingsSection = useRef<SettingsSection>('general');
   useEffect(() => {
     if (tab === 'settings') lastSettingsSection.current = settingsSection;
-    if (tab !== 'canvas') setRemovalRequest(undefined);
+    if (tab !== 'canvas') {
+      setRemovalRequest(undefined);
+      setAgentPlacement(undefined);
+    }
   }, [tab, settingsSection]);
   const appliedSelectionKey = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -247,19 +253,28 @@ export function GraphWorkspace({
     }
   };
 
-  const addNode = (position: { x: number; y: number }, positions: Record<string, { x: number; y: number }>, selection?: {binding:AgentBinding; definition:AgentDefinition}) => {
-    let added: string | undefined;
-    changeGraph((graph) => {
-      const result = addAgent(graph, position, positions);
-      added = result.id;
-      if (!selection) return result.graph;
-      const node = result.graph.spec.nodes.find(n => n.id === result.id);
-      return node ? updateNode(result.graph, result.id, nodeWithAgent(node, selection.binding, selection.definition)) : result.graph;
-    });
-    if (added) {
-      setSelection({ kind: 'node', id: added });
-      setPanelOpen(true);
-    }
+  const openAddAgent = (position: Point, positions: Record<string, Point>) => {
+    if (saving) return;
+    addAgentOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setCatalogPicker(false);
+    setAgentPlacement({position, positions});
+  };
+
+  const cancelAddAgent = () => {
+    setAgentPlacement(undefined);
+    addAgentOpener.current?.focus();
+  };
+
+  const addNode = (catalog?: {binding: AgentBinding; definition: AgentDefinition}) => {
+    if (!agentPlacement || saving || (catalog && !canBindAgent)) return;
+    const positions = {...agentPlacement.positions};
+    for (const node of draftGraph.spec.nodes) if (node.position) positions[node.id] = node.position;
+    const {graph, id} = addAgent(draftGraph, agentPlacement.position, positions);
+    const node = graph.spec.nodes.find(candidate => candidate.id === id);
+    changeGraph(() => catalog && node ? updateNode(graph, id, nodeWithAgent(node, catalog.binding, catalog.definition)) : graph);
+    setAgentPlacement(undefined);
+    setSelection({kind:'node', id});
+    setPanelOpen(true);
   };
 
   /** Preview all affected elements before editing the draft. */
@@ -447,16 +462,15 @@ export function GraphWorkspace({
         />
       )}
       {tab === 'canvas' && (
-        <div className={`floor ${selection && panelOpen ? 'with-panel' : ''}`}>
-          {canBindAgent && <Btn disabled={saving} onClick={()=>setCatalogPicker(true)}>Add from catalog</Btn>}
+        <div className={`floor ${agentPlacement || (selection && panelOpen) ? 'with-panel' : ''}`}>
           <AgentList graph={draftGraph} status={status} statusError={statusError} selected={selection?.kind==='node'?selection.id:undefined}
-            onSelect={id=>{setSelection({kind:'node',id});setPanelOpen(true);}} onConfigure={id=>configureAgent(id)}/>
+            onSelect={id=>{setAgentPlacement(undefined);setSelection({kind:'node',id});setPanelOpen(true);}} onConfigure={id=>configureAgent(id)}/>
           <GraphCanvas
             graph={draftGraph}
             status={status}
             selection={selection}
             editable
-            onAddNode={addNode}
+            onAddNode={openAddAgent}
             issues={issues}
             onConnect={(connection) => {
               if (!connection.source || !connection.target) return;
@@ -467,6 +481,7 @@ export function GraphWorkspace({
                 return result.graph;
               });
               if (added) {
+                setAgentPlacement(undefined);
                 setSelection({ kind: 'channel', id: added });
                 setPanelOpen(true);
               }
@@ -475,10 +490,32 @@ export function GraphWorkspace({
             onRemove={removeElements}
             onSelect={(s) => {
               setSelection(s);
-              if (s) setPanelOpen(true);
+              if (s) {
+                setAgentPlacement(undefined);
+                setPanelOpen(true);
+              }
             }}
           />
-          {selection && panelOpen && (
+          {agentPlacement ? (
+            <aside className="side-panel" aria-label="Add agent" onKeyDown={event=>{
+              if (event.key === 'Escape') {
+                event.stopPropagation();
+                cancelAddAgent();
+              }
+            }}>
+              <button type="button" className="icon-btn panel-close" onClick={cancelAddAgent} aria-label="Close panel"><Icon name="x" /></button>
+              <div className="panel-body form add-agent-panel">
+                <h2>Add agent</h2>
+                {catalogPicker && canBindAgent ? <AgentPickerFields onCancel={()=>setCatalogPicker(false)}
+                  onSelect={(binding,definition)=>addNode({binding,definition})} /> : (
+                  <div className="btn-row">
+                    <Btn tone="primary" autoFocus onClick={()=>addNode()} disabled={saving}>Create new agent</Btn>
+                    {canBindAgent && <Btn onClick={()=>setCatalogPicker(true)} disabled={saving}>Choose from catalog</Btn>}
+                  </div>
+                )}
+              </div>
+            </aside>
+          ) : selection && panelOpen && (
             <aside className="side-panel" aria-label="Details">
               <button type="button" className="icon-btn panel-close" onClick={() => setPanelOpen(false)} aria-label="Close panel">
                 <Icon name="x" />
@@ -548,11 +585,6 @@ export function GraphWorkspace({
         onSection={section => configureAgent(configuredId,section)} onSelect={id => configureAgent(id)}
         onUpdateNode={canEditAgent ? (id,patch) => changeGraph(graph => updateNode(graph,id,patch)) : undefined}
         issues={issues?.nodes.get(configuredId)} dirty={draftDirty} canBind={canBindAgent}/>}
-      {catalogPicker && <AgentPicker onCancel={()=>setCatalogPicker(false)} onSelect={(binding,definition)=>{
-        setCatalogPicker(false);
-        const rightEdge = Math.max(0,...draftGraph.spec.nodes.map(node=>node.position?.x ?? 0));
-        addNode({x:rightEdge+280,y:0},{},{binding,definition});
-      }}/>}
       {reviewOpen && <Modal title="Review graph changes" onClose={() => !saving && setReviewOpen(false)}>
         <p>Save the entire graph draft based on version {draftBase.record.version}, including other agents, channels and graph settings.</p>
         <p>Changed fields are listed below without copying their values. Review the relevant sections or Definition for their contents.</p>
