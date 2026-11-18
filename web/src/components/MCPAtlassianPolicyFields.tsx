@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import type {MCPConnectionInput} from '../api/types';
 export function MCPAtlassianPolicyFields({input,onChange}:{input:MCPConnectionInput;onChange:(value:MCPConnectionInput)=>void}) {
  const policy=input.atlassianPolicy;
@@ -8,7 +9,7 @@ export function MCPAtlassianPolicyFields({input,onChange}:{input:MCPConnectionIn
   {policy&&<>
    <p>Only six reviewed Jira and Confluence read operations are eligible. Unknown operations, generic search, dispatchers, writes and Bitbucket are excluded. Agent grants remain required. This does not restrict individual projects or spaces within an allowed site.</p>
    {(['jira','confluence'] as const).map(product=><label key={product}><input type="checkbox" checked={policy.products.includes(product)} onChange={e=>onChange({...input,atlassianPolicy:{...policy,products:e.target.checked?[...policy.products,product]:policy.products.filter(p=>p!==product)}})}/>{product==='jira'?'Allow Jira reads':'Allow Confluence reads'}</label>)}
-   <label>Allowed Atlassian cloud IDs (one per line)<textarea required value={policy.cloudIds.join('\n')} onChange={e=>onChange({...input,atlassianPolicy:{...policy,cloudIds:e.target.value.split('\n')}})}/></label>
+   <HelpField label={"Allowed Atlassian cloud IDs (one per line)"} help={"Limits calls to the named Atlassian sites for the selected products. Use the cloud ID of each site that should be accessible."}><textarea required value={policy.cloudIds.join('\n')} onChange={e=>onChange({...input,atlassianPolicy:{...policy,cloudIds:e.target.value.split('\n')}})}/></HelpField>
    <p>Use exact site UUIDs confirmed by your Atlassian administrator, not site URLs. Saving changes clears discovered tools; review discovery again.</p>
   </>}
  </fieldset>;

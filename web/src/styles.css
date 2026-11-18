@@ -1733,8 +1733,8 @@ section {
   color: var(--danger);
   font-size: 11px;
 }
-.provider-form label.has-error input,
-.provider-form label.has-error select {
+.provider-form .has-error input,
+.provider-form .has-error select {
   border-color: var(--danger);
 }
 .provider-advanced summary {

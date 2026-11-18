@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import {TaskJourney} from "./TaskJourney";
 import {TaskAuthorization} from "./TaskAuthorization";
 import {RepositoryImport} from './RepositoryImport';
@@ -75,10 +76,10 @@ function SCMHandOffField({value,onChange}:{value:string;onChange:(v:string)=>voi
   const list=useAsync(()=>api.scmConnections().catch(()=>[]),[]);
   const options=list.data??[];
   if(options.length===0&&!value)return null;
-  return <label>Source control hand-off<select value={value} onChange={e=>onChange(e.target.value)}>
+  return <HelpField label={"Source control hand-off"} help={"Choose which source-control connection delivers the completed result. Review its repository, branch prefix and pull request approval requirement."}><select value={value} onChange={e=>onChange(e.target.value)}>
     <option value="">None — review and push manually</option>
     {options.map(c=><option key={c.name} value={c.name}>{c.name} ({c.repository})</option>)}
-  </select><span className="muted small">After the workflow's human gate, the result agent commits on a task branch, pushes it and opens a pull request{options.find(c=>c.name===value)?.requirePullRequestApproval===false?'':' once a person approves it'}.</span></label>;
+  </select><span className="muted small">After the workflow's human gate, the result agent commits on a task branch, pushes it and opens a pull request{options.find(c=>c.name===value)?.requirePullRequestApproval===false?'':' once a person approves it'}.</span></HelpField>;
 }
 
 /** What the SCM hand-off did: pushed branch, pull request, failures. */
@@ -187,47 +188,47 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
       if(details){details.open=true;setSettingsOpen(true);}
     }} onSubmit={e=>{e.preventDefault();void save();}}>
       <fieldset disabled={!canEdit||busy}>
-        <label>Request<textarea required rows={8} placeholder="Describe the work you want the agents to do and the result you expect." maxLength={16384} value={input.request} onChange={e=>editRequest(e.target.value)}/></label>
+        <HelpField label={"Request"} help={"Describe what work should be done and how to judge the result. Include file names or constraints that the agent cannot infer from the repository."}><textarea required rows={8} placeholder="Describe the work you want the agents to do and the result you expect." maxLength={16384} value={input.request} onChange={e=>editRequest(e.target.value)}/></HelpField>
         <p>Run task authorizes a separate execution of the selected workflow with its existing permissions. Weft checks requirements first; missing configuration or required approvals keep the task waiting. Saving alone keeps a draft.</p>
         <div className="row"><Btn tone="primary" disabled={!input.request.trim()||busy||!canStart||modelBlocked} onClick={()=>void submit()}>{saved?.submitted?'Continue task':'Run task'}</Btn>
         <Btn disabled={!input.request.trim()||busy||!canEdit} onClick={()=>void resolve()}>Resolve request</Btn></div>
         <p>Uses the configured default model to interpret and save your request. Your workflow selection takes priority, then a named workflow, then Software Factory. Title, project and environment choices are retained; input bindings are rebuilt. No agents start.</p>
         {saved?.resolution&&<aside aria-label="Request interpretation"><p>{saved.resolution.message}</p>{saved.resolution.repository&&<p>Repository: {saved.resolution.repository}</p>}{['needs_model','model_error'].includes(saved.resolution.state)&&<a href="#/models">Configure models</a>}<p>Your original request is preserved. Resolving never grants tool access.</p></aside>}
-        <label>Workflow<select required value={input.graphId} onChange={e=>{const g=graphs.find(g=>g.graph.metadata.id===e.target.value)?.graph;change({graphId:e.target.value,graphVersion:g?.metadata.version??0,...workflowTaskDefaults(g,input.title,input.request)});}}>
+        <HelpField label={"Workflow"} help={"Choose the saved workflow to run this task. Review the agents, their versions and the permissions used by the task."}><select required value={input.graphId} onChange={e=>{const g=graphs.find(g=>g.graph.metadata.id===e.target.value)?.graph;change({graphId:e.target.value,graphVersion:g?.metadata.version??0,...workflowTaskDefaults(g,input.title,input.request)});}}>
           <option value="">Select workflow</option>{!selected&&input.graphId&&<option value={input.graphId}>{input.graphId} (unavailable)</option>}
           {graphs.map(({graph:g})=><option key={g.metadata.id} value={g.metadata.id}>{g.metadata.name||g.metadata.id}</option>)}
-        </select></label>
-        <label>Execution environment<select value={input.executionMode??'workflow'} onChange={e=>change({executionMode:e.target.value as TaskInput['executionMode']})}>
+        </select></HelpField>
+        <HelpField label={"Execution environment"} help={"Use the workflow environment or an eligible project preference when available. The choice controls where task commands run."}><select value={input.executionMode??'workflow'} onChange={e=>change({executionMode:e.target.value as TaskInput['executionMode']})}>
           <option value="workflow">Use workflow environment</option><option value="local" disabled={!nativeProfile}>Local worktree{!nativeProfile?' (native Weft required)':''}</option><option value="sandbox">Sandbox</option>
-        </select></label>
+        </select></HelpField>
         <p>Environment selection is checked against the workflow; it does not change agent isolation or permissions. Local worktrees use the native Weft host and do not isolate processes or network access. <a href="https://woliveiras.com/posts/why-git-worktrees-matter-coding-agents/" target="_blank" rel="noreferrer">About worktrees</a></p>
         {input.executionMode==='sandbox'&&<p>Sandbox requires all enabled agents to use Docker isolation and the configured Docker/Colima daemon to be available. Weft never falls back to local execution.</p>}
         <p>New tasks ask for tool approval by default. Save or resolve your request to review and confirm Workspace access or Full access. Mandatory workflow approvals and installation restrictions always apply.</p>
         <ErrorBox error={projects.error}/>
         <details open={settingsOpen} onToggle={e=>setSettingsOpen(e.currentTarget.open)}>
           <summary>Review settings</summary>
-        <label>Goal<select value={input.outcome} onChange={e=>change({outcome:e.target.value,request:outcomeRequest(input,e.target.value),...(!customTitle?{title:promptTitle(outcomeRequest(input,e.target.value))}:{})})}>{taskOutcomes.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}</select></label>
+        <HelpField label={"Goal"} help={"Select the expected delivery format. Use it to make clear whether the task should present findings, make changes or hand off a result."}><select value={input.outcome} onChange={e=>change({outcome:e.target.value,request:outcomeRequest(input,e.target.value),...(!customTitle?{title:promptTitle(outcomeRequest(input,e.target.value))}:{})})}>{taskOutcomes.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}</select></HelpField>
         <p>{taskOutcomes.find(o=>o.id===input.outcome)?.description}</p>
         <label>Title<input maxLength={200} required value={input.title} onChange={e=>{setCustomTitle(true);change({title:e.target.value});}}/></label>
-        <label>Project<select value={input.projectId??''} onChange={e=>{const p=projects.data?.find(p=>p.id===e.target.value);change({projectId:p?.id,baseCommit:p?.head,executionMode:p?.executionMode??'workflow'});}}>
+        <HelpField label={"Project"} help={"Links the task to a registered repository and its preferences. Choose the project whose files the task should use."}><select value={input.projectId??''} onChange={e=>{const p=projects.data?.find(p=>p.id===e.target.value);change({projectId:p?.id,baseCommit:p?.head,executionMode:p?.executionMode??'workflow'});}}>
           <option value="">No repository (managed workspace)</option>{projects.data?.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-        </select></label>
+        </select></HelpField>
         {input.projectId&&<p>Base commit: <code>{input.baseCommit}</code>. A separate worktree will be created on the Weft server. Uncommitted source files are not copied.</p>}
         <p>Use a registered project or import a public repository below. The source checkout is retained; each task gets a separate worktree at the selected commit.</p>
         <p className="muted">Unambiguous workflow inputs and result agents are suggested below. Review them before saving. Models and permissions are unchanged.</p>
-        <label>Input delivery<select value={input.channelId??''} onChange={e=>{const c=selected?.spec.channels?.find(c=>c.id===e.target.value);change({channelId:c?.id,messageType:c?(c.types?.length===1&&!/[?*]/.test(c.types[0])?c.types[0]:''):undefined,payloadJson:c?JSON.stringify({title:input.title,description:input.request},null,2):undefined,...(c?{nodeId:c.to?.[0]??''}:{})});}}>
+        <HelpField label={"Input delivery"} help={"Choose how to send the request to the workflow. A channel delivers a structured message to eligible receivers; direct entry targets the selected agent."}><select value={input.channelId??''} onChange={e=>{const c=selected?.spec.channels?.find(c=>c.id===e.target.value);change({channelId:c?.id,messageType:c?(c.types?.length===1&&!/[?*]/.test(c.types[0])?c.types[0]:''):undefined,payloadJson:c?JSON.stringify({title:input.title,description:input.request},null,2):undefined,...(c?{nodeId:c.to?.[0]??''}:{})});}}>
           <option value="">Direct agent instruction</option>{selected?.spec.channels?.filter(c=>!c.from&&c.to?.length===1&&(!c.type||c.type==='queue')&&!c.when).map(c=><option key={c.id} value={c.id}>{c.id} → {c.to?.[0]}</option>)}
-        </select></label>
-        {input.channelId&&<><label>Message type<input required maxLength={128} value={input.messageType??''} onChange={e=>change({messageType:e.target.value})}/></label><label>Input payload (JSON)<textarea required rows={6} maxLength={16384} value={input.payloadJson??''} onChange={e=>change({payloadJson:e.target.value})}/></label><p>The selected channel receives this JSON. Request text is retained for context; it is not sent separately. Check the workflow's expected message type and fields.</p></>}
-        <label>Entry agent<select required value={input.nodeId} onChange={e=>change({nodeId:e.target.value})}>
+        </select></HelpField>
+        {input.channelId&&<><HelpField label={"Message type"} help={"Use the message type expected by the workflow\u2019s channel or routing conditions. For example, issue.opened must match the type consumed by the workflow."}><input required maxLength={128} value={input.messageType??''} onChange={e=>change({messageType:e.target.value})}/></HelpField><HelpField label={"Input payload (JSON)"} help={"Additional structured data delivered with the request. Use valid JSON and fields the receiving workflow understands."}><textarea required rows={6} maxLength={16384} value={input.payloadJson??''} onChange={e=>change({payloadJson:e.target.value})}/></HelpField><p>The selected channel receives this JSON. Request text is retained for context; it is not sent separately. Check the workflow's expected message type and fields.</p></>}
+        <HelpField label={"Entry agent"} help={"The workflow node that starts or receives the task. Pick the agent responsible for interpreting the request."}><select required value={input.nodeId} onChange={e=>change({nodeId:e.target.value})}>
           <option value="">Select entry agent</option>{input.nodeId&&!selected?.spec.nodes.some(n=>n.id===input.nodeId)&&<option value={input.nodeId}>{input.nodeId} (unavailable)</option>}
           {selected?.spec.nodes.filter(n=>!n.disabled).map(n=><option key={n.id} value={n.id}>{n.name||n.id}</option>)}
-        </select></label>
+        </select></HelpField>
         <TaskIssueSource source={input.source} grants={selected?.spec.nodes.find(n=>n.id===input.nodeId)?.tools??selected?.spec.defaults?.tools??[]} onChange={source=>change({source})}/>
-        <label>Result agent<select value={input.resultNodeId??''} onChange={e=>change({resultNodeId:e.target.value})}>
+        <HelpField label={"Result agent"} help={"The workflow node expected to produce the final task result. Use a distinct node when the workflow has a separate finishing stage."}><select value={input.resultNodeId??''} onChange={e=>change({resultNodeId:e.target.value})}>
           <option value="">Same as entry</option>
           {selected?.spec.nodes.filter(n=>!n.disabled).map(n=><option key={n.id} value={n.id}>{n.name||n.id}</option>)}
-        </select></label>
+        </select></HelpField>
         <SCMHandOffField value={input.scmConnection??''} onChange={scmConnection=>change({scmConnection:scmConnection||undefined})}/>
         <p className="muted">Version {input.graphVersion||'not selected'}. Saving a request does not change the workflow or grant tools.</p>
         {selected&&selected.metadata.version!==input.graphVersion&&<Btn onClick={()=>change({graphVersion:selected.metadata.version??0})}>Use current workflow version</Btn>}

@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import {useState} from 'react';
 import {api,errorMessage} from '../api/client';
 import type {AuthorizationMode} from '../api/tasks';
@@ -17,7 +18,7 @@ export function TaskAuthorization({taskId,canEdit,onChanged,running=false}:{task
  <ErrorBox error={state.error||error}/>
  {state.data?.record&&state.data.record.scope!==state.data.scope&&<p role="alert">Saved authorization is stale. Review the current scope and confirm again before starting.</p>}
  <Btn disabled={busy} onClick={()=>{setConfirmed(false);void state.reload();}}>Refresh authorization</Btn>
- {canEdit&&(!running||state.data?.record)&&<><label>Authorization mode<select value={mode} onChange={e=>{setMode(e.target.value as AuthorizationMode);setConfirmed(false);}}><option value="ask">Ask for approval</option><option value="workspace" disabled={running&&state.data?.record?.mode!=="full"}>Workspace access</option><option value="full" disabled={running}>Full access</option></select></label>
+ {canEdit&&(!running||state.data?.record)&&<><HelpField label={"Authorization mode"} help={"Ask prompts for gated actions. Workspace access covers reviewed worktree operations. Full access preauthorizes only reviewed grants within task scope; mandatory approvals and installation rules still apply."}><select value={mode} onChange={e=>{setMode(e.target.value as AuthorizationMode);setConfirmed(false);}}><option value="ask">Ask for approval</option><option value="workspace" disabled={running&&state.data?.record?.mode!=="full"}>Workspace access</option><option value="full" disabled={running}>Full access</option></select></HelpField>
  <p>{mode==='ask'?'Ask before each granted tool call.':mode==='workspace'?'Automatically allow workspace filesystem tools, Git reads and Docker sandbox commands. Other calls ask. Process and Kubernetes isolation both use native shell. Workspace access refuses native shell because it can reach outside the worktree.':'Run granted tools without repeated task prompts. Native commands can access files and network available to the Weft OS user, including outside the worktree. Existing grants may permit external actions, commit and push. Sandbox limits and mandatory gates still apply.'}</p>
  {state.data?.preference&&<p>Project suggestion: {state.data.preference.mode}. Select and confirm it explicitly; it is never applied automatically.</p>}
  {state.data?.projectId&&!running&&<label><input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)}/>Remember this mode as a project suggestion</label>}

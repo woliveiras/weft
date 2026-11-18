@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import type {MCPConnectionInput} from '../api/types';
 
 export function MCPMetadataFields({input,onChange}:{input:MCPConnectionInput;onChange:(input:MCPConnectionInput)=>void}) {
@@ -11,8 +12,8 @@ export function MCPMetadataFields({input,onChange}:{input:MCPConnectionInput;onC
  return <details><summary>{langsmith?'LangSmith workspace settings':'dbt environment settings (optional)'}</summary>
   <p>These non-secret settings are saved with the connection. Changing them requires replacing or clearing an existing credential. Agent permissions remain explicit.</p>
   {langsmith?<>
-   <label>LangSmith workspace ID<input value={input.metadataHeaders?.['langsmith-workspace-id']??''} onChange={e=>set('langsmith-workspace-id',e.target.value)} placeholder="Workspace UUID"/></label>
-   <label>LangSmith API region<select aria-label="LangSmith API region" value={input.metadataHeaders?.['langsmith-endpoint']??''} onChange={e=>set('langsmith-endpoint',e.target.value)}><option value="">Server default</option><option value="https://api.smith.langchain.com">US</option><option value="https://eu.api.smith.langchain.com">EU</option></select></label>
+   <HelpField label={"LangSmith workspace ID"} help={"Identifies the LangSmith workspace for this connection. Use the ID from workspace settings, particularly if the API key can see multiple workspaces."}><input value={input.metadataHeaders?.['langsmith-workspace-id']??''} onChange={e=>set('langsmith-workspace-id',e.target.value)} placeholder="Workspace UUID"/></HelpField>
+   <HelpField label={"LangSmith API region"} help={"Routes LangSmith requests to the selected API region. Match the region where the workspace is hosted."}><select aria-label="LangSmith API region" value={input.metadataHeaders?.['langsmith-endpoint']??''} onChange={e=>set('langsmith-endpoint',e.target.value)}><option value="">Server default</option><option value="https://api.smith.langchain.com">US</option><option value="https://eu.api.smith.langchain.com">EU</option></select></HelpField>
    <p>This API-key profile targets the standalone LangSmith MCP server behind public HTTPS. The hosted LangSmith MCP OAuth flow is separate. Custom upstream URLs are not supported.</p>
   </>:<>
    {([['x-dbt-prod-environment-id','dbt production environment ID'],['x-dbt-dev-environment-id','dbt development environment ID'],['x-dbt-user-id','dbt user ID']] as const).map(([name,label])=><label key={name}>{label}<input inputMode="numeric" pattern="[1-9][0-9]{0,19}" value={input.metadataHeaders?.[name]??''} onChange={e=>set(name,e.target.value)}/></label>)}

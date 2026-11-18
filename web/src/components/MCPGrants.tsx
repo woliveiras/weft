@@ -1,3 +1,4 @@
+import { FieldHelp } from './FieldHelp';
 import { useId, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { grantName, type ToolGrant } from '../api/types';
@@ -23,7 +24,7 @@ export function MCPGrants({ grants, onChange }: {
 
   return (
     <section className="mcp-grants" aria-label="MCP permissions">
-      <h4>MCP permissions</h4>
+      <div className="field-help-caption"><h4>MCP permissions</h4><FieldHelp label="MCP permissions">Choose which remote tools this agent may call. Grant only the operations it needs, such as reading issues. The connection must stay enabled and its argument restrictions and limits still apply.</FieldHelp></div>
       <div className="mcp-grants-actions">
         <p>Only explicitly selected MCP tools can run. Permissions and connection status are checked on every call. Save the graph to persist changes.</p>
         <Btn small onClick={() => void tools.reload()} disabled={tools.loading}>Reload MCP tools</Btn>

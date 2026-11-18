@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import { useState } from "react";
 import { api, errorMessage } from "../api/client";
 import type {
@@ -84,8 +85,7 @@ export function SkillsView({
         <Btn type="button" disabled={busy} onClick={() => choose()}>
           New skill
         </Btn>
-        <label>
-          Existing skill
+        <HelpField label={"Existing skill"} help={"Select an editable skill already in the installation catalog. A saved skill can be attached to workflows that should follow it."}>
           <select
             disabled={busy}
             aria-label="Existing skill"
@@ -102,19 +102,18 @@ export function SkillsView({
               </option>
             ))}
           </select>
-        </label>
+        </HelpField>
         {selected?.builtin && (
           <p role="note">Built-in role skill shipped with Weft. It is read-only; add its ID ({selected.id}) to a graph or agent to use it.</p>
         )}
         <fieldset disabled={!admin || busy || !!selected?.builtin}>
-          <label>
-            Skill ID
+          <HelpField label={"Skill ID"} help={"A stable reference used by workflow and agent skill selections. Choose a short lowercase identifier describing the skill."}>
             <input
               value={form.id}
               disabled={!!selected}
               onChange={(e) => setForm({ ...form, id: e.target.value })}
             />
-          </label>
+          </HelpField>
           <label>
             Title
             <input
@@ -133,14 +132,13 @@ export function SkillsView({
               }
             />
           </label>
-          <label>
-            Markdown body
+          <HelpField label={"Markdown body"} help={"Write the instructions the skill adds to an agent. Include the situations in which it applies, expected steps and decision criteria."}>
             <textarea
               rows={8}
               value={form.body}
               onChange={(e) => setForm({ ...form, body: e.target.value })}
             />
-          </label>
+          </HelpField>
           <label>
             <input
               type="checkbox"
@@ -203,8 +201,7 @@ export function SkillsView({
       </section>
       <section className="form" aria-label="Instruction associations">
         <h2>Graph and agent associations</h2>
-        <label>
-          Graph
+        <HelpField label={"Graph"} help={"Select the workflow whose skills or repository instructions you want to inspect or manage. Its settings can be inherited by agents."}>
           <select
             disabled={busy}
             aria-label="Graph"
@@ -226,7 +223,7 @@ export function SkillsView({
               </option>
             ))}
           </select>
-        </label>
+        </HelpField>
         {graph && (
           <>
             <fieldset disabled={!edit || busy}>
@@ -423,8 +420,7 @@ export function SkillsView({
               </Btn>
             </fieldset>
             <h3>Inspect saved configuration and executions</h3>
-            <label>
-              Agent
+            <HelpField label={"Agent"} help={"Select a workflow node to inspect its effective skill selection. Per-agent selections can override workflow inheritance."}>
               <select
                 disabled={busy}
                 aria-label="Agent"
@@ -438,7 +434,7 @@ export function SkillsView({
                   <option key={n.id}>{n.id}</option>
                 ))}
               </select>
-            </label>
+            </HelpField>
             <Btn
               disabled={busy}
               type="button"

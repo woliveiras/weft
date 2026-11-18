@@ -154,6 +154,13 @@ Edit **Workflow instructions** in the workflow's agent configuration under
 that instance. The workflow owns channels, loop, replicas, workspace and run
 limits. Installation policy and task consent apply to the resolved configuration.
 
+## Field help
+
+Choose the question mark beside a setting to see what it controls and how to
+configure it. Help opens separately from the field, so you can consult it during
+editing or review. Close it with **Close** or **Escape** to return to the same
+control.
+
 ## Agent configuration
 
 Open **Agent configuration** in a graph, or **Configure agent** in its canvas

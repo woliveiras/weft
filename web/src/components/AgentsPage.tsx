@@ -1,3 +1,4 @@
+import { FieldHelp, HelpField } from './FieldHelp';
 import { useState, type ReactNode } from 'react';
 import { api, errorMessage } from '../api/client';
 import { workflowAgentLink, type Agent, type AgentDefinition } from '../api/agents';
@@ -90,11 +91,11 @@ function AgentDetails({id, workflows, workflowsLoading, workflowsError, onReload
         <h1>{chosen?.definition.name ?? 'Agent'}</h1>
         {chosen?.definition.description && <p>{chosen.definition.description}</p>}
       </div>
-      {latest && chosen && <label className="form">Version
+      {latest && chosen && <HelpField className="form" label={"Version"} help={"Choose a published definition to inspect. Save changes as a new version, then select it in each workflow that should adopt it."}>
         <select value={chosen.version} onChange={event => setVersion(Number(event.target.value))}>
           {result.data?.versions.map(v => <option key={v.version} value={v.version}>Version {v.version}{v.version === latest.version ? ' (latest)' : ''}</option>)}
         </select>
-      </label>}
+      </HelpField>}
     </header>
     {result.loading && <p role="status">Loading agent versions…</p>}
     <ErrorBox error={result.error} />
@@ -155,32 +156,31 @@ function DefinitionEditor({initial, initialId, currentVersion, canEdit, onPublis
       </button>)}
     </nav>
     {section === 'workflows' ? workflowsPanel : <>
-    {section === 'general' && <label>Agent ID<input value={id} onChange={event => setId(event.target.value)}
-      readOnly={!!currentVersion || !canEdit} required pattern="[a-z0-9][a-z0-9-]{0,63}" /></label>}
+    {section === 'general' && <HelpField label={"Agent ID"} help={"A stable catalog identifier used by workflow bindings. Use lowercase letters, digits and hyphens. The ID is fixed after publication."}><input value={id} onChange={event => setId(event.target.value)}
+      readOnly={!!currentVersion || !canEdit} required pattern="[a-z0-9][a-z0-9-]{0,63}" /></HelpField>}
     <fieldset className="catalog-fields" disabled={!canEdit || saving}>
       {(section === 'general' || section === 'tools') && <AgentEditor summary={summary} nodeId={node.id} section={section} onUpdateNode={updateNode} definitionOnly />}
       {section === 'tools' && <>
-        <label className="check">
+        <HelpField className="check" label="Require a read-only workspace" help="Requires a read-only workspace in workflows that use this version. Use it for agents that inspect or review files. Tool grants and approval rules still apply.">
           <input type="checkbox" checked={readOnly ?? false}
             onChange={event => setDefinition({...definition,readOnly:event.target.checked})} />
-          <span>Require a read-only workspace</span>
-        </label>
+        </HelpField>
         <NodeSettings summary={summary} nodeId={node.id} toolsOnly onUpdateNode={canEdit ? updateNode : undefined} />
       </>}
-      {section === 'instructions' && <label>Agent instructions<textarea value={definition.prompt ?? ''} rows={14}
-        onChange={event => setDefinition({...definition,prompt:event.target.value})} /></label>}
+      {section === 'instructions' && <HelpField label={"Agent instructions"} help={"Describe the agent\u2019s shared responsibilities, inputs, expected output and success criteria. For reusable instructions, declare values in Parameters and refer to them as @name, such as @repository."}><textarea value={definition.prompt ?? ''} rows={14}
+        onChange={event => setDefinition({...definition,prompt:event.target.value})} /></HelpField>}
       {section === 'parameters' && <>
+        <div className="field-help-caption"><h3>Parameters</h3><FieldHelp label="Parameters">Declare the values a reusable agent accepts. Workflows set values for each use. Reference a parameter in the instructions using @ followed by its name.</FieldHelp></div>
         <p>Use named parameters such as <code>@repository</code> in the instructions. Workflows supply values for each use.</p>
         {(parameters ?? []).map((param,index) => <fieldset className="catalog-parameter" key={index}>
           <legend>Parameter {index + 1}</legend>
-          <label>Name<input value={param.name} onChange={event => setDefinition({...definition,parameters:parameters?.map((p,i)=>i===index?{...p,name:event.target.value}:p)})}/></label>
-          <label>Description<input value={param.description ?? ''} onChange={event => setDefinition({...definition,parameters:parameters?.map((p,i)=>i===index?{...p,description:event.target.value}:p)})}/></label>
-          <label>Default value<input value={param.default ?? ''} onChange={event => setDefinition({...definition,parameters:parameters?.map((p,i)=>i===index?{...p,default:event.target.value}:p)})}/></label>
-          <label className="check">
-            <input type="checkbox" checked={param.required ?? false}
+          <HelpField label={"Name"} help={"Use an identifier you can reference in instructions, such as repository for @repository. Use the same spelling in the instructions and when supplying the workflow value."}><input value={param.name} onChange={event => setDefinition({...definition,parameters:parameters?.map((p,i)=>i===index?{...p,name:event.target.value}:p)})}/></HelpField>
+          <HelpField label={"Description"} help={"Summarize the parameter so workflow authors know what value to enter and in what format. For example, specify owner/repository for a GitHub repository."}><input value={param.description ?? ''} onChange={event => setDefinition({...definition,parameters:parameters?.map((p,i)=>i===index?{...p,description:event.target.value}:p)})}/></HelpField>
+          <HelpField label={"Default value"} help={"Used if the workflow omits the parameter. Leave it empty when every workflow should supply its own value."}><input value={param.default ?? ''} onChange={event => setDefinition({...definition,parameters:parameters?.map((p,i)=>i===index?{...p,default:event.target.value}:p)})}/></HelpField>
+          <HelpField className="check" label="Required" help="Requires a nonblank value when this version is used in a workflow. A nonblank default satisfies the requirement when the workflow omits a value.">
+          <input type="checkbox" checked={param.required ?? false}
               onChange={event => setDefinition({...definition,parameters:parameters?.map((p,i)=>i===index?{...p,required:event.target.checked}:p)})} />
-            <span>Required</span>
-          </label>
+        </HelpField>
           <Btn onClick={() => setDefinition({...definition,parameters:parameters?.filter((_,i)=>i!==index)})}>Remove parameter</Btn>
         </fieldset>)}
         <Btn onClick={() => setDefinition({...definition,parameters:[...(parameters ?? []),{name:''}]})}>Add parameter</Btn>

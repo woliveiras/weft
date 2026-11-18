@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import { useEffect, useRef, useState } from 'react';
 import type { EnvironmentView, Graph, Parameter, Trigger } from '../api/types';
 import type { ElementIssue } from './canvas/edit';
@@ -72,10 +73,9 @@ export function GraphSettings({
   const contents = {
     general: (
       <fieldset aria-label="Graph configuration">
-        <label>
-          ID
+        <HelpField label={"ID"} help={"The stable workflow identifier used in URLs and integrations. Changing a reference elsewhere does not rename a saved workflow."}>
           <input value={graph.metadata.id} readOnly aria-describedby="graph-id-hint" />
-        </label>
+        </HelpField>
         <span id="graph-id-hint" className="muted tiny">
           Fixed once created: URLs, workspaces and history refer to it.
         </span>
@@ -92,8 +92,7 @@ export function GraphSettings({
             onChange={(event) => setMetadata({ description: event.target.value || undefined })}
           />
         </label>
-        <label>
-          Max hops
+        <HelpField label={"Max hops"} help={"Limits how many times a message can be passed along channels. Use it to bound feedback loops so messages do not circulate indefinitely."}>
           <input
             type="number"
             min={1}
@@ -107,7 +106,7 @@ export function GraphSettings({
               }))
             }
           />
-        </label>
+        </HelpField>
         <span id="graph-hops-hint" className="muted tiny">
           How many agent-to-agent hops one message chain may take; stops runaway loops.
         </span>
@@ -117,15 +116,14 @@ export function GraphSettings({
     workspace: (
       <fieldset>
         <legend>Workspace</legend>
-        <label>
-          Repository URL
+        <HelpField label={"Repository URL"} help={"Weft clones this repository on first start when the workspace is empty. Changing the URL does not overwrite existing files."}>
           <input
             value={workspace.repo ?? ''}
             placeholder="https://github.com/owner/project.git"
             onChange={(event) => setWorkspace({ repo: event.target.value.trim() || undefined })}
             aria-describedby="graph-repo-hint"
           />
-        </label>
+        </HelpField>
         <span id="graph-repo-hint" className="muted tiny">
           Cloned into the graph workspace the first time the graph starts, while the workspace is empty. Changing it
           later does not replace an existing workspace. Use https://, ssh:// or user@host:path; public repositories only
@@ -174,10 +172,9 @@ export function GraphSettings({
               Name
               <input value={parameter.name} onChange={(event) => updateParameter(index, { name: event.target.value })} />
             </label>
-            <label>
-              Value
+            <HelpField label={"Value"} help={"The workflow supplies this value wherever instructions use the parameter name, such as @repository. For linked agents, instance values are supplied in the agent configuration."}>
               <input value={parameter.value} onChange={(event) => updateParameter(index, { value: event.target.value })} />
-            </label>
+            </HelpField>
             <Btn small tone="ghost" onClick={() => setParameters(parameters.filter((_, i) => i !== index))}>
               Remove
             </Btn>

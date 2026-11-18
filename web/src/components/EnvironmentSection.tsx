@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import { EnvironmentProxies } from './EnvironmentProxies';
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
@@ -100,24 +101,21 @@ export function EnvironmentSection({
           To customize the definition manually, remove it and choose a new source.
         </p>
       )}
-      <label>
-        Source
+      <HelpField label={"Source"} help={"Choose whether to build from a base image or a Dockerfile. Use repository discovery when the Dockerfile needs a build context with project files."}>
         <select value={source} onChange={(event) => changeSource(event.target.value as Source)}>
           <option value="none">none — default sandbox image</option>
           <option value="image">base image — pulled from a registry</option>
           <option value="dockerfile">Dockerfile — written here</option>
         </select>
-      </label>
+      </HelpField>
       <FieldIssues issues={issues} field="spec.environment" />
       {source === 'image' && (
-        <label>
-          Base image
+        <HelpField label={"Base image"} help={"The starting image for the workflow environment. Use an explicit tag that contains the runtime your agents need, such as a specific Go or Node version."}>
           <input value={env?.image ?? ''} placeholder="golang:1.26" onChange={(event) => patch({ image: event.target.value })} />
-        </label>
+        </HelpField>
       )}
       {source === 'dockerfile' && (
-        <label>
-          Dockerfile
+        <HelpField label={"Dockerfile"} help={"Defines how to build the environment. Inline Dockerfiles do not get repository files as their build context. Use an approved repository definition if your Dockerfile needs COPY or ADD."}>
           <textarea
             className="mono"
             rows={6}
@@ -125,7 +123,7 @@ export function EnvironmentSection({
             spellCheck={false}
             onChange={(event) => patch({ dockerfile: event.target.value })}
           />
-        </label>
+        </HelpField>
       )}
       {source !== 'none' && (
         <>
@@ -136,6 +134,7 @@ export function EnvironmentSection({
           </span>
           <LinesField
             label="Setup commands (one per line)"
+            help="Commands run once per environment build, as a non-root user in /workspace. Put one command per line. Use this for tools and dependencies shared by agents."
             values={env?.setup}
             placeholder={'go mod download\npnpm -C web install --frozen-lockfile'}
             onChange={(setup) => patch({ setup })}
@@ -147,16 +146,16 @@ export function EnvironmentSection({
           <FieldIssues issues={issues} field="spec.environment.setup" />
           <LinesField
             label="Cache directories (one per line)"
+            help="Absolute paths inside the sandbox whose contents should survive restarts and rebuilds. Use them for dependency caches. Reset clears these caches."
             values={env?.caches}
             placeholder={'/home/sandbox/go/pkg/mod\n/home/sandbox/.local/share/pnpm'}
             onChange={(caches) => patch({ caches })}
           />
           <span className="muted tiny">Kept in volumes across agent restarts and rebuilds; Reset clears them.</span>
           <FieldIssues issues={issues} field="spec.environment.caches" />
-          <label>
-            Build timeout
+          <HelpField label={"Build timeout"} help={"Maximum time for building the environment, including setup. The default is 30 minutes and the maximum is two hours."}>
             <input value={env?.timeout ?? ''} placeholder="30m" onChange={(event) => patch({ timeout: event.target.value || undefined })} />
-          </label>
+          </HelpField>
           <FieldIssues issues={issues} field="spec.environment.timeout" />
           <EnvironmentStatus
             graph={graph}
@@ -188,8 +187,7 @@ export function EnvironmentNetwork({ graph, onChange }: {
       {env ? (
         <fieldset aria-label="Environment network">
           <legend>Environment network</legend>
-          <label>
-            Network during build and setup
+          <HelpField label={"Network during build and setup"} help={"Controls network access while building the image and running setup commands. Allow only the access needed to fetch dependencies; installation policy still applies."}>
             <select
               value={env?.network?.setup ?? 'bridge'}
               onChange={(event) => patch({ network: { ...env?.network, setup: event.target.value as 'none' | 'bridge' | 'egress', setupAllowedHosts: event.target.value === 'egress' ? env?.network?.setupAllowedHosts : undefined } })}
@@ -198,10 +196,9 @@ export function EnvironmentNetwork({ graph, onChange }: {
               <option value="egress">egress — approved HTTP/HTTPS hosts through a proxy</option>
               <option value="none">none</option>
             </select>
-          </label>
-          {env?.network?.setup === 'egress' && <LinesField label="Build and setup hosts (one exact DNS name per line)" values={env.network.setupAllowedHosts} placeholder="registry.npmjs.org" onChange={(setupAllowedHosts) => patch({ network: { ...env.network, setupAllowedHosts } })} />}
-          <label>
-            Network for agents
+          </HelpField>
+          {env?.network?.setup === 'egress' && <LinesField help="Exact DNS hosts needed during the build and setup, such as registry.npmjs.org. These hosts are also subject to installation policy." label="Build and setup hosts (one exact DNS name per line)" values={env.network.setupAllowedHosts} placeholder="registry.npmjs.org" onChange={(setupAllowedHosts) => patch({ network: { ...env.network, setupAllowedHosts } })} />}
+          <HelpField label={"Network for agents"} help={"Controls network access while agents run commands in the built environment. This is separate from build access and remains subject to installation policy."}>
             <select
               value={env?.network?.run ?? 'none'}
               onChange={(event) => patch({ network: { ...env?.network, run: event.target.value as 'none' | 'bridge' | 'egress', allowedHosts: event.target.value === 'egress' ? env?.network?.allowedHosts : undefined } })}
@@ -210,8 +207,8 @@ export function EnvironmentNetwork({ graph, onChange }: {
               <option value="bridge">bridge — unrestricted internet</option>
               <option value="egress">egress — approved HTTP/HTTPS hosts through a proxy</option>
             </select>
-          </label>
-          {env?.network?.run === 'egress' && <LinesField label="Allowed hosts (one exact DNS name per line)" values={env.network.allowedHosts} placeholder="registry.npmjs.org" onChange={(allowedHosts) => patch({ network: { ...env.network, allowedHosts } })} />}
+          </HelpField>
+          {env?.network?.run === 'egress' && <LinesField help="Exact DNS hosts required by commands running in this environment. This list applies to agent execution and is bounded by the installation policy." label="Allowed hosts (one exact DNS name per line)" values={env.network.allowedHosts} placeholder="registry.npmjs.org" onChange={(allowedHosts) => patch({ network: { ...env.network, allowedHosts } })} />}
           <span className="muted tiny">Installation policy must permit the network and every host. An egress environment cannot switch to unrestricted bridge.</span>
         </fieldset>
       ) : <p className="muted">Choose a source in Environment to configure its networks.</p>}
@@ -222,11 +219,13 @@ export function EnvironmentNetwork({ graph, onChange }: {
 /** One value per line; the text is kept as typed so a trailing newline can start the next value. */
 function LinesField({
   label,
+  help,
   values,
   placeholder,
   onChange,
 }: {
   label: string;
+  help: string;
   values?: string[];
   placeholder?: string;
   onChange: (values: string[] | undefined) => void;
@@ -238,8 +237,7 @@ function LinesField({
     setText((current) => (parsed(current).join('\n') === joined ? current : joined));
   }, [joined]);
   return (
-    <label>
-      {label}
+    <HelpField label={label} help={help}>
       <textarea
         className="mono"
         rows={3}
@@ -252,7 +250,7 @@ function LinesField({
           onChange(next.length ? next : undefined);
         }}
       />
-    </label>
+    </HelpField>
   );
 }
 

@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import type { BudgetDefinition, BudgetView, Price, PriceCatalogue, SpendLine } from '../api/types';
@@ -212,40 +213,34 @@ function BudgetSettings({ canEdit, currency, onSaved }: { canEdit: boolean; curr
       <h3>Budget settings</h3>
       <ErrorBox error={policy.error || defs.error} />
       <fieldset disabled={!canEdit}>
-        <label>
-          Task run budget ({currency})
+        <HelpField label={`Task run budget (${currency})`} help="The default spending ceiling for one task run. Leave it empty to use only the applicable monthly limits.">
           <input value={runBudget} onChange={(e) => setRunBudget(e.target.value)} placeholder="No budget" inputMode="decimal" />
-        </label>
-        <label>
-          Warning level (%)
+        </HelpField>
+        <HelpField label={"Warning level (%)"} help={"The usage percentage that emits a warning before a budget is exhausted. It gives operators time to review spending before runs are paused."}>
           <input value={warning} onChange={(e) => setWarning(e.target.value)} inputMode="numeric" />
-        </label>
+        </HelpField>
         <p className="muted small">Monthly budgets restart every calendar month (UTC). The tightest applicable budget decides; reaching one pauses runs and refuses new tasks until it is raised.</p>
         {rows.map((r, i) => (
           <div className="row" key={i} role="group" aria-label={`Monthly budget ${i + 1}`}>
-            <label>
-              Scope
+            <HelpField label={"Scope"} help={"Chooses which installation, user, project or workflow the monthly limit covers. When scopes overlap, the tightest applicable limit wins."}>
               <select value={r.scope} onChange={(e) => set(i, { scope: e.target.value as DefinitionRow['scope'] })}>
                 <option value="installation">Installation</option>
                 <option value="user">User</option>
                 <option value="project">Project</option>
                 <option value="workflow">Workflow</option>
               </select>
-            </label>
+            </HelpField>
             {r.scope !== 'installation' && (
-              <label>
-                Applies to
+              <HelpField label={"Applies to"} help={"Enter the ID of the user, project or workflow this budget applies to. The installation scope covers all usage."}>
                 <input value={r.id} onChange={(e) => set(i, { id: e.target.value })} placeholder={r.scope === 'user' ? 'user name' : r.scope === 'project' ? 'project id' : 'workflow id'} />
-              </label>
+              </HelpField>
             )}
-            <label>
-              Monthly limit ({currency})
+            <HelpField label={`Monthly limit (${currency})`} help="The spending ceiling for this scope for a calendar month in UTC. When limits overlap, the tightest one applies.">
               <input value={r.limit} onChange={(e) => set(i, { limit: e.target.value })} inputMode="decimal" />
-            </label>
-            <label>
-              Interrupt level (%)
+            </HelpField>
+            <HelpField label={"Interrupt level (%)"} help={"Optional early stop point expressed as a percentage of the monthly limit. When it is reached, Weft pauses affected work."}>
               <input value={r.interrupt} onChange={(e) => set(i, { interrupt: e.target.value })} placeholder="None" inputMode="numeric" />
-            </label>
+            </HelpField>
             <Btn type="button" small onClick={() => setRows((cur) => cur.filter((_, j) => j !== i))}>
               Remove
             </Btn>
@@ -323,50 +318,42 @@ function PriceSettings({ canEdit, onSaved }: { canEdit: boolean; onSaved: () => 
       )}
       <ErrorBox error={catalogue.error} />
       <fieldset disabled={!canEdit}>
-        <label>
-          Currency
+        <HelpField label={"Currency"} help={"The three-letter currency code for prices, such as USD. Prices and budgets use the configured currency without an exchange-rate conversion."}>
           <input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} />
-        </label>
-        <label>
-          Unpriced models
+        </HelpField>
+        <HelpField label={"Unpriced models"} help={"Allow calls with missing prices and report them as unpriced, or refuse those calls while a budget applies. Add prices for models used in budgeted work."}>
           <select value={unpriced} onChange={(e) => setUnpriced(e.target.value as PriceCatalogue['unpriced'])}>
             <option value="allow">Allow and show as unpriced</option>
             <option value="refuse">Refuse while a budget applies</option>
           </select>
-        </label>
+        </HelpField>
         {rows.map((r, i) => (
           <div className="row" key={i} role="group" aria-label={`Price ${i + 1}`}>
-            <label>
-              Applies to
+            <HelpField label={"Applies to"} help={"Choose a named provider or a provider plugin. A matching provider price takes precedence over a plugin price."}>
               <select value={r.target} onChange={(e) => set(i, { target: e.target.value as PriceRow['target'] })}>
                 <option value="provider">Provider</option>
                 <option value="type">Plugin</option>
               </select>
-            </label>
+            </HelpField>
             <label>
               {r.target === 'provider' ? 'Provider name' : 'Plugin id'}
               <input value={r.name} onChange={(e) => set(i, { name: e.target.value })} />
             </label>
-            <label>
-              Model
+            <HelpField label={"Model"} help={"Enter an exact model ID or * as a fallback. An exact model price wins within the same provider scope."}>
               <input value={r.model} onChange={(e) => set(i, { model: e.target.value })} placeholder="*" />
-            </label>
-            <label>
-              Input ({currency}/M tokens)
+            </HelpField>
+            <HelpField label={`Input (${currency}/M tokens)`} help="Price per million ordinary input tokens. Use the provider rate for this model and currency.">
               <input value={r.input} onChange={(e) => set(i, { input: e.target.value })} inputMode="decimal" />
-            </label>
-            <label>
-              Output ({currency}/M tokens)
+            </HelpField>
+            <HelpField label={`Output (${currency}/M tokens)`} help="Price per million tokens generated by the model. This can differ from the input price.">
               <input value={r.output} onChange={(e) => set(i, { output: e.target.value })} inputMode="decimal" />
-            </label>
-            <label>
-              Cache read
+            </HelpField>
+            <HelpField label={"Cache read"} help={"The price per million tokens read from the provider\u2019s token cache. Leave it empty to use the input rate."}>
               <input value={r.cacheRead} onChange={(e) => set(i, { cacheRead: e.target.value })} placeholder="Input rate" inputMode="decimal" />
-            </label>
-            <label>
-              Cache write
+            </HelpField>
+            <HelpField label={"Cache write"} help={"The price per million tokens written to the provider\u2019s token cache. Leave it empty to use the input rate."}>
               <input value={r.cacheWrite} onChange={(e) => set(i, { cacheWrite: e.target.value })} placeholder="Input rate" inputMode="decimal" />
-            </label>
+            </HelpField>
             <Btn type="button" small onClick={() => setRows((cur) => cur.filter((_, j) => j !== i))}>
               Remove
             </Btn>

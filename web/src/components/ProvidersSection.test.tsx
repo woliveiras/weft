@@ -148,7 +148,7 @@ describe('ProvidersSection', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Add provider' }));
     const alert = await within(dialog).findByRole('alert');
     expect(alert.textContent).toBe('an API key is required');
-    expect(alert.closest('label')?.textContent).toContain('API key');
+    expect(within(dialog).getByLabelText('API key').getAttribute('aria-describedby')).toBe(alert.id);
   });
 
   it('validates locally before sending', async () => {

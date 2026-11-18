@@ -1,3 +1,4 @@
+import { FieldHelp, HelpField } from './FieldHelp';
 import { useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import type { EnvironmentNetworkMode, InstallationNetwork, NetworkPolicyView } from '../api/types';
@@ -67,12 +68,15 @@ function NetworkPolicyControls({ canManage }: { canManage: boolean }) {
       <div className="integration-grid">
         {(['setupNetworks', 'runNetworks'] as const).map(field => <fieldset key={field} disabled={disabled}>
           <legend>{field === 'setupNetworks' ? 'Build and setup networks' : 'Agent networks'}</legend>
+          <FieldHelp label={field === 'setupNetworks' ? 'Build and setup networks' : 'Agent networks'}>
+            Choose the network modes workflows may request for this phase. None blocks network access, egress limits public destinations to approved hosts, and bridge permits broader public access. Review the installation policy before allowing additional modes.
+          </FieldHelp>
           {modes.map(mode => <label key={mode}><input type="checkbox" checked={network[field].includes(mode)} onChange={() => toggle(field, mode)} />{mode}</label>)}
         </fieldset>)}
       </div>
-      <label>Installation allowed hosts (one exact DNS name per line)
+      <HelpField label={"Installation allowed hosts (one exact DNS name per line)"} help={"The installation-wide list of DNS names allowed for restricted outbound access. Put one exact hostname per line. Workflow settings remain subject to this boundary."}>
         <textarea disabled={disabled} rows={5} value={(network.egressHosts ?? []).join('\n')} onChange={event => setDraft({ ...network, egressHosts: event.target.value.split('\n') })} />
-      </label>
+      </HelpField>
       <p className="muted small">Exact lowercase public DNS names only; no wildcards, URLs, IPs or ports. Empty lists deny all egress destinations. Environment lists remain separate and must fit this ceiling.</p>
       <h3>Environment host usage and admission status</h3>
       <Usage view={current.data} />

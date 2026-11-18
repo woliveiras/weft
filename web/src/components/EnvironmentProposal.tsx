@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import { useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import { useAsync } from '../hooks/useData';
@@ -51,7 +52,9 @@ export function EnvironmentProposal({ graphId, disabled, configured = false }: {
       <JsonView value={proposal.data.analysis} label="Proposed environment" open />
     </>}
     {canPropose && <>
-      <label><input type="checkbox" checked={resume} disabled={disabled || busy} onChange={e => setResume(e.target.checked)} /> Start graph when the approved environment is ready</label>
+      <HelpField label="Start graph when the approved environment is ready" help="When the proposal is accepted and the build succeeds, Weft can start the workflow automatically. Clear this choice to start it yourself.">
+          <input type="checkbox" checked={resume} disabled={disabled || busy} onChange={e => setResume(e.target.checked)} />
+        </HelpField>
       <Btn disabled={disabled || busy || proposal.loading} onClick={() => void act('propose')}>{busy ? 'Analyzing…' : 'Analyze repository'}</Btn>
     </>}
     {state === 'awaiting_approval' && <p>Open Approvals to accept or reject the full proposal. Admin approval is required.</p>}

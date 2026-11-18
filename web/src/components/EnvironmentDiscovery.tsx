@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import { useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import type { EnvironmentDiscovery as Discovery, EnvironmentSpec } from '../api/types';
@@ -58,31 +59,31 @@ export function EnvironmentDiscovery({ graphId, disabled, onAccept }: {
     {result?.status === 'proposal_required' && <EnvironmentProposal graphId={graphId} disabled={disabled || busy} />}
     {!!result?.candidates.length && <>
       <p className="muted small">Source: {result.source}</p>
-      <label>Repository definition
+      <HelpField label={"Repository definition"} help={"Select a definition found in the repository, such as a Dockerfile or dev container. Review the proposed build context before adopting it."}>
         <select disabled={busy || disabled} value={selected} onChange={(event) => {
           setSelected(event.target.value); setService(''); setTarget(''); setPreview(undefined); setCompanionsReviewed(false); setError(undefined);
         }}>
           <option value="">Select a definition</option>
           {result.candidates.map((item) => <option key={item.path} value={item.path}>{item.path}</option>)}
         </select>
-      </label>
+      </HelpField>
       <ErrorBox error={candidate?.error} />
-      {!!candidate?.services?.length && <label>Development service
+      {!!candidate?.services?.length && <HelpField label={"Development service"} help={"Choose which service becomes the agent environment. Review any auxiliary services listed alongside it before accepting the definition."}>
         <select disabled={busy || disabled} value={service} onChange={(event) => {
           setService(event.target.value); setPreview(undefined); setCompanionsReviewed(false); setError(undefined);
         }}>
           <option value="">Select a service</option>
           {candidate.services.map((name) => <option key={name} value={name}>{name}</option>)}
         </select>
-      </label>}
-      {!!candidate?.targets?.length && <label>Build stage
+      </HelpField>}
+      {!!candidate?.targets?.length && <HelpField label={"Build stage"} help={"Choose the named Dockerfile stage used as the resulting environment. Select a stage that contains the tools needed for the workflow."}>
         <select disabled={busy || disabled} value={target} onChange={(event) => {
           setTarget(event.target.value); setPreview(undefined); setCompanionsReviewed(false); setError(undefined);
         }}>
           <option value="">Final stage (default)</option>
           {candidate.targets.map((name) => <option key={name} value={name}>{name}</option>)}
         </select>
-      </label>}
+      </HelpField>}
       <Btn small disabled={disabled || busy || !candidate || !!candidate.error || (result.source === 'compose' && !service)} onClick={() => void review()}>Review environment</Btn>
     </>}
     {preview && <>

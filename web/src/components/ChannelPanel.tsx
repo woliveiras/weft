@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import type { Channel, ChannelType, GraphStatus, GraphSummary, MessageRecord } from '../api/types';
@@ -95,8 +96,7 @@ export function ChannelPanel({
       {onUpdateChannel && (
         <section className="form">
           <h3>Channel settings</h3>
-          <label>
-            Type
+          <HelpField label={"Type"} help={"Queue sends each message to one eligible consumer. Topic filters messages by topic and fanout feeds each configured target node. Broadcast delivers a copy to each target replica."}>
             <select
               value={type}
               onChange={(event) => onUpdateChannel(ch.id, { type: event.target.value as ChannelType })}
@@ -108,28 +108,26 @@ export function ChannelPanel({
               ))}
             </select>
             <FieldIssues issues={issues} field="type" />
-          </label>
+          </HelpField>
           {type === 'topic' && (
-            <label>
-              Topic
+            <HelpField label={"Topic"} help={"A routing label used by topic subscriptions. Use a consistent name on publishers and consumers so messages reach the intended targets."}>
               <input
                 value={ch.topic ?? ''}
                 onChange={(event) => onUpdateChannel(ch.id, { topic: event.target.value })}
                 placeholder={ch.id}
               />
               <FieldIssues issues={issues} field="topic" />
-            </label>
+            </HelpField>
           )}
           <TypesField channel={ch} onChange={(types) => onUpdateChannel(ch.id, { types })} />
-          <label>
-            Route condition
+          <HelpField label={"Route condition"} help={"Routes only messages that match this expression. For example, payload.approved == true routes an approved payload. You can also refer to type, source, target and metadata."}>
             <input
               value={ch.when ?? ''}
               onChange={(event) => onUpdateChannel(ch.id, { when: event.target.value || undefined })}
               placeholder='payload.approved == true'
             />
             <FieldIssues issues={issues} field="when" />
-          </label>
+          </HelpField>
           <label className="check">
             <input
               type="checkbox"
@@ -293,8 +291,7 @@ function InjectForm({
             </select>
           </label>
         )}
-        <label>
-          payload (JSON)
+        <HelpField label={"payload (JSON)"} help={"Provide a JSON value in the shape the receiving agent or route condition expects. Sending it delivers a real message to the selected channel."}>
           <textarea
             className="mono"
             rows={6}
@@ -302,7 +299,7 @@ function InjectForm({
             onChange={(e) => setPayload(e.target.value)}
             aria-invalid={!!jsonError}
           />
-        </label>
+        </HelpField>
         {jsonError && <div className="bad small">{jsonError}</div>}
         <Btn tone="primary" small disabled={!type.trim() || !!jsonError} onClick={send}>
           Inject
@@ -324,8 +321,7 @@ function TypesField({ channel, onChange }: { channel: Channel; onChange: (types:
     setText((current) => (parsed(current).join(', ') === joined ? current : joined));
   }, [channel.id, joined]);
   return (
-    <label>
-      Message types (comma-separated)
+    <HelpField label={"Message types (comma-separated)"} help={"Restricts which message types this consumer accepts. Use the exact types emitted by the source; separate multiple types with commas."}>
       <input
         value={text}
         onChange={(event) => {
@@ -335,6 +331,6 @@ function TypesField({ channel, onChange }: { channel: Channel; onChange: (types:
         }}
         placeholder="task.*, review.*"
       />
-    </label>
+    </HelpField>
   );
 }

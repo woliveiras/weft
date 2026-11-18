@@ -325,3 +325,31 @@ main > .page:not(.fill) { width: 100%; max-width: var(--content-max); margin-inl
 }
 .mcp-grants-actions > p { flex: 1 1 24rem; margin: 0; }
 .mcp-grants-actions > .btn { flex: none; margin-inline-start: auto; }
+
+.help-field { display: grid; gap: var(--space-1); min-inline-size: 0; align-self: stretch; }
+.field-help-caption { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1); }
+.help-field > :is(input, select, textarea) { inline-size: 100%; min-inline-size: 0; box-sizing: border-box; }
+.field-help-trigger {
+  display: inline-grid;
+  place-items: center;
+  vertical-align: middle;
+  inline-size: 24px;
+  block-size: 24px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+.field-help-trigger:is(:hover, :focus-visible) { color: var(--primary); background: var(--primary-soft); }
+.field-help-dialog {
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  inline-size: min(28rem, calc(100% - 2rem));
+  max-block-size: calc(100% - 2rem);
+  box-sizing: border-box;
+  padding: var(--space-5);
+}
+.field-help-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+.field-help-dialog h2 { margin: 0 0 var(--space-3); font: var(--text-h3); }
+.field-help-body { margin-block-end: var(--space-4); line-height: 1.55; overflow-wrap: anywhere; }

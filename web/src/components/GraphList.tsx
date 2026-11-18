@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import { useState } from 'react';
 import { parse, parseDocument } from 'yaml';
 import { ApiError, api, errorMessage } from '../api/client';
@@ -270,7 +271,9 @@ function CreateDialog({
     <Modal title={title} onClose={onClose}>
       <p className="muted small">Paste or upload a graph document (YAML or JSON).</p>
       <input type="file" accept=".yaml,.yml,.json" onChange={(e) => void onFile(e.target.files?.[0])} />
-      <textarea className="code-editor mono" aria-label="Workflow document" rows={18} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
+      <HelpField label="Workflow document" help="Define the workflow in YAML or JSON. The document includes agents, channels and optional defaults. Use Validate to review issues before creating the workflow.">
+        <textarea className="code-editor mono" rows={18} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
+      </HelpField>
       {issues.length > 0 && (
         <ul className="small">
           {issues.map((i, k) => (

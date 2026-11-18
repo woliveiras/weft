@@ -34,7 +34,7 @@ describe('SCMConnectionsSection', () => {
     const form = screen.getByRole('form', { name: 'Add source control connection' });
     await user.type(within(form).getByLabelText('Name'), 'team');
     await user.type(within(form).getByLabelText('Repository'), 'acme/other');
-    await user.click(within(form).getByLabelText(/approval/));
+    await user.click(within(form).getByRole('checkbox', { name: /approval/ }));
     await user.type(within(form).getByLabelText('Token'), 'secret-token');
     await user.click(within(form).getByRole('button', { name: 'Save connection' }));
     await waitFor(() => expect(api.find('POST', '/api/v1/scm/connections')).toHaveLength(1));

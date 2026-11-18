@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import { useEffect, useId, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import type { ModelRef, ProviderInfo } from '../api/types';
@@ -67,8 +68,7 @@ export function ModelFields({
 
   return (
     <>
-      <label>
-        Provider
+      <HelpField label={"Provider"} help={"The configured service and credentials used for model calls. A workflow default takes precedence over the installation default when this field is left at default."}>
         <select value={selected} onChange={(e) => update({ provider: e.target.value || undefined })} aria-invalid={!!problem}>
           <option value="">
             {inherited?.provider ? `Graph default (${inherited.provider})` : `Default provider${def ? ` (${def.name})` : ''}`}
@@ -87,14 +87,12 @@ export function ModelFields({
             {problem}
           </span>
         )}
-      </label>
-      <label>
-        <span id={`${listId}-label`}>Model</span>
+      </HelpField>
+      <HelpField label="Model" help="Choose the model ID the provider accepts. Suggestions come from that provider. Clear an override to use the workflow or provider default.">
         <input
           className="agent-model-input"
           value={model?.name ?? ''}
           list={listId}
-          aria-labelledby={`${listId}-label`}
           aria-describedby={[
             showingDefault && `${listId}-default`,
             modelHint && `${listId}-hint`,
@@ -112,7 +110,7 @@ export function ModelFields({
           Default model. <span className="agent-model-edit-hint">Type a model name to change it.</span>
         </span>}
         {modelHint && <span id={`${listId}-hint`} className="field-hint">{modelHint}</span>}
-      </label>
+      </HelpField>
     </>
   );
 }

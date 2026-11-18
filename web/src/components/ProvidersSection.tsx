@@ -1,5 +1,6 @@
+import { HelpField } from './FieldHelp';
 import { ContextHelp } from './common';
-import { useImperativeHandle, useState, type Ref } from 'react';
+import { useId, useImperativeHandle, useState, type Ref } from 'react';
 import { ApiError, api, errorMessage } from '../api/client';
 import type { ProviderInfo, ProviderPlugin, ProviderSettings, ProviderTestResult } from '../api/types';
 import { useAsync } from '../hooks/useData';
@@ -582,18 +583,34 @@ function ProviderForm({
   );
 }
 
+const providerFieldHelp: Record<string, string> = {
+  Name: 'A stable name agents select when they call this provider. Use distinct names for different accounts or endpoints.',
+  Type: 'Selects the provider plugin and protocol. It determines which credentials, default endpoint and model options are available.',
+  'Base URL': 'The model API address. Leave it empty for the plugin default or enter an address the Weft server can reach for a custom deployment.',
+  'Default model': 'The model ID used by agents that select this provider without choosing their own model. Use the ID the provider accepts.',
+  'Vertex AI project': 'Selects the Google Cloud project for Vertex AI. The Weft server uses Application Default Credentials for that project. An empty project uses the Gemini API configuration.',
+  'Vertex AI region': 'Select the Vertex AI location that serves the requested model. The global location is the default.',
+  'API key': 'Authenticates model requests to this provider. When editing, leave the field empty to keep a stored key or enter a new value to replace it.',
+  'Timeout (seconds)': 'Maximum wait for a provider request. Increase it if large model requests time out during normal operations.',
+  Retries: 'How many times Weft may retry a request after a retryable provider failure. Higher values can make a failing request take longer.',
+  'Concurrent requests': 'Limits simultaneous requests to this provider. Use a ceiling that fits the provider quota or local server capacity.',
+  'Context window (tokens)': 'The amount of conversation the model can process. Match the model limit. Native agents budget their prompts against this value and report prompts that cannot fit.',
+  'Model guidance': 'Small model mode gives native agents shorter tool schemas and asks for one call per reply. Start with Standard and use Small model mode if the model struggles to follow tool call formats.',
+};
+
 function Field({ label, error, hint, children }: { label: string; error?: string; hint?: string; children: React.ReactNode }) {
+  const descriptionId = useId();
   return (
-    <label className={error ? 'has-error' : undefined}>
-      {label}
+    <HelpField label={label} help={providerFieldHelp[label]} className={error ? 'has-error' : undefined}
+      descriptionId={error || hint ? descriptionId : undefined}>
       {children}
       {error ? (
-        <span className="field-error" role="alert">
+        <span id={descriptionId} className="field-error" role="alert">
           {error}
         </span>
       ) : hint ? (
-        <span className="field-hint">{hint}</span>
+        <span id={descriptionId} className="field-hint">{hint}</span>
       ) : null}
-    </label>
+    </HelpField>
   );
 }

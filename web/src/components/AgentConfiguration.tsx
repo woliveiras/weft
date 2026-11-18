@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import { AgentInstance } from './AgentBinding';
 import type { GraphNode, GraphSummary } from '../api/types';
 import type { ElementIssue } from './canvas/edit';
@@ -14,7 +15,7 @@ export function AgentConfiguration({summary, nodeId, section, onSection, onSelec
  const updateFields = node?.agent && section === 'general' ? undefined : onUpdateNode;
  const boundary=node?agentBoundaries(summary.graph,node):undefined;
  return <section className="agent-configuration-page" aria-label="Agent settings">
-  <label className="agent-selector">Agent<select aria-label="Agent" value={node?.id??''} onChange={e=>onSelect(e.target.value)}><option value="" disabled>Select an agent</option>{summary.graph.spec.nodes.map(n=><option key={n.id} value={n.id}>{n.name||n.id}</option>)}</select></label>
+  <HelpField className="agent-selector" label={"Agent"} help={"Select the node whose workflow-specific instructions, settings and access you want to inspect. Changes are saved with the workflow draft."}><select aria-label="Agent" value={node?.id??''} onChange={e=>onSelect(e.target.value)}><option value="" disabled>Select an agent</option>{summary.graph.spec.nodes.map(n=><option key={n.id} value={n.id}>{n.name||n.id}</option>)}</select></HelpField>
   {!node||!boundary?<p role="status">Select an agent from this graph. The requested agent may have been removed.</p>:<>
    <header className="page-head"><div><p className="muted">{summary.graph.metadata.name||summary.graph.metadata.id} / Agents</p><h1>{node.name||node.id}</h1><p>{dirty?'Unsaved graph draft':`Saved in graph version ${summary.record.version}`}</p></div></header>
    <AgentInstance key={node.id} node={node} summary={summary} canEdit={canBind} onUpdate={next=>onUpdateNode?.(node.id,next)}/>
@@ -24,11 +25,11 @@ export function AgentConfiguration({summary, nodeId, section, onSection, onSelec
     {node.agent && section === 'general' ? <p role="note">These fields come from the selected agent version.</p> : !onUpdateNode && <p role="note">Read-only view.</p>}
     {section==='instructions'?<section className="form" aria-label="Instructions editor">
       <h2>Instructions</h2>
-      <label>Agent instructions<textarea aria-label="Agent instructions" rows={8} value={node.prompt??''}
-        readOnly={!updateDefinition} onChange={e=>updateDefinition?.(node.id,{prompt:e.target.value})}/></label>
+      <HelpField label={"Agent instructions"} help={"These are the shared instructions. For a reusable agent they come from the pinned catalog version. Edit workflow instructions below for behavior specific to this node."}><textarea aria-label="Agent instructions" rows={8} value={node.prompt??''}
+        readOnly={!updateDefinition} onChange={e=>updateDefinition?.(node.id,{prompt:e.target.value})}/></HelpField>
       <FieldIssues issues={issues} field="prompt"/>
-      <label>Workflow instructions<textarea aria-label="Workflow instructions" rows={8} value={node.localInstructions??''}
-        readOnly={!onUpdateNode} onChange={e=>onUpdateNode?.(node.id,{localInstructions:e.target.value})}/></label>
+      <HelpField label={"Workflow instructions"} help={"These instructions are appended after the shared instructions for this node only. Both graph and instance parameters are available; instance values take precedence when names overlap."}><textarea aria-label="Workflow instructions" rows={8} value={node.localInstructions??''}
+        readOnly={!onUpdateNode} onChange={e=>onUpdateNode?.(node.id,{localInstructions:e.target.value})}/></HelpField>
       <FieldIssues issues={issues} field="localInstructions"/>
       <p className="muted">These instructions apply to this agent in {summary.graph.metadata.name || summary.graph.metadata.id}.</p>
     </section>:<>

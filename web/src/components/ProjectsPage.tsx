@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import {RepositoryImport} from './RepositoryImport';
 import {ProjectPreference} from './ProjectPreference';
 import {useState} from 'react';
@@ -19,7 +20,7 @@ export function ProjectsPage({canEdit,nativeProfile=false}:{canEdit:boolean;nati
  <form className="card form" onSubmit={e=>{e.preventDefault();void save();}} aria-label="Register project">
  <h2>Register repository</h2><fieldset disabled={!canEdit||busy}>
  <label>Project name<input value={name} required maxLength={200} onChange={e=>setName(e.target.value)}/></label>
- <label>Repository path<input value={path} required maxLength={4096} placeholder="/absolute/path/to/repository" onChange={e=>setPath(e.target.value)}/></label>
+ <HelpField label={"Repository path"} help={"An absolute path to an existing Git repository on the Weft server. The browser\u2019s local file system is available only when it is also the server\u2019s file system."}><input value={path} required maxLength={4096} placeholder="/absolute/path/to/repository" onChange={e=>setPath(e.target.value)}/></HelpField>
  <label><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I selected this repository on the Weft server and authorize reading its Git metadata.</label>
  <p>Registration does not execute agents. Task worktrees start from a reviewed commit; uncommitted source changes stay in your checkout. Worktrees separate files, not OS permissions.</p>
  <a href="https://woliveiras.com/posts/why-git-worktrees-matter-coding-agents/" target="_blank" rel="noreferrer">Learn about worktrees</a>

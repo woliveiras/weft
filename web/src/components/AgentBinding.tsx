@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import { useState } from 'react';
 import { api } from '../api/client';
 import { nodeWithAgent, type AgentDefinition, type AgentBinding } from '../api/agents';
@@ -27,19 +28,19 @@ export function AgentPicker({node, onCancel, onSelect}: {
   return <Modal title={isUpdate ? 'Choose an agent version' : 'Select a reusable agent'} onClose={onCancel} keyboard>
     <div className="form">
       <label>Search agents<input autoFocus type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
-      <label>Reusable agent<select value={id} disabled={catalog.loading && !catalog.data} onChange={e=>{
+      <HelpField label={"Reusable agent"} help={"Choose a catalog definition to reuse for this node. Review its instructions and grants before saving the workflow."}><select value={id} disabled={catalog.loading && !catalog.data} onChange={e=>{
         setId(e.target.value); setVersion(''); setValues({});
       }}>
         <option value="">Select an agent</option>
         {matches.map(a=><option key={a.id} value={a.id}>{a.name}{a.origin ? ` · ${a.origin.workflow}` : ` · ${a.id}`}</option>)}
-      </select></label>
+      </select></HelpField>
       {catalog.data?.length===0 && <p>No reusable agents yet. Create one in <a href="#/agents">Agents</a>.</p>}
       {!!catalog.data?.length && !matches.length && <p role="status">No agents match your search.</p>}
       {(catalog.loading || (id && details.loading)) && <p role="status">Loading agent versions…</p>}
       <ErrorBox error={catalog.error ?? details.error}/>
       {catalog.error && <Btn onClick={()=>void catalog.reload()}>Retry loading agents</Btn>}
       {details.error && <Btn onClick={()=>void details.reload()}>Retry loading versions</Btn>}
-      {id && details.data?.id === id && <label>Agent version<select value={version} onChange={e=>{
+      {id && details.data?.id === id && <HelpField label={"Agent version"} help={"Pins the node to one published definition. Future versions become available to select without changing the version already used by this workflow."}><select value={version} onChange={e=>{
         setVersion(e.target.value);
         const next = details.data?.versions.find(v=>v.version===Number(e.target.value));
         setValues(Object.fromEntries((next?.definition.parameters ?? []).map(p=>[p.name,
@@ -50,7 +51,7 @@ export function AgentPicker({node, onCancel, onSelect}: {
         {details.data.versions.map(v=><option key={v.version} value={v.version}>
           Version {v.version}{node?.agent?.id===id && node.agent.version===v.version ? ' (in use)' : ''}
         </option>)}
-      </select></label>}
+      </select></HelpField>}
       {definition && <ParameterFields parameters={parameters} values={values} onChange={setValues}/>}
       {definition && <DefinitionChange node={node} definition={definition}/>}
       <div className="btn-row">
@@ -87,10 +88,11 @@ function ParameterFields({parameters, values, onChange}: {
 }) {
   return parameters.length > 0 && <fieldset disabled={!onChange}>
     <legend>Workflow parameters</legend>
-    {parameters.map(p=><label key={p.name}>{p.name}{p.required && ' (required)'}
+    {parameters.map(p=><HelpField key={p.name} label={p.name + (p.required ? ' (required)' : '')}
+      help={p.description || `Supplies @${p.name} for this node. Use the value the shared instructions expect for this workflow.`}>
       <input value={values[p.name] ?? p.default ?? ''} onChange={event=>onChange?.({...values,[p.name]:event.target.value})}/>
       {p.description && <small className="muted">{p.description}</small>}
-    </label>)}
+    </HelpField>)}
   </fieldset>;
 }
 

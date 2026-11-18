@@ -1,3 +1,4 @@
+import { HelpField } from './FieldHelp';
 import { useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import type { HistoryRetentionPolicy, HistoryRetentionView } from '../api/types';
@@ -44,8 +45,8 @@ function RetentionControls({ canManage }: { canManage: boolean }) {
     {!canManage && <p>Administrator access is required to change retention.</p>}
     {!current.error && current.data && policy && <>
       <p>Revision {current.data.revision}{current.data.updatedBy ? ` · Updated by ${current.data.updatedBy}` : ''}</p>
-      <label>Retention days (1–90)<input type="number" min={1} max={90} step={1} disabled={disabled} value={policy.days || ''} onChange={event => { setNotice(undefined); setDraft({ ...policy, days: Number(event.target.value) }); }} /></label>
-      <label>Maximum blocks per environment (1–10,000)<input type="number" min={1} max={10000} step={1} disabled={disabled} value={policy.maxEvents || ''} onChange={event => { setNotice(undefined); setDraft({ ...policy, maxEvents: Number(event.target.value) }); }} /></label>
+      <HelpField label={"Retention days (1\u201390)"} help={"Controls how many days of workspace journal history are retained before eligible older records are removed."}><input type="number" min={1} max={90} step={1} disabled={disabled} value={policy.days || ''} onChange={event => { setNotice(undefined); setDraft({ ...policy, days: Number(event.target.value) }); }} /></HelpField>
+      <HelpField label={"Maximum blocks per environment (1\u201310,000)"} help={"Limits how many workspace journal blocks are kept per environment, independently of the age limit."}><input type="number" min={1} max={10000} step={1} disabled={disabled} value={policy.maxEvents || ''} onChange={event => { setNotice(undefined); setDraft({ ...policy, maxEvents: Number(event.target.value) }); }} /></HelpField>
       {canManage && <Btn disabled={disabled || !valid} onClick={() => { if (!current.data) return; setError(undefined); setNotice(undefined); setReview({ ...current.data, policy: { ...policy } }); }}>Review retention changes</Btn>}
     </>}
     {review && <section className="integration-card" aria-label="Confirm history retention">

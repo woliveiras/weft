@@ -8,3 +8,10 @@ These results were recorded at the time of the run. The documentation migration 
 - 2026-10-18. The onboarding implementation had previously been activated as 9b8d1e8. Removal a2b33b3 rebuilt web assets and recreated only weftd; the backend binary hash, volume mounts, schema versions 1–2 and existing graphs were preserved. Browser inspection covered Models, Graphs, agent configuration and Connections.
 - Before withdrawal on 2026-10-18. The original installed guide was collapsed initially and preserved its reviewed count and topic across navigation and reload. The record cites 51 automated E2E scenarios. This is historical evidence of a withdrawn feature.
 - 2026-10-18. Removal verification recorded Go/Python and 272 frontend tests, lint, build and seven targeted Chromium journeys as passing. Historical commit labels before the flattened root are descriptive references.
+
+- Field help passed 467 web tests and 14 Chromium scenarios covering workflow
+  and agent configuration, MCP connections, and installation policy. Keyboard
+  activation and Escape preserved a workflow draft. Viewers could read
+  installation policy help without gaining write access. The local console
+  also confirmed the Runtime popup fits the viewport and returns focus to its
+  help control when closed.

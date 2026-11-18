@@ -34,6 +34,11 @@ Graphs expose searchable graph and agent selection. Agent settings separate inst
 
 Fresh and returning browsers use direct routes and contextual help. Historical browser-local guide state does not mount the removed global panel or discard saved drafts.
 
+Complex settings expose field help beside the label. Help explains the effect,
+dependencies or value format. Opening it leaves the field values unchanged.
+The popup supports keyboard access, closing with Escape and returning focus
+to the help control, including when the field is read-only.
+
 ### AC-004 — Responsive presentation
 
 Common forms and controls remain usable at narrow widths and in the supported themes. Long event labels remain readable alongside actors.

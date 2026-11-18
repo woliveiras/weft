@@ -1,3 +1,4 @@
+import { FieldHelp, HelpField } from './FieldHelp';
 import { MCPGrants } from './MCPGrants';
 import { useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
@@ -497,7 +498,7 @@ export function NodeSettings({
     <section>
       {onUpdateNode && <MCPGrants grants={tools} onChange={grants=>onUpdateNode(nodeId,{tools:grants})} />}
       <div className="section-head">
-        <h3>Tools {usesGraphDefaults ? <span className="muted small">(graph defaults)</span> : null}</h3>
+        <div className="field-help-caption"><h3>Tools {usesGraphDefaults ? <span className="muted small">(graph defaults)</span> : null}</h3><FieldHelp label="Tools">Select the capabilities this agent needs. Grants allow access within workspace and installation limits. Require approval on a selected tool when someone should review each use.</FieldHelp></div>
         <FieldIssues issues={issues} field="tools" />
         {onUpdateNode && toolCatalog.data && (
           <span className="muted small">{tools.length} selected</span>
@@ -554,7 +555,7 @@ export function NodeSettings({
           </div>
           {extraGrants.length > 0 && (
             <div className="tool-extra">
-              <h4>Patterns and configured grants</h4>
+              <div className="field-help-caption"><h4>Patterns and configured grants</h4><FieldHelp label="Patterns and configured grants">These entries are saved grants without an exact match in the current tool catalog. A pattern can grant access to more than one tool. Keep it only if the agent needs that scope.</FieldHelp></div>
               <p className="muted small">These grants are not in the current tool catalog. Existing restrictions are preserved.</p>
               {extraGrants.map((grant) => (
                 <label className="tool-option" key={grantName(grant)}>
@@ -769,34 +770,30 @@ export function AgentEditor({
       {!definitionOnly && <h3>Agent configuration</h3>}
       <div hidden={!!section && section !== 'general'}>
       {!definitionOnly && <>
-      <label>
-        ID
+      <HelpField label={"ID"} help={"The workflow uses this ID to route messages and identify the agent in channels. It stays fixed after the node is created."}>
         <input value={node.id} readOnly aria-describedby={`${nodeId}-id-hint`} />
-      </label>
+      </HelpField>
       <span id={`${nodeId}-id-hint`} className="muted tiny">
         Channels refer to agents by ID, so it is fixed once created.
       </span>
       <FieldIssues issues={issues} field="id" />
       </>}
-      <label>
-        Name
+      <HelpField label={"Name"} help={"The name is shown in the workflow and run history. Choose a label that describes the role, such as Release reviewer."}>
         <input value={node.name ?? ''} onChange={(event) => update({ name: event.target.value || undefined })} />
         <FieldIssues issues={issues} field="name" />
-      </label>
-      <label>
-        Description
+      </HelpField>
+      <HelpField label={"Description"} help={"Describe what this agent is responsible for. This summary helps people choose the right agent from the catalog."}>
         <textarea
           rows={definitionOnly ? 4 : 2}
           value={node.description ?? ''}
           onChange={(event) => update({ description: event.target.value || undefined })}
         />
-      </label>
+      </HelpField>
 
       </div>
       <fieldset hidden={!!section && section !== 'general'}>
         <legend className="sr-only">Runtime and model</legend>
-        <label>
-          Runtime
+        <HelpField label={"Runtime"} help={"Native runs the model and tool loop in Weft. External hands each turn to an adapter you run. Echo is useful for testing workflow wiring without calling a model."}>
           <select
             value={runtime.kind ?? 'native'}
             onChange={(event) =>
@@ -807,33 +804,30 @@ export function AgentEditor({
             <option value="external">external</option>
             <option value="echo">echo</option>
           </select>
-        </label>
+        </HelpField>
         {runtime.kind === 'external' && (
           <>
-            <label>
-              Framework
+            <HelpField label={"Framework"} help={"An optional label for the external adapter, such as langgraph or custom. It identifies the adapter implementation; choose an adapter that speaks the Weft Runtime Protocol."}>
               <input
                 value={node.runtime?.framework ?? ''}
                 placeholder={defaults.runtime?.framework ?? 'langgraph'}
                 onChange={(event) => update({ runtime: { ...node.runtime, framework: event.target.value || undefined } })}
               />
-            </label>
-            <label>
-              Endpoint
+            </HelpField>
+            <HelpField label={"Endpoint"} help={"The address of the external runtime adapter, reachable from the Weft server. For example, http://agents:8000 can refer to a service on the same Docker network. This is separate from the model provider URL."}>
               <input
                 value={node.runtime?.endpoint ?? ''}
                 placeholder={defaults.runtime?.endpoint ?? 'http://agents:8080'}
                 onChange={(event) => update({ runtime: { ...node.runtime, endpoint: event.target.value || undefined } })}
               />
-            </label>
-            <label>
-              Image
+            </HelpField>
+            <HelpField label={"Image"} help={"A container image that runs the external runtime adapter. Use this when Weft needs to launch the adapter instead of reaching an existing endpoint. The command sandbox image is configured under Tools & permissions."}>
               <input
                 value={node.runtime?.image ?? ''}
                 placeholder={defaults.runtime?.image}
                 onChange={(event) => update({ runtime: { ...node.runtime, image: event.target.value || undefined } })}
               />
-            </label>
+            </HelpField>
             <p className="muted tiny">An external agent needs an endpoint, command or image.</p>
           </>
         )}
@@ -844,8 +838,7 @@ export function AgentEditor({
 
       <fieldset hidden={!!section && section !== 'advanced'}>
         <legend>Loop</legend>
-        <label>
-          Loop mode
+        <HelpField label={"Loop mode"} help={"Event waits for incoming work. Once runs a single turn per start. Continuous repeats even without new input. Scheduled runs at the interval you set below."}>
           <select
             value={effectiveLoopMode(summary.graph, node)}
             onChange={(event) => setLoop({ mode: event.target.value as NonNullable<GraphNode['loop']>['mode'] })}
@@ -857,20 +850,18 @@ export function AgentEditor({
             ))}
           </select>
           <FieldIssues issues={issues} field="loop.mode" />
-        </label>
+        </HelpField>
         {loop.mode === 'scheduled' && (
-          <label>
-            Schedule
+          <HelpField label={"Schedule"} help={"Choose when a scheduled agent runs. Use an interval such as @every 1h or a five-field cron expression. This field only applies in scheduled mode."}>
             <input
               value={loop.schedule ?? ''}
               placeholder="@every 1h"
               onChange={(event) => setLoop({ schedule: event.target.value || undefined })}
             />
             <FieldIssues issues={issues} field="loop.schedule" />
-          </label>
+          </HelpField>
         )}
-        <label>
-          Stop policy
+        <HelpField label={"Stop policy"} help={"Choose when an agent stops repeating turns, such as after a limit or a period without work. Auto asks the agent to confirm it is done on a subsequent turn and works best with a repeating loop."}>
           <select
             value={stop.policy ?? 'never'}
             onChange={(event) => setStop({ policy: event.target.value as NonNullable<typeof stop.policy> })}
@@ -882,10 +873,11 @@ export function AgentEditor({
             ))}
           </select>
           <FieldIssues issues={issues} field="loop.stop.policy" />
-        </label>
+        </HelpField>
         {stopField && (
-          <label>
-            {stopField.label}
+          <HelpField label={stopField.label} help={stopField.key === 'maxIterations'
+            ? 'The maximum number of turns this agent runs before it stops.'
+            : 'Enter a duration such as 10m or 1h. The selected stop policy determines whether it counts total run time or time without work.'}>
             <input
               type={stopField.kind === 'number' ? 'number' : 'text'}
               min={stopField.kind === 'number' ? 1 : undefined}
@@ -898,15 +890,14 @@ export function AgentEditor({
               }
             />
             <FieldIssues issues={issues} field={`loop.stop.${stopField.key}`} />
-          </label>
+          </HelpField>
         )}
         {fieldIssuesExact(issues, 'loop')}
       </fieldset>
 
       <fieldset hidden={!!section && section !== 'advanced'}>
         <legend>Replicas</legend>
-        <label>
-          Scaling
+        <HelpField label={"Scaling"} help={"Fixed keeps the configured replica count. Autoscale tracks pending work and adjusts the count within the minimum and maximum you set."}>
           <select
             value={cluster.mode ?? 'fixed'}
             onChange={(event) => setCluster({ mode: event.target.value as NonNullable<GraphNode['cluster']>['mode'] })}
@@ -914,20 +905,18 @@ export function AgentEditor({
             <option value="fixed">fixed</option>
             <option value="autoscale">autoscale</option>
           </select>
-        </label>
+        </HelpField>
         {cluster.mode === 'autoscale' ? (
           <>
-            <label>
-              Min replicas
+            <HelpField label={"Min replicas"} help={"The number of replicas autoscaling keeps available when work is low. A lower minimum uses fewer resources when the workflow is idle."}>
               <input
                 type="number"
                 min={1}
                 value={cluster.minReplicas ?? ''}
                 onChange={(event) => setCluster({ minReplicas: numberOrUndefined(event.target.value) })}
               />
-            </label>
-            <label>
-              Max replicas
+            </HelpField>
+            <HelpField label={"Max replicas"} help={"Caps autoscaling as pending work grows. Raise this only when the model provider and workspace can handle more simultaneous work."}>
               <input
                 type="number"
                 min={1}
@@ -935,11 +924,10 @@ export function AgentEditor({
                 value={cluster.maxReplicas ?? ''}
                 onChange={(event) => setCluster({ maxReplicas: numberOrUndefined(event.target.value) })}
               />
-            </label>
+            </HelpField>
           </>
         ) : (
-          <label>
-            Replicas
+          <HelpField label={"Replicas"} help={"How many copies can handle work for this node at the same time. Queue consumers share messages; a broadcast can send a separate copy to each replica."}>
             <input
               type="number"
               min={1}
@@ -948,11 +936,10 @@ export function AgentEditor({
               placeholder="1"
               onChange={(event) => setCluster({ replicas: numberOrUndefined(event.target.value) })}
             />
-          </label>
+          </HelpField>
         )}
         <FieldIssues issues={issues} field="cluster" />
-        <label>
-          Workspace
+        <HelpField label={"Workspace"} help={"Shared replicas see the same files. Worktree gives each replica a separate Git working tree so concurrent edits can be kept apart."}>
           <select
             value={node.workspace?.mode ?? 'shared'}
             onChange={(event) => update({ workspace: { ...node.workspace, mode: event.target.value as 'shared' | 'worktree' } })}
@@ -961,13 +948,12 @@ export function AgentEditor({
             <option value="worktree">worktree</option>
           </select>
           <FieldIssues issues={issues} field="workspace" />
-        </label>
+        </HelpField>
       </fieldset>
 
       <fieldset hidden={!!section && section !== 'tools'} disabled={sharedReadOnly}>
-        <legend>Command sandbox</legend>
-        <label>
-          Isolation
+        <legend><span className="field-help-caption">Command sandbox <FieldHelp label="Command sandbox">Controls where agent commands run and which container image, network and resources are available. Choose these settings based on the commands the workflow needs.</FieldHelp></span></legend>
+        <HelpField label={"Isolation"} help={"Process runs commands inside Weft. Docker uses the dedicated command sandbox. Kubernetes currently runs commands in the Weft pod. Tool grants and installation policy still control which operations are allowed."}>
           <select
             value={isolation.mode ?? 'process'}
             onChange={(event) => setIsolation({ mode: event.target.value as NonNullable<GraphNode['isolation']>['mode'] })}
@@ -977,11 +963,10 @@ export function AgentEditor({
             <option value="kubernetes">kubernetes</option>
           </select>
           <FieldIssues issues={issues} field="isolation.mode" />
-        </label>
+        </HelpField>
         {isolation.mode === 'docker' ? (
           <>
-            <label>
-              Network
+            <HelpField label={"Network"} help={"None blocks sandbox network access. Bridge allows public network access subject to installation rules and can reach other containers on that bridge. Use only the network access needed by the task."}>
               <select
                 value={isolation.network ?? 'none'}
                 onChange={(event) => setIsolation({ network: event.target.value === 'none' ? undefined : event.target.value })}
@@ -989,31 +974,28 @@ export function AgentEditor({
                 <option value="none">none — no network access</option>
                 <option value="bridge">bridge — internet only, no private networks</option>
               </select>
-            </label>
-            <label>
-              Image
+            </HelpField>
+            <HelpField label={"Image"} help={"The Docker image containing the command-line tools the agent needs. Leave it blank to use the workflow environment or installation default. A custom image needs to be available on the sandbox daemon."}>
               <input
                 value={node.isolation?.image ?? ''}
                 placeholder={defaults.isolation?.image ?? 'installation default (weft/sandbox:latest)'}
                 onChange={(event) => setIsolation({ image: event.target.value || undefined })}
               />
-            </label>
-            <label>
-              CPU limit
+            </HelpField>
+            <HelpField label={"CPU limit"} help={"Limits how much CPU a Docker sandbox can use, in CPU cores. For example, 2 allows up to two cores for that sandbox."}>
               <input
                 value={node.isolation?.cpu ?? ''}
                 placeholder={defaults.isolation?.cpu ?? 'e.g. 2'}
                 onChange={(event) => setIsolation({ cpu: event.target.value || undefined })}
               />
-            </label>
-            <label>
-              Memory limit
+            </HelpField>
+            <HelpField label={"Memory limit"} help={"Caps Docker sandbox memory. Use a size such as 2g and allow enough for builds. Commands can be killed if they exceed the limit."}>
               <input
                 value={node.isolation?.memory ?? ''}
                 placeholder={defaults.isolation?.memory ?? 'e.g. 2g'}
                 onChange={(event) => setIsolation({ memory: event.target.value || undefined })}
               />
-            </label>
+            </HelpField>
             <p className="muted tiny">
               Commands run in a container on the Weft sandbox daemon, never on the host. The image must already exist
               there; see Administration → System health.
@@ -1036,17 +1018,15 @@ export function AgentEditor({
           A turn that exceeds a limit fails and its input is redelivered. Long tasks (dependency upgrades, large
           refactors) need more time and tool calls than the defaults.
         </p>
-        <label>
-          Turn timeout
+        <HelpField label={"Turn timeout"} help={"The maximum time for one execution turn. Increase it for long builds or checks. An expired turn fails and its input may be delivered again."}>
           <input
             value={node.limits?.turnTimeout ?? ''}
             placeholder="30m"
             onChange={(event) => setLimits({ turnTimeout: event.target.value || undefined })}
           />
           <FieldIssues issues={issues} field="limits.turnTimeout" />
-        </label>
-        <label>
-          Max tool calls
+        </HelpField>
+        <HelpField label={"Max tool calls"} help={"Caps the number of tool calls during one turn. Each call uses part of the allowance, so long multi-step tasks may need a larger budget."}>
           <input
             type="number"
             min={1}
@@ -1055,9 +1035,8 @@ export function AgentEditor({
             onChange={(event) => setLimits({ maxToolCalls: numberOrUndefined(event.target.value) })}
           />
           <FieldIssues issues={issues} field="limits.maxToolCalls" />
-        </label>
-        <label>
-          Token budget
+        </HelpField>
+        <HelpField label={"Token budget"} help={"Caps input plus output tokens for one turn. Use a larger allowance when the agent must read substantial context or generate long results."}>
           <input
             type="number"
             min={1}
@@ -1066,7 +1045,7 @@ export function AgentEditor({
             aria-describedby={`${nodeId}-tokens-hint`}
             onChange={(event) => setLimits({ maxTokens: numberOrUndefined(event.target.value) })}
           />
-        </label>
+        </HelpField>
         <span id={`${nodeId}-tokens-hint`} className="muted tiny">
           Input plus output tokens the agent may use in one turn.
         </span>
@@ -1076,27 +1055,24 @@ export function AgentEditor({
       <fieldset hidden={definitionOnly || (!!section && section !== 'tools')}>
         <legend>Permissions</legend>
         <p className="muted tiny">Tool grants are chosen below; these gates hold the agent for a human decision.</p>
-        <label className="check">
+        <HelpField className="check" label="Approve each turn before it starts" help="A person reviews and approves each turn before the agent starts processing. Use it when every execution needs review.">
           <input
             type="checkbox"
             checked={!!approval.beforeTurn}
             onChange={(event) => update({ approval: { ...node.approval, beforeTurn: event.target.checked || undefined } })}
           />
-          Approve each turn before it starts
-        </label>
-        <label className="check">
+        </HelpField>
+        <HelpField className="check" label="Approve output before it is sent" help="Holds each outgoing message for review before downstream channels receive it. Use it when agent results need a human check.">
           <input
             type="checkbox"
             checked={!!approval.beforeEmit}
             onChange={(event) => update({ approval: { ...node.approval, beforeEmit: event.target.checked || undefined } })}
           />
-          Approve output before it is sent
-        </label>
+        </HelpField>
         <FieldIssues issues={issues} field="approval" />
-        <label className="check">
+        <HelpField className="check" label="Disable agent" help="Keeps this node and its configuration in the workflow while preventing its replicas from running. Check downstream nodes if they depend on its output.">
           <input type="checkbox" checked={!!node.disabled} onChange={(event) => update({ disabled: event.target.checked || undefined })} />
-          Disable agent
-        </label>
+        </HelpField>
       </fieldset>
     </section>
   );

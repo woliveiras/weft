@@ -1,8 +1,20 @@
+import { HelpField } from './FieldHelp';
 import { useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import { delegationLimits, validDelegationPolicy, validDelegationProfile, type DelegationPolicy, type DelegationProfile, type DelegationProfileView } from '../api/delegation';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox } from './common';
+
+const delegationLimitHelp: Record<typeof delegationLimits[number][0], string> = {
+  maxDepth: 'Limits how many levels of agents can delegate in one chain. Use 1 to allow a direct child without further delegation.',
+  maxChildrenPerExecution: 'Caps the total number of child requests one execution can make.',
+  maxConcurrentChildren: 'Limits how many child executions can be in progress at once.',
+  maxDurationSeconds: 'Maximum time for a child request, including the time it waits for human approval.',
+  maxTreeTokens: 'The total token allowance across a delegation tree. Weft reserves estimated usage before a child calls a model, so this is an execution limit.',
+  maxOutputTokens: 'Maximum number of output tokens per child request. An individual delegation profile may impose a lower limit.',
+  maxObjectiveBytes: 'Maximum size of the objective the parent sends, measured in bytes. Large inputs can exceed this limit even when they contain few words.',
+  maxResultBytes: 'Maximum result size the child can return, measured in bytes. Ask for a concise result when a task needs more supporting detail.',
+};
 
 export function DelegationSection({canManage}: {canManage:boolean}) {
  return <section className="integration-section" aria-label="Delegation settings"><h2>Delegation</h2>
@@ -33,9 +45,11 @@ function PolicyControls({canManage}: {canManage:boolean}) {
   {current.loading&&<p>Loading policy…</p>}
   {policy&&current.data&&!current.error&&<>
    <p>Revision {current.data.revision} · Maximum depth {policy.maxDepth}</p>
-   <label><input type="checkbox" checked={policy.enabled} disabled={disabled} onChange={e=>setDraft({...policy,enabled:e.target.checked})}/>Enable delegation</label>
-   <label>Approval mode<select value={policy.approvalMode} disabled={disabled} onChange={e=>setDraft({...policy,approvalMode:e.target.value as DelegationPolicy['approvalMode']})}><option value="required">Approval required</option><option value="automatic">Automatic within limits</option></select></label>
-   {delegationLimits.map(([key,label,max])=><label key={key}>{label}<input type="number" min={1} max={max} step={1} disabled={disabled} value={policy[key]} onChange={e=>setDraft({...policy,[key]:Number(e.target.value)})}/></label>)}
+   <HelpField label="Enable delegation" help="Allows agents to request delegated analysis within installation and profile limits. The parent still needs the delegation tool grant.">
+          <input type="checkbox" checked={policy.enabled} disabled={disabled} onChange={e=>setDraft({...policy,enabled:e.target.checked})}/>
+        </HelpField>
+   <HelpField label={"Approval mode"} help={"Choose whether each delegation needs human approval. Automatic still requires the delegation tool grant and applies profile and installation limits."}><select value={policy.approvalMode} disabled={disabled} onChange={e=>setDraft({...policy,approvalMode:e.target.value as DelegationPolicy['approvalMode']})}><option value="required">Approval required</option><option value="automatic">Automatic within limits</option></select></HelpField>
+   {delegationLimits.map(([key,label,max])=><HelpField key={key} label={label} help={delegationLimitHelp[key]}><input type="number" min={1} max={max} step={1} disabled={disabled} value={policy[key]} onChange={e=>setDraft({...policy,[key]:Number(e.target.value)})}/></HelpField>)}
    <p>Tree budgets reserve estimated input plus output before each call. Reported usage is counted once; unknown usage after dispatch retains an estimated charge. Parent token limits also apply. This is not a guaranteed billing cap. Running children retain their snapshot; changed settings invalidate waiting requests before inference.</p>
    {canManage&&<Btn disabled={disabled||!validDelegationPolicy(policy)} onClick={()=>{setNotice(undefined);setReview(true);}}>Review delegation policy</Btn>}
    {review&&<section aria-label="Confirm delegation policy"><h4>Review policy changes</h4>
@@ -69,12 +83,12 @@ function ProfileControls({canManage}: {canManage:boolean}) {
   {!current.error&&current.data?.map(v=><article key={v.profile.id}><h4>{v.profile.name}</h4><p>{v.profile.id} · Revision {v.revision} · {v.profile.enabled?'Enabled':'Disabled'}</p>{canManage&&<Btn disabled={disabled} onClick={()=>open(v)}>Edit {v.profile.name}</Btn>}</article>)}
   {canManage&&<Btn disabled={disabled} onClick={()=>open()}>New delegation profile</Btn>}
   {edit&&<section aria-label="Profile editor">
-   <label>Profile ID<input value={edit.profile.id} disabled={disabled||edit.revision!==undefined} onChange={e=>setEdit({...edit,profile:{...edit.profile,id:e.target.value}})}/></label>
-   <label>Profile name<input value={edit.profile.name} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,name:e.target.value}})}/></label>
-   <label>Profile instructions<textarea value={edit.profile.instructions} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,instructions:e.target.value}})}/></label>
-   <label>Inherited capabilities (one per line)<textarea value={(edit.profile.tools??[]).join('\n')} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,tools:e.target.value ? e.target.value.split('\n').map(name=>name.trim()) : []}})}/></label>
+   <HelpField label={"Profile ID"} help={"The stable profile identifier an agent requests when delegating work. It cannot be edited after creation."}><input value={edit.profile.id} disabled={disabled||edit.revision!==undefined} onChange={e=>setEdit({...edit,profile:{...edit.profile,id:e.target.value}})}/></HelpField>
+   <HelpField label={"Profile name"} help={"The display name of this delegation profile. Use a name that describes the kind of work the child should handle."}><input value={edit.profile.name} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,name:e.target.value}})}/></HelpField>
+   <HelpField label={"Profile instructions"} help={"Instructions provided to the delegated analysis agent. State its responsibilities and the result it should return to its parent."}><textarea value={edit.profile.instructions} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,instructions:e.target.value}})}/></HelpField>
+   <HelpField label={"Inherited capabilities (one per line)"} help={"The subset of capabilities the child may inherit from the parent. A capability must also be granted to the parent and allowed by installation policy."}><textarea value={(edit.profile.tools??[]).join('\n')} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,tools:e.target.value ? e.target.value.split('\n').map(name=>name.trim()) : []}})}/></HelpField>
    <p>Optional; empty means no tools. Use exact parent grant names, including exact MCP tool names. Wildcards and environment/review control tools are unsupported. Further delegation requires delegation.request and an increased depth limit. Missing parent grants reject the request.</p>
-   <label>Profile output token allowance<input type="number" min={1} max={4096} value={edit.profile.maxOutputTokens} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,maxOutputTokens:Number(e.target.value)}})}/></label>
+   <HelpField label={"Profile output token allowance"} help={"Caps the delegated child\u2019s output in tokens. Choose enough for the expected result within the installation allowance."}><input type="number" min={1} max={4096} value={edit.profile.maxOutputTokens} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,maxOutputTokens:Number(e.target.value)}})}/></HelpField>
    <label><input type="checkbox" checked={edit.profile.enabled} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,enabled:e.target.checked}})}/>Profile enabled</label>
    <Btn disabled={disabled||!validDelegationProfile(edit.profile)} onClick={()=>setReview(true)}>Review delegation profile</Btn>
    <Btn disabled={busy} onClick={()=>{setEdit(undefined);setReview(false);}}>Cancel profile changes</Btn>
