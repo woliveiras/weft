@@ -49,3 +49,35 @@ These results were recorded at the time of the run. The documentation migration 
   containers were left running. Real-preview lifecycle coverage remains pending
   in an environment with available capacity; the regular 18 browser scenarios
   above use a disposable backend and do not claim real preview verification.
+
+## Workflow catalogue — 2026-11-19
+
+- `make test-web`: 501 tests passed across 95 files, including TypeScript
+  checking. Presentation tests cover update ordering, stable ties, missing dates,
+  search/status combination and execution-copy exclusion. Component tests cover
+  paging, agent expansion, loading/error/empty states, read-only controls,
+  in-flight action locking, retry and deletion cancellation.
+- Docker Chromium runner: 16 functional scenarios passed across
+  `workflows.spec.ts`, `ux-feedback.spec.ts`, `work-navigation.spec.ts`,
+  `graph-navigation.spec.ts`, `agent-catalog.spec.ts`, `field-help.spec.ts` and
+  `onboarding.spec.ts`. The workflow scenarios exercised the real disposable
+  backend for Start/Pause/Resume/Stop, persisted versions, viewer API denial,
+  deletion confirmation and recovery from action/list failures. Existing draft
+  navigation, agent reuse and deferred-cleanup assertions remain intact.
+- A narrow-screen check found offscreen assistive text escaping its table scroll
+  container. Giving that container a positioning context fixed the overflow.
+  All 16 scenarios passed after that correction; the three workflow scenarios
+  passed again after the final header-help alignment refinement.
+- Workflows visual baselines were regenerated and visually inspected in light
+  and dark themes. Both baseline comparisons then passed against another fresh
+  backend. Dynamic workflow update times are masked in visual comparisons;
+  semantic date ordering remains covered separately by presentation tests.
+- `docker compose up -d --build --no-deps weftd` completed with the standard
+  Dockerfile. The service was healthy and `/healthz` returned `ok`. Read-only
+  local browser inspection confirmed four workflows, newest updated first,
+  aligned filters and the Status help icon, and expandable code-review agents.
+  No live workflow was started, stopped, paused or deleted for visual inspection.
+- The change is confined to frontend presentation, associated tests and docs.
+  Go/Python test suites and real-preview lifecycle tests were not rerun; the
+  standard local image build compiled the Go binaries. These observations do not
+  establish cross-browser or assistive-technology conformance.

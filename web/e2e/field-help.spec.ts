@@ -4,8 +4,8 @@ test('opens workflow help inside a dialog and preserves a draft', async ({ page 
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
   await page.setViewportSize({ width: 580, height: 850 });
   await page.goto('/#/graphs');
-  await page.getByRole('button', { name: 'New graph', exact: true }).click();
-  const workflow = page.getByRole('dialog', { name: 'New graph', exact: true });
+  await page.getByRole('button', { name: 'New workflow', exact: true }).click();
+  const workflow = page.getByRole('dialog', { name: 'New workflow', exact: true });
   const document = workflow.getByRole('textbox', { name: 'Workflow document', exact: true });
   await document.fill('metadata: {name: draft}');
   const help = workflow.getByRole('button', { name: 'Help for Workflow document', exact: true });

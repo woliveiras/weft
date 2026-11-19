@@ -639,9 +639,6 @@ main {
 .card p {
   margin: 0;
 }
-.graph-card.st-running {
-  border-color: var(--success-border);
-}
 
 /* workspace */
 .workspace {
@@ -2051,13 +2048,6 @@ button, summary, a { touch-action: manipulation; }
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; }
 }
 
-/* Stretch only the navigation button; sibling controls remain independent. */
-.graph-card { position: relative; }
-.graph-card-open::after { content: ''; position: absolute; inset: 0; border-radius: inherit; }
-.graph-card-open:focus-visible::after { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
-.graph-card:has(.graph-card-open:hover) { border-color: var(--primary); }
-.graph-card-agents button, .graph-card-actions button { position: relative; z-index: 1; }
-.graph-card-agents ul { display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 0; list-style: none; }
 .tl-row > * { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 700px) {
   .tl-row { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
@@ -2198,3 +2188,30 @@ dialog.approval-dialog::backdrop { background: var(--overlay); }
 .approval-dialog .approval { margin: 0; }
 .approval-dialog .form { max-width: none; }
 .approval-dialog pre { max-height: 35vh; overflow: auto; }
+
+/* Workflow catalogue shares the installation table and filter layout. */
+.workflows-page { max-width: none; }
+.workflow-filters { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: end; }
+.workflow-filters label { display: grid; gap: var(--space-2); min-width: 0; flex: 0 1 220px; }
+.workflow-filters label:first-child { flex: 1 1 280px; }
+.workflow-filters :is(input, select) { width: 100%; min-width: 0; }
+.workflow-list-count { margin-block: var(--space-4); }
+.workflow-table { min-width: 0; position: relative; }
+.workflow-table :is(th, td) { vertical-align: top; }
+.workflow-table td:first-child { min-width: 230px; max-width: 400px; overflow-wrap: anywhere; }
+.workflow-open { font-weight: 600; text-align: left; white-space: normal; }
+.workflow-description { margin-block: var(--space-1); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.workflow-table time { display: block; min-width: 140px; }
+.workflow-table .connection-meta { overflow-wrap: anywhere; }
+.workflow-agents { min-width: 100px; }
+.workflow-agents summary, .workflow-more summary { white-space: nowrap; cursor: pointer; }
+.workflow-agents ul { list-style: none; padding: 0; margin-block: var(--space-3) 0; display: grid; gap: var(--space-3); }
+.workflow-agents button { text-align: left; white-space: normal; }
+.workflow-actions { min-width: 145px; align-items: flex-start; }
+.workflow-more { flex-basis: 100%; }
+.workflow-more summary { color: var(--text-muted); font-size: var(--font-size-sm, 13px); padding-block: var(--space-1); }
+.workflow-more .btn { margin-top: var(--space-2); }
+.workflows-pagination { margin-top: var(--space-4); }
+.workflow-row { cursor: pointer; }
+.workflow-row:focus-within { background: var(--surface-hover); }
+.workflow-table th .field-help-caption { flex-wrap: nowrap; white-space: nowrap; }

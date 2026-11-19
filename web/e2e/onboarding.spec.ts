@@ -18,6 +18,7 @@ test('direct first use preserves canvas drafts and inspects a real execution wit
   await name.fill('My first echo');
   await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Models',exact:true}).click();
   await page.getByRole('button', {name:'Workflows',exact:true}).click();
+  await page.getByRole('row').filter({has:page.getByRole('button',{name:'Direct first use',exact:true})}).getByText('1 agent', {exact:false}).click();
   await page.getByRole('button',{name:'Configure Echo',exact:true}).click();
   await expect(name).toHaveValue('My first echo');
   await page.getByRole('button',{name:'Review & save',exact:true}).click();
@@ -42,7 +43,7 @@ test('viewer navigation ignores corrupt legacy guide progress and preserves narr
  await page.addInitScript(()=>{localStorage.setItem('weftToken','e2e-viewer-token');localStorage.setItem('weft.guide.v1:["viewer","viewer"]','{');});
  const mutations:string[]=[];page.on('request',r=>{if(r.method()!=='GET')mutations.push(r.url());});
  await page.setViewportSize({width:580,height:850});await page.goto('/#/graphs');
- await expect(page.getByRole('heading',{name:'Graphs',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Workflows',exact:true})).toBeVisible();
  await expect(page.getByRole('region',{name:'Getting started',exact:true})).toHaveCount(0);
  await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Models',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Models',exact:true})).toBeVisible();

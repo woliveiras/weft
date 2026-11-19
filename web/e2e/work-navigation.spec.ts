@@ -18,7 +18,7 @@ test('keeps configuration visible and preserves legacy links', async ({page}) =>
   await expect(nav.getByRole('button',{name:'Connections',exact:true})).toBeVisible();
   await nav.getByRole('button',{name:'Workflows',exact:true}).click();
   await expect(page).toHaveURL(/#\/graphs$/);
-  await expect(page.getByRole('heading',{name:'Graphs',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Workflows',exact:true})).toBeVisible();
   await page.goBack();
   await expect(nav.getByRole('button',{name:'Connections',exact:true})).toHaveAttribute('aria-current','page');
   await page.reload();

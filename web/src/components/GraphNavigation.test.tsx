@@ -38,9 +38,11 @@ it('exposes graph agents and keeps navigation separate from graph actions',async
  const {GraphList}=await import('./GraphList');
  const open=vi.fn(), configure=vi.fn();
  render(<GraphList canDelete graphs={[{graph,record:{state:'running',version:1}} as GraphSummary]} onOpen={open} onAgent={configure} onChanged={()=>{}}/>);
+ fireEvent.click(screen.getByText('1 agent', {exact:false}));
  fireEvent.click(screen.getByRole('button',{name:'Configure Draft reviewer'}));
  expect(configure).toHaveBeenCalledWith('g','reviewer');expect(open).not.toHaveBeenCalled();
  fireEvent.click(screen.getByRole('button',{name:'Factory'}));expect(open).toHaveBeenCalledWith('g');
+ fireEvent.click(screen.getByText('More actions'));
  expect(screen.getByRole('button',{name:'Delete'})).toHaveProperty('disabled',true);
 });
 
@@ -55,6 +57,7 @@ it('shows the cleanup failure and requires administrator confirmation to defer i
  try {
    render(<GraphList canDelete graphs={[{graph, record:{state:'stopped', version:1}} as GraphSummary]}
      onOpen={vi.fn()} onChanged={changed} />);
+   fireEvent.click(screen.getByText('More actions'));
    fireEvent.click(screen.getByRole('button', {name:/^Delete$/}));
    expect((await screen.findByRole('alert')).textContent).toContain('Sandbox daemon unavailable');
    expect(deleteGraph).toHaveBeenCalledOnce();
@@ -80,7 +83,7 @@ it('shows the budget refusal beside the graph resume control', async () => {
    fireEvent.click(screen.getByRole('button', {name:'Resume'}));
    const alert = await screen.findByRole('alert');
    expect(alert.textContent).toBe(message);
-   expect(alert.closest('article')).toBe(container.querySelector('article'));
+   expect(alert.closest('tr')).toBe(container.querySelector('tbody tr'));
    expect(resume).toHaveBeenCalledWith('g', 'resume');
    expect(changed).not.toHaveBeenCalled();
  } finally {
@@ -94,5 +97,5 @@ it('excludes task execution copies from editable workflows and actions',async()=
  render(<GraphList canDelete graphs={[{graph:task,record:{state:'running'}} as unknown as GraphSummary]} onOpen={vi.fn()} onChanged={vi.fn()}/>);
  expect(screen.queryByText('Execution')).toBeNull();
  for(const name of ['Stop','Pause','Delete','Open']) expect(screen.queryByRole('button',{name:new RegExp(`^${name}$`)})).toBeNull();
- expect(screen.getByText(/No graphs yet/)).toBeTruthy();
+ expect(screen.getByText(/No workflows yet/)).toBeTruthy();
 });

@@ -9,7 +9,7 @@ it.each([null,'{',JSON.stringify({version:1,current:4,reviewed:['concepts']})])(
  localStorage.setItem('weftToken','test-token');const key='weft.guide.v1:["operator","operator"]';if(progress!==null)localStorage.setItem(key,progress);
  location.hash='#/graphs';const reads=vi.spyOn(Storage.prototype,'getItem');
  const backend=fakeApi({'GET /api/v1/info':()=>({identity:{name:'operator',role:'operator'}}),'GET /api/v1/graphs':()=>[],'GET /api/v1/approvals':()=>[]});
- render(<App/>);await screen.findByRole('button',{name:'New graph'});
+ render(<App/>);await screen.findByRole('heading',{name:'Workflows'});
  expect(screen.queryByRole('region',{name:'Getting started'})).toBeNull();expect(screen.queryByRole('button',{name:'Getting started'})).toBeNull();
  expect(reads.mock.calls.some(([key])=>key.startsWith('weft.guide.'))).toBe(false);
  expect(backend.calls.every(c=>c.method==='GET')).toBe(true);expect(backend.calls.some(c=>c.path==='/api/v1/providers'||c.path==='/api/v1/mcp/connections')).toBe(false);

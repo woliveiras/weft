@@ -7,8 +7,8 @@ const headers = {Authorization:'Bearer e2e-admin-token'};
 test('creates, reuses and configures an agent through workflow creation and the catalog', async ({page}) => {
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
   await page.goto('/#/graphs');
-  await page.getByRole('button', {name:'New graph', exact:true}).click();
-  const dialog = page.getByRole('dialog', {name:'New graph'});
+  await page.getByRole('button', {name:'New workflow', exact:true}).click();
+  const dialog = page.getByRole('dialog', {name:'New workflow'});
   await dialog.getByRole('textbox', {name:'Workflow document'}).fill(JSON.stringify({
     metadata:{id:'catalog-review-source',name:'Catalog review source'},
     spec:{nodes:[{id:'reviewer',name:'Catalog reviewer',description:'Reviews incoming changes.',
@@ -85,7 +85,7 @@ test('creates, reuses and configures an agent through workflow creation and the 
   await expect(page.getByRole('link', {name:'Catalog review source / Catalog reviewer'})).toBeVisible();
 
   await page.goto('/#/graphs');
-  await page.getByRole('button', {name:'New graph', exact:true}).click();
+  await page.getByRole('button', {name:'New workflow', exact:true}).click();
   const document = dialog.getByRole('textbox', {name:'Workflow document'});
   await document.fill(`# Target workflow
 metadata:

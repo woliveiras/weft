@@ -6,7 +6,7 @@ import {test, expect} from '@playwright/test';
 // `pnpm exec playwright test --config playwright.visual.config.ts --update-snapshots` and review
 // the images before committing.
 const pages = [
-  ['workflows', '/#/graphs', 'Graphs'],
+  ['workflows', '/#/graphs', 'Workflows'],
   ['canvas', '/#/g/journal-capture/canvas', undefined],
   ['models', '/#/models', 'Models'],
   ['approvals', '/#/approvals', 'Approvals'],
@@ -26,8 +26,8 @@ for (const theme of ['light', 'dark'] as const) {
         await expect(page).toHaveScreenshot(`${name}-${theme}.png`, {
           animations: 'disabled',
           caret: 'hide',
-          // Connection state and infrastructure details vary between runs.
-          mask: [page.locator('.conn'), page.locator('.infra')],
+          // Connection state, infrastructure details and workflow update times vary between runs.
+          mask: [page.locator('.conn'), page.locator('.infra'), ...(name === 'workflows' ? [page.locator('.workflow-table time')] : [])],
           maxDiffPixelRatio: 0.01,
         });
       });

@@ -232,6 +232,9 @@ function Shell() {
             <GraphList
               graphs={list}
               canDelete={info.data?.identity?.role === 'admin'}
+              canCreate={info.data?.identity?.role === 'admin'}
+              canControl={info.data?.identity?.role === 'admin' || info.data?.identity?.role === 'operator'}
+              loading={graphs.loading}
               error={graphs.error}
               onOpen={(id) => go({ view: 'graph', id, tab: 'canvas' })}
               onAgent={(id, agentId) => go({ view: 'graph', id, tab: 'agent', agentId, agentSection: 'general' })}

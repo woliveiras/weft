@@ -59,6 +59,8 @@ Common forms and controls remain usable at narrow widths and in the supported th
 
 - 2026-11-19. Maintainer refinement: Projects belongs to Configuration. Configuration remains visible with its divider and fixed heading; it has no collapse control. The approval inbox uses a newest-request-first table, combined filters and 20-row pages. Details and existing decision actions open on demand without changing authorization or approval contracts.
 
+- 2026-11-19. Maintainer refinement to workflow discovery and responsive presentation: the Workflows catalogue uses a newest-updated-first table with combined search/status filters, 20-row pages and expandable workflow-local agent links. Lifecycle actions, administrator deletion confirmation and deferred cleanup remain intact; loading, failure and empty states are explicit.
+
 ## Reconciliation
 
 - [interface-navigation.md](../../../docs/interface-navigation.md), [getting-started.md](../../../docs/getting-started.md), [brand/brand-guidelines.md](../../../docs/brand/brand-guidelines.md).

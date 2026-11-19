@@ -1,0 +1,86 @@
+import { expect, test, type Page } from '@playwright/test';
+const headers = { Authorization: 'Bearer e2e-admin-token' };
+async function create(page: Page, id: string) {
+  expect((await page.request.post('/api/v1/graphs', { headers, data: { metadata: { id, name: id, description: 'Reusable event workflow' }, spec: {
+    nodes: [{ id: 'reader', name: 'Reader', runtime: { kind: 'echo' }, loop: { mode: 'event' } }], channels: [{ id: 'inbox', type: 'queue', to: ['reader'] }],
+  } } })).status()).toBe(201);
+}
+test('lists newest workflows, filters, expands agents and runs lifecycle actions without opening the workflow', async ({ page }) => {
+  await create(page, 'catalog-ui-older');
+  await create(page, 'catalog-ui-newer');
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.goto('/#/graphs');
+  await expect(page.getByRole('heading', { name: 'Workflows', exact: true })).toBeVisible();
+  const table = page.getByRole('table', { name: 'Workflows', exact: true });
+  await page.getByRole('searchbox', { name: 'Search workflows', exact: true }).fill('catalog-ui-');
+  await expect(table.getByRole('row')).toHaveCount(3);
+  await expect(table.getByRole('row').nth(1)).toContainText('catalog-ui-newer');
+  await expect(page.getByRole('columnheader', { name: /Updated/ })).toHaveAttribute('aria-sort', 'descending');
+  const row = table.getByRole('row').filter({ has: page.getByRole('button', { name: 'catalog-ui-newer', exact: true }) });
+  await row.getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(row.getByText('Running', { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/#\/graphs$/);
+  await row.getByRole('button', { name: 'Pause', exact: true }).click();
+  await expect(row.getByText('Paused', { exact: true })).toBeVisible();
+  await row.getByRole('button', { name: 'Resume', exact: true }).click();
+  await expect(row.getByText('Running', { exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Workflow status', exact: true }).selectOption('running');
+  await expect(table.getByRole('row')).toHaveCount(2);
+  await row.getByRole('button', { name: 'Stop', exact: true }).click();
+  await expect(page.getByText('No workflows match these filters.')).toBeVisible();
+  await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
+  await page.getByRole('searchbox', { name: 'Search workflows', exact: true }).fill('catalog-ui-newer');
+  await row.locator('.workflow-agents summary').click();
+  await row.getByRole('button', { name: 'Configure Reader', exact: true }).click();
+  await expect(page).toHaveURL(/g\/catalog-ui-newer\/agent\?agent=reader/);
+  expect((await (await page.request.get('/api/v1/graphs/catalog-ui-newer', { headers })).json()).record.version).toBe(1);
+});
+test('recovers action and list failures and preserves explicit deletion confirmation', async ({ page }) => {
+  const id = 'catalog-ui-retry'; await create(page, id);
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.goto('/#/graphs');
+  await page.getByRole('searchbox', { name: 'Search workflows' }).fill(id);
+  const row = page.getByRole('row').filter({ has: page.getByRole('button', { name: id, exact: true }) });
+  await page.route(`**/api/v1/graphs/${id}/start`, route => route.fulfill({ status: 503, json: { error: 'Sandbox unavailable', code: 'unavailable' } }));
+  await row.getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText(id + ': Sandbox unavailable');
+  await expect(row.getByRole('button', { name: 'Start', exact: true })).toBeEnabled();
+  await page.unroute(`**/api/v1/graphs/${id}/start`);
+  await row.getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(row.getByText('Running', { exact: true })).toBeVisible();
+  await row.locator('.workflow-more summary').click();
+  await expect(row.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+  await row.getByRole('button', { name: 'Stop', exact: true }).click();
+  await expect(row.getByText('Stopped', { exact: true })).toBeVisible();
+  page.once('dialog', dialog => dialog.dismiss());
+  await row.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(row).toBeVisible();
+  await row.locator('.workflow-more summary').click();
+  page.once('dialog', dialog => dialog.accept());
+  await row.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page.getByText('No workflows match these filters.')).toBeVisible();
+  expect((await page.request.get('/api/v1/graphs/' + id, { headers })).status()).toBe(404);
+  await page.route('**/api/v1/graphs', route => route.request().method() === 'GET' ? route.fulfill({ status: 503, json: { error: 'Workflow storage unavailable', code: 'unavailable' } }) : route.continue());
+  await page.reload();
+  await expect(page.getByRole('alert')).toContainText('Workflow storage unavailable');
+  await expect(page.getByText(/No workflows yet/)).toHaveCount(0);
+  await page.unroute('**/api/v1/graphs');
+  await page.getByRole('button', { name: 'Refresh workflows', exact: true }).click();
+  await expect(page.getByRole('table', { name: 'Workflows', exact: true })).toBeVisible();
+});
+test('viewer uses narrow table and agents without mutation controls or page overflow', async ({ page }) => {
+  const id = 'catalog-ui-viewer'; await create(page, id);
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-viewer-token'));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/#/graphs');
+  await page.getByRole('searchbox', { name: 'Search workflows' }).fill(id);
+  const row = page.getByRole('row').filter({ has: page.getByRole('button', { name: id, exact: true }) });
+  for (const name of ['Start', 'Delete', 'New workflow']) await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+  await expect(row).toContainText('Read-only');
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(page.getByRole('region', { name: 'Workflows', exact: true })).toHaveAttribute('tabindex', '0');
+  await row.locator('.workflow-agents summary').click();
+  await row.getByRole('button', { name: 'Configure Reader', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Agent configuration', exact: true }).getByLabel('Name', { exact: true })).toBeDisabled();
+  expect((await page.request.post(`/api/v1/graphs/${id}/start`, { headers: { Authorization: 'Bearer e2e-viewer-token' } })).status()).toBe(403);
+});

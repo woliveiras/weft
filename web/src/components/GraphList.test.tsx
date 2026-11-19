@@ -1,0 +1,86 @@
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, expect, it, vi } from 'vitest';
+import type { GraphSummary } from '../api/types';
+import { fakeApi, apiError } from '../test/fakeApi';
+import { GraphList } from './GraphList';
+afterEach(cleanup);
+const workflow = (id: string, extra = {}): GraphSummary => ({ graph: { apiVersion: 'weft.io/v1', kind: 'Graph', metadata: { id, name: 'Workflow ' + id, description: 'Review code' }, spec: { nodes: [{ id: 'reader', name: 'Reader', runtime: { kind: 'echo' } }], channels: [] } }, record: { id, desiredState: 'stopped', state: 'stopped', version: 2, updatedAt: '2026-11-19T09:00:00Z', ...extra } }) as GraphSummary;
+const props = { onOpen: vi.fn(), onChanged: vi.fn(), onAgent: vi.fn() };
+it('combines filters, clears them, and expands agents without navigating', async () => {
+  const open = vi.fn(), agent = vi.fn();
+  render(<GraphList {...props} onOpen={open} onAgent={agent} graphs={[workflow('a'), workflow('b', { state: 'running', updatedAt: '2026-11-19T10:00:00Z' })]} />);
+  const table = screen.getByRole('table', { name: 'Workflows' });
+  expect(within(table).getAllByRole('row')[1].textContent).toContain('Workflow b');
+  expect(Array.from(document.querySelectorAll('details.workflow-agents')).every(element => !element.hasAttribute('open'))).toBe(true);
+  await userEvent.type(screen.getByLabelText('Search workflows'), 'review');
+  await userEvent.selectOptions(screen.getByLabelText('Workflow status'), 'running');
+  expect(within(table).getAllByRole('row')).toHaveLength(2);
+  await userEvent.click(screen.getByText('1 agent', { exact: false }));
+  await userEvent.click(screen.getByRole('button', { name: 'Configure Reader' }));
+  expect(agent).toHaveBeenCalledWith('b', 'reader');
+  expect(open).not.toHaveBeenCalled();
+  await userEvent.click(screen.getByRole('button', { name: 'Workflow b' }));
+  expect(open).toHaveBeenCalledWith('b');
+  await userEvent.type(screen.getByLabelText('Search workflows'), 'missing');
+  expect(screen.getByText('No workflows match these filters.')).toBeTruthy();
+  await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+  expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(3);
+  expect(document.activeElement).toBe(screen.getByLabelText('Search workflows'));
+});
+it('keeps loading, dependency failures and empty results distinct and offers refresh', async () => {
+  const refresh = vi.fn();
+  const { rerender } = render(<GraphList {...props} onChanged={refresh} loading graphs={[]} />);
+  expect(screen.getByRole('status').textContent).toBe('Refreshing workflows…');
+  expect(screen.queryByText(/No workflows yet/)).toBeNull();
+  rerender(<GraphList {...props} onChanged={refresh} error="Storage unavailable" graphs={[]} />);
+  expect(screen.getByRole('alert').textContent).toBe('Storage unavailable');
+  expect(screen.queryByText(/No workflows yet/)).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: 'Refresh workflows' }));
+  expect(refresh).toHaveBeenCalledOnce();
+  rerender(<GraphList {...props} graphs={[]} />);
+  expect(screen.getByText(/No workflows yet/)).toBeTruthy();
+});
+it('locks repeated actions while pending and preserves the list and retry after failure', async () => {
+  let finish!: (value: Response) => void;
+  let failed = true;
+  const changed = vi.fn();
+  const backend = fakeApi({ 'POST /api/v1/graphs/a/start': () => failed ? new Promise<Response>(resolve => { finish = resolve; }) : {} });
+  render(<GraphList {...props} onChanged={changed} graphs={[workflow('a')]} />);
+  await userEvent.click(screen.getByRole('button', { name: 'Start' }));
+  expect((screen.getByRole('button', { name: 'Starting…' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(backend.find('POST', '/api/v1/graphs/a/start')).toHaveLength(1);
+  finish(apiError(503, 'Sandbox unavailable', 'unavailable'));
+  expect(await screen.findByText('Workflow a: Sandbox unavailable')).toBeTruthy();
+  expect(changed).not.toHaveBeenCalled();
+  failed = false;
+  await userEvent.click(screen.getByRole('button', { name: 'Start' }));
+  await waitFor(() => expect(changed).toHaveBeenCalledOnce());
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+it('paginates and resets on filters, hides mutation actions for viewers, and retains open navigation', async () => {
+  render(<GraphList {...props} canCreate={false} canControl={false} graphs={Array.from({ length: 21 }, (_, i) => workflow(String(i)))} />);
+  expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(21);
+  for (const name of ['Start', 'Delete', 'New workflow']) expect(screen.queryByRole('button', { name })).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+  expect(screen.getByText('Page 2 of 2')).toBeTruthy();
+  await userEvent.type(screen.getByLabelText('Search workflows'), 'Workflow 0');
+  expect(screen.getByRole('button', { name: 'Workflow 0' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Previous page' })).toBeNull();
+});
+it('requires confirmation before deletion and keeps running workflows protected', async () => {
+  const backend = fakeApi({ 'DELETE /api/v1/graphs/a': () => ({}) });
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  try {
+    render(<GraphList {...props} canDelete graphs={[workflow('a'), workflow('b', { state: 'running' })]} />);
+    const row = screen.getByRole('row', { name: /Workflow a/ });
+    await userEvent.click(within(row).getByText('More actions'));
+    await userEvent.click(within(row).getByRole('button', { name: 'Delete' }));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(backend.calls).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Workflow a' })).toBeTruthy();
+    const running = screen.getByRole('row', { name: /Workflow b/ });
+    await userEvent.click(within(running).getByText('More actions'));
+    expect((within(running).getByRole('button', { name: 'Delete' }) as HTMLButtonElement).disabled).toBe(true);
+  } finally { confirm.mockRestore(); }
+});

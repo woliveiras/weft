@@ -1,21 +1,23 @@
 import {test,expect} from '@playwright/test';
 const headers={Authorization:'Bearer e2e-admin-token'};
-test('graph cards open from whitespace and agent links preserve drafts and action boundaries',async({page})=>{
+test('workflow rows open from whitespace and agent links preserve drafts and action boundaries',async({page})=>{
  const id='ux-card';
  expect((await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id,name:'UX card'},spec:{nodes:[{id:'reader',runtime:{kind:'echo'},loop:{mode:'once'}}]}}})).status()).toBe(201);
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
  await page.goto('/#/graphs');
- const card=page.locator('.graph-card').filter({has:page.getByRole('button',{name:'UX card',exact:true})});
+ const card=page.locator('.workflow-row').filter({has:page.getByRole('button',{name:'UX card',exact:true})});
  await page.screenshot({path:'/tmp/weft-ux-graphs.png',fullPage:true});
  const bounds=await card.boundingBox();expect(bounds).toBeTruthy();
  await card.click({position:{x:bounds!.width-15,y:bounds!.height-15}});
  await expect(page).toHaveURL(/g\/ux-card\/canvas/);
  await page.goto('/#/graphs');
+ await card.locator('.workflow-agents summary').click();
  await card.getByRole('button',{name:'Configure reader',exact:true}).click();
  await expect(page).toHaveURL(/agent\?agent=reader/);
  const name=page.getByRole('region',{name:'Agent configuration',exact:true}).getByLabel('Name',{exact:true});
  await name.fill('Unsaved reader');
  await page.getByRole('button',{name:'Workflows',exact:true}).click();
+ await card.locator('.workflow-agents summary').click();
  await card.getByRole('button',{name:'Configure reader',exact:true}).click();
  await expect(name).toHaveValue('Unsaved reader');
  await page.getByRole('button',{name:'Workflows',exact:true}).click();
@@ -87,8 +89,9 @@ test('an administrator can keep a graph or confirm deletion after cleanup fails'
  });
  await page.addInitScript(() => localStorage.setItem('weftToken','e2e-admin-token'));
  await page.goto('/#/graphs');
- const card = page.locator('.graph-card').filter({has:page.getByRole('button',{name:'Deferred deletion',exact:true})});
+ const card = page.locator('.workflow-row').filter({has:page.getByRole('button',{name:'Deferred deletion',exact:true})});
  const openDelete = async () => {
+   await card.locator('.workflow-more summary').click();
    page.once('dialog', dialog => dialog.accept());
    await card.getByRole('button', {name:'Delete',exact:true}).click();
    await expect(page.getByText('Sandbox daemon unavailable')).toBeVisible();

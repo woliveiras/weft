@@ -18,7 +18,7 @@ introduce roles or change API permissions.
 Configuration is always visible, with a fixed heading and a divider after Work.
 On narrow screens navigation wraps and scrolls within a bounded area. Existing
 graph URLs and editor drafts retain their behavior.
-The graph list still uses its existing Graphs heading and graph actions.
+The workflow catalogue uses the Workflows heading and New workflow action. Existing graph URLs and API names remain unchanged.
 
 Administration has independent hash routes for `health`, `network`, `resources`,
 `retention` and `tools`. Opening a section loads only that section's resources.
@@ -326,3 +326,25 @@ question answers and application preview/review actions retain their existing
 APIs and authorization. Decision failures preserve the entered feedback for retry.
 Environment decisions require an administrator. The list keeps healthy sources
 usable when another source fails, with an explicit refresh action.
+
+## Workflow catalogue
+
+The Workflows table shows name, description, ID, operational status, saved
+version, agents, channels and update time. The optional start time remains below
+the update time. Updated sorts descending with a deterministic ID tie-breaker;
+missing historical update dates sort last. Search matches name, description or ID
+without case sensitivity and combines with the exact status filter. Filtering
+resets the page. Pages contain at most 20 workflows and omit task execution copies.
+
+Expand the agent count to configure an agent in that workflow. Select the name
+or unused row space to open the canvas; agent links, actions and disclosures do
+not navigate the row. The status help explains that Running may mean waiting for
+an event, rather than actively processing a task.
+
+Authorized operators retain Start, Stop, Pause and Resume. In-flight actions
+prevent repeated submission and expose progress; errors preserve the list for
+retry. Administrators create workflows and open More actions to delete, with the
+existing confirmation and deferred-cleanup review preserved. Viewers retain
+navigation without mutation controls. Loading, failed refresh, empty catalogue
+and filtered-empty states are distinct, with an explicit refresh action. Narrow
+screens keep horizontal overflow inside the labelled, keyboard-focusable table.
