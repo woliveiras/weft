@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { parseRoute, routeHash } from './App';
 
 describe('installation destination routes', () => {
+  it('round-trips project creation and import destinations', () => {
+    for (const hash of ['#/projects', '#/projects/new', '#/projects/import']) {
+      expect(routeHash(parseRoute(hash))).toBe(hash);
+    }
+    expect(parseRoute('#/projects/unknown')).toEqual({ view: 'projects' });
+  });
   it('supports independent destinations and safe administration fallback', () => {
     expect(parseRoute('#/models')).toEqual({ view: 'models' });
     expect(parseRoute('#/administration/network')).toEqual({ view: 'administration', section: 'network' });

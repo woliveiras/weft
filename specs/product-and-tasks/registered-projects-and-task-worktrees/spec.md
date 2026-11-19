@@ -45,6 +45,7 @@ Cleanup applies to the stopped task's reviewed worktree only. Path, branch, HEAD
 ## History
 
 - 2026-10-19. FLOW-03c added registered projects and version-pinned worktrees. Later native increments added cleanup review and remembered environment suggestions.
+- 2026-11-19. The maintainer requested Projects follow the console's table and form conventions. The list supports repository search and environment filters, row disclosures retain server paths and preference editing, and Add project opens reviewed registration or URL import on dedicated routes.
 
 ## Reconciliation
 

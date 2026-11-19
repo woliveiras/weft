@@ -1,5 +1,5 @@
 import { AgentsPage } from './components/AgentsPage';
-import {ProjectsPage} from './components/ProjectsPage';
+import {ProjectsPage, type ProjectView} from './components/ProjectsPage';
 import { ActivityPage } from './components/ActivityPage';
 import { activityHash, parseActivityState, type ActivityRouteState } from './components/activityView';
 import { TasksPage } from './components/TasksPage';
@@ -36,7 +36,7 @@ type Route =
   | { view: 'graphs' }
   | { view: 'agents'; agentId?: string; create?: boolean }
   | { view: 'activity'; activity: ActivityRouteState }
-  | { view: 'projects' }
+  | { view: 'projects'; projectView?: ProjectView }
   | { view: 'tasks'; taskId?: string; create?: boolean }
   | { view: 'approvals' }
   | { view: 'connections'; connectionID?: string; connectionTab?: ConnectionTab; create?: boolean; sourceControlCreate?: boolean; history?: boolean; connectQuery?: string; oauthQuery?: string }
@@ -52,7 +52,10 @@ export function parseRoute(hash: string): Route {
   if (parts[0] === 'agents') {
     return {view:'agents', ...(parts[1] === 'new' ? {create:true} : parts[1] ? {agentId:decodeURIComponent(parts[1])} : {})};
   }
-  if (parts[0] === 'projects') return {view:'projects'};
+  if (parts[0] === 'projects') return {
+    view: 'projects',
+    ...(parts[1] === 'new' ? { projectView: 'register' as const } : parts[1] === 'import' ? { projectView: 'import' as const } : {}),
+  };
   if (parts[0] === 'tasks') return {view:'tasks', ...(parts[1] === 'new' ? {create:true} : parts[1] ? {taskId:decodeURIComponent(parts[1])} : {})};
   if (parts[0] === 'approvals') return { view: 'approvals' };
   if (parts[0] === 'skills') return { view: 'skills' };
@@ -88,7 +91,7 @@ export function routeHash(r: Route): string {
   if (r.view === 'agents') {
     return r.create ? '#/agents/new' : r.agentId ? `#/agents/${encodeURIComponent(r.agentId)}` : '#/agents';
   }
-  if (r.view === 'projects') return '#/projects';
+  if (r.view === 'projects') return r.projectView === 'register' ? '#/projects/new' : r.projectView === 'import' ? '#/projects/import' : '#/projects';
   if (r.view === 'tasks') return r.create ? '#/tasks/new' : r.taskId ? `#/tasks/${encodeURIComponent(r.taskId)}` : '#/tasks';
   if (r.view === 'approvals') return '#/approvals';
   if (r.view === 'skills') return '#/skills';
@@ -223,7 +226,7 @@ function Shell() {
           <ErrorBox error={info.error && !graphs.error ? `info: ${info.error}` : undefined} />
           {ownedTask && <section className="page"><h1>Task execution</h1><p>This graph is the execution copy owned by a task.</p><a href={`#/tasks/${encodeURIComponent(ownedTask)}`}>Open task {ownedTask}</a></section>}
           {route.view === 'activity' && <ActivityPage state={route.activity} onChange={activity => go({ view: 'activity', activity })} />}
-          {route.view === 'projects' && <ProjectsPage nativeProfile={info.data?.nativeProfile===true} canEdit={info.data?.identity?.role==='admin'}/>}
+          {route.view === 'projects' && <ProjectsPage key={route.projectView ?? 'list'} mode={route.projectView} nativeProfile={info.data?.nativeProfile===true} canEdit={info.data?.identity?.role==='admin'}/>}
           {route.view === 'tasks' && <TasksPage key={route.taskId ?? (route.create ? 'new' : 'list')} id={route.taskId} create={route.create} info={info.data} graphs={list}/>}
           {route.view === 'graphs' && (
             <GraphList

@@ -2,6 +2,31 @@ import {test,expect} from '@playwright/test';
 import {openTaskSettings} from './task-settings';
 const headers={Authorization:'Bearer e2e-admin-token'};
 const source='https://repository.fixture.example/source.git';
+test('imports from the Projects setup screen and returns to the registered repository', async ({ page }) => {
+ await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+ await page.goto('/#/projects');
+ await page.getByRole('link', {name:'Add project',exact:true}).click();
+ await page.getByRole('link', {name:'Import from URL',exact:true}).click();
+ await expect(page).toHaveURL(/#\/projects\/import$/);
+ const section = page.getByRole('region', {name:'Import repository',exact:true});
+ const clone = await section.getByRole('textbox', {name:'Clone URL',exact:true}).boundingBox();
+ const authentication = await section.getByRole('combobox', {name:'Git authentication',exact:true}).boundingBox();
+ expect(authentication!.x).toBeGreaterThan(clone!.x + clone!.width);
+ await page.setViewportSize({width:390,height:844});
+ expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+ await page.setViewportSize({width:1280,height:720});
+ await expect(section.getByRole('button', {name:'Import repository',exact:true})).toBeDisabled();
+ await section.getByRole('textbox', {name:'Clone URL',exact:true}).fill(source);
+ await section.getByRole('checkbox').check();
+ await section.getByRole('button', {name:'Import repository',exact:true}).click();
+ await expect(section.getByRole('status')).toContainText('ready:');
+ await section.getByRole('button', {name:'Use imported project',exact:true}).click();
+ await expect(page).toHaveURL(/#\/projects$/);
+ const table = page.getByRole('table', {name:'Registered projects'});
+ await expect(table).toContainText(source);
+ await expect(page.getByRole('form')).toHaveCount(0);
+});
+
 async function openImport(page:import('@playwright/test').Page,url:string){
  await page.goto('/#/tasks/new');
  await page.getByText('Import repository from URL',{exact:true}).click();

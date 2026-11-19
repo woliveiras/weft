@@ -463,6 +463,57 @@ main > .page:not(.fill) {
 main > .page:is(.task-request-page, .installation-page, .administration-page) {
   padding-inline: var(--page-inline-padding, var(--space-8));
 }
+.projects-page > .page-head { align-items: center; }
+.projects-page a.btn { text-decoration: none; }
+.projects-table { position: relative; min-inline-size: 0; }
+.projects-table td { vertical-align: top; overflow-wrap: anywhere; }
+.projects-table td:first-child { min-inline-size: 10rem; }
+.projects-table td:nth-child(2) { min-inline-size: 12rem; }
+.projects-table td:nth-child(3) { min-inline-size: 8rem; max-inline-size: 12rem; }
+.projects-table td:nth-child(4) { min-inline-size: 16rem; }
+.projects-table time { white-space: nowrap; }
+.project-repository-url { display: block; margin-block-end: var(--space-1); }
+.project-location > code { display: block; margin-block-start: var(--space-2); }
+.project-preference { margin-block-start: var(--space-2); }
+.project-preference-fields { display: grid; gap: var(--space-3); margin-block-start: var(--space-3); }
+.project-preference-fields > p { margin: 0; }
+.project-preference-fields select { inline-size: 100%; }
+.project-preference-fields > .btn { justify-self: start; white-space: normal; }
+.projects-page .project-registration { max-width: none; }
+.project-registration > p { margin: 0; }
+.project-registration > fieldset:not([hidden]) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: var(--space-4);
+}
+.project-registration > fieldset > :is(label, .help-field) { align-self: end; }
+.project-registration-consent, .project-registration fieldset > p { grid-column: 1 / -1; }
+.project-registration fieldset > p { margin: 0; }
+.project-registration .project-registration-consent { align-items: flex-start; margin-block-start: var(--space-2); gap: var(--space-2); }
+.project-registration-consent input { flex: 0 0 auto; inline-size: auto; margin-block-start: .25em; }
+.projects-page .repository-import-form { max-width: none; }
+.repository-source-fields, .repository-auth-fields { display: contents; }
+.projects-page .repository-import-form > fieldset:not([hidden]) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--space-4) var(--space-section);
+}
+.projects-page :is(.repository-source-fields, .repository-auth-fields) { display: grid; gap: var(--space-4); min-inline-size: 0; }
+.projects-page :is(.repository-source-fields, .repository-auth-fields) > p { margin: 0; color: var(--text-muted); font-size: .875rem; }
+.projects-page .repository-import-form :is(.repository-import-consent, fieldset > .btn) { grid-column: 1 / -1; }
+.projects-page .repository-import-form fieldset > .btn { justify-self: start; }
+.projects-page .repository-import-form > fieldset :is(.help-field, label, p) { inline-size: 100%; }
+.projects-page .repository-import-form > p { margin: 0; }
+.projects-page .repository-import-form > fieldset > p { margin: 0; }
+.projects-page .repository-import-form label.check { align-items: flex-start; }
+.projects-page .repository-import-form label.check input { margin-block-start: .25em; }
+.projects-page .repository-import-form > .help-field { border-block-start: 1px solid var(--border); padding-block-start: var(--space-4); }
+.projects-page .repository-import-form > article { border-block-start: 1px solid var(--border); padding-block-start: var(--space-4); }
+@media (max-width: 720px) {
+  .project-registration > fieldset:not([hidden]), .projects-page .repository-import-form > fieldset:not([hidden]) { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 760px) {
   main > .page:not(.fill) { --page-inline-padding: var(--space-4); }
 }

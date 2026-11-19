@@ -96,6 +96,16 @@ and status filter. The tab refetches, throttled to one request per 5 s, on
 is stated instead of shown as empty; `—` marks a value that could not be read or
 has no finished run.
 
+## Project pages
+
+`#/projects` lists registered projects with name, ID, repository, pinned commit,
+execution preference and registration date. Search and environment filters combine.
+Server paths and environment preference forms expand within each row.
+Administrators use **Add project** to open `#/projects/new` and review an existing
+checkout, or choose **Import from URL** at `#/projects/import`. Both flows retain
+explicit repository-access confirmation. Registration and selecting a completed
+import return to Projects. Each row retains its Create task entry point.
+
 ## Connection pages
 
 `#/connections` lists installation connections. The MCP section supports
