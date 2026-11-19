@@ -43,10 +43,12 @@ for(const mode of ['required','automatic'] as const){
    await page.getByRole('button',{name:'Run all',exact:true}).click();
    await page.goto('/#/approvals');
    if(mode==='required'){
+    await page.getByRole('row').filter({hasText:id}).filter({hasText:'tool-free analysis'}).locator('.approval-request-link').click();
     const child=page.locator('.approval').filter({hasText:id}).filter({hasText:'tool-free analysis'});
     await expect(child).toBeVisible();
     await child.getByRole('button',{name:'Approve',exact:true}).click();
    }
+   await page.getByRole('row').filter({hasText:id}).filter({hasText:'filesystem.write'}).locator('.approval-request-link').click();
    const write=page.locator('.approval').filter({hasText:id}).filter({hasText:'filesystem.write'});
    await expect(write).toBeVisible();
    const content=await page.request.get('/api/v1/graphs/'+id+'/files/content?path=journey.txt',{headers});

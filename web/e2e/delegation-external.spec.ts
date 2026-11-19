@@ -19,6 +19,7 @@ for(const decision of ['approve','reject','cancel'] as const){
    expect((await page.request.post('/api/v1/executions/'+parent+'/cancel',{headers,data:{scope:'tree',confirm:true}})).ok()).toBeTruthy();
   }else{
    await page.getByRole('button',{name:/^Approvals/}).click();
+   await page.getByRole('row').filter({hasText:id}).locator('.approval-request-link').click();
    await page.locator('.approval').filter({hasText:id}).getByRole('button',{name:decision==='approve'?'Approve':'Reject',exact:true}).click();
   }
   await expect.poll(async()=>(await(await page.request.get('/api/v1/executions/'+parent,{headers})).json()).status).toBe(decision==='cancel'?'cancelled':'succeeded');

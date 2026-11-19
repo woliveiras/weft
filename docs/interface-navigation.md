@@ -7,19 +7,17 @@ introduce roles or change API permissions.
 | --- | --- | --- |
 | Work | Activity (`#/activity`) | What is running, what needs a person and recent executions across all workflows, and per agent/workflow health; see below |
 | Work | Tasks (`#/tasks`) | Find saved requests in the task history table. Search by title, ID or issue and filter the current page by status or workflow. Open a row's task link for requirements, execution and progress. See [task workflows](task-workflows.md). |
-| Work | Projects (`#/projects`) | Registered repositories and task worktrees; see [registered projects](task-workflows.md#registered-project-worktrees-2026-10-19). |
 | Work | Approvals | Existing approval and application-review flows, including pending count |
+| Configuration | Projects (`#/projects`) | Registered repositories and task worktrees; see [registered projects](task-workflows.md#registered-project-worktrees-2026-10-19). |
 | Configuration | Workflows (`#/graphs`) | Existing graph editor, activity, files, messages and advanced YAML |
 | Configuration | Connections (`#/connections`) | Installation MCP connections, OAuth setup, discovered tools and call history |
 | Configuration | Models (`#/models`) | Model providers, credentials and explicit connection/inference tests |
 | Configuration | Skills & instructions (`#/skills`) | Existing installation instruction management |
 | Configuration | Administration (`#/administration/health`) | Installation health and policy sections |
 
-Configuration can be collapsed with its button (Enter or Space with keyboard
-focus). Navigation to another destination reveals the group; reload/direct links
-start expanded so the active destination is visible. Collapse is session UI state,
-not installation configuration. On narrow screens navigation wraps and scrolls
-within a bounded area. Existing graph URLs and editor drafts retain their behavior.
+Configuration is always visible, with a fixed heading and a divider after Work.
+On narrow screens navigation wraps and scrolls within a bounded area. Existing
+graph URLs and editor drafts retain their behavior.
 The graph list still uses its existing Graphs heading and graph actions.
 
 Administration has independent hash routes for `health`, `network`, `resources`,
@@ -310,3 +308,21 @@ Use the main navigation directly: Graphs, Connections, Models, Administration,
 Approvals, and Skills & steering. Contextual help remains available in each screen.
 Existing browser-local guide progress is ignored; no stored application data,
 graphs, drafts, connections, permissions, or execution history is deleted.
+
+## Approval inbox
+
+Approvals uses a single table for approval requests and application reviews,
+ordered by request creation time descending. Search matches title, ID, workflow,
+agent or reviewer; status, request type and workflow filters combine. Pending is
+the initial status. The API returns up to 200 approval requests per selected
+status (200 total for All statuses); table pages contain 20 records. Application
+reviews are included when available to the signed-in operator. This is a recent
+scope, not an exhaustive archive. Missing historical dates are identified and
+sort last.
+
+Select a request title to open its details in a keyboard-accessible dialog.
+Closing it makes no decision and returns focus to the title. Approval, rejection,
+question answers and application preview/review actions retain their existing
+APIs and authorization. Decision failures preserve the entered feedback for retry.
+Environment decisions require an administrator. The list keeps healthy sources
+usable when another source fails, with an explicit refresh action.

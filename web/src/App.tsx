@@ -241,7 +241,7 @@ function Shell() {
           {route.view === 'agents' && <AgentsPage key={routeHash(route)} id={route.agentId} create={route.create}
             workflows={workflows} workflowsLoading={graphs.loading} workflowsError={graphs.error} onReloadWorkflows={graphs.reload} canEdit={info.data?.identity?.role==='admin'}/>}
           {route.view === 'skills' && <SkillsView role={info.data?.identity?.role} onChanged={() => void graphs.reload()} />}
-          {route.view === 'approvals' && <ApprovalsView onChanged={() => void approvals.reload()} />}
+          {route.view === 'approvals' && <ApprovalsView role={info.data?.identity?.role} onChanged={() => void approvals.reload()} />}
           {route.view === 'connections' && <ConnectionsPage info={info.data} connectionID={route.connectionID} connectionTab={route.connectionTab} create={route.create} sourceControlCreate={route.sourceControlCreate} history={route.history} connectQuery={route.connectQuery} oauthQuery={route.oauthQuery} />}
           {route.view === 'models' && <ModelsPage info={info.data} />}
           {route.view === 'administration' && <AdministrationPage info={info.data} infoError={info.error} section={route.section} />}

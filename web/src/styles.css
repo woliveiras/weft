@@ -2070,8 +2070,6 @@ button, summary, a { touch-action: manipulation; }
 .navigation-group + .navigation-group { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 8px; }
 .navigation-label { font-size: 12px; font-weight: 600; color: var(--text-muted); margin: 0; padding: 8px 14px; }
 .navigation-hint { font-size: 12px; color: var(--text-muted); margin: 0 14px 8px; }
-.primary-navigation .navigation-disclosure { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: transparent; color: var(--text); border: 1px solid transparent; border-radius: var(--radius-sm); font: inherit; font-weight: 600; cursor: pointer; }
-.primary-navigation .navigation-disclosure:hover { background: var(--surface-hover); }
 .primary-navigation button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 @media (max-width: 800px) {
   .primary-navigation { flex-direction: column; max-height: 38vh; overflow: auto; }
@@ -2177,3 +2175,26 @@ button, summary, a { touch-action: manipulation; }
   .graph-settings > nav a { flex: none; }
   .graph-settings .parameter-row { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Approval inbox: scan requests before opening decision details. */
+.approvals-page { max-width: none; }
+.approval-filters { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-4); }
+.approval-filters label { display: grid; gap: var(--space-2); flex: 1 1 170px; min-width: 0; }
+.approval-filters label:first-child { flex: 2 1 260px; }
+.approval-filters input, .approval-filters select { width: 100%; min-width: 0; }
+.approval-scope { margin-block: var(--space-4) var(--space-2); }
+.approvals-table th, .approvals-table td { vertical-align: top; }
+.approvals-table td:first-child { min-width: 260px; max-width: 480px; overflow-wrap: anywhere; }
+.approvals-table code { overflow-wrap: anywhere; }
+.approval-request-link { text-align: left; white-space: normal; padding: 0; line-height: 1.5; }
+.approvals-pagination { margin-top: var(--space-4); align-items: center; }
+dialog.approval-dialog { margin: auto; padding: 0; color: var(--text); width: min(900px, 94vw); }
+dialog.approval-dialog:not([open]) { display: none; }
+dialog.approval-dialog::backdrop { background: var(--overlay); }
+.approval-dialog .modal-head { gap: var(--space-4); }
+.approval-dialog .modal-head h2 { overflow-wrap: anywhere; }
+.approval-dialog .modal-head .btn { flex-shrink: 0; }
+.approval-dialog .modal-body { min-height: 0; }
+.approval-dialog .approval { margin: 0; }
+.approval-dialog .form { max-width: none; }
+.approval-dialog pre { max-height: 35vh; overflow: auto; }

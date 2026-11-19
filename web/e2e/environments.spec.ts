@@ -31,7 +31,7 @@ async function executed(page: Page, id: string) {
 async function propose(page: Page, id: string, resume = false) {
   await settings(page, id);
   await page.getByRole('button', { name: 'Discover environment', exact: true }).click();
-  if (resume) await page.getByLabel('Start graph when the approved environment is ready').check();
+  if (resume) await page.getByRole('checkbox', { name: 'Start graph when the approved environment is ready', exact: true }).check();
   await page.getByRole('button', { name: 'Analyze repository', exact: true }).click();
 }
 
@@ -70,6 +70,7 @@ test('proposal waits for developer approval, then builds and resumes execution',
   expect((await blockedStart).status()).toBe(422);
   await expect(page.getByRole('alert').first()).toBeVisible();
   await page.goto('/#/approvals');
+  await page.getByRole('row').filter({ hasText: id }).locator('.approval-request-link').click();
   await page.locator('article.approval').filter({ hasText: id }).getByRole('button', { name: 'Approve', exact: true }).click();
   await expect.poll(async () => (await read(page, id, 'environment')).state).toBe('ready');
   await executed(page, id);
@@ -80,6 +81,7 @@ test('a budget-blocked automatic start leaves the approved environment ready', a
   await propose(page, id, true);
   await expect(page.getByText('Environment proposal: awaiting_approval')).toBeVisible();
   await page.goto('/#/approvals');
+  await page.getByRole('row').filter({ hasText: id }).locator('.approval-request-link').click();
   await page.locator('article.approval').filter({ hasText: id }).getByRole('button', { name: 'Approve', exact: true }).click();
   await expect.poll(async () => (await read(page, id, 'environment/proposal')).startBlocked)
     .toEqual({ scope: 'run', id });
@@ -104,6 +106,7 @@ test('rejecting a proposal prevents build and execution', async ({ page }) => {
   await propose(page, id, true);
   await expect(page.getByText('Environment proposal: awaiting_approval')).toBeVisible();
   await page.goto('/#/approvals');
+  await page.getByRole('row').filter({ hasText: id }).locator('.approval-request-link').click();
   await page.locator('article.approval').filter({ hasText: id }).getByRole('button', { name: 'Reject', exact: true }).click();
   await expect.poll(async () => (await read(page, id, 'environment/proposal')).state).toBe('rejected');
   await settings(page, id);

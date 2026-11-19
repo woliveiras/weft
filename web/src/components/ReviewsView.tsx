@@ -19,7 +19,7 @@ export function ReviewsView() {
   </section>;
 }
 
-export function ReviewCard({ review: r, reload }: { review: HumanReview; reload: () => void }) {
+export function ReviewCard({ review: r, reload, canDecide = true }: { review: HumanReview; reload: () => void; canDecide?: boolean }) {
   const [method, setMethod] = useState('managed');
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
@@ -84,19 +84,19 @@ export function ReviewCard({ review: r, reload }: { review: HumanReview; reload:
       <p className="small">Preview expires {fmtDateTime(r.sessionExpires)}</p>
       <code>{r.url}</code>
       <div className="btn-row">
-        <Btn disabled={busy || !ready} onClick={() => void run(openPreview)}>Open preview</Btn>
-        <Btn disabled={busy || !ready} onClick={() => void run(async () => {
+        <Btn disabled={!canDecide || busy || !ready} onClick={() => void run(openPreview)}>Open preview</Btn>
+        <Btn disabled={!canDecide || busy || !ready} onClick={() => void run(async () => {
           const result = await api.previewCredential(r.id, false);
           setCredential(result.token);
         })}>Generate HTTP client credential</Btn>
-        <Btn disabled={busy || !ready} onClick={() => void run(() => api.reviewAction(r.id, 'renew'))}>Extend preview</Btn>
-        <Btn disabled={busy || !pending || !['failed', 'expired', 'stopped'].includes(r.session)}
+        <Btn disabled={!canDecide || busy || !ready} onClick={() => void run(() => api.reviewAction(r.id, 'renew'))}>Extend preview</Btn>
+        <Btn disabled={!canDecide || busy || !pending || !['failed', 'expired', 'stopped'].includes(r.session)}
           onClick={() => void run(() => api.reviewAction(r.id, 'restart'))}>Restart preview</Btn>
-        <Btn disabled={busy || !pending} onClick={() => void run(async () => {
+        <Btn disabled={!canDecide || busy || !pending} onClick={() => void run(async () => {
           await api.reviewAction(r.id, 'revoke-access');
           setCredential(undefined);
         })}>Revoke preview access</Btn>
-        <Btn disabled={busy} onClick={() => void run(async () => {
+        <Btn disabled={!canDecide || busy} onClick={() => void run(async () => {
           setLogs((await api.previewLogs(r.id)).logs);
         })}>Application logs</Btn>
       </div>
@@ -109,7 +109,7 @@ export function ReviewCard({ review: r, reload }: { review: HumanReview; reload:
       {logs !== undefined && <details open><summary>Application logs</summary><pre>{logs}</pre></details>}
     </>}
     {r.error && <p role="alert">{r.error}</p>}
-    {pending ? <div className="form">
+    {pending && !canDecide ? <p>Waiting for an authorized operator to decide.</p> : pending ? <div className="form">
       <label>Review method<select value={method} onChange={e => setMethod(e.target.value)}>
         <option value="managed">Tested the Weft preview</option>
         <option value="external">Tested an external environment</option>
@@ -118,7 +118,7 @@ export function ReviewCard({ review: r, reload }: { review: HumanReview; reload:
       </select></label>
       <label>Review feedback<textarea value={comment} onChange={e => setComment(e.target.value)}/></label>
       <div className="btn-row">
-        {(['approved', 'changes_requested', 'rejected'] as const).map(state => <Btn key={state} disabled={busy}
+        {(['approved', 'changes_requested', 'rejected'] as const).map(state => <Btn key={state} disabled={!canDecide || busy}
           onClick={() => void run(() => api.reviewAction(r.id, 'decide', { state, method, comment, revision: r.revision }))}>
           {state === 'approved' ? 'Approve candidate' : state === 'changes_requested' ? 'Request changes' : 'Reject'}
         </Btn>)}

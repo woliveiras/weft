@@ -28,5 +28,6 @@ it('gives each navigation destination an icon without changing accessible names'
     expect(button.classList.contains('nav-item')).toBe(true);
   }
   expect(screen.getByRole('button', {name: 'Models'}).getAttribute('aria-current')).toBe('page');
-  expect(screen.getByRole('button', {name: 'Configuration'}).querySelector('svg')).not.toBeNull();
+  expect(screen.getByRole('heading', {name: 'Configuration'})).toBeTruthy();
+  expect(screen.queryByRole('button', {name: 'Configuration'})).toBeNull();
 });

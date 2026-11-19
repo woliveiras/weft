@@ -15,3 +15,37 @@ These results were recorded at the time of the run. The documentation migration 
   installation policy help without gaining write access. The local console
   also confirmed the Runtime popup fits the viewport and returns focus to its
   help control when closed.
+
+## Approval inbox and fixed Configuration — 2026-11-19
+
+- `make test-web`: 494 tests passed across 93 files, with TypeScript checking.
+- Docker Chromium runner: 18 scenarios passed across `approvals.spec.ts`,
+  `work-navigation.spec.ts`, `environments.spec.ts`, `delegation.spec.ts`,
+  `delegation-external.spec.ts` and `release-one-journey.spec.ts`.
+- Inbox coverage includes combined filters, request-time descending order,
+  dialog dismissal with Escape and focus return, persisted decision feedback,
+  read-only viewer inspection and API rejection of viewer decisions, narrow
+  viewport containment, existing environment approval/rejection and native and
+  external delegation approval flows. Component tests cover pagination,
+  missing historical dates, invalid answers, decision conflicts and independent
+  source failure/recovery.
+- `docker compose up -d --build --no-deps weftd` completed using the standard
+  Dockerfile. The service reported healthy and `/healthz` returned `ok`.
+- Read-only local browser inspection confirmed a fixed Configuration heading
+  and divider, the approved history with 48 records split into three pages,
+  the latest request first and aligned filter controls. No live request was
+  approved or rejected during that inspection.
+- These checks do not claim assistive-technology or cross-browser conformance.
+
+- Follow-up navigation refinement: Projects moved from Work to Configuration;
+  the 18 Chromium scenarios passed again, including section membership, route
+  navigation and the active Projects marker.
+- Additional real-preview browser checks could not reach the review gate:
+  `fixture-preview` stayed in `starting` with no execution or review after
+  startup. Read-only inspection found the installation's two code-review
+  containers using 1 CPU and 1 GiB each on the shared dedicated daemon; the
+  disposable preview fixture admits at most two containers, 1 CPU and 512 MiB.
+  This is consistent with capacity contention before execution. Live workflow
+  containers were left running. Real-preview lifecycle coverage remains pending
+  in an environment with available capacity; the regular 18 browser scenarios
+  above use a disposable backend and do not claim real preview verification.

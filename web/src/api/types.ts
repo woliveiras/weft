@@ -876,6 +876,8 @@ export interface GitInspection {
 }
 
 export interface HumanReview {
+ createdAt?: string;
+ decidedAt?: string;
  id: string;
  graphId: string;
  nodeId: string;

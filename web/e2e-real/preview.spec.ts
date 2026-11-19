@@ -3,7 +3,9 @@ const headers={Authorization:'Bearer e2e-admin-token'};
 test('human reviews React and HTTP in a real sandbox before the agent continues',async({page,context})=>{
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
  const start=await page.request.post('/api/v1/graphs/fixture-preview/start',{headers});expect(start.ok()).toBeTruthy();
- await page.goto('/#/approvals');const card=page.locator('article').filter({has:page.getByText('Review sandbox React and HTTP',{exact:true})});
+ await page.goto('/#/approvals');
+ await page.getByRole('button',{name:'Review sandbox React and HTTP',exact:true}).click();
+ const card=page.locator('article').filter({has:page.getByText('Review sandbox React and HTTP',{exact:true})});
  await expect(card).toBeVisible();await expect(card.getByRole('button',{name:'Open preview',exact:true})).toBeEnabled({timeout:60000});
  const before=await page.request.get('/api/v1/graphs/fixture-preview/executions',{headers});expect((await before.json()).length).toBe(1);
  const popup=context.waitForEvent('page');await card.getByRole('button',{name:'Open preview',exact:true}).click();const preview=await popup;
@@ -29,12 +31,15 @@ test('requesting changes returns feedback and requires a new human decision', as
  }).toBe('stopped');
  expect((await page.request.post('/api/v1/graphs/fixture-preview/start', { headers })).ok()).toBeTruthy();
  await page.goto('/#/approvals');
+ await page.getByRole('button',{name:'Review sandbox React and HTTP',exact:true}).click();
  const pending = page.locator('article').filter({ has: page.getByRole('button', { name: 'Approve candidate', exact: true }) });
  await expect(pending).toHaveCount(1);
  await expect(pending.getByRole('button', { name: 'Open preview', exact: true })).toBeEnabled({ timeout: 60000 });
  await pending.getByLabel('Review feedback').fill('Please submit a new candidate for another review.');
  await pending.getByRole('button', { name: 'Request changes', exact: true }).click();
  await expect(page.locator('article').filter({ hasText: 'changes_requested' })).toHaveCount(1);
+ await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+ await page.getByRole('button', { name: 'Review sandbox React and HTTP', exact: true }).click();
  await expect(pending).toHaveCount(1, { timeout: 60000 });
  await expect(pending.getByRole('button', { name: 'Open preview', exact: true })).toBeEnabled({ timeout: 60000 });
  await pending.getByLabel('Review method').selectOption('without_execution');

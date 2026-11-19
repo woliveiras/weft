@@ -1,0 +1,62 @@
+import { expect, test, type Page } from '@playwright/test';
+const headers = { Authorization: 'Bearer e2e-admin-token' };
+async function pending(page: Page, id: string) {
+  const graph = { metadata: { id, name: id }, spec: { nodes: [{ id: 'echo', runtime: { kind: 'echo' }, prompt: 'Approval inbox fixture', loop: { mode: 'once' }, approval: { beforeTurn: true } }] } };
+  expect((await page.request.post('/api/v1/graphs', { headers, data: graph })).status()).toBe(201);
+  expect((await page.request.post(`/api/v1/graphs/${id}/start`, { headers })).ok()).toBe(true);
+  await expect.poll(async () => (await (await page.request.get(`/api/v1/approvals?graph=${id}&status=pending`, { headers })).json()).length).toBe(1);
+}
+test('finds newest requests, reviews details without deciding, and records a real decision', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await pending(page, 'inbox-older');
+  await pending(page, 'inbox-newer');
+  await page.goto('/#/approvals');
+  const table = page.getByRole('table', { name: 'Approval history' });
+  await expect(table.getByRole('row').nth(1)).toContainText('inbox-newer');
+  await expect(page.getByRole('columnheader', { name: /Requested/ })).toHaveAttribute('aria-sort', 'descending');
+  await page.getByLabel('Search requests', { exact: true }).fill('inbox-');
+  await page.getByRole('combobox', { name: 'Request type', exact: true }).selectOption('turn');
+  await page.getByRole('combobox', { name: 'Workflow', exact: true }).selectOption('inbox-newer');
+  await expect(table.getByRole('row')).toHaveCount(2);
+  const title = table.locator('.approval-request-link');
+  await title.click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('button', { name: 'Approve', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(title).toBeFocused();
+  const before = await (await page.request.get('/api/v1/approvals?graph=inbox-newer', { headers })).json();
+  expect(before[0].status).toBe('pending');
+  await title.click();
+  await dialog.getByLabel('comment', { exact: true }).fill('Verified turn scope');
+  await dialog.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByText('No requests match these filters.')).toBeVisible();
+  await page.getByRole('combobox', { name: 'Approval status', exact: true }).selectOption('approved');
+  await expect(table.getByRole('row')).toHaveCount(2);
+  await expect(table).toContainText('admin');
+  const saved = await (await page.request.get('/api/v1/approvals?graph=inbox-newer', { headers })).json();
+  expect(saved[0].status).toBe('approved');
+  expect(saved[0].comment).toBe('Verified turn scope');
+  expect(saved[0].decidedBy).toBe('e2e-admin');
+  await title.click();
+  await expect(dialog.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(page.getByRole('region', { name: 'Approval history' })).toHaveAttribute('tabindex', '0');
+});
+
+test('viewer can inspect requests but cannot decide or load application reviews', async ({ page }) => {
+  await pending(page, 'inbox-viewer');
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-viewer-token'));
+  await page.goto('/#/approvals');
+  await page.getByLabel('Search requests', { exact: true }).fill('inbox-viewer');
+  await page.getByRole('table').locator('.approval-request-link').click();
+  await expect(page.getByRole('dialog')).toContainText('Waiting for an authorized operator');
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Reject', exact: true })).toHaveCount(0);
+  const requests = await (await page.request.get('/api/v1/approvals?graph=inbox-viewer', { headers })).json();
+  const denied = await page.request.post(`/api/v1/approvals/${requests[0].id}/approve`, { headers: { Authorization: 'Bearer e2e-viewer-token' }, data: {} });
+  expect(denied.status()).toBe(403);
+});

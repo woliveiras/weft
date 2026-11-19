@@ -1,16 +1,20 @@
 import {test, expect} from '@playwright/test';
 
-test('groups navigation, supports keyboard disclosure and preserves legacy links', async ({page}) => {
+test('keeps configuration visible and preserves legacy links', async ({page}) => {
   await page.addInitScript(() => localStorage.setItem('weftToken','e2e-admin-token'));
   await page.goto('/#/integrations');
   const nav = page.getByRole('navigation',{name:'Main navigation'});
   await expect(nav.getByRole('button',{name:'Connections',exact:true})).toHaveAttribute('aria-current','page');
   await expect(nav.getByRole('button',{name:'Tasks',exact:true})).toBeEnabled();
-  await expect(nav.getByRole('button',{name:'Projects',exact:true})).toBeEnabled();
-  const toggle = nav.getByRole('button',{name:'Configuration',exact:true});
-  await toggle.focus(); await page.keyboard.press('Enter');
-  await expect(nav.getByRole('button',{name:'Connections',exact:true})).toBeHidden();
-  await page.keyboard.press('Space');
+  const config = nav.getByRole('region', {name:'Configuration',exact:true});
+  await expect(config.getByRole('button',{name:'Projects',exact:true})).toBeEnabled();
+  await expect(nav.getByRole('region', {name:'Work',exact:true}).getByRole('button',{name:'Projects',exact:true})).toHaveCount(0);
+  await config.getByRole('button',{name:'Projects',exact:true}).click();
+  await expect(page).toHaveURL(/#\/projects$/);
+  await expect(config.getByRole('button',{name:'Projects',exact:true})).toHaveAttribute('aria-current','page');
+  await nav.getByRole('button',{name:'Connections',exact:true}).click();
+  await expect(nav.getByRole('heading',{name:'Configuration',exact:true})).toBeVisible();
+  await expect(nav.getByRole('button',{name:'Configuration',exact:true})).toHaveCount(0);
   await expect(nav.getByRole('button',{name:'Connections',exact:true})).toBeVisible();
   await nav.getByRole('button',{name:'Workflows',exact:true}).click();
   await expect(page).toHaveURL(/#\/graphs$/);

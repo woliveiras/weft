@@ -57,6 +57,8 @@ Common forms and controls remain usable at narrow widths and in the supported th
 - 2026-10-18. The maintainer withdrew global resumable onboarding following reported layout breakage. Contextual help and direct navigation became the first-use path. Browser-local progress was left in place and ignored.
 - 2026-10-19. Phase A grouped daily work and configuration and retained legacy deep links.
 
+- 2026-11-19. Maintainer refinement: Projects belongs to Configuration. Configuration remains visible with its divider and fixed heading; it has no collapse control. The approval inbox uses a newest-request-first table, combined filters and 20-row pages. Details and existing decision actions open on demand without changing authorization or approval contracts.
+
 ## Reconciliation
 
 - [interface-navigation.md](../../../docs/interface-navigation.md), [getting-started.md](../../../docs/getting-started.md), [brand/brand-guidelines.md](../../../docs/brand/brand-guidelines.md).

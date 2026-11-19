@@ -20,6 +20,7 @@ for(const decision of ['approve','reject'] as const) {
   expect(pending.status).toBe('awaiting_approval');expect(pending.summary).toBeUndefined();
   expect((await page.request.post('/api/v1/approvals/'+approval!.id+'/approve',{headers:viewer,data:{}})).status()).toBe(403);
   await page.getByRole('button',{name:/^Approvals/}).click();
+  await page.getByRole('row').filter({hasText:id}).locator('.approval-request-link').click();
   const card=page.locator('.approval').filter({hasText:id});
   await expect(card).toContainText('tool-free analysis');
   await expect(card).toContainText('"effectiveTools": []');
@@ -56,10 +57,12 @@ test('profile-selected inherited capabilities retain per-call approval and child
  expect((await page.request.post('/api/v1/graphs',{headers:admin,data:{metadata:{id,name:id},spec:{nodes:[{id:'parent',runtime:{kind:'native'},prompt:'delegation-fixture inherited-profile',model:{provider:'e2e',name:'fixture'},loop:{mode:'once'},tools:grants}]}}})).status()).toBe(201);
  await page.goto('/#/g/'+id+'/canvas');await page.getByRole('button',{name:'Run all',exact:true}).click();
  await page.getByRole('button',{name:/^Approvals/}).click();
+ await page.getByRole('row').filter({hasText:id}).locator('.approval-request-link').click();
  const card=page.locator('.approval').filter({hasText:id});
  await expect(card).toContainText('inherited capabilities');
  await expect(card).toContainText('"requiresApproval": true');
  await card.getByRole('button',{name:'Approve',exact:true}).click();
+ await page.getByRole('row').filter({hasText:id}).filter({hasText:'filesystem.list'}).locator('.approval-request-link').click();
  const toolCard=page.locator('.approval').filter({hasText:id}).filter({hasText:'filesystem.list'});
  await expect(toolCard.getByRole('button',{name:'Approve',exact:true})).toBeVisible();
  await toolCard.getByRole('button',{name:'Approve',exact:true}).click();
