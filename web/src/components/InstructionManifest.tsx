@@ -7,7 +7,7 @@ const policyLabels = {
   inherited: "Inherited from graph",
 };
 
-function Provenance({ entry }: { entry: InstructionEntry }) {
+function Provenance({ entry, compact }: { entry: InstructionEntry; compact?:boolean }) {
   return (
     <article>
       <h4>{entry.order !== undefined && `${entry.order}. `}{entry.scope} · {entry.source}</h4>
@@ -20,12 +20,12 @@ function Provenance({ entry }: { entry: InstructionEntry }) {
       {entry.canonical && entry.canonical !== entry.source && <p>Canonical path <code>{entry.canonical}</code></p>}
       {entry.lockStatus && <p>Lock {entry.lockStatus}{entry.declaredVersion && <> · <code>{entry.declaredVersion}</code></>}</p>}
       {entry.sha256 && <p>SHA-256 <code>{entry.sha256}</code></p>}
-      {entry.body && <pre style={{ whiteSpace: "pre-wrap" }}>{entry.body}</pre>}
+      {entry.body && (compact?<details><summary>Instruction content</summary><pre style={{whiteSpace:"pre-wrap"}}>{entry.body}</pre></details>:<pre style={{ whiteSpace: "pre-wrap" }}>{entry.body}</pre>)}
     </article>
   );
 }
 
-export function InstructionManifest({ snapshot }: { snapshot: InstructionSnapshot }) {
+export function InstructionManifest({ snapshot, compact }: { snapshot: InstructionSnapshot; compact?:boolean }) {
   return (
     <section aria-label="Instruction manifest">
       <h3>{snapshot.executionId ? `Execution ${snapshot.executionId}` : "Current saved configuration (not an execution)"}</h3>
@@ -33,11 +33,11 @@ export function InstructionManifest({ snapshot }: { snapshot: InstructionSnapsho
       {!!snapshot.blockedSources?.length && <p>Blocked sources · {snapshot.blockedSources.join(", ")}</p>}
       <p>Remaining conservative guidance budget · {snapshot.budget} bytes</p>
       {snapshot.entries.length === 0 && <p>No guidance entries recorded.</p>}
-      {snapshot.entries.map((entry, index) => <Provenance key={entry.record ?? index} entry={entry}/>)}
+      {snapshot.entries.map((entry, index) => <Provenance key={entry.record ?? index} entry={entry} compact={compact}/>)}
       {!!snapshot.reads?.length && (
         <section aria-label="On-demand reads">
           <h3>On-demand reads</h3>
-          {snapshot.reads.map((entry, index) => <Provenance key={entry.record ?? index} entry={entry}/>)}
+          {snapshot.reads.map((entry, index) => <Provenance key={entry.record ?? index} entry={entry} compact={compact}/>)}
         </section>
       )}
     </section>

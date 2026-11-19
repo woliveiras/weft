@@ -24,17 +24,20 @@ test("admin creates and associates guidance, runs an agent and inspects its immu
   });
   expect(response.ok()).toBeTruthy();
   await page.goto("/#/skills");
-  await page.getByLabel("Skill ID").fill("browser-skill");
+  await page.getByRole("link", {name:"New skill", exact:true}).click();
+  await page.getByLabel("Skill ID", {exact:true}).fill("browser-skill");
   await page.getByLabel("Title", { exact: true }).fill("Browser skill");
-  await page.getByLabel("Markdown body").fill("Respect project conventions.");
-  await page.getByRole("button", { name: "Save skill", exact: true }).click();
-  await expect(page.getByLabel("Skill ID")).toBeDisabled();
+  await page.getByLabel("Markdown body", {exact:true}).fill("Respect project conventions.");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByLabel("Skill ID", {exact:true})).toBeDisabled();
+  await page.getByRole("link",{name:"Back to skills",exact:true}).click();
+  await page.getByRole("link",{name:"Workflow associations",exact:true}).click();
   await page
-    .getByLabel("Graph", { exact: true })
+    .getByLabel("Workflow", { exact: true })
     .selectOption("instruction-browser");
   await page.getByLabel("Browser skill (browser-skill)").check();
   await page
-    .getByLabel("Authorize project steering from this graph workspace")
+    .getByLabel("Authorize project steering from this graph workspace", {exact:true})
     .check();
   const saved = page.waitForResponse(
     (r) =>
@@ -43,6 +46,7 @@ test("admin creates and associates guidance, runs an agent and inspects its immu
   );
   await page.getByRole("button", { name: "Save associations" }).click();
   expect((await saved).ok()).toBeTruthy();
+  await page.getByRole("link",{name:"Inspect instructions",exact:true}).click();
   await page
     .getByRole("button", { name: "Inspect saved instructions" })
     .click();
@@ -76,11 +80,12 @@ test("admin creates and associates guidance, runs an agent and inspects its immu
   await expect(page.getByLabel("Instruction manifest")).toContainText(
     "Perform the original task",
   );
-  await page.getByLabel("Markdown body").fill("Changed after execution");
-  await page.getByRole("button", { name: "Save skill", exact: true }).click();
-  await expect(
-    page.getByRole("option", { name: /Browser skill · v2/ }),
-  ).toBeAttached();
+  await page.goto("/#/skills/s/browser-skill/content");
+  await page.getByLabel("Markdown body", {exact:true}).fill("Changed after execution");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Skill saved as revision 2.");
+  await page.goto("/#/skills/inspect?workflow=instruction-browser&agent=writer");
+  await page.getByRole("button", {name:"Load executions"}).click();
   await page.getByRole("button", { name: /Inspect writer ·/ }).click();
   await expect(page.getByLabel("Instruction manifest")).toContainText(
     "Respect project conventions.",
@@ -118,12 +123,13 @@ test("Activity shows historical progressive guidance to a viewer", async ({ page
   });
   expect(graph.ok()).toBeTruthy();
   await page.addInitScript(() => localStorage.setItem("weftToken", "e2e-admin-token"));
-  await page.goto("/#/skills");
-  await page.getByLabel("Graph", { exact: true }).selectOption(id);
-  await page.getByLabel("Discover repository instructions and skills").check();
+  await page.goto("/#/skills/associations");
+  await page.getByLabel("Workflow", { exact: true }).selectOption(id);
+  await page.getByLabel("Discover repository instructions and skills", {exact:true}).check();
   const saved = page.waitForResponse((r) => r.request().method() === "PUT" && r.url().endsWith(`/graphs/${id}`));
   await page.getByRole("button", { name: "Save associations" }).click();
   expect((await saved).ok()).toBeTruthy();
+  await page.getByRole("link", {name:"Inspect instructions",exact:true}).click();
   await page.getByRole("button", { name: "Inspect saved instructions" }).click();
   const preview = page.getByLabel("Instruction manifest");
   await expect(preview).toContainText("Inherited from graph");
@@ -158,4 +164,89 @@ test("Activity shows historical progressive guidance to a viewer", async ({ page
   await expect(manifest).not.toContainText("Browser console body.");
   await viewerPage.reload();
   await expect(viewerPage.getByLabel("On-demand reads")).toContainText("reference · confirmed");
+});
+
+test('catalogue filters and full-page editing preserve drafts, conflicts and read-only roles',async({page})=>{
+  const headers={Authorization:'Bearer e2e-admin-token'};
+  await page.addInitScript(()=>{if(!localStorage.getItem('weftToken'))localStorage.setItem('weftToken','e2e-admin-token');});
+  for(let i=0;i<21;i++) {
+    expect((await page.request.post('/api/v1/skills',{headers,data:{id:`catalogue-${i}`,title:`Catalogue skill ${i}`,description:'Reusable review guidance',body:'# Review\n**Security** first.\n- Inspect inputs',enabled:i!==0}})).ok()).toBe(true);
+  }
+  expect((await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id:'skill-usage',name:'Skill usage'},spec:{instructions:{skillIds:['catalogue-20']},nodes:[{id:'reviewer',name:'Reviewer',runtime:{kind:'echo'}}]}}})).ok()).toBe(true);
+  await page.goto('/#/skills');
+  await page.getByLabel('Search skills').fill('Catalogue skill');
+  await page.getByRole('combobox',{name:'Origin',exact:true}).selectOption('custom');
+  const table=page.getByRole('table');await expect(table.getByRole('row')).toHaveCount(21);
+  await expect(table.getByRole('row').nth(1)).toContainText('Catalogue skill 20');
+  await page.getByRole('button',{name:'Next',exact:true}).click();await expect(table.getByRole('row')).toHaveCount(2);
+  await page.getByLabel('Skill status').selectOption('disabled');await expect(table.getByRole('row')).toHaveCount(2);
+  await page.getByLabel('Skill status').selectOption('current');
+  await table.getByRole('link',{name:'Catalogue skill 20',exact:true}).click();
+  await expect(page).toHaveURL(/#\/skills\/s\/catalogue-20\/content$/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const metadata=await page.locator('.skill-metadata-fields').boundingBox();
+  const fullDescription=await page.getByLabel('Description',{exact:true}).boundingBox();
+  expect(Math.abs(metadata!.width-fullDescription!.width)).toBeLessThan(2);
+  await page.getByLabel('Title',{exact:true}).fill('Reviewed catalogue skill');
+  await page.getByRole('button',{name:'Preview',exact:true}).click();
+  await expect(page.getByLabel('Markdown preview').getByRole('heading',{name:'Review',exact:true})).toBeVisible();
+  await page.getByRole('link',{name:'Workflows',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Workflows using this skill'})).toContainText('Skill usage');
+  await page.getByRole('link',{name:'Content',exact:true}).click();
+  await expect(page.getByLabel('Title',{exact:true})).toHaveValue('Reviewed catalogue skill');
+  await expect(page.getByText('Unsaved changes',{exact:true})).toBeVisible();
+  await page.route('**/api/v1/skills/catalogue-20',route=>route.fulfill({status:409,json:{error:'Revision changed',code:'conflict'}}));
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await expect(page.getByRole('alert')).toHaveText('Revision changed');
+  await expect(page.getByLabel('Title',{exact:true})).toHaveValue('Reviewed catalogue skill');
+  await page.unroute('**/api/v1/skills/catalogue-20');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await expect(page.getByRole('status')).toHaveText('Skill saved as revision 2.');
+  await page.getByRole('link',{name:'History',exact:true}).click();
+  await expect(page.getByText(/Revision 2 · e2e-admin/)).toBeVisible();
+  await page.getByRole('link',{name:'Workflows',exact:true}).click();
+  await page.getByRole('link',{name:'Skill usage',exact:true}).click();
+  await expect(page).toHaveURL(/#\/skills\/associations\?workflow=skill-usage$/);
+  await expect(page.getByLabel('Workflow',{exact:true})).toHaveValue('skill-usage');
+  await page.getByText('Reviewer · Inherited skills',{exact:true}).click();
+  await expect(page.getByLabel('Inherit graph skills',{exact:true})).toBeChecked();
+  await page.setViewportSize({width:580,height:900});
+  await expect.poll(()=>page.locator('main').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+  await page.goto('/#/skills/s/catalogue-20/content');
+  const description=await page.getByLabel('Description',{exact:true}).boundingBox();const body=await page.getByLabel('Markdown body',{exact:true}).boundingBox();
+  expect(Math.abs(description!.x-body!.x)).toBeLessThan(2);expect(Math.abs(description!.width-body!.width)).toBeLessThan(2);
+  await page.evaluate(()=>localStorage.setItem('weftToken','e2e-viewer-token'));await page.reload();
+  await expect(page.getByLabel('Markdown body',{exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'Save',exact:true})).toHaveCount(0);
+  expect((await page.request.put('/api/v1/skills/catalogue-20',{headers:{Authorization:'Bearer e2e-viewer-token','If-Match':'2'},data:{id:'catalogue-20',title:'Forbidden',body:'Body',enabled:true}})).status()).toBe(403);
+});
+
+
+test('copies a built-in only after review and saving, retaining the original and associations',async({page})=>{
+  const headers={Authorization:'Bearer e2e-admin-token'};
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+  const original=await (await page.request.get('/api/v1/skills/weft-planner',{headers})).json();
+  await page.goto('/#/skills/s/weft-planner/content');
+  await expect(page.getByText('Built-in · Read-only',{exact:true})).toBeVisible();
+  await expect(page.getByLabel('Markdown body',{exact:true})).toBeDisabled();
+  await page.getByRole('link',{name:'Create editable copy',exact:true}).click();
+  await expect(page).toHaveURL(/#\/skills\/new\?copyFrom=weft-planner$/);
+  await expect(page.getByLabel('Skill ID',{exact:true})).toHaveValue('planner-copy');
+  await expect(page.getByLabel('Markdown body',{exact:true})).toHaveValue(original.body);
+  expect((await page.request.get('/api/v1/skills/planner-copy',{headers})).status()).toBe(404);
+  await page.getByLabel('Title',{exact:true}).fill('My editable planner');
+  await page.getByLabel('Markdown body',{exact:true}).fill('Custom planning instructions.');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await expect(page.getByRole('status')).toHaveText('Skill saved as revision 1.');
+  const copy=await (await page.request.get('/api/v1/skills/planner-copy',{headers})).json();
+  expect(copy).toMatchObject({id:'planner-copy',title:'My editable planner',body:'Custom planning instructions.',revision:1,global:false});
+  expect(copy.builtin).not.toBe(true);
+  expect(await (await page.request.get('/api/v1/skills/weft-planner',{headers})).json()).toEqual(original);
+  await page.getByRole('link',{name:'Workflows',exact:true}).click();
+  await expect(page.getByText('No saved workflow uses this skill.',{exact:true})).toBeVisible();
+  await page.goto('/#/skills/s/weft-planner/content');
+  await page.getByRole('link',{name:'Create editable copy',exact:true}).click();
+  await expect(page.getByLabel('Skill ID',{exact:true})).toHaveValue('planner-copy-2');
+  page.once('dialog',dialog=>dialog.accept());
+  await page.getByRole('link',{name:'Back to skills',exact:true}).click();
+  expect((await page.request.get('/api/v1/skills/planner-copy-2',{headers})).status()).toBe(404);
 });

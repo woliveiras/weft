@@ -1,3 +1,4 @@
+import {parseSkillsRoute,skillsHash,type SkillsRoute} from './components/skillsNavigation';
 import { parseModelsRoute, modelsHash, type ModelsRoute } from './components/modelsNavigation';
 import { AgentsPage } from './components/AgentsPage';
 import {ProjectsPage, type ProjectView} from './components/ProjectsPage';
@@ -43,7 +44,7 @@ type Route =
   | { view: 'connections'; connectionID?: string; connectionTab?: ConnectionTab; create?: boolean; sourceControlCreate?: boolean; history?: boolean; connectQuery?: string; oauthQuery?: string }
   | ({ view: 'models' } & ModelsRoute)
   | { view: 'administration'; section: AdministrationSection }
-  | { view: 'skills' }
+  | { view: 'skills'; skills?: SkillsRoute }
   | { view: 'graph'; id: string; tab: GraphTab; settingsSection?: SettingsSection; selectionKey?: string; agentId?: string; agentSection?: AgentSection; executionId?: string; runSection?: RunSection; correlationId?: string; connectionOrigin?: string };
 
 export function parseRoute(hash: string): Route {
@@ -59,7 +60,7 @@ export function parseRoute(hash: string): Route {
   };
   if (parts[0] === 'tasks') return {view:'tasks', ...(parts[1] === 'new' ? {create:true} : parts[1] ? {taskId:decodeURIComponent(parts[1])} : {})};
   if (parts[0] === 'approvals') return { view: 'approvals' };
-  if (parts[0] === 'skills') return { view: 'skills' };
+  if (parts[0] === 'skills') return { view: 'skills', skills:parseSkillsRoute(parts,qs) };
   if (parts[0] === 'models') return { view: 'models', ...parseModelsRoute(parts) };
   if (parts[0] === 'administration') return { view: 'administration', section: administrationSections.includes(parts[1] as AdministrationSection) ? parts[1] as AdministrationSection : 'health' };
   if (parts[0] === 'connections' && parts[1] === 'c') return { view: 'connections', connectionID: parts[2] ?? '', connectionTab: connectionTabs.includes(parts[3] as ConnectionTab) ? parts[3] as ConnectionTab : 'overview' };
@@ -95,7 +96,7 @@ export function routeHash(r: Route): string {
   if (r.view === 'projects') return r.projectView === 'register' ? '#/projects/new' : r.projectView === 'import' ? '#/projects/import' : '#/projects';
   if (r.view === 'tasks') return r.create ? '#/tasks/new' : r.taskId ? `#/tasks/${encodeURIComponent(r.taskId)}` : '#/tasks';
   if (r.view === 'approvals') return '#/approvals';
-  if (r.view === 'skills') return '#/skills';
+  if (r.view === 'skills') return skillsHash(r.skills);
   if (r.view === 'connections') {
     if (r.connectionID !== undefined) return `#/connections/c/${encodeURIComponent(r.connectionID)}/${r.connectionTab ?? 'overview'}`;
     if (r.sourceControlCreate) return scmCreateLink;
@@ -244,7 +245,7 @@ function Shell() {
           )}
           {route.view === 'agents' && <AgentsPage key={routeHash(route)} id={route.agentId} create={route.create}
             workflows={workflows} workflowsLoading={graphs.loading} workflowsError={graphs.error} onReloadWorkflows={graphs.reload} canEdit={info.data?.identity?.role==='admin'}/>}
-          {route.view === 'skills' && <SkillsView role={info.data?.identity?.role} onChanged={() => void graphs.reload()} />}
+          {route.view === 'skills' && <SkillsView role={info.data?.identity?.role} route={route.skills} onNavigate={skills=>go({view:'skills',skills})} onChanged={() => void graphs.reload()} />}
           {route.view === 'approvals' && <ApprovalsView role={info.data?.identity?.role} onChanged={() => void approvals.reload()} />}
           {route.view === 'connections' && <ConnectionsPage info={info.data} connectionID={route.connectionID} connectionTab={route.connectionTab} create={route.create} sourceControlCreate={route.sourceControlCreate} history={route.history} connectQuery={route.connectQuery} oauthQuery={route.oauthQuery} />}
           {route.view === 'models' && <ModelsPage info={info.data} modelSection={route.modelSection} providerEditor={route.providerEditor} />}

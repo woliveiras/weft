@@ -12,7 +12,8 @@ test('viewer opens contextual help with the keyboard and navigates remaining scr
  await expect(page.getByRole('button',{name:'Add provider',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'Skills & instructions',exact:true}).click();
  await expect(page.getByText('Guidance never grants tools, credentials or permissions.')).toBeVisible();
- await expect(page.getByRole('button',{name:'Save skill',exact:true})).toBeDisabled();
+ await expect(page.getByRole('link',{name:'New skill',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('table')).toBeVisible();
  await page.locator('summary').filter({hasText:'How instruction precedence works'}).click();
  await expect(page.getByText(/Later scopes take precedence/)).toBeVisible();
  await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:/^Approvals(?: \d+)?$/}).click();

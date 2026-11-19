@@ -69,6 +69,8 @@ Common forms and controls remain usable at narrow widths and in the supported th
 
 - 2026-11-19. Maintainer refinement to budget comprehension: current-month cards expose the UTC period, separate limit/spent/remaining facts and an inline Edit budget form. Monthly edits preserve recorded spend, existing manual-raise floors and administrator-only writes. Confirmation identifies the saved old/new recurring limit. Default per-task ceilings and inherited warning levels use a separate form/save; failure retains edits and cancellation restores focus without writing.
 
+- 2026-11-19. Maintainer refinement to Skills & instructions: a newest-updated-first catalogue with combined search/status/origin filters and 20-row pages replaces the combined form. Full-page details separate content, workflow usage and revision history. Draft content persists across detail tabs, Save creates a revision and deletion confirms history retention. Association settings expand agents on demand; inspection distinguishes saved configuration from immutable execution snapshots. Explicit loading/error/retry and read-only built-ins/viewers preserve instruction/grant contracts.
+
 ## Reconciliation
 
 - [interface-navigation.md](../../../docs/interface-navigation.md), [getting-started.md](../../../docs/getting-started.md), [brand/brand-guidelines.md](../../../docs/brand/brand-guidelines.md).

@@ -42,6 +42,10 @@ Workspace reads stay in the selected workspace, exclude unsupported entries and 
 
 - 2026-10-18. The plan records implemented managed Markdown, selected project steering and immutable manifests. A concurrent two-graph acceptance test checked isolated sources and file access.
 
+- 2026-11-19. Maintainer UI refinement: Skills & instructions exposes catalogue filters, full-page revisioned editing, workflow usage, on-demand history and separate association/inspection routes. Installation-default opt-in, explicit node narrowing, built-in immutability and saved execution snapshots retain their existing semantics. Markdown preview is a bounded inert presentation and does not execute HTML, scripts or images.
+
+- 2026-11-19. Built-in skill details explicitly identify read-only content and offer administrators Create editable copy. The action prepares an unsaved custom draft with an available, non-reserved ID; Save creates a first revision. Original content and associations remain unchanged; history and installation-default status are not copied.
+
 ## Reconciliation
 
 - [instructions.md](../../../docs/instructions.md), [product-contracts.md](../../../docs/product-contracts.md), [runtime-protocol.md](../../../docs/runtime-protocol.md).

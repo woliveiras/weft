@@ -366,3 +366,32 @@ Usage shows one breakdown at a time, ordered by cost descending, with text searc
 In **Models → Budgets**, **Current month budgets** shows the UTC calendar period and each used budget’s monthly limit, spent amount and remaining balance. **Edit budget** opens the matching recurring definition directly below its summary; unused definitions are listed with their configured limit. Changes affect this month and future months, preserving recorded spending. A manual monthly raise remains a floor for the current ledger, so its effective limit can differ from the recurring definition. Cancelling performs no write; errors retain input, and success identifies the saved old/new limit. Removal requires confirmation and preserves spending history.
 
 **Default budget per task** saves separately. Its ceiling applies to new runs; existing runs retain their limits. The default warning level can also be inherited by monthly budgets without an override. Neither save starts a task.
+
+### Skills & instructions
+
+The Skills catalogue shows name, description, origin, state, revision and update
+actor/time, newest first. Search combines with state and origin filters; pages
+contain at most 20 records. New skill opens a full-page editor. Existing skills
+open Content, Workflows and History tabs at `#/skills/s/<id>/<tab>`.
+
+The editor keeps changes in memory across its detail tabs. Save at the top right
+creates a revision, while Unsaved changes distinguishes the draft. Write and
+Preview share the same Markdown input; preview supports a bounded subset and
+keeps HTML and images inert. Built-in content has explicit read-only labels.
+Administrators can use **Create editable copy** to open a custom draft with a
+new, available ID. Review and Save creates it; opening or cancelling performs no
+write. The original stays unchanged, and workflow associations, history and
+installation-default status are not copied. Conflicts retain
+input. Leaving through Skills navigation asks before discarding changes;
+browser reload warns, but drafts are not persisted across reloads.
+
+Workflow associations has its own route, `#/skills/associations`. Select a
+workflow to configure skills, installation defaults and repository guidance;
+expand an agent to inspect or narrow its selection. Save associations uses the
+workflow version and does not start it. The Workflows detail tab links to these
+settings and to each agent's workflow configuration.
+
+Inspect instructions at `#/skills/inspect` separates current saved configuration
+from immutable execution records. Execution search and 20-row pages bound the
+recent list; bodies expand on demand while provenance, hashes and omissions
+remain visible. A failed read offers retry and does not invent an empty record.

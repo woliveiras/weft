@@ -8,6 +8,7 @@ import {test, expect} from '@playwright/test';
 const pages = [
   ['workflows', '/#/graphs', 'Workflows'],
   ['canvas', '/#/g/journal-capture/canvas', undefined],
+  ['skills', '/#/skills', 'Skills & instructions'],
   ['models', '/#/models', 'Models'],
   ['approvals', '/#/approvals', 'Approvals'],
   ['new-task', '/#/tasks/new', 'New task'],

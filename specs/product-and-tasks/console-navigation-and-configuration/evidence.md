@@ -190,3 +190,40 @@ These results were recorded at the time of the run. The documentation migration 
   `/tmp/weft-budgets-overview.png` and `/tmp/weft-budgets-inline-editor.png`.
 - Other Go packages and Python suites were not rerun. Browser verification was
   Chromium; no cross-browser or assistive-technology conformance is claimed.
+
+
+## Skills & instructions refinement — 2026-11-19
+
+- The maintainer-approved refinement separates the skill catalogue, full-page
+  editor, workflow associations and saved/execution inspection. Updated-first
+  ordering, combined filters and 20-row pages bound the catalogue. Content drafts
+  survive its detail tabs and failed CAS writes. Built-ins remain read-only;
+  deletion retains the existing reference guard and explicit confirmation.
+- `make test-web` passed TypeScript and all 534 tests in 99 files, including
+  unit filtering/route/preview tests and component lifecycle/role/failure tests.
+  Log: `/tmp/weft-skills-web-final.log`.
+- Docker Chromium passed nine instruction/navigation scenarios against the real
+  disposable backend. The journeys create skills, save workflow associations,
+  execute a deterministic agent, update a revision and verify the old immutable
+  snapshot remains unchanged. The new scenario covers pagination, combined
+  filters, preview, tab draft retention, 409 retention, workflow usage links,
+  narrow-screen alignment and viewer write denial.
+  Log: `/tmp/weft-skills-browser-final.log`.
+- Both new light/dark catalogue baselines were visually inspected and passed a
+  fresh-backend comparison without updating snapshots or changing tolerances.
+  Log: `/tmp/weft-skills-visual-final.log`.
+- No backend logic, API/storage format, authorization or telemetry changed.
+  Existing mutation audit and instruction events are retained; no content logging
+  was added. Go/Python suites and Go lint were not rerun for this console-only
+  refinement. Chromium checks do not establish cross-browser or assistive-
+  technology conformance. Preview intentionally supports only its documented
+  subset; drafts remain in memory and are not restored after reload.
+
+- The standard `docker compose up -d --build --no-deps weftd` build passed;
+  `/healthz` returned `ok`. Browser inspection of the live installation confirmed
+  the catalogue, full-width creation form, read-only built-in content, Markdown
+  preview, revision history and workflow associations. A shared fieldset rule
+  found during visual review was corrected and the nine browser scenarios passed
+  again, including a new full-width metadata assertion. No live skill or workflow
+  mutation was submitted. Build log: `/tmp/weft-skills-compose-final.log`.
+  Screenshots: `/tmp/weft-skills-overview.png`, `/tmp/weft-skills-editor.png`.

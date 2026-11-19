@@ -1,6 +1,6 @@
 # Skills and project steering
 
-Open **Skills & steering** in the console. Administrators can create Markdown
+Open **Skills & instructions** in the console. Administrators can create Markdown
 skills, edit them into new revisions, toggle enabled/default flags, inspect
 history and delete them logically. Viewers can inspect content; operators can
 run graphs but cannot edit skills or graph associations. These are installation
@@ -25,13 +25,19 @@ Weft ships four read-only skills for coding workflows, listed with
 | `weft-verifier` | Run the declared checks and report their real results |
 
 IDs starting with `weft-` are reserved: creating, editing or deleting them
-returns 422. Built-in skills are never installation defaults. Like all
-guidance they are untrusted text: the tools they mention work only when the
-agent is granted them.
+returns 422. Built-in skills are never installation defaults.
+
+Administrators can choose **Create editable copy** on a built-in detail page.
+This prepares a custom draft with an available, non-reserved ID and the same
+title, description and Markdown. Save creates its first independent revision;
+no workflow associations or installation-default flag are copied. Cancelling
+creates nothing and the original remains unchanged. Like all guidance, they
+are untrusted text: the tools they mention work only when the agent is granted
+them.
 
 ## Association and precedence
 
-Save graph/agent associations on the same screen. The whole graph is updated
+Open **Workflow associations** to save graph/agent associations. The whole graph is updated
 with its version in `If-Match`; concurrent changes return a conflict and keep
 the local edits. Inspection explicitly uses the **saved** configuration.
 
