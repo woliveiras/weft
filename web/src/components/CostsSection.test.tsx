@@ -129,14 +129,18 @@ describe('CostsSection', () => {
       ],
     });
 
-    const budgets = screen.getByRole('form', { name: 'Budget settings' });
-    await user.click(within(budgets).getByRole('button', { name: 'Add monthly budget' }));
-    await user.click(within(budgets).getByRole('button', { name: 'Save budgets' }));
-    expect(await within(budgets).findByText(/Enter a limit for the installation budget/)).toBeTruthy();
-    await user.type(within(within(budgets).getByRole('group', { name: 'Monthly budget 2' })).getByLabelText(/^Monthly limit/), '100');
-    await user.clear(within(budgets).getByLabelText(/^Task run budget/));
-    await user.click(within(budgets).getByRole('button', { name: 'Save budgets' }));
-    expect(await within(budgets).findByText('Budgets saved.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Add monthly budget' }));
+    const budgets = screen.getByRole('form', { name: 'Add monthly budget' });
+    await user.click(within(budgets).getByRole('button', { name: 'Save monthly budget' }));
+    expect(await within(budgets).findByText(/Enter a monthly limit greater than zero/)).toBeTruthy();
+    await user.type(within(budgets).getByLabelText(/^Monthly limit/), '100');
+    await user.click(within(budgets).getByRole('button', { name: 'Save monthly budget' }));
+    expect(await screen.findByText('Monthly budget added with a limit of $100.00.')).toBeTruthy();
+    expect(api.find('PUT', '/api/v1/cost/policy')).toHaveLength(0);
+    const defaults = screen.getByRole('form', {name:'Default budget per task'});
+    await user.clear(within(defaults).getByLabelText(/^Task run budget/));
+    await user.click(within(defaults).getByRole('button', {name:'Save task defaults'}));
+    expect(await within(defaults).findByText(/Defaults saved/)).toBeTruthy();
     expect(api.find('PUT', '/api/v1/cost/policy')[0].body).toEqual({ taskRunBudgetMicros: 0, warningPercent: 80 });
     expect(api.find('PUT', '/api/v1/cost/budgets')[0].body).toEqual({ budgets: [
       { scope: 'user', id: 'alice', limitMicros: 5_000_000 },
@@ -159,4 +163,151 @@ it('identifies an invalid ledger and preserves valid budget controls', async () 
   expect(within(invalid).queryByRole('meter')).toBeNull();
   expect(within(invalid).queryByRole('button', { name: 'Raise budget' })).toBeNull();
   expect(within(screen.getByRole('listitem', { name: 'Budget User alice · 2026-11' })).getByRole('button', { name: 'Raise budget' })).toBeTruthy();
+});
+
+it('paginates usage by descending cost and combines category and search',async()=>{
+  const user=userEvent.setup();
+  routes({'GET /api/v1/cost/spend':()=>({...spend,byProvider:Array.from({length:21},(_,index)=>line(`provider-${index}`,index*1_000_000,'fixture'))})});
+  render(<CostsSection canEdit={false} section="usage"/>);
+  const table=await screen.findByRole('table',{name:'By provider and model'});
+  expect(within(table).getAllByRole('row')).toHaveLength(21);
+  expect(within(table).getAllByRole('row')[1].textContent).toContain('provider-20');
+  await user.click(screen.getByRole('button',{name:'Next'}));
+  expect(within(table).getAllByRole('row')).toHaveLength(2);
+  expect(within(table).getByText('provider-0')).toBeTruthy();
+  await user.type(screen.getByLabelText('Search usage'),'PROVIDER-20');
+  expect(within(table).getByText('provider-20')).toBeTruthy();
+  expect(screen.queryByRole('button',{name:'Next'})).toBeNull();
+  await user.selectOptions(screen.getByLabelText('Breakdown'),'byUser');
+  expect(await screen.findByRole('table',{name:'By user'})).toBeTruthy();
+  expect(screen.getByText('alice')).toBeTruthy();
+  expect(screen.queryByRole('form',{name:'Model prices'})).toBeNull();
+});
+it('keeps pricing unavailable after a load failure and allows an explicit retry',async()=>{
+  let failed=true; const user=userEvent.setup();
+  const fixture=routes({'GET /api/v1/cost/prices':()=>failed ? apiError(503,'Prices unavailable','unavailable') : {version:1,currency:'USD',unpriced:'allow',prices:[]}});
+  render(<CostsSection canEdit section="prices"/>);
+  await screen.findByText('Prices unavailable');
+  expect(screen.getByRole('button',{name:'Save prices'}).matches(':disabled')).toBe(true);
+  await user.click(screen.getByRole('button',{name:'Save prices'}));
+  expect(fixture.find('PUT','/api/v1/cost/prices')).toHaveLength(0);
+  failed=false; await user.click(screen.getByRole('button',{name:'Retry model prices'}));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Save prices'}).matches(':disabled')).toBe(false));
+});
+
+it('edits a current monthly budget inline without saving task defaults or changing recorded spend',async()=>{
+  const user=userEvent.setup();
+  let defs=[{scope:'installation',id:'*',limitMicros:100_000_000,warningPercent:65}];
+  const fixture=routes({
+    'GET /api/v1/cost/budgets':()=>({budgets:defs,period:'2026-11'}),
+    'GET /api/v1/cost/ledgers':()=>[{...healthy,limitMicros:defs[0].limitMicros,remainingMicros:defs[0].limitMicros-healthy.chargedMicros}],
+    'PUT /api/v1/cost/budgets':call=>{defs=(call.body as {budgets:typeof defs}).budgets;return {budgets:defs,period:'2026-11'};},
+  });
+  render(<CostsSection canEdit section="budgets"/>);
+  expect(await screen.findByText('November 2026 · UTC')).toBeTruthy();
+  const card=screen.getByRole('listitem',{name:'Budget Installation · 2026-11'});
+  await waitFor(()=>expect(within(card).getByRole('button',{name:'Edit budget'}).matches(':disabled')).toBe(false));
+  const edit=within(card).getByRole('button',{name:'Edit budget'});
+  await user.click(edit);
+  const form=within(card).getByRole('form',{name:'Edit Installation budget'});
+  const limit=within(form).getByLabelText(/^Monthly limit/) as HTMLInputElement;
+  expect(limit.value).toBe('100');expect(document.activeElement).toBe(limit);
+  await user.clear(limit);await user.type(limit,'120');
+  await user.click(within(form).getByRole('button',{name:'Cancel'}));
+  expect(fixture.find('PUT','/api/v1/cost/budgets')).toHaveLength(0);
+  expect(document.activeElement).toBe(edit);
+  await user.click(edit);await user.clear(screen.getByLabelText(/^Monthly limit/));await user.type(screen.getByLabelText(/^Monthly limit/),'150');
+  await user.click(screen.getByRole('button',{name:'Save monthly budget'}));
+  expect(await screen.findByText('Monthly limit updated from $100.00 to $150.00.')).toBeTruthy();
+  expect(fixture.find('PUT','/api/v1/cost/policy')).toHaveLength(0);
+  expect(defs[0].warningPercent).toBe(65);
+  expect(within(card).getByText('$10.00')).toBeTruthy();
+  await waitFor(()=>expect(within(card).getByText('$140.00')).toBeTruthy());
+  expect(document.activeElement).toBe(edit);
+});
+
+it('retains monthly edits after validation or service failure and preserves a manually raised floor notice',async()=>{
+  const user=userEvent.setup();let fail=true;
+  const fixture=routes({
+    'GET /api/v1/cost/ledgers':()=>[{...reached,raisedBy:'admin'}],
+    'PUT /api/v1/cost/budgets':call=>fail?apiError(503,'Budget service unavailable','unavailable'):{...(call.body as object),period:'2026-11'},
+  });
+  render(<CostsSection canEdit section="budgets"/>);
+  const card=await screen.findByRole('listitem',{name:'Budget User alice · 2026-11'});
+  await waitFor(()=>expect(within(card).getByRole('button',{name:'Edit budget'}).matches(':disabled')).toBe(false));
+  await user.click(within(card).getByRole('button',{name:'Edit budget'}));
+  expect(screen.getByText(/effective limit cannot fall below/)).toBeTruthy();
+  const input=screen.getByLabelText(/^Monthly limit/) as HTMLInputElement;
+  await user.clear(input);await user.type(input,'0');await user.click(screen.getByRole('button',{name:'Save monthly budget'}));
+  expect(await screen.findByText(/Enter a monthly limit greater than zero/)).toBeTruthy();
+  expect(fixture.find('PUT','/api/v1/cost/budgets')).toHaveLength(0);
+  await user.clear(input);await user.type(input,'4');
+  expect(screen.getByText(/below current spending and reservations/)).toBeTruthy();
+  await user.click(screen.getByRole('button',{name:'Save monthly budget'}));
+  expect(await screen.findByText('Budget service unavailable')).toBeTruthy();expect(input.value).toBe('4');
+  fail=false;await user.click(screen.getByRole('button',{name:'Save monthly budget'}));
+  expect(await screen.findByText('Monthly limit updated from $5.00 to $4.00.')).toBeTruthy();
+});
+
+it('keeps unavailable monthly settings read-only and restores edit after retry',async()=>{
+  const user=userEvent.setup();let fail=true;
+  routes({'GET /api/v1/cost/budgets':()=>fail?apiError(503,'Definitions unavailable','unavailable'):{budgets:[],period:'2026-11'}});
+  render(<CostsSection canEdit section="budgets"/>);
+  expect(await screen.findByText(/Could not load monthly budget settings/)).toBeTruthy();
+  expect(screen.getByRole('button',{name:'Add monthly budget'}).matches(':disabled')).toBe(true);
+  fail=false;await user.click(screen.getByRole('button',{name:'Retry monthly budgets'}));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Add monthly budget'}).matches(':disabled')).toBe(false));
+});
+
+it('saves task defaults independently and retains values on failure',async()=>{
+  const user=userEvent.setup();let fail=true;
+  const fixture=routes({'PUT /api/v1/cost/policy':call=>fail?apiError(503,'Policy unavailable','unavailable'):call.body});
+  render(<CostsSection canEdit section="budgets"/>);
+  const form=screen.getByRole('form',{name:'Default budget per task'});
+  const limit=within(form).getByLabelText(/^Task run budget/) as HTMLInputElement;
+  await waitFor(()=>expect(limit.value).toBe('2'));
+  await user.clear(limit);await user.type(limit,'3');
+  await user.clear(within(form).getByLabelText(/^Default warning/));await user.type(within(form).getByLabelText(/^Default warning/),'101');
+  await user.click(within(form).getByRole('button',{name:'Save task defaults'}));
+  expect(await within(form).findByText('Warning level must be between 1 and 100.')).toBeTruthy();
+  expect(fixture.find('PUT','/api/v1/cost/policy')).toHaveLength(0);
+  await user.clear(within(form).getByLabelText(/^Default warning/));await user.type(within(form).getByLabelText(/^Default warning/),'70');
+  await user.click(within(form).getByRole('button',{name:'Save task defaults'}));
+  expect(await within(form).findByText('Policy unavailable')).toBeTruthy();expect(limit.value).toBe('3');
+  fail=false;await user.click(within(form).getByRole('button',{name:'Save task defaults'}));
+  expect(await within(form).findByText(/Defaults saved/)).toBeTruthy();
+  expect(fixture.find('PUT','/api/v1/cost/budgets')).toHaveLength(0);
+  expect(fixture.find('PUT','/api/v1/cost/policy').at(-1)?.body).toEqual({taskRunBudgetMicros:3_000_000,warningPercent:70});
+});
+
+it('validates duplicate scopes and confirms removal without erasing other definitions',async()=>{
+  const user=userEvent.setup();
+  const fixture=routes({'PUT /api/v1/cost/budgets':call=>({...(call.body as object),period:'2026-11'})});
+  render(<CostsSection canEdit section="budgets"/>);
+  await user.click(await screen.findByRole('button',{name:'Add monthly budget'}));
+  const form=screen.getByRole('form',{name:'Add monthly budget'});
+  await user.selectOptions(within(form).getByLabelText('Scope'),'user');
+  await user.type(within(form).getByLabelText('Applies to'),'alice');
+  await user.type(within(form).getByLabelText(/^Monthly limit/),'2');
+  await user.click(within(form).getByRole('button',{name:'Save monthly budget'}));
+  expect(await screen.findByText(/A monthly budget already exists/)).toBeTruthy();
+  expect(fixture.find('PUT','/api/v1/cost/budgets')).toHaveLength(0);
+  await user.click(within(form).getByRole('button',{name:'Cancel'}));
+  const card=screen.getByRole('listitem',{name:'Budget User alice · 2026-11'});
+  await user.click(within(card).getByRole('button',{name:'Edit budget'}));
+  await user.click(screen.getByRole('button',{name:'Remove budget'}));
+  expect(screen.getByText(/Remove this recurring limit/)).toBeTruthy();
+  expect(fixture.find('PUT','/api/v1/cost/budgets')).toHaveLength(0);
+  await user.click(screen.getByRole('button',{name:'Confirm removal'}));
+  expect(await screen.findByText('Monthly budget removed. Recorded spending is preserved.')).toBeTruthy();
+  expect(fixture.find('PUT','/api/v1/cost/budgets')[0].body).toEqual({budgets:[]});
+});
+
+it('does not claim zero spending or allow edits when monthly balances are unavailable',async()=>{
+  routes({'GET /api/v1/cost/ledgers':()=>apiError(503,'Balances unavailable','unavailable')});
+  render(<CostsSection canEdit section="budgets"/>);
+  expect(await screen.findByText('Current balance unavailable. Refresh budget balances before editing.')).toBeTruthy();
+  expect(screen.queryByText('No spending recorded for this budget this month.')).toBeNull();
+  expect(screen.getByRole('button',{name:'Edit budget'}).matches(':disabled')).toBe(true);
+  expect(screen.getByRole('button',{name:'Add monthly budget'}).matches(':disabled')).toBe(true);
 });

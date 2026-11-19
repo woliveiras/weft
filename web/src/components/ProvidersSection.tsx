@@ -1,10 +1,11 @@
+import type {ProviderEditorRoute} from './modelsNavigation';
 import { HelpField } from './FieldHelp';
 import { ContextHelp } from './common';
 import { useId, useImperativeHandle, useState, type Ref } from 'react';
 import { ApiError, api, errorMessage } from '../api/client';
 import type { ProviderInfo, ProviderPlugin, ProviderSettings, ProviderTestResult } from '../api/types';
 import { useAsync } from '../hooks/useData';
-import { Badge, Btn, ErrorBox, Modal, fmtDateTime, fmtTime } from './common';
+import { Badge, Btn, ErrorBox, fmtDateTime, fmtTime } from './common';
 import {
   credentialLabel,
   describeTest,
@@ -26,11 +27,14 @@ interface Props {
   /** Operators and admins run connection tests (they cost tokens). */
   canTest: boolean;
   ref?: Ref<ProvidersHandle>;
+  presentation?: 'providers'|'plugins';
+  editor?: ProviderEditorRoute;
+  onEditor?: (editor:ProviderEditorRoute|undefined)=>void;
 }
 
 type Testing = Record<string, boolean>;
 
-export function ProvidersSection({ canEdit, canTest, ref }: Props) {
+export function ProvidersSection({ canEdit, canTest, ref, presentation, editor, onEditor }: Props) {
   const providers = useAsync(api.providers, []);
   const settings = useAsync(api.providerSettings, []);
   const plugins = useAsync(api.providerPlugins, []);
@@ -39,7 +43,11 @@ export function ProvidersSection({ canEdit, canTest, ref }: Props) {
   const [results, setResults] = useState<Record<string, ProviderTestResult>>({});
   const [testing, setTesting] = useState<Testing>({});
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
-  const [editing, setEditing] = useState<{ mode: 'create' } | { mode: 'edit'; provider: ProviderInfo }>();
+  const [localEditor,setLocalEditor] = useState<ProviderEditorRoute>();
+  const editing=editor ?? localEditor;
+  const setEditing=(next:ProviderEditorRoute|undefined)=>onEditor ? onEditor(next) : setLocalEditor(next);
+  const [search,setSearch]=useState('');
+  const [filter,setFilter]=useState('all');
 
   const reload = async () => {
     await Promise.all([providers.reload(), settings.reload(), plugins.reload()]);
@@ -106,9 +114,33 @@ export function ProvidersSection({ canEdit, canTest, ref }: Props) {
   const meta = settings.data;
   const list = providers.data ?? [];
   const enabledTypes = new Set((plugins.data ?? []).filter((p) => p.enabled).map((p) => p.id));
+  const provider=editing?.mode==='edit' ? list.find(p=>p.name===editing.name) : undefined;
+  const failed=providers.error || settings.error || plugins.error;
+  const available=!!meta && !!plugins.data && !failed;
+  const query=search.trim().toLowerCase();
+  const visible=list.filter(p=>[p.name,p.type,p.defaultModel,p.baseUrl].some(value=>value?.toLowerCase().includes(query)) &&
+    (filter==='all'|| (filter==='unavailable' ? p.status==='unavailable' : filter==='default' ? p.default : p.type===filter)));
+  if(editing) return <section className="provider-editor-page">
+    <Btn tone="ghost" onClick={()=>setEditing(undefined)}>Back to providers</Btn>
+    <header className="page-head"><div><h1>{editing.mode==='create'?'Add model provider':`Edit ${editing.name}`}</h1><p className="muted">Configure the provider, then select it in your agents. Saving does not start an agent.</p></div></header>
+    {!canEdit ? <p role="status">Only an administrator can configure model providers.</p>
+      : failed ? <><ErrorBox error={failed}/><Btn onClick={()=>void reload()}>Retry loading providers</Btn></>
+      : !available || !meta || providers.loading ? <p role="status">Loading provider settings…</p>
+      : editing.mode==='create' && enabledTypes.size===0 ? <p role="status">No inference plugins are enabled. <a href="#/models/plugins">Enable an inference plugin</a> before adding a provider.</p>
+      : editing.mode==='edit' && (!provider || !provider.editable) ? <p role="status">{provider ? 'This provider is managed by server configuration and cannot be edited here.' : 'This provider was not found. Return to providers to choose another.'}</p>
+      : <ProviderForm key={editing.mode==='edit'?editing.name:'new'} mode={editing.mode} provider={provider}
+          settings={{...meta,types:meta.types.filter(t=>enabledTypes.has(t.type)||t.type===provider?.type)}}
+          onClose={()=>setEditing(undefined)} onSaved={async(name)=>{
+            setResults(cur=>{const next={...cur};delete next[name];return next;});
+            await reload();setEditing(undefined);
+          }}/>
+    }
+  </section>;
+
 
   return (
-    <section className="integration-section" aria-labelledby="providers-heading">
+    <section className="integration-section" aria-labelledby={presentation==='plugins'?'plugins-heading':'providers-heading'}>
+      {presentation!=='plugins' && <>
       <div className="section-head">
         <div>
           <h2 id="providers-heading">Model providers</h2>
@@ -124,7 +156,7 @@ export function ProvidersSection({ canEdit, canTest, ref }: Props) {
               tone="primary"
               small
               onClick={() => setEditing({ mode: 'create' })}
-              disabled={!meta || !plugins.data || enabledTypes.size === 0}
+              disabled={!available || enabledTypes.size === 0}
               title={plugins.data && enabledTypes.size === 0 ? 'Enable an inference plugin first' : undefined}
             >
               Add provider
@@ -138,57 +170,55 @@ export function ProvidersSection({ canEdit, canTest, ref }: Props) {
           <code>secrets.keyFile</code>) and restart. Providers that need no key can still be added.
         </p>
       )}
-      <PluginList plugins={plugins.data} canEdit={canEdit} switching={switching} errors={pluginErrors} onToggle={(p, on) => void setPluginEnabled(p, on)} />
+      <div className="model-provider-filters">
+        <label>Search providers<input type="search" placeholder="Name, plugin, model or endpoint" value={search} onChange={event=>setSearch(event.target.value)}/></label>
+        <label>Provider filter<select value={filter} onChange={event=>setFilter(event.target.value)}><option value="all">All providers</option><option value="default">Default provider</option><option value="unavailable">Unavailable</option>{Array.from(new Set(list.map(p=>p.type))).sort().map(type=><option key={type} value={type}>{type}</option>)}</select></label>
+        <Btn disabled={!search && filter==='all'} onClick={()=>{setSearch('');setFilter('all');}}>Clear filters</Btn>
+        <Btn disabled={providers.loading || settings.loading || plugins.loading} onClick={()=>void reload()}>Refresh providers</Btn>
+        {canTest && <Btn disabled={!available || !list.length || Object.values(testing).some(Boolean)} onClick={()=>void Promise.all(list.map(p=>runTest(p.name)))}>{Object.values(testing).some(Boolean)?'Testing providers…':'Test all providers'}</Btn>}
+      </div>
+      <p className="muted small" role="status">{visible.length} of {list.length} providers</p>
       <ErrorBox error={plugins.error ? `Could not load inference plugins: ${plugins.error}` : undefined} />
       <ErrorBox error={providers.error ? `Could not load providers: ${providers.error}` : undefined} />
       <ErrorBox error={settings.error ? `Could not load provider settings: ${settings.error}` : undefined} />
+      {failed && <Btn onClick={()=>void reload()}>Retry loading providers</Btn>}
       {providers.loading && !providers.data ? (
         <p className="muted">Loading providers…</p>
-      ) : list.length === 0 ? (
+      ) : failed && !providers.data ? null : list.length === 0 ? (
         <p className="empty">
           No model providers yet.{' '}
           {canEdit
             ? enabledTypes.size === 0
-              ? 'Enable an inference plugin above, then add a provider to let agents use a model.'
+              ? 'Enable an inference plugin in Inference plugins, then add a provider to let agents use a model.'
               : 'Add one to let agents use a model.'
             : 'Ask an administrator to enable an inference plugin and add a provider.'}
         </p>
-      ) : (
-        <div className="integration-grid">
-          {list.map((p) => (
+      ) : visible.length===0 ? <p className="empty">No providers match these filters.</p> : (
+        <div className="integration-grid provider-grid">
+          {visible.map((p) => (
             <ProviderCard
               key={p.name}
               provider={p}
               result={results[p.name] ?? p.lastTest}
               testing={!!testing[p.name]}
               error={cardErrors[p.name]}
-              canEdit={canEdit}
-              canTest={canTest}
+              canEdit={canEdit && available}
+              canTest={canTest && available}
               onTest={() => void runTest(p.name)}
-              onEdit={() => setEditing({ mode: 'edit', provider: p })}
+              onEdit={() => setEditing({ mode: 'edit', name:p.name })}
               onRemove={() => void remove(p)}
               onDefault={() => void makeDefault(p)}
             />
           ))}
         </div>
       )}
-      {editing && meta && (
-        <ProviderForm
-          mode={editing.mode}
-          provider={editing.mode === 'edit' ? editing.provider : undefined}
-          settings={{ ...meta, types: meta.types.filter((t) => enabledTypes.has(t.type) || (editing.mode === 'edit' && t.type === editing.provider.type)) }}
-          onClose={() => setEditing(undefined)}
-          onSaved={async (name) => {
-            setEditing(undefined);
-            setResults((cur) => {
-              const next = { ...cur };
-              delete next[name];
-              return next;
-            });
-            await reload();
-          }}
-        />
-      )}
+      </>}
+      {presentation!=='providers' && <>
+        <PluginList plugins={plugins.data} canEdit={canEdit && available} switching={switching} errors={pluginErrors} onToggle={(p,on)=>void setPluginEnabled(p,on)}/>
+        <ErrorBox error={plugins.error}/>
+        {plugins.loading && !plugins.data && <p role="status">Loading inference plugins…</p>}
+        {plugins.error && <Btn onClick={()=>void reload()}>Retry loading plugins</Btn>}
+      </>}
     </section>
   );
 }
@@ -243,7 +273,7 @@ function PluginList({
               </p>
               {canEdit && p.enabledBy !== 'config' && (
                 <Btn small disabled={!!switching[p.id]} onClick={() => onToggle(p, !p.enabled)}>
-                  {p.enabled ? 'Disable' : 'Enable'}
+                  {switching[p.id] ? (p.enabled?'Disabling…':'Enabling…') : p.enabled ? 'Disable' : 'Enable'}
                 </Btn>
               )}
               <ErrorBox error={errors[p.id] || undefined} />
@@ -297,7 +327,7 @@ function ProviderCard({
         </div>
         <div className="integration-card-status">
           {p.default && <Badge tone="info">Default</Badge>}
-          {p.status === 'unavailable' ? (
+          {testing ? <Badge tone="info">Testing</Badge> : p.status === 'unavailable' ? (
             <Badge tone="bad">Unavailable</Badge>
           ) : summary ? (
             <Badge tone={summary.tone}>{summary.tone === 'bad' ? 'Failing' : summary.tone === 'warn' ? 'Works, check' : 'Working'}</Badge>
@@ -346,7 +376,7 @@ function ProviderCard({
           </span>
         </div>
       )}
-      {error && <p className="integration-note">{error}</p>}
+      <ErrorBox error={error}/>
       <div className="integration-card-actions">
         {canTest && (
           <Btn small onClick={onTest} disabled={testing}>
@@ -442,15 +472,18 @@ function ProviderForm({
 
   const summary = test ? describeTest(test) : undefined;
   return (
-    <Modal title={mode === 'create' ? 'Add model provider' : `Edit ${provider?.name}`} onClose={onClose}>
+    <>
       <form
-        className="form provider-form"
+        className="card form provider-form"
+        aria-label="Provider settings"
         onSubmit={(e) => {
           e.preventDefault();
           void save();
         }}
         noValidate
       >
+        <fieldset className="provider-edit-fields" disabled={!!busy}>
+        <div className="provider-form-columns"><section className="form" aria-label="Provider details"><h2>Provider details</h2>
         {mode === 'create' && (
           <Field label="Name" error={errors.name} hint="Agents select the provider by this name, e.g. team-openai.">
             <input value={draft.name} onChange={(e) => set({ name: e.target.value })} autoFocus required />
@@ -480,6 +513,7 @@ function ProviderForm({
         <Field label="Default model" error={errors.defaultModel} hint="Used by agents that do not choose a model.">
           <input value={draft.defaultModel} onChange={(e) => set({ defaultModel: e.target.value })} />
         </Field>
+        </section><section className="form" aria-label="Authentication"><h2>Authentication</h2>
         {type?.settings?.includes('project') && (
           <Field
             label="Vertex AI project"
@@ -523,6 +557,7 @@ function ProviderForm({
             Remove the stored credential
           </label>
         )}
+        </section></div>
         <details className="provider-advanced">
           <summary>Limits</summary>
           <div className="provider-advanced-grid">
@@ -559,6 +594,7 @@ function ProviderForm({
             </Field>
           </div>
         </details>
+        </fieldset>
         {summary && (
           <div className={`provider-test tone-${summary.tone}`} role="status">
             <strong>{summary.title}</strong>
@@ -579,7 +615,7 @@ function ProviderForm({
           </Btn>
         </div>
       </form>
-    </Modal>
+    </>
   );
 }
 

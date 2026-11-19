@@ -354,3 +354,15 @@ screens keep horizontal overflow inside the labelled, keyboard-focusable table.
 ### Compact navigation
 
 Use **Collapse navigation** at the top of the primary menu to show an icon rail; **Expand navigation** restores the labels. The browser remembers the choice. Accessible destination names, the current-page marker and pending-approval counts remain available, and hovering or focusing an icon shows its name. Toggling changes only the layout: it preserves the current route and in-memory workflow drafts. If browser storage is unavailable, a message explains that the choice applies only to this session.
+
+### Models configuration pages
+
+Models opens on configured **Providers**, with search and a combined default/unavailable/plugin filter. **Inference plugins**, **Usage & costs**, **Budgets** and **Model prices** have separate routes. Add and edit open full provider pages at `#/models/providers/new` and `#/models/providers/<name>/edit`; Back to providers and Cancel return to the list. Provider details, authentication and limits retain their help and explicit save/test actions. Stored credentials remain blank and write-only.
+
+Usage shows one breakdown at a time, ordered by cost descending, with text search and 20-row pages. Report limits, unpriced calls and estimates remain visible. Budget and pricing forms retain the existing financial rules and require successfully loaded settings before edits can be saved.
+
+### Editing budgets
+
+In **Models → Budgets**, **Current month budgets** shows the UTC calendar period and each used budget’s monthly limit, spent amount and remaining balance. **Edit budget** opens the matching recurring definition directly below its summary; unused definitions are listed with their configured limit. Changes affect this month and future months, preserving recorded spending. A manual monthly raise remains a floor for the current ledger, so its effective limit can differ from the recurring definition. Cancelling performs no write; errors retain input, and success identifies the saved old/new limit. Removal requires confirmation and preserves spending history.
+
+**Default budget per task** saves separately. Its ceiling applies to new runs; existing runs retain their limits. The default warning level can also be inherited by monthly budgets without an override. Neither save starts a task.

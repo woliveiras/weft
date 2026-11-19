@@ -65,6 +65,10 @@ Common forms and controls remain usable at narrow widths and in the supported th
 
 - 2026-11-19. Maintainer refinement: the primary navigation toggles between labelled destinations and an icon rail to leave more canvas space. The browser remembers the preference; accessible labels, approval counts, keyboard/pointer name hints, active destinations and drafts remain available in both presentations. Browser-storage failure does not prevent session-local toggling.
 
+- 2026-11-19. Maintainer refinement to Models: providers, inference plugins, usage, budgets and prices have separate destinations. Provider creation/editing use full pages with grouped fields instead of configuration modals. Provider search/filtering, a highest-cost-first usage breakdown with search and 20-row pages, explicit dependency failures and aligned responsive forms preserve existing API/credential/budget semantics.
+
+- 2026-11-19. Maintainer refinement to budget comprehension: current-month cards expose the UTC period, separate limit/spent/remaining facts and an inline Edit budget form. Monthly edits preserve recorded spend, existing manual-raise floors and administrator-only writes. Confirmation identifies the saved old/new recurring limit. Default per-task ceilings and inherited warning levels use a separate form/save; failure retains edits and cancellation restores focus without writing.
+
 ## Reconciliation
 
 - [interface-navigation.md](../../../docs/interface-navigation.md), [getting-started.md](../../../docs/getting-started.md), [brand/brand-guidelines.md](../../../docs/brand/brand-guidelines.md).

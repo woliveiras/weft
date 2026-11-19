@@ -277,11 +277,26 @@ func ExpiredLedger(scope, id, period string) bool {
 }
 
 func (b Budgets) visibleView(ctx context.Context, l *Ledger, period string) (View, error) {
-	v := l.View()
 	if ExpiredLedger(l.Scope, l.ID, period) {
+		v := l.View()
 		v.Paused, v.NotResumed = false, nil
 		return v, nil
 	}
+	if l.Scope != TaskRun {
+		defs, _, err := b.Definitions(ctx)
+		if err != nil {
+			return View{}, err
+		}
+		for _, d := range defs {
+			if d.Scope == l.Scope && MonthlyID(d.ID, period) == l.ID {
+				// Reads use admission's precedence without writing the ledger.
+				// A saved definition must be visible before another call reserves.
+				(applicable{scope: d.Scope, limit: d.LimitMicros}).applyLimit(l)
+				break
+			}
+		}
+	}
+	v := l.View()
 	// A committed graph resume remains observable even while its ledger
 	// action awaits finalization.
 	pending := v.NotResumed[:0]

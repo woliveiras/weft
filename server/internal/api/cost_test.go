@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/woliveiras/weft/server/internal/llm"
 	"slices"
 	"strings"
 	"testing"
@@ -671,4 +672,53 @@ func settledBudgetTask(t *testing.T, store storage.Store, graphID, taskID string
 		}
 	}
 	return false
+}
+
+func TestMonthlyBudgetEditImmediatelyUpdatesReadViewsAndPreservesLedger(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	body := `{"budgets":[{"scope":"installation","id":"*","limitMicros":1000}]}`
+	if c := call(t, srv, "PUT", "/api/v1/cost/budgets", adminTok, "application/json", body, nil); c != 200 {
+		t.Fatal(c)
+	}
+	b := cost.Budgets{Store: a.Store}
+	catalogue := func(context.Context) (cost.Catalogue, error) {
+		return cost.Catalogue{Currency: "USD", Prices: []cost.Price{{Provider: "fixture", Model: "*", InputMicrosPerMTok: 1_000_000, OutputMicrosPerMTok: 1_000_000}}}, nil
+	}
+	reservation, err := b.Reserve(t.Context(), cost.Target{Graph: "task-run-budget-view", Execution: "fixture"}, catalogue, "fixture", "mock", &llm.ChatRequest{Model: "fixture", MaxTokens: 10, Messages: []llm.ChatMessage{{Role: llm.RoleUser, Content: "Budget view fixture"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reservation.Settle(t.Context(), &llm.ChatResponse{Usage: llm.Usage{InputTokens: 7, OutputTokens: 3}}); err != nil {
+		t.Fatal(err)
+	}
+	id := "*@" + cost.Period(time.Now())
+	key := cost.BudgetPrefix + cost.Installation + "/" + id
+	before, err := a.Store.GetSetting(t.Context(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, limit := range []int64{2000, 5} {
+		data, _ := json.Marshal(map[string]any{"budgets": []cost.Definition{{Scope: cost.Installation, ID: "*", LimitMicros: limit}}})
+		if c := call(t, srv, "PUT", "/api/v1/cost/budgets", adminTok, "application/json", string(data), nil); c != 200 {
+			t.Fatal(c)
+		}
+		var view cost.View
+		if c := call(t, srv, "GET", "/api/v1/cost/budgets/installation/"+id, viewerTok, "", "", &view); c != 200 || view.Limit != limit || view.Charged != 10 {
+			t.Fatalf("read=%+v code=%d", view, c)
+		}
+		if view.Reached != (limit <= 10) {
+			t.Fatalf("reached state=%+v", view)
+		}
+		var list []cost.View
+		if c := call(t, srv, "GET", "/api/v1/cost/ledgers", viewerTok, "", "", &list); c != 200 || len(list) != 1 || list[0].Limit != limit || list[0].Charged != 10 {
+			t.Fatalf("list=%+v code=%d", list, c)
+		}
+	}
+	after, err := a.Store.GetSetting(t.Context(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Revision != after.Revision || string(before.Value) != string(after.Value) {
+		t.Fatal("reading the effective limit rewrote the ledger")
+	}
 }

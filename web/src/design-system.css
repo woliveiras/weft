@@ -788,3 +788,80 @@ main > .page:is(.task-request-page, .installation-page, .administration-page) {
   .is-compact .navigation-group + .navigation-group { margin: 0; padding: 0; border-top: 0; border-left: 1px solid var(--border); padding-inline-start: var(--space-2); }
   .primary-navigation.is-compact .nav-item { margin: 0; }
 }
+
+/* Model configuration uses the same page rhythm as connections and agents. */
+.models-page > .section-navigation { margin-block-end: var(--space-section); overflow-x: auto; flex-wrap: nowrap; }
+.models-page > .section-navigation a { white-space: nowrap; }
+.models-page .integration-section { display: grid; gap: var(--space-5); }
+.models-page .section-head { align-items: flex-start; margin: 0; gap: var(--space-4); }
+.models-page .section-head p { max-width: 75ch; }
+.model-provider-filters { display: flex; align-items: end; flex-wrap: wrap; gap: var(--space-4); }
+.model-provider-filters > label { display: grid; gap: var(--space-2); min-width: min(240px,100%); flex: 1; }
+.model-provider-filters input, .model-provider-filters select { width: 100%; }
+.model-provider-filters > .btn { flex: none; }
+.models-page .integration-grid { margin: 0; padding: 0; list-style: none; gap: var(--space-4); }
+.models-page .plugin-list { display: grid; gap: var(--space-4); }
+.models-page .integration-card { padding: var(--space-5); gap: var(--space-3); }
+.models-page .plugin-list .integration-card > .btn { margin-top: auto; align-self: flex-start; }
+.models-page .integration-details { grid-template-columns: minmax(100px,auto) minmax(0,1fr); }
+.models-page .integration-details dd { font-family: inherit; overflow-wrap: anywhere; }
+.models-page .integration-card-actions { margin-top: auto; gap: var(--space-2); flex-wrap: wrap; }
+.provider-editor-page { display: grid; gap: var(--space-5); }
+.provider-editor-page > .btn { justify-self: start; }
+.provider-editor-page .page-head { margin: 0; }
+.models-page .provider-form { max-width: none; padding: var(--space-6); display: grid; gap: var(--space-5); }
+.provider-edit-fields { border: 0; padding: 0; margin: 0; display: grid; gap: var(--space-5); min-width: 0; }
+.provider-form-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--space-6); }
+.provider-form-columns > section { display: grid; gap: var(--space-4); align-content: start; min-width: 0; }
+.provider-form-columns h2 { margin: 0; font-size: 1.1rem; }
+.provider-form .help-field { display: grid; gap: var(--space-2); }
+.provider-form input, .provider-form select { width: 100%; min-height: 40px; }
+.provider-form .field-hint { font-size: 12px; line-height: 1.5; }
+.provider-form .check { display: flex; align-items: flex-start; gap: var(--space-2); }
+.provider-form .check input { width: auto; min-height: 0; margin-block-start: 4px; }
+.provider-advanced { border-top: 1px solid var(--border); padding-top: var(--space-4); }
+.provider-advanced-grid { grid-template-columns: repeat(auto-fit,minmax(min(100%,240px),1fr)); gap: var(--space-4); align-items: start; margin-top: var(--space-4); }
+.provider-form-actions { flex-wrap: wrap; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--border); }
+.models-page .card.form { max-width: none; }
+.models-page .card.form > fieldset { display: grid; gap: var(--space-4); border: 0; padding: 0; margin: 0; min-width: 0; }
+.models-page .card.form .help-field { display: grid; gap: var(--space-2); }
+.models-page .card.form input, .models-page .card.form select { width: 100%; }
+.model-budget-row, .model-price-row { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,210px),1fr)); gap: var(--space-4); align-items: start; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); }
+.model-budget-row > .btn, .model-price-row > .btn { justify-self: start; align-self: end; }
+.model-price-row > label { display: grid; gap: var(--space-2); }
+.model-usage-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: var(--space-4); }
+.model-usage-summary .card { display: grid; gap: var(--space-2); }
+.model-usage-summary strong { font-size: 1.35rem; overflow-wrap: anywhere; }
+.model-usage-details, .cost-spend { display: grid; gap: var(--space-4); }
+.model-usage-details p, .cost-spend h3 { margin: 0; }
+.model-table-scroll { overflow-x: auto; min-width: 0; }
+.model-spend-table { width: 100%; }
+.model-spend-table caption { text-align: left; padding-block-end: var(--space-3); font-weight: 600; }
+.model-spend-table th, .model-spend-table td { padding: var(--space-3); overflow-wrap: anywhere; }
+.models-page .budget-bar { list-style: none; padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-raised); }
+.models-page .budget-bar meter { width: 100%; margin-top: var(--space-3); }
+@media(max-width:800px) {
+  .provider-form-columns, .model-usage-summary { grid-template-columns: 1fr; }
+  .models-page .provider-form { padding: var(--space-4); }
+}
+
+/* A monthly limit is edited beside its balance; task defaults have a separate save. */
+.monthly-budgets { display: grid; gap: var(--space-4); }
+.monthly-budgets h3, .budget-inline-editor h4 { margin: 0; }
+.monthly-budgets .section-head p { margin-block: var(--space-2) 0; }
+.monthly-budget-list .budget-bar.is-editing { grid-column: 1 / -1; }
+.budget-amounts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: var(--space-4); margin-block: var(--space-4); }
+.budget-amounts div { display: grid; gap: var(--space-2); }
+.budget-amounts dt { color: var(--text-muted); font-size: 12px; }
+.budget-amounts dd { margin: 0; font-size: 1.2rem; font-weight: 600; overflow-wrap: anywhere; }
+.models-page .budget-inline-editor { margin-top: var(--space-5); padding: var(--space-5); display: grid; gap: var(--space-4); }
+.budget-inline-editor p { margin: 0; }
+.budget-editor-fields { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,240px),1fr)); gap: var(--space-4); align-items: start; }
+.budget-editor-actions { flex-wrap: wrap; gap: var(--space-3); }
+.models-page .default-task-budget { margin-top: var(--space-5); }
+@media(max-width:600px) {
+  .budget-amounts { grid-template-columns: 1fr; gap: var(--space-3); }
+  .budget-amounts div { grid-template-columns: 1fr 1fr; align-items: baseline; }
+  .budget-editor-fields { grid-template-columns: 1fr; }
+  .models-page .budget-inline-editor { padding: var(--space-4); }
+}

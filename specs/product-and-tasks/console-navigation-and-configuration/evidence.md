@@ -122,3 +122,71 @@ These results were recorded at the time of the run. The documentation migration 
   not rerun; the standard image build compiled the Go binaries. Chromium checks
   and keyboard inspection do not establish cross-browser or assistive-technology
   conformance.
+
+## 2026-11-19 — Models configuration pages (AC-001, AC-002, AC-004)
+
+- `make test-web` passed TypeScript and 517 tests in 97 files. Coverage includes
+  section route round trips, provider filters, direct editor loading/retry,
+  viewer denial, unavailable plugin guidance, retained credential semantics,
+  usage ordering/search/pagination and disabled writes after pricing load errors.
+  Log: `/tmp/weft-models-web-final-pass.log`. One concurrent run encountered an
+  unrelated five-second SharedEnvironments cleanup timeout; the unchanged suite
+  passed on rerun with its existing timeout and assertions.
+- Docker Chromium passed 14 functional scenarios across costs, navigation,
+  work navigation and visual consolidation. Existing real-backend budget
+  raise/recovery and permission assertions remain intact. Log:
+  `/tmp/weft-models-browser-final.log`.
+- The isolated provider-management suite passed all three scenarios: full-page
+  creation/editing, refresh/back navigation, combined filters, narrow-screen
+  geometry, viewer API denial, real synthetic upstream success/failure,
+  sanitized responses, retained edits after a 503 save failure and successful
+  persistence without resupplying the stored key. Provider activation is kept
+  in this separate disposable backend because it reloads the model registry.
+  Log: `/tmp/weft-models-provider-final.log`.
+- Both Models visual baselines were regenerated, inspected in light/dark themes
+  and compared successfully without updates against another fresh backend.
+  Log: `/tmp/weft-models-visual-verified.log`.
+- `docker compose up -d --build --no-deps weftd` completed using the standard
+  Dockerfile. The container is healthy and `/healthz` returned `ok`. Read-only
+  local browser inspection confirmed the provider-first landing page, dedicated
+  creation page, aligned limits, usage summary/table and separate budget/price
+  forms. Creation was cancelled; no live credentials, plugins or budgets were
+  changed, and no paid model test was invoked. Screenshots:
+  `/tmp/weft-models-overview.png` and `/tmp/weft-models-provider-form.png`.
+- No backend code changed. Go/Python suites were not rerun; the image build
+  compiled Go binaries. Chromium checks do not establish cross-browser or
+  assistive-technology conformance.
+
+
+## 2026-11-19 — Explain and edit active budgets (AC-004)
+
+- Monthly cards show the UTC period and separate limit/spent/remaining values.
+  Administrators open an inline definition editor; cancellation makes no write
+  and restores focus. Default per-task ceilings and inherited warning thresholds
+  save independently. Unavailable balances/definitions disable writes without
+  claiming zero spend; recoverable save errors retain input. Removal preserves
+  history and has an explicit confirmation step.
+- `make test-web` passed TypeScript and 524 tests in 97 files. After the final
+  focus-restoration adjustment, TypeScript and all 19 cost/component tests passed
+  again. Logs: `/tmp/weft-budget-web-final.log` and
+  `/tmp/weft-budget-web-focused.log`.
+- Docker Chromium passed nine costs/task-journey/task-outcome scenarios. The new
+  scenario executes a deterministic in-process model in a task execution copy,
+  creates a real monthly ledger, edits its definition through the UI and checks
+  persisted values, unchanged spend, no policy write, retry after 503, keyboard
+  focus, reload, viewer API denial and narrow-screen geometry. Existing paused
+  resume, insufficient raise and invalid-ledger assertions remain intact.
+  Log: `/tmp/weft-budget-browser-final.log`. Three separate provider/navigation
+  scenarios also passed: `/tmp/weft-budget-model-navigation.log`.
+- The live-backend test exposed a stale healthy-ledger read after saving a new
+  definition. The read path now applies existing admission precedence, including
+  explicit/legacy Raise floors, without rewriting accounting. Cost, API and
+  engine tests passed in Docker; see the INT-004 evidence and
+  `/tmp/weft-budget-go.log`. `make lint` passed (`gofmt` and `go vet ./...`).
+- The standard `docker compose up -d --build --no-deps weftd` build completed;
+  the container is healthy and `/healthz` returned `ok`. Local browser inspection
+  confirmed the balance facts, prefilled inline editor and independent defaults.
+  Editing was cancelled without changing live limits. Screenshots:
+  `/tmp/weft-budgets-overview.png` and `/tmp/weft-budgets-inline-editor.png`.
+- Other Go packages and Python suites were not rerun. Browser verification was
+  Chromium; no cross-browser or assistive-technology conformance is claimed.

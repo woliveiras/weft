@@ -86,13 +86,13 @@ describe('ProvidersSection', () => {
     const user = userEvent.setup();
     render(<ProvidersSection canEdit canTest />);
     await user.click(await screen.findByRole('button', { name: 'Add provider' }));
-    const dialog = screen.getByRole('dialog', { name: 'Add model provider' });
+    const dialog = screen.getByRole('form', { name: 'Provider settings' });
     await user.type(within(dialog).getByLabelText(/^Name/), 'team');
     await user.type(within(dialog).getByLabelText(/^Default model/), 'gpt-x');
     await user.type(within(dialog).getByLabelText(/^API key/), 'sk-secret-1');
     await user.click(within(dialog).getByRole('button', { name: 'Add provider' }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('form', {name:'Provider settings'})).toBeNull());
     const [post] = api.find('POST', '/api/v1/providers');
     expect(post.headers['If-Match']).toBe('4');
     expect(post.body).toMatchObject({ name: 'team', type: 'openai', defaultModel: 'gpt-x', apiKey: { value: 'sk-secret-1' } });
@@ -116,7 +116,7 @@ describe('ProvidersSection', () => {
     const user = userEvent.setup();
     render(<ProvidersSection canEdit canTest />);
     await user.click(await screen.findByRole('button', { name: 'Add provider' }));
-    const dialog = screen.getByRole('dialog', { name: 'Add model provider' });
+    const dialog = screen.getByRole('form', { name: 'Provider settings' });
     expect(within(dialog).queryByLabelText(/^Vertex AI project/)).toBeNull();
     await user.selectOptions(within(dialog).getByLabelText(/^Type/), 'gemini');
     await user.type(within(dialog).getByLabelText(/^Name/), 'vertex');
@@ -125,14 +125,14 @@ describe('ProvidersSection', () => {
     await user.type(within(dialog).getByLabelText(/^Vertex AI region/), 'europe-west4');
     await user.click(within(dialog).getByRole('button', { name: 'Add provider' }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('form', {name:'Provider settings'})).toBeNull());
     const [post] = api.find('POST', '/api/v1/providers');
     expect(post.body).toMatchObject({ name: 'vertex', type: 'gemini', project: 'my-project', region: 'europe-west4' });
     expect((post.body as { apiKey?: unknown }).apiKey).toBeUndefined();
     expect(await within(await screen.findByRole('article', { name: 'Provider vertex' })).findByText('my-project · europe-west4')).toBeTruthy();
   });
 
-  it('shows server validation next to the field and keeps the dialog open', async () => {
+  it('shows server validation next to the field and keeps the editor open', async () => {
     fakeApi({
       'GET /api/v1/providers': () => [mockProvider],
       'GET /api/v1/provider-settings': () => settings(),
@@ -143,7 +143,7 @@ describe('ProvidersSection', () => {
     const user = userEvent.setup();
     render(<ProvidersSection canEdit canTest />);
     await user.click(await screen.findByRole('button', { name: 'Add provider' }));
-    const dialog = screen.getByRole('dialog');
+    const dialog = screen.getByRole('form', { name: 'Provider settings' });
     await user.type(within(dialog).getByLabelText(/^Name/), 'team');
     await user.click(within(dialog).getByRole('button', { name: 'Add provider' }));
     const alert = await within(dialog).findByRole('alert');
@@ -160,7 +160,7 @@ describe('ProvidersSection', () => {
     const user = userEvent.setup();
     render(<ProvidersSection canEdit canTest />);
     await user.click(await screen.findByRole('button', { name: 'Add provider' }));
-    const dialog = screen.getByRole('dialog');
+    const dialog = screen.getByRole('form', { name: 'Provider settings' });
     await user.click(within(dialog).getByRole('button', { name: 'Add provider' }));
     expect((await within(dialog).findByRole('alert')).textContent).toBe('Enter a name.');
     expect(api.find('POST', '/api/v1/providers')).toHaveLength(0);
@@ -176,7 +176,7 @@ describe('ProvidersSection', () => {
     const user = userEvent.setup();
     render(<ProvidersSection canEdit canTest />);
     await user.click(within(await screen.findByRole('article', { name: 'Provider team' })).getByRole('button', { name: 'Edit' }));
-    let dialog = screen.getByRole('dialog', { name: 'Edit team' });
+    let dialog = screen.getByRole('form', { name: 'Provider settings' });
     expect((within(dialog).getByLabelText(/^API key/) as HTMLInputElement).value).toBe('');
     await user.clear(within(dialog).getByLabelText(/^Default model/));
     await user.type(within(dialog).getByLabelText(/^Default model/), 'gpt-y');
@@ -185,7 +185,7 @@ describe('ProvidersSection', () => {
     expect(api.find('PUT', '/api/v1/providers/team')[0].body).not.toHaveProperty('apiKey');
 
     await user.click(within(card('team')).getByRole('button', { name: 'Edit' }));
-    dialog = screen.getByRole('dialog', { name: 'Edit team' });
+    dialog = screen.getByRole('form', { name: 'Provider settings' });
     await user.click(within(dialog).getByLabelText('Remove the stored credential'));
     await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
     await waitFor(() => expect(api.find('PUT', '/api/v1/providers/team')).toHaveLength(2));
@@ -202,7 +202,7 @@ describe('ProvidersSection', () => {
     const user = userEvent.setup();
     render(<ProvidersSection canEdit canTest />);
     await user.click(within(await screen.findByRole('article', { name: 'Provider team' })).getByRole('button', { name: 'Edit' }));
-    const dialog = screen.getByRole('dialog');
+    const dialog = screen.getByRole('form', { name: 'Provider settings' });
     await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
     expect((await within(dialog).findByRole('alert')).textContent).toMatch(/changed by someone else/);
   });
@@ -238,7 +238,7 @@ describe('ProvidersSection', () => {
     const user = userEvent.setup();
     render(<ProvidersSection canEdit canTest />);
     await user.click(await screen.findByRole('button', { name: 'Add provider' }));
-    const dialog = screen.getByRole('dialog');
+    const dialog = screen.getByRole('form', { name: 'Provider settings' });
     await user.type(within(dialog).getByLabelText(/^Name/), 'team');
     await user.type(within(dialog).getByLabelText(/^API key/), 'sk-1');
     await user.click(within(dialog).getByRole('button', { name: 'Test settings' }));
@@ -270,7 +270,7 @@ describe('ProvidersSection', () => {
     render(<ProvidersSection canEdit canTest />);
     expect(await screen.findByText(/no encryption key/)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Add provider' }));
-    expect((within(screen.getByRole('dialog')).getByLabelText(/^API key/) as HTMLInputElement).disabled).toBe(true);
+    expect((within(screen.getByRole('form', { name: 'Provider settings' })).getByLabelText(/^API key/) as HTMLInputElement).disabled).toBe(true);
   });
 
   it('shows unavailable providers with the server reason', async () => {
@@ -360,7 +360,7 @@ describe('ProvidersSection', () => {
     });
     const user = userEvent.setup();
     const { unmount } = render(<ProvidersSection canEdit canTest />);
-    expect(await screen.findByText(/Enable an inference plugin above/)).toBeTruthy();
+    expect(await screen.findByText(/Enable an inference plugin in Inference plugins/)).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Add provider' }) as HTMLButtonElement).disabled).toBe(true);
     unmount();
 
@@ -368,7 +368,56 @@ describe('ProvidersSection', () => {
     render(<ProvidersSection canEdit canTest />);
     await waitFor(() => expect((screen.getByRole('button', { name: 'Add provider' }) as HTMLButtonElement).disabled).toBe(false));
     await user.click(screen.getByRole('button', { name: 'Add provider' }));
-    const options = within(within(screen.getByRole('dialog')).getByRole('combobox', { name: 'Type' })).getAllByRole('option').map((o) => o.textContent);
+    const options = within(within(screen.getByRole('form', { name: 'Provider settings' })).getByRole('combobox', { name: 'Type' })).getAllByRole('option').map((o) => o.textContent);
     expect(options).toEqual(['Ollama']);
   });
+});
+
+it('combines provider search and filters without hiding configured providers behind plugins',async()=>{
+  fakeApi({'GET /api/v1/providers':()=>[mockProvider,managed,{...managed,name:'broken',status:'unavailable'}],
+    'GET /api/v1/provider-settings':()=>settings(),'GET /api/v1/provider-plugins':()=>plugins()});
+  const user=userEvent.setup(); render(<ProvidersSection canEdit canTest presentation="providers"/>);
+  await screen.findByRole('article',{name:'Provider team'});
+  expect(screen.queryByRole('group',{name:'Inference plugins'})).toBeNull();
+  await user.type(screen.getByLabelText('Search providers'),'GPT-X');
+  expect(screen.getAllByRole('article')).toHaveLength(2);
+  await user.selectOptions(screen.getByLabelText('Provider filter'),'unavailable');
+  expect(screen.getAllByRole('article')).toHaveLength(1);
+  expect(card('broken')).toBeTruthy();
+  await user.selectOptions(screen.getByLabelText('Provider filter'),'default');
+  expect(screen.getByText('No providers match these filters.')).toBeTruthy();
+  await user.click(screen.getByRole('button',{name:'Clear filters'}));
+  expect(screen.getAllByRole('article')).toHaveLength(3);
+});
+it('opens a direct editor without a modal and recovers failed metadata loading',async()=>{
+  let failed=true; const user=userEvent.setup(); const navigate=vi.fn();
+  const calls=fakeApi({'GET /api/v1/providers':()=>[mockProvider,managed],
+    'GET /api/v1/provider-settings':()=>failed ? apiError(503,'Settings unavailable','unavailable') : settings(),
+    'GET /api/v1/provider-plugins':()=>plugins()});
+  render(<ProvidersSection canEdit canTest presentation="providers" editor={{mode:'edit',name:'team'}} onEditor={navigate}/>);
+  await screen.findByText('Settings unavailable'); failed=false;
+  await user.click(screen.getByRole('button',{name:'Retry loading providers'}));
+  const form=await screen.findByRole('form',{name:'Provider settings'});
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(within(form).getByLabelText('API key')).toHaveProperty('value','');
+  await user.click(screen.getByRole('button',{name:'Back to providers'}));
+  expect(navigate).toHaveBeenCalledWith(undefined);
+  expect(calls.calls.every(call=>call.method==='GET')).toBe(true);
+});
+it('does not expose a direct provider editor to a viewer',async()=>{
+  const calls=fakeApi({'GET /api/v1/providers':()=>[managed],'GET /api/v1/provider-settings':()=>settings(),'GET /api/v1/provider-plugins':()=>plugins()});
+  render(<ProvidersSection canEdit={false} canTest={false} editor={{mode:'edit',name:'team'}}/>);
+  expect(screen.getByText(/Only an administrator/)).toBeTruthy();
+  expect(screen.queryByRole('form',{name:'Provider settings'})).toBeNull();
+  await waitFor(()=>expect(calls.calls.length).toBe(3));
+  expect(calls.calls.every(call=>call.method==='GET')).toBe(true);
+});
+
+it('explains a direct creation route with no enabled plugins instead of offering an unusable form',async()=>{
+  fakeApi({'GET /api/v1/providers':()=>[], 'GET /api/v1/provider-settings':()=>settings(),
+    'GET /api/v1/provider-plugins':()=>plugins().map(plugin=>({...plugin,enabled:false}))});
+  render(<ProvidersSection canEdit canTest editor={{mode:'create'}}/>);
+  expect(await screen.findByText(/No inference plugins are enabled/)).toBeTruthy();
+  expect(screen.getByRole('link',{name:'Enable an inference plugin'}).getAttribute('href')).toBe('#/models/plugins');
+  expect(screen.queryByRole('form',{name:'Provider settings'})).toBeNull();
 });

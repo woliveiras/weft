@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { budgetLabel, fromMicros, money, toMicros, usedPercent } from './cost';
+import { budgetLabel, budgetPeriodLabel, fromMicros, money, toMicros, usedPercent } from './cost';
 
 describe('cost helpers', () => {
   it('converts between currency units and micro-units without drift', () => {
@@ -24,4 +24,10 @@ describe('cost helpers', () => {
     expect(usedPercent({ limitMicros: 200, chargedMicros: 100, reservedMicros: 60 })).toBe(80);
     expect(usedPercent({ limitMicros: 0, chargedMicros: 5, reservedMicros: 0 })).toBe(0);
   });
+});
+
+it('formats calendar months in UTC and leaves invalid periods explicit',()=>{
+  expect(budgetPeriodLabel('2026-11')).toBe('November 2026');
+  expect(budgetPeriodLabel('2027-01')).toBe('January 2027');
+  for(const period of ['','2026-00','2026-13','invalid']) expect(budgetPeriodLabel(period)).toBe(period);
 });

@@ -42,3 +42,10 @@ export function budgetLabel(v: Pick<BudgetView, 'scope' | 'id'>): string {
   const who = v.scope === 'installation' ? '' : ` ${id}`;
   return `${scope}${who}${period ? ` · ${period}` : ''}`;
 }
+
+/** Calendar months are UTC; never shift the first day through the browser timezone. */
+export function budgetPeriodLabel(period: string): string {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return period;
+  return new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(`${period}-01T00:00:00Z`));
+}

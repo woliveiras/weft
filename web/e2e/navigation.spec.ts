@@ -38,3 +38,13 @@ test('viewer navigation retains read-only permissions at narrow widths', async (
   await page.getByRole('link', { name: 'Network policies', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Review network policy' })).toHaveCount(0);
 });
+
+test('a direct new-provider URL explains missing plugin activation without showing an unusable editor',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+  await page.goto('/#/models/providers/new');
+  await expect(page.getByText(/No inference plugins are enabled/)).toBeVisible();
+  await expect(page.getByRole('form',{name:'Provider settings'})).toHaveCount(0);
+  await page.getByRole('link',{name:'Enable an inference plugin',exact:true}).click();
+  await expect(page).toHaveURL(/models\/plugins$/);
+  await expect(page.getByRole('listitem',{name:'Inference plugin OpenAI'})).toBeVisible();
+});

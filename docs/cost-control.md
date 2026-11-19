@@ -30,7 +30,7 @@ time, or billing users.
 | Usage reported by external runtimes for work outside the LLM callback | [runtime-protocol.md](runtime-protocol.md) (`TurnResult.usage`) |
 | Task-run budget: policy default, CAS reservation before dispatch (native, callback, delegation), settlement, pause at the hard level, audited human raise that resumes the run, warning event, startup reconciliation of open reservations | `server/internal/cost/budget.go`, `server/internal/engine/cost_budget.go`, [API](api.md#monetary-budgets) |
 | Monthly installation, user, project and workflow budgets (UTC calendar month), warning level, optional interrupt level, refusal of new task starts at the hard level, multi-budget reservation with rollback | `server/internal/cost/definitions.go`, [API](api.md#monetary-budgets) |
-| Console: monthly spend (by provider/model, user, project, workflow, task run), budget bars with warning and hard levels and a raise for administrators, price and budget editing, the budgets a new task is held to, and a paused run's budget with its raise on the task | **Models → Costs**, Tasks |
+| Console: monthly spend (by provider/model, user, project, workflow, task run), budget bars with warning and hard levels and a raise for administrators, price and budget editing, the budgets a new task is held to, and a paused run's budget with its raise on the task | **Models → Usage & costs / Budgets / Model prices**, Tasks |
 
 Cost records are events, so they follow the event history retention. A call
 the provider rejected (HTTP 4xx other than 408/429) was not served and is not
@@ -85,7 +85,9 @@ recorded at the request estimate (`estimated: true`).
 
 - Periods: calendar month (UTC) or per run.
 - A changed monthly definition applies to the current period, subject to the
-  [floor set by a manual raise](#monthly-budget-floor).
+  [floor set by a manual raise](#monthly-budget-floor). Current ledger GETs show
+  that effective limit immediately, without rewriting recorded entries or
+  waiting for another reservation. Closed periods retain their historical limit.
 - Thresholds: a **warning** level (default 80%) and a **hard** level (100%).
   An optional **interrupt** level (for example 110%) stops a turn that is still
   running.

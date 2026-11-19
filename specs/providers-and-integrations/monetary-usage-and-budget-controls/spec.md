@@ -88,6 +88,8 @@ pause and raise controls for terminal tasks.
 - 2026-10-30. The local-first cost phase selected zero default Ollama price and synthetic prices for enforcement tests.
 - 2026-11-11. COST-01–05 are recorded as delivered. The optional native Ollama journey exercised local cost recording.
 
+- 2026-11-19. Maintainer refinement to AC-003: monthly cards expose inline definition editing and separate task-default saves. Current ledger reads reflect saved monthly definitions using admission precedence and explicit Raise floors, without requiring another call or rewriting accounting entries. Closed periods retain historical limits; failed definition reads are surfaced.
+
 ## Reconciliation
 
 - [cost-control.md](../../../docs/cost-control.md), [api.md](../../../docs/api.md), [delegation.md](../../../docs/delegation.md).

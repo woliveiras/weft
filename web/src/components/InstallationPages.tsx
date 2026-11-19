@@ -1,13 +1,9 @@
 import { DelegationSection } from './DelegationSection';
-import { useRef, useState } from 'react';
-import { Btn } from './common';
 import type { Info } from '../api/types';
 import { ConnectionsList } from './ConnectionsList';
 import { MCPHistory } from './MCPHistory';
 import type { ConnectionTab } from './mcpNavigation';
 import { MCPSection } from './MCPSection';
-import { ProvidersSection, type ProvidersHandle } from './ProvidersSection';
-import { CostsSection } from './CostsSection';
 import { SCMConnectionCreate, SCMConnectionsSection } from './SCMConnectionsSection';
 import { IntegrationsView } from './IntegrationsView';
 import { NetworkPolicySection } from './NetworkPolicySection';
@@ -35,21 +31,7 @@ export function ConnectionsPage({ info, connectionID, connectionTab = 'overview'
   </div>;
 }
 
-export function ModelsPage({ info }: { info?: Info }) {
-  const providers = useRef<ProvidersHandle>(null);
-  const [testing, setTesting] = useState(false);
-  const testAll = async () => {
-    setTesting(true);
-    try { await providers.current?.testAll(); } finally { setTesting(false); }
-  };
-  const role = info?.identity?.role;
-  return <div className="page installation-page"><header className="page-head"><div><h1>Models</h1>
-    <p className="muted">Configure model providers for this installation, then choose a model in each agent.</p></div>
-    {(role === 'admin' || role === 'operator') && <Btn onClick={() => void testAll()} disabled={testing}>{testing ? 'Testing providers…' : 'Test all providers'}</Btn>}</header>
-    <ProvidersSection ref={providers} canEdit={role === 'admin'} canTest={role === 'admin' || role === 'operator'} />
-    <CostsSection canEdit={role === 'admin'} />
-  </div>;
-}
+export { ModelsPage } from './ModelsPage';
 
 export function AdministrationPage({ info, infoError, section }: { info?: Info; infoError?: string; section: AdministrationSection }) {
   const canManage = info?.identity?.role === 'admin';

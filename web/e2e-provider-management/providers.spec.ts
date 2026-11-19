@@ -20,12 +20,13 @@ test('configures a provider in the browser and keeps stored keys out of success 
  await new Promise<void>(resolve=>upstream.listen(0,'127.0.0.1',resolve));
  try{
   await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
-  await page.goto('/#/models');
+  await page.goto('/#/models/plugins');
   const openaiPlugin=page.getByRole('listitem',{name:'Inference plugin OpenAI'});await expect(openaiPlugin).toBeVisible();
   if(await openaiPlugin.getByRole('button',{name:'Enable',exact:true}).isVisible())await openaiPlugin.getByRole('button',{name:'Enable',exact:true}).click();
   await expect(openaiPlugin.getByText('Enabled',{exact:true})).toBeVisible();
+  await page.getByRole('link',{name:'Providers',exact:true}).click();
   await page.getByRole('button',{name:'Add provider',exact:true}).click();
-  const form=page.getByRole('dialog',{name:'Add model provider'});
+  const form=page.getByRole('form',{name:'Provider settings'});
   await form.getByLabel(/^Name/).fill('browser-provider');
   await form.getByRole('combobox',{name:/^Type/}).selectOption('openai');
   await form.getByLabel(/^Base URL/).fill('http://127.0.0.1:'+(upstream.address() as AddressInfo).port+'/v1');
@@ -42,8 +43,26 @@ test('configures a provider in the browser and keeps stored keys out of success 
   const list=await page.request.get('/api/v1/providers',{headers});
   expect(list.ok()).toBe(true);expect(await list.text()).not.toContain(key);
   await card.getByRole('button',{name:'Edit',exact:true}).click();
-  await expect(page.getByRole('dialog').getByLabel(/^API key/)).toHaveValue('');
-  await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click();
+  await expect(page.getByRole('form',{name:'Provider settings'}).getByLabel(/^API key/)).toHaveValue('');
+  await page.getByRole('form',{name:'Provider settings'}).getByRole('button',{name:'Cancel',exact:true}).click();
+  await card.getByRole('button',{name:'Edit',exact:true}).click();
+  const editor=page.getByRole('form',{name:'Provider settings'});
+  await expect(page).toHaveURL(/models\/providers\/browser-provider\/edit$/);
+  await page.reload();
+  await expect(editor.getByLabel('API key',{exact:true})).toHaveValue('');
+  await editor.getByText('Limits',{exact:true}).click();
+  await editor.getByLabel('Context window (tokens)',{exact:true}).fill('65536');
+  await page.route('**/api/v1/providers/browser-provider',route=>route.request().method()==='PUT'
+    ? route.fulfill({status:503,json:{error:'Provider update temporarily unavailable'}}) : route.continue());
+  await editor.getByRole('button',{name:'Save changes',exact:true}).click();
+  await expect(editor.getByRole('alert')).toContainText('Provider update temporarily unavailable');
+  await expect(editor.getByLabel('Context window (tokens)',{exact:true})).toHaveValue('65536');
+  await page.unroute('**/api/v1/providers/browser-provider');
+  await editor.getByRole('button',{name:'Save changes',exact:true}).click();
+  await expect(card).toContainText('65,536 tokens');
+  const updated=await page.request.get('/api/v1/providers',{headers});
+  expect(await updated.text()).not.toContain(key);
+
   fail=true;
   const response=page.waitForResponse(r=>r.url().endsWith('/providers/browser-provider/test'));
   await card.getByRole('button',{name:'Test connection',exact:true}).click();

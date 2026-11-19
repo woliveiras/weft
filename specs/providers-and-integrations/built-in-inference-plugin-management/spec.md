@@ -49,6 +49,8 @@ Disabled or missing ready providers block inference-dependent admission and expl
 - 2026-10-18. Browser configuration and managed LangGraph gateway acceptance used synthetic credentials. Provider management was isolated in its own disposable browser backend after registry reload affected other fixture scenarios.
 - 2026-10-30. The local-first plan recorded the three plugin states, UI/API-only configuration and development-only mock. PLUG-01–05 are reported complete by 2026-11-11.
 
+- 2026-11-19. Maintainer UI refinement: provider creation and editing use direct console pages instead of configuration modals. Providers and inference plugins are separate destinations. Existing manifest-driven fields, activation consent, revision checks and write-only credentials remain the configuration contract; failed loads and direct routes without enabled plugins are explicit states.
+
 ## Reconciliation
 
 - [configuration.md](../../../docs/configuration.md), [extensibility.md](../../../docs/extensibility.md), [provider-langgraph-validation.md](../../../docs/provider-langgraph-validation.md), [adr/0008-offline-mock-provider.md](../../../docs/adr/0008-offline-mock-provider.md).
