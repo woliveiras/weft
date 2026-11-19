@@ -99,7 +99,12 @@ has no finished run.
 ## Connection pages
 
 `#/connections` lists installation connections. The MCP section supports
-name/service/ID search and a status filter. Its **Add connection** link opens
+name/service/ID search and a status filter. Source control has independent
+name/service/repository search and a test-status filter. Search and status combine,
+and Clear filters resets the current section. Source control test statuses reflect
+checks performed while the list is open. Reloading the page resets them to
+Not tested. Filters align horizontally on wider screens and stack on narrow ones.
+The MCP section's **Add connection** link opens
 `#/connections/new`, and template links use `#/connections/connect?...`.
 **Add connection** under Source control opens `#/connections/source-control/new`.
 Saving or cancelling returns to the list. A source control test reports its

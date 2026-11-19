@@ -44,6 +44,31 @@ test('administrators add a source control connection and tasks choose it as thei
   }
   await expect(card.getByRole('status')).toContainText('Connection failed');
   await expect(card.getByRole('button', { name: 'Test connection' })).toBeEnabled();
+  const scm = page.getByRole('region', { name: 'Source control', exact: true });
+  const mcp = page.getByRole('region', { name: 'MCP connections', exact: true });
+  for (const panel of [mcp, scm]) {
+    const controls = panel.locator('.connection-filter-fields');
+    const search = await controls.getByRole('searchbox').boundingBox();
+    const status = await controls.getByRole('combobox').boundingBox();
+    expect(search).not.toBeNull();
+    expect(status).not.toBeNull();
+    expect(Math.abs(search!.y - status!.y)).toBeLessThan(2);
+    expect(status!.x).toBeGreaterThan(search!.x + search!.width);
+  }
+  await scm.getByRole('searchbox', { name: 'Search connections' }).fill('ACME/APP');
+  await scm.getByRole('combobox', { name: 'Test status' }).selectOption('failed');
+  await expect(card).toBeVisible();
+  await scm.getByRole('combobox', { name: 'Test status' }).selectOption('connected');
+  await expect(scm.getByText('No connections match these filters.')).toBeVisible();
+  await scm.getByRole('button', { name: 'Clear filters' }).click();
+  await expect(card).toBeVisible();
+  await expect(scm.getByRole('searchbox')).toBeFocused();
+  await mcp.getByRole('searchbox').fill('unmatched-mcp-connection');
+  await expect(card).toBeVisible();
+  await expect(mcp.getByText('No connections match these filters.')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.setViewportSize({ width: 1280, height: 720 });
   // The token never comes back to the browser.
   const listed = await (await page.request.get('/api/v1/scm/connections', { headers: admin })).text();
   expect(listed).not.toContain('synthetic-scm-token');

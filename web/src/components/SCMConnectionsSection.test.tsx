@@ -13,6 +13,32 @@ afterEach(() => {
 });
 
 describe('SCMConnectionsSection', () => {
+  it('combines case-insensitive search and test status and clears filters without changing connections', async () => {
+    const backend = fakeApi({
+      'GET /api/v1/scm/connections': () => [gh, { ...gh, name: 'other', kind: 'bitbucket-dc', repository: 'team/other' }],
+      'POST /api/v1/scm/connections/gh/test': () => ({ ok: true, identity: { user: 'bot', canPush: true } }),
+    });
+    render(<SCMConnectionsSection role="admin" />);
+    const row = await screen.findByRole('row', { name: /acme\/app/ });
+    await userEvent.click(within(row).getByRole('button', { name: 'Test connection' }));
+    await within(row).findByText('Connected');
+    const search = screen.getByRole('searchbox', { name: 'Search connections' });
+    const status = screen.getByRole('combobox', { name: 'Test status' });
+    await userEvent.type(search, ' ACME/APP ');
+    await userEvent.selectOptions(status, 'connected');
+    expect(screen.getByText('1 of 2 connections')).toBeTruthy();
+    expect(screen.queryByRole('row', { name: /team\/other/ })).toBeNull();
+    await userEvent.selectOptions(status, 'failed');
+    expect(screen.getByText('No connections match these filters.')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(document.activeElement).toBe(search);
+    expect(screen.getByText('2 of 2 connections')).toBeTruthy();
+    await userEvent.type(search, 'BITBUCKET DATA CENTER');
+    expect(screen.getByRole('row', { name: /team\/other/ })).toBeTruthy();
+    expect(screen.queryByRole('row', { name: /acme\/app/ })).toBeNull();
+    expect(backend.find('POST', '/api/v1/scm/connections/gh/test')).toHaveLength(1);
+    expect(backend.calls.filter(call => call.method !== 'GET')).toHaveLength(1);
+  });
   it('reports a connected repository and allows admins to remove it', async () => {
     const api = fakeApi({
       'GET /api/v1/scm/connections': () => [gh],
@@ -85,19 +111,20 @@ describe('SCMConnectionsSection', () => {
     listUnavailable = false;
     await userEvent.click(screen.getByRole('button', { name: 'Reload source control connections' }));
     const testButton = await screen.findByRole<HTMLButtonElement>('button', { name: 'Test connection' });
+    const row = screen.getByRole('row', { name: /acme\/app/ });
     await userEvent.click(testButton);
-    expect(await screen.findByText('Checking connection')).toBeTruthy();
+    expect(await within(row).findByText('Checking connection')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Testing…' })).toBe(testButton);
     expect(testButton.disabled).toBe(true);
     await act(async () => finishTest(apiError(503, 'Service unavailable', 'unavailable')));
-    expect(await screen.findByText('Connection failed')).toBeTruthy();
+    expect(await within(row).findByText('Connection failed')).toBeTruthy();
     expect(screen.getByText('Service unavailable')).toBeTruthy();
     expect(testButton.disabled).toBe(false);
     await userEvent.click(testButton);
     await act(async () => finishTest(json({ ok: true, identity: { user: 'bot', canPush: false } })));
-    expect(await screen.findByText('Limited access')).toBeTruthy();
+    expect(await within(row).findByText('Limited access')).toBeTruthy();
     expect(screen.getByText(/Cannot push/)).toBeTruthy();
-    expect(screen.queryByText('Connection failed')).toBeNull();
+    expect(within(row).queryByText('Connection failed')).toBeNull();
     expect(backend.find('POST', '/api/v1/scm/connections/gh/test')).toHaveLength(2);
   });
 });

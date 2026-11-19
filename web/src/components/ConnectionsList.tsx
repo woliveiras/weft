@@ -1,33 +1,22 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { api } from '../api/client';
 import { useAsync } from '../hooks/useData';
 import { Badge, Btn, Empty, ErrorBox, fmtDateTime, stateLabel } from './common';
+import { ConnectionFilters, emptyConnectionFilters } from './ConnectionFilters';
 import { connectionLink, connectionStatuses, matchingConnections } from './mcpNavigation';
 
 export function ConnectionsList({ role }: { role?: string }) {
   const list = useAsync(api.mcpConnections, []);
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
-  const searchField = useRef<HTMLInputElement>(null);
-  const matches = matchingConnections(list.data ?? [], search, status);
+  const [filters, setFilters] = useState(emptyConnectionFilters);
+  const matches = matchingConnections(list.data ?? [], filters.search, filters.status);
   return <section aria-labelledby="mcp-connections-heading" className="card connections-panel">
     <header className="connections-panel-head">
       <div><h2 id="mcp-connections-heading">MCP connections</h2><p className="muted">Connect external tool servers. Grant tools to each agent in its permissions.</p></div>
       {role === 'admin' && <a className="btn btn-primary" href="#/connections/new" aria-describedby="mcp-connections-heading">Add connection</a>}
     </header>
     <div className="connections-toolbar">
-      <div className="connection-filters">
-        <label>Search connections<input ref={searchField} type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Name, service or ID" /></label>
-        <label>Connection status<select value={status} onChange={e => setStatus(e.target.value)}>
-          <option value="">All statuses</option>
-          {Object.entries(connectionStatuses).map(([key, { label }]) => <option key={key} value={key}>{label}</option>)}
-        </select></label>
-        {(search || status) && <Btn tone="ghost" onClick={() => {
-          setSearch('');
-          setStatus('');
-          searchField.current?.focus();
-        }}>Clear filters</Btn>}
-      </div>
+      <ConnectionFilters value={filters} onChange={setFilters} placeholder="Name, service or ID"
+        statusLabel="Connection status" statuses={connectionStatuses} />
       <div className="btn-row">
         <a href="#/connections/history">View connection history</a>
         <Btn disabled={list.loading} onClick={() => void list.reload()}>Reload MCP connections</Btn>

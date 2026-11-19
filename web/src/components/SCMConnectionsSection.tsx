@@ -5,6 +5,7 @@ import { api, errorMessage } from '../api/client';
 import type { SCMConnection } from '../api/types';
 import { useAsync } from '../hooks/useData';
 import { Badge, Btn, Empty, ErrorBox } from './common';
+import { ConnectionFilters, emptyConnectionFilters } from './ConnectionFilters';
 
 type Draft = { name: string; kind: string; repository: string; apiUrl: string; gitUrl: string; branchPrefix: string; approval: boolean; token: string };
 const empty: Draft = { name: '', kind: 'github', repository: '', apiUrl: '', gitUrl: '', branchPrefix: '', approval: true, token: '' };
@@ -22,10 +23,18 @@ const serviceNames: Record<string, string> = { github: 'GitHub', 'bitbucket-dc':
 /** Server-held source control connections for push and pull request tools. */
 export function SCMConnectionsSection({ role }: { role?: string }) {
   const list = useAsync(api.scmConnections, []);
+  const [filters, setFilters] = useState(emptyConnectionFilters);
   const [results, setResults] = useState<Record<string, ConnectionTest>>({});
   const [error, setError] = useState<string>();
   const admin = role === 'admin';
   const canTest = admin || role === 'operator';
+  const search = filters.search.trim().toLowerCase();
+  const matches = (list.data ?? []).filter(connection => {
+    const status = results[connection.name]?.state ?? 'untested';
+    const service = serviceNames[connection.kind] ?? connection.kind;
+    return (!filters.status || status === filters.status) &&
+      [connection.name, connection.kind, service, connection.repository].some(value => value.toLowerCase().includes(search));
+  });
   const test = async (connection: SCMConnection) => {
     setResults(current => ({ ...current, [connection.name]: { state: 'testing' } }));
     let result: ConnectionTest;
@@ -69,17 +78,24 @@ export function SCMConnectionsSection({ role }: { role?: string }) {
         </div>
         {admin && <a className="btn btn-primary" href={scmCreateLink} aria-describedby="scm-heading">Add connection</a>}
       </header>
+      <div className="connections-toolbar">
+        <ConnectionFilters value={filters} onChange={setFilters} placeholder="Name, service or repository"
+          statusLabel="Test status" statuses={testStatuses} />
+      </div>
       {list.error && <div className="connections-load-error">
         <ErrorBox error={`Could not load source control connections: ${list.error}`} />
         <Btn disabled={list.loading} onClick={() => void list.reload()}>Reload source control connections</Btn>
       </div>}
       <ErrorBox error={error} />
-      {list.loading && <p className="muted" role="status">Loading source control connections…</p>}
+      <p className="small muted connections-count" role="status">
+        {list.loading ? 'Loading source control connections…' : list.error ? '' : list.data?.length ? `${matches.length} of ${list.data.length} connections` : ''}
+      </p>
       {!list.loading && !list.error && !list.data?.length && <Empty>No source control connection yet.</Empty>}
-      {!!list.data?.length && <div className="connection-table connections-table" role="region" aria-label="Source control connection list" tabIndex={0}>
+      {!list.loading && !!list.data?.length && !matches.length && <Empty>No connections match these filters.</Empty>}
+      {matches.length > 0 && <div className="connection-table connections-table" role="region" aria-label="Source control connection list" tabIndex={0}>
         <table><caption className="sr-only">Source control connections</caption>
           <thead><tr><th scope="col">Connection</th><th scope="col">Repository and branches</th><th scope="col">Pull request approval</th><th scope="col">Credential</th><th scope="col">Test status</th>{canTest && <th scope="col">Actions</th>}</tr></thead>
-          <tbody>{list.data.map(c => {
+          <tbody>{matches.map(c => {
             const result = results[c.name];
             const pending = result?.state === 'testing';
             const status = testStatuses[result?.state ?? 'untested'];

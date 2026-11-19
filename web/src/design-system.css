@@ -171,10 +171,20 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 .connections-panel-head p { margin: var(--space-1) 0 0; }
 .connections-panel-head .btn { text-decoration: none; }
 .connections-toolbar { align-items: end; }
-.connections-toolbar .btn-row { align-items: center; }
-.connections-panel .connection-filters { margin: 0; gap: var(--space-3); }
-.connections-panel .connection-filters label { min-inline-size: min(11rem, 100%); }
-.connections-panel .connection-filters :is(input, select) { min-inline-size: 0; max-inline-size: 100%; }
+.connections-toolbar .btn-row { align-items: center; margin-inline-start: auto; }
+.connection-filter-fields {
+  display: grid;
+  align-items: end;
+  grid-template-columns: minmax(0, 15rem) minmax(0, 11rem) auto;
+  gap: var(--space-3);
+  max-inline-size: 100%;
+}
+.connection-filter-fields label { display: grid; gap: var(--space-1); min-inline-size: 0; }
+.connection-filter-fields :is(input, select) { inline-size: 100%; min-inline-size: 0; }
+.connection-filter-fields .btn { justify-self: start; }
+@media (max-width: 560px) {
+  .connection-filter-fields { grid-template-columns: minmax(0, 1fr); inline-size: 100%; }
+}
 .connections-panel .connections-count { margin: 0; }
 .connections-count:empty { display: none; }
 .connections-table { position: relative; min-inline-size: 0; }
