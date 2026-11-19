@@ -729,3 +729,62 @@ main > .page:is(.task-request-page, .installation-page, .administration-page) {
 .field-help-dialog::backdrop { background: rgb(0 0 0 / 45%); }
 .field-help-dialog h2 { margin: 0 0 var(--space-3); font: var(--text-h3); }
 .field-help-body { margin-block-end: var(--space-4); line-height: 1.55; overflow-wrap: anywhere; }
+
+/* Keep workflow navigation, editing and execution in predictable groups. */
+.workflow-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; padding-block: 0; }
+.workflow-toolbar > .tabs { padding-block: var(--space-2); }
+.workflow-toolbar > .toolbar-actions { justify-content: space-between; gap: var(--space-3); padding-block: var(--space-3); border-top: 1px solid var(--border); }
+.workflow-draft-controls { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+.workflow-toolbar .toolbar-actions .badge { min-height: auto; padding-block: var(--space-1); }
+.workflow-toolbar .toolbar-run-controls { margin-inline-start: auto; border: 0; padding-inline-start: 0; }
+.agent-inspector { display: grid; gap: var(--space-4); padding: var(--space-5); }
+.agent-inspector > .panel-title { padding-inline-end: var(--space-5); flex-wrap: wrap; }
+.agent-inspector > .panel-title h2 { margin: 0; }
+.agent-inspector > p, .add-agent-panel > p { margin: 0; }
+.agent-inspector .inspector-tabs { margin: 0; overflow-x: auto; flex-wrap: nowrap; padding-block-end: var(--space-2); }
+.inspector-tabs > button { flex-shrink: 0; padding-inline: var(--space-2); }
+.inspector-content { min-width: 0; display: grid; gap: var(--space-5); }
+.inspector-content > section { margin: 0; min-width: 0; }
+.inspector-content h3 { margin-block: 0 var(--space-3); font-size: .95rem; text-transform: none; letter-spacing: normal; }
+.inspector-content .node-editor > div:not([hidden]) { display: grid; gap: var(--space-3); }
+.inspector-content .node-editor fieldset { padding-inline: 0; }
+.inspector-content .log { height: 320px; max-height: 45vh; }
+.inspector-content .table { display: block; overflow-x: auto; }
+.inspector-content .check-inline { display: flex; align-items: center; gap: var(--space-2); }
+.inspector-content .check-inline input { width: auto; margin: 0; }
+.add-agent-panel { display: grid; gap: var(--space-4); padding: var(--space-5); }
+.add-agent-panel .section-navigation { margin: 0; }
+.add-agent-panel form { display: grid; gap: var(--space-4); }
+.add-agent-panel form label { display: grid; gap: var(--space-2); }
+.add-agent-panel form input, .add-agent-panel form textarea { width: 100%; }
+@media (min-width: 1101px) { .floor > .side-panel { width: 500px; } }
+@media (max-width: 900px) {
+  .workflow-toolbar .toolbar-run-controls { margin-inline-start: 0; }
+  .floor > .side-panel { position: absolute; inset: 0 0 0 auto; width: min(500px, 100%); z-index: 8; }
+}
+@media (min-width: 901px) and (max-width: 1400px) {
+  .floor > .side-panel { position: absolute; inset: 0 0 0 auto; width: min(500px, 100%); z-index: 8; }
+}
+.inspector-replicas > summary { margin-bottom: var(--space-3); }
+
+/* A compact navigation rail makes room without hiding destinations. */
+.navigation-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.primary-navigation .navigation-toggle { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; padding: 0; }
+.navigation-destinations { display: flex; flex-direction: column; gap: var(--space-2); }
+.primary-navigation.is-compact { width: 68px; padding-inline: var(--space-2); }
+.is-compact .navigation-header { justify-content: center; }
+.is-compact .navigation-label, .is-compact .nav-item-label {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.primary-navigation.is-compact .nav-item { width: 44px; min-height: 44px; padding: var(--space-2); justify-content: center; margin-inline: auto; }
+.primary-navigation.is-compact .count { position: absolute; top: 0; right: 0; font-size: 10px; min-width: 14px; padding: 0 3px; }
+.navigation-warning { color: var(--warning); overflow-wrap: anywhere; }
+.navigation-tooltip { position: fixed; z-index: 1000; max-width: 190px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); background: var(--surface-raised); color: var(--text); box-shadow: var(--shadow-2); pointer-events: none; font-size: 12px; }
+@media(max-width:800px) {
+  .primary-navigation.is-compact { width: 100%; flex-direction: row; align-items: flex-start; max-height: 38vh; }
+  .is-compact .navigation-destinations { flex: 1; min-width: 0; flex-direction: row; flex-wrap: wrap; }
+  .is-compact .navigation-group, .is-compact .navigation-items { display: flex; flex-direction: row; flex-wrap: wrap; gap: var(--space-1); }
+  .is-compact .navigation-group { flex-shrink: 1; }
+  .is-compact .navigation-group + .navigation-group { margin: 0; padding: 0; border-top: 0; border-left: 1px solid var(--border); padding-inline-start: var(--space-2); }
+  .primary-navigation.is-compact .nav-item { margin: 0; }
+}

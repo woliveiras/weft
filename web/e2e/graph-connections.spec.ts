@@ -70,15 +70,22 @@ test('creates agents, drags connections, validates, cancels and confirms Delete,
     const config = page.getByRole('region', { name: 'Agent configuration' });
     await expect(config.getByLabel('ID', { exact: true })).toHaveValue(agent);
     await config.getByRole('combobox', { name: 'Runtime', exact: true }).selectOption('echo');
+    await page.getByRole('tab', {name:'Graph',exact:true}).click();
     await page.getByRole('button', { name: 'Close panel', exact: true }).click();
     // Move the new card so its handles do not overlap the previous agent.
-    await move(page, agent, 0.65, agent === 'agent-2' ? 0.25 : 0.7);
+    await move(page, agent, 0.85, agent === 'agent-2' ? 0.25 : 0.7);
   }
+  await expect.poll(async()=>{
+    const source=await node(page,'source').boundingBox();
+    const target=await node(page,'agent-2').boundingBox();
+    return !!source && !!target && source.x+source.width+10 < target.x;
+  }).toBe(true);
   await connect(page, 'source', 'agent-2', 1);
   await connect(page, 'agent-2', 'agent-3', 2);
   await connect(page, 'source', 'agent-3', 3);
 
   await node(page, 'agent-2').click();
+  await page.getByRole('navigation',{name:'Agent inspector sections'}).getByRole('button',{name:'Configuration',exact:true}).click();
   const config = page.getByRole('region', { name: 'Agent configuration' });
   await config.getByRole('combobox', { name: 'Loop mode', exact: true }).selectOption('scheduled');
   await config.getByLabel('Schedule', { exact: true }).fill('invalid schedule');
@@ -130,7 +137,10 @@ test('creates agents, drags connections, validates, cancels and confirms Delete,
   await page.mouse.click(point.x, point.y);
   await deleteSelection(page, 'Remove channel "channel-3"?', false);
   await expect(edges(page)).toHaveCount(1);
-  await deleteSelection(page, 'Remove channel "channel-3"?', true);
+  await page.getByRole('complementary',{name:'Details'}).getByRole('button',{name:'Remove',exact:true}).click();
+  const channelDialog=page.getByRole('dialog',{name:'Confirm removal'});
+  await expect(channelDialog).toContainText('Remove channel "channel-3"?');
+  await channelDialog.getByRole('button',{name:'Remove',exact:true}).click();
   await expect(edges(page)).toHaveCount(0);
   await save(page);
   await page.reload();
@@ -141,9 +151,9 @@ test('creates agents, drags connections, validates, cancels and confirms Delete,
   expect(disconnected.graph.spec.channels ?? []).toEqual([]);
 });
 
-test('confirms draft removal from agent details and restores the agent and channel with Discard', async ({ page }) => {
+test('confirms draft removal from agent details and restores the agent and channel with Discard', async ({ page }, testInfo) => {
   const created = await page.request.post('/api/v1/graphs', { headers, data: {
-    metadata: { name: 'Removal review' },
+    metadata: { name: `Removal review ${testInfo.repeatEachIndex}` },
     spec: {
       nodes: [
         { id: 'one', runtime: { kind: 'echo' }, position: { x: 0, y: 0 } },
@@ -157,9 +167,9 @@ test('confirms draft removal from agent details and restores the agent and chann
   const id = initial.graph.metadata.id;
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
   await page.goto(`/#/g/${id}/canvas?sel=node:two`);
-  const button = page.getByRole('complementary', { name: 'Details' }).getByRole('button', { name: 'Remove agent', exact: true });
+  const button = page.getByRole('complementary', { name: 'Details' }).getByRole('button', { name: 'Remove', exact: true });
   const dialog = page.getByRole('dialog', { name: 'Confirm removal' });
-  await expect(page.getByRole('button', { name: 'Remove Agent Two' })).toBeVisible();
+  await expect(button).toBeVisible();
   await button.click();
   await expect(dialog).toContainText('Remove agent "Agent Two" and channel "delivery"?');
   await expect(dialog).toContainText('Agent ID: two');

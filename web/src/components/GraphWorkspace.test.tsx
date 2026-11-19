@@ -153,7 +153,9 @@ function Harness({ start = 'canvas' as GraphTab, role = 'admin' as 'viewer' | 'o
 
 function renderWorkspace(selected?: string) {
   location.hash = selected ? `#/g/g/canvas?sel=node:${selected}` : '#/g/g/canvas';
-  return render(<Harness />);
+  const result = render(<Harness />);
+  if (selected) fireEvent.click(screen.getByRole('button', {name:'Configuration'}));
+  return result;
 }
 
 const agentEditor = () => screen.getByRole('region', { name: 'Agent configuration' });
@@ -187,7 +189,10 @@ describe('GraphWorkspace editor', () => {
     const drawer = screen.getByRole('complementary', { name: 'Add agent' });
     expect(screen.queryByText('unsaved graph changes')).toBeNull();
     await user.click(within(drawer).getByRole('button', { name: 'Create new agent' }));
-    // The new agent is selected so it can be configured right away.
+    // Creation opens the dedicated editor; the canvas inspector remains a compatible draft editor.
+    expect(screen.getByRole('region', {name:'Agent settings'})).toBeTruthy();
+    await user.click(screen.getByRole('tab', {name:'Graph'}));
+    await user.click(screen.getByRole('button', {name:'Configuration'}));
     const name = within(agentEditor()).getByLabelText('Name') as HTMLInputElement;
     expect(name.value).toBe('Agent 3');
     await user.clear(name);
@@ -318,7 +323,7 @@ describe('GraphWorkspace editor', () => {
     renderWorkspace('dev');
     await screen.findByRole('region', { name: 'Agent configuration' });
 
-    const remove = toolbarButton('Remove Developer');
+    const remove = within(screen.getByRole('complementary', {name:'Details'})).getByRole('button', {name:'Remove'});
     await user.click(remove);
     const dialog = screen.getByRole('dialog', { name: 'Confirm removal' });
     expect(dialog.textContent).toContain('Remove agent "Developer" and channels "in", "code"?');
@@ -331,7 +336,7 @@ describe('GraphWorkspace editor', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.queryByText('unsaved graph changes')).toBeNull();
 
-    await user.click(within(screen.getByRole('complementary', { name: 'Details' })).getByRole('button', { name: 'Remove agent' }));
+    await user.click(within(screen.getByRole('complementary', { name: 'Details' })).getByRole('button', { name: 'Remove' }));
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove' }));
     expect(puts()).toHaveLength(0);
     expect(screen.getByText('unsaved graph changes')).toBeTruthy();
@@ -525,6 +530,7 @@ describe('GraphWorkspace YAML view', () => {
     expect(screen.getByText(/The graph view and Save use the last valid YAML/)).toBeTruthy();
 
     await user.click(screen.getByRole('tab', { name: 'Graph' }));
+    await user.click(screen.getByRole('button', {name:'Configuration'}));
     expect((within(agentEditor()).getByLabelText('Name') as HTMLInputElement).value).toBe('From YAML');
 
     await user.click(toolbarButton('Save graph'));
@@ -643,4 +649,51 @@ it('opens a section directly, loads existing statuses and moves focus during key
   expect(document.activeElement).toBe(await screen.findByRole('heading', { name: 'General' }));
   expect(general.getAttribute('aria-current')).toBe('page');
   expect(screen.getByLabelText('ID', { exact: true })).toHaveProperty('readOnly', true);
+});
+
+it('validates a new agent name and preserves form values when switching sources', async()=>{
+  const user=userEvent.setup(); const {puts}=backend(); renderWorkspace();
+  await user.click(screen.getByRole('button',{name:'Add agent'}));
+  const drawer=screen.getByRole('complementary',{name:'Add agent'});
+  const name=within(drawer).getByLabelText('Name');
+  await user.clear(name); await user.type(name,'   ');
+  expect(within(drawer).getByRole('button',{name:'Create new agent'})).toHaveProperty('disabled',true);
+  await user.clear(name); await user.type(name,'Security reviewer');
+  await user.type(within(drawer).getByLabelText('Description'),'Reviews changes before delivery.');
+  await user.click(within(drawer).getByRole('button',{name:'Choose from catalog'}));
+  await user.click(within(drawer).getByRole('button',{name:'Create new'}));
+  expect(within(drawer).getByLabelText('Name')).toHaveProperty('value','Security reviewer');
+  await user.click(within(drawer).getByRole('button',{name:'Create new agent'}));
+  expect(screen.getByRole('region',{name:'Agent settings'})).toBeTruthy();
+  expect(within(agentEditor()).getByLabelText('Name')).toHaveProperty('value','Security reviewer');
+  expect(within(agentEditor()).getByLabelText('Description')).toHaveProperty('value','Reviews changes before delivery.');
+  expect(puts()).toHaveLength(0);
+});
+it('loads inspector activity on demand and keeps draft-only nodes out of runtime APIs',async()=>{
+  const user=userEvent.setup(); const b=backend(); renderWorkspace();
+  await user.click(screen.getByRole('button',{name:'Add agent'}));
+  await user.click(screen.getByRole('button',{name:'Create new agent'}));
+  await user.click(screen.getByRole('tab',{name:'Graph'}));
+  const drawer=screen.getByRole('complementary',{name:'Details'});
+  expect(within(drawer).getByText(/This agent is in the draft/)).toBeTruthy();
+  expect(within(drawer).getByRole('button',{name:'Start'})).toHaveProperty('disabled',true);
+  for (const section of ['Output','Messages','Runs']) await user.click(within(drawer).getByRole('button',{name:section}));
+  expect(b.api.find('GET','/api/v1/graphs/g/nodes/agent-3/chat')).toHaveLength(0);
+  expect(b.api.find('GET','/api/v1/graphs/g/executions')).toHaveLength(0);
+});
+
+it('keeps channel removal contextual and confirms it before changing the graph draft', async()=>{
+  const user=userEvent.setup(); const {puts}=backend();
+  location.hash='#/g/g/canvas?sel=channel:code'; render(<Harness/>);
+  const drawer=screen.getByRole('complementary',{name:'Details'});
+  await user.click(within(drawer).getByRole('button',{name:'Remove'}));
+  const dialog=screen.getByRole('dialog',{name:'Confirm removal'});
+  expect(dialog.textContent).toContain('Remove channel "code"?');
+  await user.click(within(dialog).getByRole('button',{name:'Remove'}));
+  expect(puts()).toHaveLength(0);
+  await user.click(toolbarButton('Save graph'));
+  await waitFor(()=>expect(puts()).toHaveLength(1));
+  const graph=puts()[0].body as Graph;
+  expect(graph.spec.channels?.map(channel=>channel.id)).toEqual(['in']);
+  expect(graph.spec.nodes).toEqual(initial().graph.spec.nodes);
 });

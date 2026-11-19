@@ -1,0 +1,63 @@
+import {expect,test} from '@playwright/test';
+import type {GraphSummary} from '../src/api/types';
+const headers={Authorization:'Bearer e2e-admin-token'};
+
+test('creates a named draft through the canvas and keeps runtime activity separate',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+  const created=await page.request.post('/api/v1/graphs',{headers,data:{metadata:{name:'Canvas creation'},spec:{nodes:[{id:'source',runtime:{kind:'echo'}}]}}});
+  expect(created.ok()).toBeTruthy();
+  const original:GraphSummary=await created.json(); const id=original.graph.metadata.id;
+  await page.goto(`/#/g/${id}/canvas`);
+  await expect(page.getByRole('group',{name:'Workflow changes',exact:true})).toBeVisible();
+  await expect(page.getByRole('group',{name:'Workflow execution',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Add agent',exact:true}).click();
+  const add=page.getByRole('complementary',{name:'Add agent',exact:true});
+  await add.getByLabel('Name',{exact:true}).fill('   ');
+  await expect(add.getByRole('button',{name:'Create new agent'})).toBeDisabled();
+  await add.getByLabel('Name',{exact:true}).fill('Release assistant');
+  await add.getByLabel('Description',{exact:true}).fill('Checks the release request.');
+  await add.getByRole('button',{name:'Create new agent'}).click();
+  await expect(page).toHaveURL(/agent=agent-2/);
+  const editor=page.getByRole('region',{name:'Agent configuration',exact:true});
+  await expect(editor.getByLabel('Name',{exact:true})).toHaveValue('Release assistant');
+  await expect(editor.getByLabel('Description',{exact:true})).toHaveValue('Checks the release request.');
+  await editor.getByRole('combobox',{name:'Runtime',exact:true}).selectOption('echo');
+  await page.getByRole('tab',{name:'Graph',exact:true}).click();
+  const details=page.getByRole('complementary',{name:'Details',exact:true});
+  await expect(details.getByRole('button',{name:'Start',exact:true})).toBeDisabled();
+  await expect(details.getByRole('button',{name:'Remove',exact:true})).toBeVisible();
+  await expect(details.getByRole('region',{name:'Agent configuration',exact:true})).toHaveCount(0);
+  await details.getByRole('navigation',{name:'Agent inspector sections'}).getByRole('button',{name:'Messages',exact:true}).click();
+  await expect(details.getByText(/Save the workflow before running/)).toBeVisible();
+  await expect(details.getByLabel('Operator message')).toHaveCount(0);
+  const before:GraphSummary=await (await page.request.get(`/api/v1/graphs/${id}`,{headers})).json();
+  expect(before.record.version).toBe(original.record.version);
+  await page.getByRole('button',{name:'Save graph',exact:true}).click();
+  await expect(page.getByText('All changes saved',{exact:true})).toBeVisible();
+  await details.getByRole('navigation',{name:'Agent inspector sections'}).getByRole('button',{name:'Messages',exact:true}).click();
+  await expect(details.getByText('No operator messages yet.')).toBeVisible();
+  const saved:GraphSummary=await (await page.request.get(`/api/v1/graphs/${id}`,{headers})).json();
+  expect(saved.graph.spec.nodes[1]).toMatchObject({id:'agent-2',name:'Release assistant',description:'Checks the release request.'});
+  expect(saved.record.state).toBe('stopped');
+  // A failed dependency is visible and recoverable, without an empty-success message.
+  await page.route(`**/api/v1/graphs/${id}/events?**`,route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'History temporarily unavailable'})}));
+  await details.getByRole('button',{name:'Output',exact:true}).click();
+  await expect(details.getByText(/History temporarily unavailable/)).toBeVisible();
+  await expect(details.getByText('No output yet.')).toHaveCount(0);
+  await page.unroute(`**/api/v1/graphs/${id}/events?**`);
+  await details.getByRole('button',{name:'Retry output'}).click();
+  await expect(details.getByText('No output yet.')).toBeVisible();
+});
+
+test('keeps the canvas and creation form usable at narrow widths and restores focus on cancel',async({page})=>{
+  await page.setViewportSize({width:760,height:850});
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+  await page.goto('/#/g/journal-capture/canvas');
+  const addButton=page.getByRole('button',{name:'Add agent',exact:true});
+  await addButton.click(); const drawer=page.getByRole('complementary',{name:'Add agent',exact:true});
+  await expect(drawer.getByLabel('Name',{exact:true})).toBeFocused();
+  const rect=await drawer.boundingBox(); expect(rect!.x).toBeGreaterThanOrEqual(0); expect(rect!.x+rect!.width).toBeLessThanOrEqual(760);
+  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth); expect(overflow).toBe(false);
+  await page.keyboard.press('Escape'); await expect(drawer).toHaveCount(0); await expect(addButton).toBeFocused();
+  await expect(page.getByText('unsaved graph changes',{exact:true})).toHaveCount(0);
+});

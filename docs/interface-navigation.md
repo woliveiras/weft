@@ -160,7 +160,7 @@ workflows. An agent's **Workflows** tab, next to **Parameters**, lists where it
 is used and links directly to the agent configuration in each workflow.
 
 When creating a workflow, choose **Add existing agent**. On the canvas, open
-**Add agent** and choose **Choose from catalog** in the side panel. Search the
+**Add agent** and choose **Choose from catalog** in the side panel. To create a new agent, enter its name and description, then continue to the full Agent configuration page. Cancelling or pressing Escape closes the creation form without adding a node. Search the
 catalog, select a version and supply its parameter values. Publishing a version in the catalog leaves saved workflow
 versions pinned. In the workflow's agent configuration, **Agent version**
 shows the pinned version and lists the published versions of that agent.
@@ -211,7 +211,9 @@ Viewers inspect a read-only page; operators and administrators can edit under th
 existing backend authorization. Opening a section never grants tools or starts an
 agent. Execution controls remain on the graph's operational views. The existing
 canvas inspector and Definition editor remain available for compatibility, including
-fields not represented by dedicated form controls. No schema or runtime permission
+fields not represented by dedicated form controls. The inspector opens on Overview; Configuration, Output, Messages and Runs are separate sections. Output, message history and turns load when selected. An unsaved node has no runtime history or enabled execution controls. Remove stays contextual to the selected agent or channel and opens the existing affected-channel confirmation.
+
+The workspace toolbar separates workflow changes from execution of the saved version. Draft status, validation, saving, discard and conflict recovery retain their existing semantics. At narrow widths, the inspector overlays the canvas instead of squeezing it out of view. No schema or runtime permission
 contract changes are introduced by this organization.
 
 ## Runs
@@ -348,3 +350,7 @@ existing confirmation and deferred-cleanup review preserved. Viewers retain
 navigation without mutation controls. Loading, failed refresh, empty catalogue
 and filtered-empty states are distinct, with an explicit refresh action. Narrow
 screens keep horizontal overflow inside the labelled, keyboard-focusable table.
+
+### Compact navigation
+
+Use **Collapse navigation** at the top of the primary menu to show an icon rail; **Expand navigation** restores the labels. The browser remembers the choice. Accessible destination names, the current-page marker and pending-approval counts remain available, and hovering or focusing an icon shows its name. Toggling changes only the layout: it preserves the current route and in-memory workflow drafts. If browser storage is unavailable, a message explains that the choice applies only to this session.

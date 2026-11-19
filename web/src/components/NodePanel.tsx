@@ -48,13 +48,16 @@ interface Props {
   issues?: ElementIssue[];
   onConfigure?: () => void;
   onRemove?: () => void;
+  isSaved?: boolean;
+  canControl?: boolean;
 }
 
-export function NodePanel({ summary, status, nodeId, onSaved, onStatus, onUpdateNode, issues, onConfigure, onRemove }: Props) {
+export function NodePanel({ summary, status, nodeId, onSaved, onStatus, onUpdateNode, issues, onConfigure, onRemove, isSaved = true, canControl = true }: Props) {
   const graph = summary.graph;
   const gid = graph.metadata.id;
   const node = graph.spec.nodes.find((n) => n.id === nodeId);
   const ns = status?.nodes?.find((n) => n.nodeId === nodeId);
+  const [panelTab, setPanelTab] = useState<'overview' | 'configuration' | 'output' | 'messages' | 'runs'>('overview');
   const [replica, setReplica] = useState(-1);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -62,6 +65,7 @@ export function NodePanel({ summary, status, nodeId, onSaved, onStatus, onUpdate
 
   useEffect(() => {
     setReplica(-1);
+    setPanelTab('overview');
     setError(undefined);
   }, [nodeId]);
   useEffect(() => {
@@ -101,42 +105,52 @@ export function NodePanel({ summary, status, nodeId, onSaved, onStatus, onUpdate
   const sel = replica >= 0 ? replicas[replica] : undefined;
 
   return (
-    <div className="panel-body">
+    <div className="panel-body agent-inspector">
       <div className="panel-title">
         <StateDot state={ns?.state ?? 'stopped'} />
         <h2>{node.name || node.id}</h2>
-        <Badge>{stateLabel(ns?.state ?? 'stopped')}</Badge>
+        <Badge>{isSaved ? stateLabel(ns?.state ?? 'stopped') : 'Draft'}</Badge>
         {node.disabled && <Badge tone="muted">disabled</Badge>}
       </div>
       {node.description && <p className="muted">{node.description}</p>}
       <div className="btn-row">
         {onConfigure && <Btn tone="primary" onClick={onConfigure}>Configure agent</Btn>}
-        {onRemove && <Btn tone="danger" onClick={onRemove}>Remove agent</Btn>}
+        {onRemove && <Btn tone="danger" onClick={onRemove}>Remove</Btn>}
       </div>
-      <AgentEnvironment graph={graph} node={node} />
       <ElementIssues issues={issues} label="Agent validation" />
-
+      <nav className="section-navigation inspector-tabs" aria-label="Agent inspector sections">
+        {(['overview', 'configuration', 'output', 'messages', 'runs'] as const).map(next=><button key={next} type="button"
+          aria-current={panelTab===next ? 'page' : undefined} onClick={()=>setPanelTab(next)}>
+          {{overview:'Overview',configuration:'Configuration',output:'Output',messages:'Messages',runs:'Runs'}[next]}
+        </button>)}
+      </nav>
+      {!isSaved && <p className="notice" role="status">This agent is in the draft. Save the workflow before running it or viewing its activity.</p>}
+      <div className="inspector-content">
+      {panelTab==='overview' && <>
+      <section><h3>Execution</h3>
+      <p className="muted small">Controls use saved workflow version {summary.record.version}. Unsaved configuration changes are not included.</p>
       <div className="btn-row">
-        <Btn tone="primary" small disabled={busy || node.disabled} onClick={() => act('start')} title="Start">
+        <Btn tone="primary" small disabled={busy || !canControl || !isSaved || node.disabled} onClick={() => act('start')} title="Start">
           <Icon name="play" /> Start
         </Btn>
-        <Btn small disabled={busy} onClick={() => act('stop')} title="Stop after the current turn">
+        <Btn small disabled={busy || !canControl || !isSaved} onClick={() => act('stop')} title="Stop after the current turn">
           <Icon name="stop" /> Stop
         </Btn>
-        <Btn small disabled={busy} onClick={() => act('pause')}>
+        <Btn small disabled={busy || !canControl || !isSaved} onClick={() => act('pause')}>
           <Icon name="pause" /> Pause
         </Btn>
-        <Btn small disabled={busy} onClick={() => act('resume')}>
+        <Btn small disabled={busy || !canControl || !isSaved} onClick={() => act('resume')}>
           Resume
         </Btn>
-        <Btn small tone="danger" disabled={busy} onClick={() => act('kill')} title="Kill turns in flight now">
+        <Btn small tone="danger" disabled={busy || !canControl || !isSaved} onClick={() => act('kill')} title="Kill turns in flight now">
           <Icon name="bolt" />
         </Btn>
       </div>
       <ErrorBox error={error} />
-
-      <section>
-        <h3>Replicas</h3>
+      </section>
+      <AgentEnvironment graph={graph} node={node} />
+      <details className="inspector-replicas">
+        <summary>Replicas · {desired}</summary>
         <div className="seg" role="tablist" aria-label="Replica">
           <button
             type="button"
@@ -210,18 +224,24 @@ export function NodePanel({ summary, status, nodeId, onSaved, onStatus, onUpdate
               aria-label="Replica count"
             />
           </label>
-          <Btn small disabled={busy || scale === ns?.desiredReplicas} onClick={doScale}>
+          <Btn small disabled={busy || !canControl || !isSaved || scale === ns?.desiredReplicas} onClick={doScale}>
             Apply
           </Btn>
         </div>
-      </section>
-
-      <OutputLog graphId={gid} nodeId={nodeId} replica={replica} />
-      <ChatBox graphId={gid} nodeId={nodeId} replica={replica} />
-      <PromptEditor summary={summary} nodeId={nodeId} onSaved={onSaved} onUpdateNode={onUpdateNode} issues={issues} />
-      {onUpdateNode && <AgentEditor summary={summary} nodeId={nodeId} onUpdateNode={onUpdateNode} issues={issues} />}
-      <NodeSettings summary={summary} nodeId={nodeId} onUpdateNode={onUpdateNode} issues={issues} />
-      <Executions graphId={gid} nodeId={nodeId} replica={replica} />
+      </details>
+      <details><summary>Configuration summary</summary><NodeSettings summary={summary} nodeId={nodeId} /></details>
+      </>}
+      {panelTab==='configuration' && <>
+        <p className="muted small">Changes join the workflow draft. Use Configure agent for a larger editing area with separate configuration sections.</p>
+        {node.agent ? <section><h3>Instructions</h3><pre className="prompt">{node.prompt || 'No shared instructions.'}</pre><p className="muted small">Shared configuration comes from the pinned agent version. Configure agent to review the version and workflow instructions.</p></section>
+          : <PromptEditor summary={summary} nodeId={nodeId} onSaved={onSaved} onUpdateNode={onUpdateNode} issues={issues} readOnly={!canControl} />}
+        {onUpdateNode && <AgentEditor summary={summary} nodeId={nodeId} onUpdateNode={onUpdateNode} issues={issues} />}
+        <NodeSettings summary={summary} nodeId={nodeId} onUpdateNode={onUpdateNode} issues={issues} />
+      </>}
+      {panelTab==='output' && isSaved && <OutputLog graphId={gid} nodeId={nodeId} replica={replica} />}
+      {panelTab==='messages' && isSaved && <ChatBox graphId={gid} nodeId={nodeId} replica={replica} readOnly={!canControl} />}
+      {panelTab==='runs' && isSaved && <Executions graphId={gid} nodeId={nodeId} replica={replica} />}
+      </div>
     </div>
   );
 }
@@ -229,23 +249,29 @@ export function NodePanel({ summary, status, nodeId, onSaved, onStatus, onUpdate
 function OutputLog({ graphId, nodeId, replica }: { graphId: string; nodeId: string; replica: number }) {
   const [lines, setLines] = useState<WeftEvent[]>([]);
   const [follow, setFollow] = useState(true);
+  const [error, setError] = useState<string>();
+  const [loading, setLoading] = useState(true);
+  const [reload, setReload] = useState(0);
   const box = useRef<HTMLDivElement>(null);
   const filter = { graph: graphId, node: nodeId, replica, types: LOG_TYPES };
 
   useEffect(() => {
     let cancelled = false;
     setLines([]);
+    setLoading(true);
+    setError(undefined);
     api
       .events(graphId, { node: nodeId, types: LOG_TYPES.join(','), limit: 300 })
       .then((evs) => {
         if (!cancelled) setLines((cur) => mergeEvents(evs.filter((e) => matches(e, filter)), cur));
       })
-      .catch(() => undefined);
+      .catch(cause => { if (!cancelled) setError(errorMessage(cause)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graphId, nodeId, replica]);
+  }, [graphId, nodeId, replica, reload]);
 
   useEventStream(filter, (ev) => setLines((cur) => mergeEvents(cur, [ev]).slice(-1000)));
 
@@ -257,12 +283,15 @@ function OutputLog({ graphId, nodeId, replica }: { graphId: string; nodeId: stri
     <section>
       <div className="section-head">
         <h3>Live output</h3>
-        <label className="small">
+        <label className="check-inline small">
           <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> follow
         </label>
       </div>
+      <ErrorBox error={error} />
+      {error && <Btn small onClick={()=>setReload(value=>value+1)}>Retry output</Btn>}
+      {loading && <p role="status">Loading output…</p>}
       <div className="log" ref={box} aria-live="polite">
-        {lines.length === 0 && <div className="muted">No output yet.</div>}
+        {!loading && !error && lines.length === 0 && <div className="muted">No output yet.</div>}
         {foldLiveOutput(lines).map((ev) => (
           <div key={ev.id} className={`log-line ${eventTone(ev)}`}>
             <span className="log-time">{fmtTime(ev.time)}</span>
@@ -282,7 +311,7 @@ function mergeEvents(a: WeftEvent[], b: WeftEvent[]): WeftEvent[] {
   return out;
 }
 
-function ChatBox({ graphId, nodeId, replica }: { graphId: string; nodeId: string; replica: number }) {
+function ChatBox({ graphId, nodeId, replica, readOnly = false }: { graphId: string; nodeId: string; replica: number; readOnly?: boolean }) {
   const [text, setText] = useState('');
   const [error, setError] = useState<string>();
   const history = useAsync(() => api.chatHistory(graphId, nodeId), [graphId, nodeId]);
@@ -290,7 +319,7 @@ function ChatBox({ graphId, nodeId, replica }: { graphId: string; nodeId: string
   useEventStream({ graph: graphId, node: nodeId, types: ['operator.message'] }, reload);
 
   const send = async () => {
-    if (!text.trim()) return;
+    if (readOnly || !text.trim()) return;
     try {
       await api.sendChat(graphId, nodeId, text.trim(), replica);
       setText('');
@@ -305,6 +334,10 @@ function ChatBox({ graphId, nodeId, replica }: { graphId: string; nodeId: string
   return (
     <section>
       <h3>Talk to {replica >= 0 ? `n${replica}` : 'the agent'}</h3>
+      <ErrorBox error={history.error} />
+      {history.loading && <p role="status">Loading messages…</p>}
+      {history.error && <Btn small onClick={()=>void history.reload()}>Retry messages</Btn>}
+      {!history.loading && !history.error && msgs.length===0 && <p className="muted small">No operator messages yet.</p>}
       {msgs.length > 0 && (
         <ul className="chat">
           {msgs.map((m) => (
@@ -318,7 +351,7 @@ function ChatBox({ graphId, nodeId, replica }: { graphId: string; nodeId: string
           ))}
         </ul>
       )}
-      <div className="chat-input">
+      {!readOnly && <div className="chat-input">
         <textarea
           rows={2}
           value={text}
@@ -332,7 +365,7 @@ function ChatBox({ graphId, nodeId, replica }: { graphId: string; nodeId: string
         <Btn tone="primary" small onClick={send} disabled={!text.trim()}>
           Send
         </Btn>
-      </div>
+      </div>}
       <ErrorBox error={error} />
     </section>
   );
@@ -344,9 +377,11 @@ function PromptEditor({
   onSaved,
   onUpdateNode,
   issues,
+  readOnly = false,
 }: {
   summary: GraphSummary;
   nodeId: string;
+  readOnly?: boolean;
   onSaved: (s: GraphSummary) => void;
   onUpdateNode?: (nodeId: string, update: Partial<GraphNode>) => void;
   issues?: ElementIssue[];
@@ -383,7 +418,7 @@ function PromptEditor({
     <section>
       <div className="section-head">
         <h3>Prompt</h3>
-        {!editing ? (
+        {readOnly ? null : !editing ? (
           <Btn small tone="ghost" onClick={() => setEditing(true)}>
             Edit
           </Btn>

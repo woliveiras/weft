@@ -98,6 +98,8 @@ export function GraphWorkspace({
   const [saveConflict, setSaveConflict] = useState(false);
   const [agentPlacement, setAgentPlacement] = useState<{position: Point; positions: Record<string, Point>}>();
   const [catalogPicker, setCatalogPicker] = useState(false);
+  const [newAgentName, setNewAgentName] = useState('');
+  const [newAgentDescription, setNewAgentDescription] = useState('');
   const addAgentOpener = useRef<HTMLElement | null>(null);
   const canBindAgent = info?.identity?.role === 'admin';
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -257,6 +259,8 @@ export function GraphWorkspace({
     if (saving) return;
     addAgentOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setCatalogPicker(false);
+    setNewAgentName(`Agent ${draftGraph.spec.nodes.length + 1}`);
+    setNewAgentDescription('');
     setAgentPlacement({position, positions});
   };
 
@@ -266,15 +270,17 @@ export function GraphWorkspace({
   };
 
   const addNode = (catalog?: {binding: AgentBinding; definition: AgentDefinition}) => {
-    if (!agentPlacement || saving || (catalog && !canBindAgent)) return;
+    if (!agentPlacement || saving || (!catalog && !newAgentName.trim()) || (catalog && !canBindAgent)) return;
     const positions = {...agentPlacement.positions};
     for (const node of draftGraph.spec.nodes) if (node.position) positions[node.id] = node.position;
     const {graph, id} = addAgent(draftGraph, agentPlacement.position, positions);
     const node = graph.spec.nodes.find(candidate => candidate.id === id);
-    changeGraph(() => catalog && node ? updateNode(graph, id, nodeWithAgent(node, catalog.binding, catalog.definition)) : graph);
+    changeGraph(() => catalog && node ? updateNode(graph, id, nodeWithAgent(node, catalog.binding, catalog.definition))
+      : updateNode(graph, id, {name: newAgentName.trim(), description: newAgentDescription.trim() || undefined}));
     setAgentPlacement(undefined);
     setSelection({kind:'node', id});
     setPanelOpen(true);
+    if (!catalog) configureAgent(id);
   };
 
   /** Preview all affected elements before editing the draft. */
@@ -321,13 +327,12 @@ export function GraphWorkspace({
     }
   };
 
-  const selectedAgent = selection?.kind === 'node' ? draftGraph.spec.nodes.find((node) => node.id === selection.id) : undefined;
   const state = status?.state ?? summary.record.state;
   const running = state === 'running' || state === 'paused' || state === 'stopping';
 
   return (
     <div className="workspace">
-      <div className="toolbar">
+      <div className="toolbar workflow-toolbar">
         <div className="tabs" role="tablist">
           {(['canvas', 'agent', 'runs', 'activity', 'files', 'events', 'messages', 'yaml', 'settings'] as GraphTab[]).map((t) => (
             <button
@@ -357,26 +362,16 @@ export function GraphWorkspace({
         </div>
         <div className="toolbar-actions">
           {(tab === 'canvas' || tab === 'yaml' || tab === 'agent' || tab === 'settings') && (
-            <>
+            <div className="workflow-draft-controls" role="group" aria-label="Workflow changes">
               {tab === 'canvas' && (
                 <Btn small tone="ghost" onClick={() => openSettings()}>
                   Graph settings
                 </Btn>
               )}
-              {tab === 'canvas' && selectedAgent && (
-                <Btn small tone="danger" onClick={() => removeElements([selectedAgent.id], [])} disabled={saving}>
-                  Remove {selectedAgent.name || selectedAgent.id}
-                </Btn>
-              )}
-              {tab === 'canvas' && selection?.kind === 'channel' && (
-                <Btn small tone="danger" onClick={() => removeElements([], [], [selection.id])} disabled={saving}>
-                  Remove channel
-                </Btn>
-              )}
               {saving ? (
                 <Badge>saving…</Badge>
               ) : (
-                draftDirty && <Badge tone="warn">unsaved graph changes</Badge>
+                draftDirty ? <Badge tone="warn">unsaved graph changes</Badge> : <span className="muted small">All changes saved</span>
               )}
               {saveConflict && (
                 <>
@@ -397,27 +392,27 @@ export function GraphWorkspace({
               <Btn small tone="ghost" disabled={!draftDirty || saving} onClick={() => resetDraft(summary.graph)}>
                 Discard
               </Btn>
-            </>
+            </div>
           )}
-          <div className="toolbar-run-controls" hidden={tab === 'agent' || tab === 'runs'}>
+          <div role="group" aria-label="Workflow execution" className="toolbar-run-controls" hidden={tab === 'agent' || tab === 'runs'}>
             <Badge tone={state === 'running' ? 'ok' : state === 'failed' ? 'bad' : state === 'paused' ? 'warn' : undefined}>
               {state}
             </Badge>
             {status && status.desiredState !== status.state && <span className="muted small">→ {status.desiredState}</span>}
             <span className="muted small">v{summary.record.version}</span>
             {(status?.approvalsPending ?? 0) > 0 && <Badge tone="warn">{status?.approvalsPending} approvals</Badge>}
-            <Btn small tone="primary" onClick={() => act('start')} disabled={state === 'running'} title="Run all">
+            <Btn small onClick={() => act('start')} disabled={!canEditAgent || state === 'running'} title="Run all">
               <Icon name="play" /> Run all
             </Btn>
-            <Btn small onClick={() => act('stop')} disabled={!running} title="Stop all after current turns">
+            <Btn small onClick={() => act('stop')} disabled={!canEditAgent || !running} title="Stop all after current turns">
               <Icon name="stop" /> Stop all
             </Btn>
             {state === 'paused' ? (
-              <Btn small onClick={() => act('resume')}>
+              <Btn small disabled={!canEditAgent} onClick={() => act('resume')}>
                 Resume
               </Btn>
             ) : (
-              <Btn small onClick={() => act('pause')} disabled={state !== 'running'}>
+              <Btn small onClick={() => act('pause')} disabled={!canEditAgent || state !== 'running'}>
                 <Icon name="pause" /> Pause
               </Btn>
             )}
@@ -425,7 +420,7 @@ export function GraphWorkspace({
               small
               tone="danger"
               onClick={() => act('kill')}
-              disabled={!running}
+              disabled={!canEditAgent || !running}
               title="Kill all turns in flight"
               aria-label="Kill"
             >
@@ -469,7 +464,7 @@ export function GraphWorkspace({
             graph={draftGraph}
             status={status}
             selection={selection}
-            editable
+            editable={canEditAgent}
             onAddNode={openAddAgent}
             issues={issues}
             onConnect={(connection) => {
@@ -506,12 +501,22 @@ export function GraphWorkspace({
               <button type="button" className="icon-btn panel-close" onClick={cancelAddAgent} aria-label="Close panel"><Icon name="x" /></button>
               <div className="panel-body form add-agent-panel">
                 <h2>Add agent</h2>
+                <p className="muted">Choose an existing agent or create one for this workflow. Nothing runs until the workflow is saved and started.</p>
+                <div className="section-navigation" aria-label="Agent source">
+                  <button type="button" aria-current={!catalogPicker ? 'page' : undefined} onClick={()=>setCatalogPicker(false)}>Create new</button>
+                  {canBindAgent && <button type="button" aria-current={catalogPicker ? 'page' : undefined} onClick={()=>setCatalogPicker(true)}>Choose from catalog</button>}
+                </div>
                 {catalogPicker && canBindAgent ? <AgentPickerFields onCancel={()=>setCatalogPicker(false)}
                   onSelect={(binding,definition)=>addNode({binding,definition})} /> : (
-                  <div className="btn-row">
-                    <Btn tone="primary" autoFocus onClick={()=>addNode()} disabled={saving}>Create new agent</Btn>
-                    {canBindAgent && <Btn onClick={()=>setCatalogPicker(true)} disabled={saving}>Choose from catalog</Btn>}
-                  </div>
+                  <form className="form" onSubmit={event=>{event.preventDefault();addNode();}}>
+                    <label>Name<input autoFocus required value={newAgentName} onChange={event=>setNewAgentName(event.target.value)} /></label>
+                    <label>Description<textarea rows={4} value={newAgentDescription} onChange={event=>setNewAgentDescription(event.target.value)} /></label>
+                    <p className="muted small">Next, configure instructions, model and permissions in Agent configuration. Saving the workflow also makes this agent available in the catalog.</p>
+                    <div className="btn-row">
+                      <Btn onClick={cancelAddAgent}>Cancel</Btn>
+                      <Btn type="submit" tone="primary" disabled={saving || !newAgentName.trim()}>Create new agent</Btn>
+                    </div>
+                  </form>
                 )}
               </div>
             </aside>
@@ -522,18 +527,21 @@ export function GraphWorkspace({
               </button>
               {selection.kind === 'node' ? (
                 <NodePanel
+                  key={selection.id}
                   summary={currentSummary}
+                  isSaved={summary.graph.spec.nodes.some(node=>node.id===selection.id)}
+                  canControl={canEditAgent}
                   status={status}
                   nodeId={selection.id}
                   onConfigure={() => configureAgent(selection.id)}
-                  onRemove={saving ? undefined : () => removeElements([selection.id], [])}
+                  onRemove={saving || !canEditAgent ? undefined : () => removeElements([selection.id], [])}
                   onSaved={(saved) => {
                     setDraftGraph(saved.graph);
                     setDraftDirty(false);
                     onSaved(saved);
                   }}
                   issues={issues?.nodes.get(selection.id)}
-                  onUpdateNode={draftGraph.spec.nodes.find(n=>n.id===selection.id)?.agent ? undefined : (nodeId, update) => changeGraph((graph) => updateNode(graph, nodeId, update))}
+                  onUpdateNode={!canEditAgent || draftGraph.spec.nodes.find(n=>n.id===selection.id)?.agent ? undefined : (nodeId, update) => changeGraph((graph) => updateNode(graph, nodeId, update))}
                   onStatus={setStatus}
                 />
               ) : (
@@ -542,7 +550,8 @@ export function GraphWorkspace({
                   status={status}
                   channelId={selection.id}
                   issues={issues?.channels.get(selection.id)}
-                  onUpdateChannel={(channelId, update) => changeGraph((graph) => updateChannel(graph, channelId, update))}
+                  onRemove={saving || !canEditAgent ? undefined : ()=>removeElements([], [], [selection.id])}
+                  onUpdateChannel={!canEditAgent ? undefined : (channelId, update) => changeGraph((graph) => updateChannel(graph, channelId, update))}
                   onShowCorrelation={(c) => {
                     onCorrelation(c);
                     onTab('messages');

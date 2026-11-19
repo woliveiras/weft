@@ -81,3 +81,44 @@ These results were recorded at the time of the run. The documentation migration 
   Go/Python test suites and real-preview lifecycle tests were not rerun; the
   standard local image build compiled the Go binaries. These observations do not
   establish cross-browser or assistive-technology conformance.
+
+
+## 2026-11-19 — Canvas and compact navigation refinements (AC-001, AC-002, AC-004)
+
+- The workflow catalogue work was committed separately as `b901a82`.
+- `make test-web` passed type checking and 510 tests in 96 files, including
+  named creation, whitespace rejection, retained form values, cancellation/focus,
+  deferred activity requests, output loading/error/retry, draft-only nodes,
+  read-only inspection, contextual channel removal, icon-rail persistence and
+  browser-storage failure. Final log: `/tmp/weft-canvas-all-web-final.log`.
+- Docker Chromium covered 25 distinct functional scenarios across
+  `canvas-panel.spec.ts`, `graph-connections.spec.ts`, `graph-navigation.spec.ts`,
+  `agent-catalog.spec.ts`, `agent-configuration.spec.ts`, `recovery.spec.ts`,
+  `ux-feedback.spec.ts`, `work-navigation.spec.ts` and
+  `visual-consolidation.spec.ts`. The combined run passed 24 scenarios and exposed
+  an overlapping-handle test arrangement in the remaining drag scenario. The
+  arrangement now leaves a visible gap and asserts separation before connecting;
+  no forced pointer action was introduced. Both connection/removal scenarios then
+  passed twice (four checks), including the real API persistence boundary. A
+  repeated fixture name was made unique for repeat runs. Logs:
+  `/tmp/weft-canvas-functional-final.log` and
+  `/tmp/weft-canvas-connections-verified.log`.
+- The existing suspension/recovery journey was updated to expand Replicas and
+  select Messages before using their controls. Its five scenarios passed. A
+  separate eight-scenario run covered compact navigation, draft retention,
+  accessible names and hints, legacy routes, narrow layouts and canvas help.
+- Ten light/dark visual baselines were regenerated, inspected and compared
+  successfully without snapshot updates in a fresh backend run. Log:
+  `/tmp/weft-canvas-navigation-visual-verified.log`.
+- `docker compose up -d --build --no-deps weftd` completed with the standard
+  Dockerfile; the final service was healthy and `/healthz` returned `ok`.
+  Local browser inspection confirmed the compact menu, separate draft/execution
+  controls, contextual Remove, sectioned inspector and aligned creation form.
+  Creation was cancelled without editing the live graph; no lifecycle controls
+  were used during browser inspection. The layout preference was changed only
+  in the inspection browser. Screenshots: `/tmp/weft-canvas-compact.png` and
+  `/tmp/weft-canvas-add-agent.png`.
+- The implementation changes frontend presentation only. Go/Python suites were
+  not rerun; the standard image build compiled the Go binaries. Chromium checks
+  and keyboard inspection do not establish cross-browser or assistive-technology
+  conformance.

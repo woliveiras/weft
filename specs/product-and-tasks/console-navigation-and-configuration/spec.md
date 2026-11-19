@@ -61,6 +61,10 @@ Common forms and controls remain usable at narrow widths and in the supported th
 
 - 2026-11-19. Maintainer refinement to workflow discovery and responsive presentation: the Workflows catalogue uses a newest-updated-first table with combined search/status filters, 20-row pages and expandable workflow-local agent links. Lifecycle actions, administrator deletion confirmation and deferred cleanup remain intact; loading, failure and empty states are explicit.
 
+- 2026-11-19. Maintainer refinement to canvas editing: separate draft and execution toolbar groups; named creation before full agent configuration; a sectioned inspector opens on Overview and defers activity requests until selected. Draft-only nodes show no runtime history or enabled controls. Contextual Remove preserves affected-element confirmation, and the inspector fits narrow viewports.
+
+- 2026-11-19. Maintainer refinement: the primary navigation toggles between labelled destinations and an icon rail to leave more canvas space. The browser remembers the preference; accessible labels, approval counts, keyboard/pointer name hints, active destinations and drafts remain available in both presentations. Browser-storage failure does not prevent session-local toggling.
+
 ## Reconciliation
 
 - [interface-navigation.md](../../../docs/interface-navigation.md), [getting-started.md](../../../docs/getting-started.md), [brand/brand-guidelines.md](../../../docs/brand/brand-guidelines.md).

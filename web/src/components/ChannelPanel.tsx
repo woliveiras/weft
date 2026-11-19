@@ -22,6 +22,7 @@ export function ChannelPanel({
   channelId,
   onShowCorrelation,
   onUpdateChannel,
+  onRemove,
   issues,
 }: {
   summary: GraphSummary;
@@ -29,6 +30,7 @@ export function ChannelPanel({
   channelId: string;
   onShowCorrelation: (correlationId: string) => void;
   onUpdateChannel?: (channelId: string, update: Partial<Channel>) => void;
+  onRemove?: () => void;
   /** Validation findings for this channel. */
   issues?: ElementIssue[];
 }) {
@@ -57,6 +59,7 @@ export function ChannelPanel({
         )}
       </div>
       <p className="muted small">{SEMANTICS[type]}</p>
+      {onRemove && <div className="btn-row"><Btn tone="danger" onClick={onRemove}>Remove</Btn></div>}
       <ElementIssues issues={issues} label="Channel validation" />
       <dl className="kv">
         <dt>from</dt>

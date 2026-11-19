@@ -85,6 +85,7 @@ test('idle suspension and message-driven resume preserve workspace contents', as
   await agent(page);
   const lifecycle = async (action: string) => (await read(page, id, 'events')).filter((e: { type: string; data?: { action: string; outcome: string } }) => e.type === 'sandbox.lifecycle' && e.data?.action === action && e.data.outcome === 'ok').length;
   await expect.poll(() => lifecycle('suspend')).toBe(1);
+  await page.locator('.inspector-replicas > summary').click();
   await page.getByRole('tab', { name: /n0$/ }).click();
   await expect(page.getByText('sandbox suspended; workspace preserved', { exact: false })).toBeVisible();
   await page.getByRole('tab', { name: 'Files', exact: true }).click();
@@ -94,6 +95,7 @@ test('idle suspension and message-driven resume preserve workspace contents', as
   await agent(page);
   await page.locator('.toolbar-run-controls').getByRole('button', { name: 'Pause', exact: true }).click();
   await expect.poll(async () => (await read(page, id, 'status')).state).toBe('paused');
+  await page.getByRole('navigation', {name:'Agent inspector sections'}).getByRole('button', {name:'Messages',exact:true}).click();
   await page.getByRole('textbox', { name: 'Operator message' }).fill('Resume and keep the workspace');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.locator('.toolbar-run-controls').getByRole('button', { name: 'Resume', exact: true })).toBeVisible();
