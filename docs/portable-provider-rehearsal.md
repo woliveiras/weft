@@ -28,12 +28,14 @@ explicitly reviewed CA configuration; do not bypass TLS to make a test pass.
    default branch with a commit before importing/registering it for a task.
 2. For Jira Data Center, configure its native issue connection with exact site
    URL, numeric project and project-restricted technical account. For Jira Cloud,
-   configure a supported first-party static REST-compatible connection, then a
+   configure a supported first-party MCP connection and its independent Jira REST
+   credential (see [setup](atlassian-bitbucket-setup.md#independent-jira-cloud-rest-access)), then a
    credential-free Cloud workflow profile pinning that connection revision,
    cloud ID and numeric project. Review the remote account permissions before
    confirming `projectRestricted`; the flag does not modify Jira permissions.
-   MCP OAuth credentials are not silently reused for REST. A target needing
-   OAuth REST requires a separately implemented and reviewed authentication flow.
+   MCP OAuth credentials are not reused for REST. Explicit Basic REST credentials
+   may coexist with MCP OAuth. Qualify both audiences; MCP Ready and a stored REST
+   credential flag do not prove a typed REST request succeeded.
 3. Discover transitions from a real sample issue of the intended type in the
    intended source state. Select numeric transition and destination status IDs.
    `Review`, `In Review`, translated names and board columns are presentation,

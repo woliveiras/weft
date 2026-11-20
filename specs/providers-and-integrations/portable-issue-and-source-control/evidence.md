@@ -1097,3 +1097,45 @@ name assumptions through discovered, scoped workflow mappings.
   access, adopt/review workflows and trigger scope, then explicitly start the
   selected rehearsal. No trigger, remote branch/PR/review/merge or automatic
   tracker transition was executed by this setup change.
+
+
+### Batch10 — independent Jira Cloud REST credential (2026-11-20)
+
+- A live personal Cloud MCP V2 token with the three Jira agent-interface scopes
+  successfully discovered 23 tools, while the same token received REST HTTP401
+  scope rejection. The maintainer explicitly authorized the blocking correction,
+  tests, independent review and local update. Specification/test reviews preceded
+  implementation; fail-first API/core logs reproduced missing input/state and
+  wrong-audience behavior. A separate maximum-token API test first returned400.
+- AC010 uses a separate encrypted `jiraRest` slot and Cloud/purpose/connection AAD.
+  Unit and real TLS/storage tests cover separate authentication headers, MCP OAuth
+  coexistence, restart/discovery preservation, credential clearing without fallback,
+  scope replacement and revision fences, denied/malformed destinations, redirects,
+  transport/HTTP errors and credential reflections. API/profile integration checks
+  REST reads and stale profile refusal after REST-only clearing. YAML round trips
+  use independent secret references and preserve-only exports, with no public
+  email/token/ciphertext. The64KiB JSON envelope bound is independent of per-field
+  byte limits. No remote secret is used in fixtures.
+- Frontend unit/component tests and a Chromium journey against a disposable real
+  Go API cover creation, blank edit, independent clear, incompatibility, no echoed
+  secrets, keyboard help and390px overflow. Docker web verification passed112files/
+  631tests, TypeScript and production build; final focused42tests also passed.
+- Root `make test-go lint build` completed with exit0. Focused API tests passed
+  in `/tmp/weft-jira-rest-api-green.log`; full Go/vet/build evidence is in
+  `/tmp/weft-jira-rest-full-go.log`. Independent implementation review found no
+  blocking findings in core/API/YAML/UI/docs. Additional trigger TLS integration
+  exposed a pre-existing Jira MCP-envelope decoding defect; that correction and
+  its separate evidence are pending, rather than treating the search as qualified.
+- The authorized local standard-Dockerfile update used
+  `docker compose up -d --build --no-deps weftd`, exit0, with healthy container.
+  At17:03:16Z the administrator saved independent REST credentials in personal
+  connection `rehearsal-jira`; discovery preserved MCP authentication and produced
+  connection/catalogue revision4, Ready23tools. Values remain encrypted and are
+  absent from this evidence. No grants or trigger were activated.
+- At17:03:38Z, credential-free profile `rehearsal-scrum` revision1 pinned connection4,
+  Cloud ID `eca45cd2-875d-4ff3-a84e-cb02398b8c88`, project10000. Read-only transition
+  discovery of SCRUM-5 succeeded through local Weft to real Jira Cloud: issue10004,
+  type10003, current status10000 (To Do), transition IDs11/21/31/41 to statuses
+  10000/3/10001/10002. This qualifies the scoped REST read boundary only. No issue
+  mutation occurred. `projectRestricted` remains false; a personal administrator
+  account is not asserted to be a project-restricted technical account.

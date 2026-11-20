@@ -135,11 +135,12 @@ to the actual issue, state and technical account, not to a board column.
 
 Existing Jira Cloud triggers without profiles/mappings retain their comment/label
 behavior. Optional transitions require an explicitly reviewed Cloud workflow
-profile referencing an existing first-party static REST-compatible MCP connection
-and its exact revision. Configure the profile in **Connections → Jira Cloud
-workflow profiles**; it stores no credential. OAuth MCP credentials, custom
-endpoints and incompatible connection policies cannot be reused implicitly for
-these REST calls.
+profile referencing an existing first-party MCP connection with explicitly configured
+Jira REST access (or a legacy static REST-compatible credential), and its exact
+revision. Configure the profile in **Connections → Jira Cloud
+workflow profiles**; it stores no credential. OAuth MCP credentials are never
+reused for REST. An independent REST credential can coexist with MCP OAuth;
+custom endpoints and incompatible connection policies remain unsupported.
 
 The profile's `siteUrl` is the exact gateway identity
 `https://api.atlassian.com/ex/jira/<cloudId>`, not a tenant browser URL or a Data
@@ -196,33 +197,101 @@ Logging into the plugin does not install a credential in the local Weft server.
 For a personal Cloud rehearsal using an API token:
 
 1. Open [Atlassian Administration](https://admin.atlassian.com), select the
-   organization containing your test Jira site, then open **Rovo → Rovo MCP server
-   → Authentication**. Enable API-token authentication for that organization if
+   organization containing your test Jira site, then open **Connectors → Atlassian
+   MCP server → Authentication**. Older navigation/documentation may call this
+   **Rovo MCP server**. Enable **Allow API token authentication** for that organization if
    you want this authentication method. This is an operator administration step;
    Weft does not change Atlassian authentication settings.
+   The toggle saves immediately; wait until it is enabled again and visibly on.
+   Do not enable enterprise managed authentication or add a domain just for this
+   token path. The domain list applies to OAuth redirects, not API-token access;
+   API tokens remain subject to applicable IP allowlists and their scopes.
 2. Open [your account's API tokens](https://id.atlassian.com/manage-profile/security/api-tokens),
    choose **Create API token with scopes**, name it for Weft and set an expiry.
-   Select the Rovo MCP app and Jira read/search/write scopes:
+   Select **Atlassian MCP V2** (the app name observed in the account UI), then
+   keep only the Jira read/search/write scopes:
    `read:jira:agent-interface`, `search:jira:agent-interface` and
    `write:jira:agent-interface`. Do not add delete/manage scopes for this rehearsal.
+   The scope picker may initially select all scopes. Set **Results per page** to
+   50 to review the entire list and deselect unrelated apps and permissions.
+   The final review must show exactly the three Jira scopes above. For a disposable
+   rehearsal, use a short expiry; the observed default was seven days.
+   Atlassian may first request an emailed verification code. Complete that account
+   verification before creating the token. A short-lived code is not the API
+   token. Keep the generated API token out of screenshots and documentation.
 3. In Weft **Connections → MCP connections → Add connection**, enter a stable
    ID/name, select **Atlassian**, and use `https://mcp.atlassian.com/v2/mcp`.
    Leave browser OAuth off for this token path. Select **Atlassian personal API
    token (Basic)**, enter **API token owner email** and **Personal API token**,
    and save. Weft constructs the authentication header; no manual base64 or
    terminal command is needed.
-4. Test the connection and discover its tools. An MCP test does not prove the
-   issue trigger's separate, typed Jira REST operations are authorized. Those
-   operations require a static credential with the Jira REST scopes they use;
-   the agent-interface scopes alone must not be assumed to grant REST access.
-   Verify both boundaries before activating a trigger. If the token issuance
-   policy cannot provide a credential compatible with both, stop adoption and
-   qualify a separately implemented REST authentication path rather than copying
-   an OAuth token or claiming trigger compatibility.
+4. Test the connection and discover its tools. **MCP Ready** confirms MCP
+   discovery only. For typed issue reads, comments, labels and optional transitions,
+   configure the independent **Jira Cloud REST access** section below before
+   activating a trigger.
+
+### Independent Jira Cloud REST access
+
+The Atlassian MCP V2 and Jira REST audiences use separate credentials. Keep the
+MCP token in the connection's normal Authentication fields.
+
+1. In the same [API-token account page](https://id.atlassian.com/manage-profile/security/api-tokens),
+   choose **Create API token with scopes**, a descriptive REST-specific name and
+   a short expiry. Choose the **Jira** app, not **Atlassian MCP V2**.
+2. Select `read:jira-work` and, only for an approved write rehearsal,
+   `write:jira-work`. These classic scopes cover the required issue operations;
+   `write:jira-work` also permits other writes, including deletion. The token
+   inherits the account's permissions. Scope selection is not project isolation.
+   Use a project-restricted technical account for automatic transitions.
+3. Edit the saved Weft MCP connection and open **Jira Cloud REST access**.
+   Enable independent REST access and enter the **Jira Cloud ID**, the token
+   owner's email and the new REST token. The Cloud ID is the site's UUID, not
+   the project key or browser hostname. It can be obtained from the site's
+   `/_tenant_info` response (`cloudId`) or the existing Atlassian resource
+   listing. The resulting REST destination is fixed to
+   `https://api.atlassian.com/ex/jira/<cloudId>/rest/api/3/`.
+4. Save. Weft encrypts the REST email/token separately and shows only whether a
+   REST credential is stored. That status does not prove remote authorization.
+   Inspect transitions from a real sample issue in a Cloud workflow profile to
+   exercise the REST boundary without modifying an issue.
+5. Saving credentials or refreshing MCP discovery advances the connection
+   revision. Review and update dependent profile pins and trigger consent before
+   resuming. Do not assume an MCP tool test also tested REST.
+
+Editing without entering replacement credentials preserves the stored pair.
+Replacing it requires both email and token. Clearing it leaves the selected
+Cloud ID visible but makes REST unavailable; Weft never falls back to the MCP
+credential. Changing Cloud ID requires replacement or explicit clearing. Existing
+connections that never selected independent REST retain their legacy static
+behavior. Independent REST is supported only for first-party Jira/Atlassian MCP
+endpoints without conflicting process, header or read-boundary policies.
+
+The [Jira issue REST reference](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/)
+and [comment REST reference](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-comments/)
+describe scopes and remote permission requirements.
 
 See [Atlassian API-token authentication](https://developer.atlassian.com/cloud/rovo-mcp/guides/configuring-authentication-via-api-token/)
 for scope/administration requirements. Token values are entered only in Weft's
 credential fields, never in chat, issue descriptions or repository files.
+
+### Live Cloud token qualification: November 20, 2026
+
+The personal rehearsal confirmed the current administration path above. Enabling
+**Allow API token authentication** and saving a Basic MCP connection with only
+the three Jira `agent-interface` scopes produced **Ready** and discovered 23
+tools. This qualifies authentication/tool discovery, not execution of every tool.
+
+A separate read-only request using the same credential to the Jira Cloud gateway
+`/ex/jira/<cloudId>/rest/api/3/issue/<test-issue>` returned **HTTP 401** with a scope
+error. The account wizard selected **Atlassian MCP V2** as one app and exposed its
+agent-interface scopes separately from the **Jira** app. Do not treat the MCP
+Ready state as qualification of the trigger's typed REST calls.
+
+This exposed a trigger credential-reuse blocker. INT-009 AC-010 separates the
+REST credential from MCP authentication, with independent encrypted storage and
+Cloud-bound dispatch. Local fixture qualification is recorded in the specification
+evidence; live REST qualification must be recorded separately. No issue mutation
+or task execution was performed during the initial MCP/scope qualification.
 
 For the other supported connection choices:
 

@@ -142,6 +142,9 @@ func (s *Server) configSnapshot(ctx context.Context) (map[string]configObject, e
 			if v.OAuth != nil {
 				spec["oauth"] = installation.Map(v.OAuth.OAuthConfig)
 			}
+			if v.JiraREST != nil {
+				spec["jiraRest"] = map[string]any{"cloudId": v.JiraREST.CloudID}
+			}
 			stamp := v.UpdatedAt
 			if v.ConfigurationUpdatedAt != nil {
 				stamp = *v.ConfigurationUpdatedAt
@@ -337,6 +340,9 @@ func exportedObject(o configObject) installation.Document {
 	}
 	if o.Secrets["oauthClient"] {
 		d.Spec["oauthClientSecretRef"] = preserve
+	}
+	if o.Secrets["jiraRest"] {
+		d.Spec["jiraRestSecretRef"] = preserve
 	}
 	env := map[string]any{}
 	for slot, set := range o.Secrets {

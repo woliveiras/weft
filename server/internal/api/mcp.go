@@ -39,7 +39,7 @@ func (s *Server) mcpPut(w http.ResponseWriter, r *http.Request) error {
 		return storage.ErrNotFound
 	}
 	var in mcpconfig.Input
-	d := json.NewDecoder(io.LimitReader(r.Body, 32769))
+	d := json.NewDecoder(io.LimitReader(r.Body, 65537))
 	d.DisallowUnknownFields()
 	if d.Decode(&in) != nil {
 		return badRequest("invalid MCP connection body")

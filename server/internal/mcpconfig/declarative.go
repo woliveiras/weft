@@ -20,9 +20,13 @@ func (m *Manager) Preview(ctx context.Context, in Input) error {
 	}
 	r, err := m.load(ctx, in.ID)
 	if errors.Is(err, storage.ErrNotFound) {
-		return nil
+		_, err := jiraRESTState(record{}, in)
+		return err
 	}
 	if err != nil {
+		return err
+	}
+	if _, err := jiraRESTState(r, in); err != nil {
 		return err
 	}
 	if (r.Endpoint != in.Endpoint || credentialKind(r.CredentialType) != credentialKind(in.CredentialType) || !reflect.DeepEqual(r.MetadataHeaders, in.MetadataHeaders)) && r.Sealed != "" && r.OAuth == nil && in.OAuth == nil && in.Credential == nil {
@@ -37,7 +41,7 @@ func (m *Manager) SecretSlots(ctx context.Context, id string) (map[string]bool, 
 	if err != nil {
 		return nil, err
 	}
-	return map[string]bool{"credential": r.Sealed != "", "oauthClient": r.OAuthClientSealed != "", "processEnvironment": r.ProcessEnvironmentSealed != ""}, nil
+	return map[string]bool{"jiraRest": r.JiraRESTSealed != "", "credential": r.Sealed != "", "oauthClient": r.OAuthClientSealed != "", "processEnvironment": r.ProcessEnvironmentSealed != ""}, nil
 }
 func (m *Manager) CredentialMatches(ctx context.Context, id, slot, value string) (bool, error) {
 	r, err := m.load(ctx, id)
@@ -45,8 +49,17 @@ func (m *Manager) CredentialMatches(ctx context.Context, id, slot, value string)
 		return false, err
 	}
 	sealed, aad := r.Sealed, prefix+id
-	if slot == "oauthClient" {
+	switch slot {
+	case "credential":
+	case "oauthClient":
 		sealed, aad = r.OAuthClientSealed, prefix+id+"/oauth-client"
+	case "jiraRest":
+		if r.JiraREST == nil {
+			return false, nil
+		}
+		sealed, aad = r.JiraRESTSealed, jiraRESTAAD(id, r.JiraREST.CloudID)
+	default:
+		return false, fmt.Errorf("%w: unknown credential slot", ErrInvalid)
 	}
 	if sealed == "" {
 		return false, nil

@@ -284,6 +284,15 @@ process environment key to a reference. Omitted process keys remain stored.
 Basic MCP credentials use `credentialUsernameRef` with `secretRef` for the
 password. Browser OAuth authorization remains interactive. Export preserves
 existing credentials without exporting browser access or refresh tokens.
+Independent Jira Cloud REST credentials on a first-party MCP connection use
+public `jiraRest: {cloudId: <site UUID>}`, `jiraRestUsernameRef` for the owner's
+email and `jiraRestSecretRef` for the token. Replacement requires both references;
+inline `jiraRestCredential` is rejected. The REST slot is independent of MCP
+`secretRef` and `oauthClientSecretRef`. Export includes only the Cloud ID and
+`jiraRestSecretRef: {preserve: true}`, never the email or encrypted credential.
+Omission preserves the selected REST mode. A changed Cloud ID requires a new
+credential pair or explicit clearing through the native connection API/UI.
+
 Private project imports may use `username` and `secretRef` for an explicit token
 attempt; import authentication remains transient under the existing import
 contract and is not exported or stored as a project credential.

@@ -1,3 +1,5 @@
+import { MCPJiraRESTFields, JiraRESTStatus } from './MCPJiraRESTFields';
+import { prepareJiraRESTDraft } from './mcpJiraRESTDraft';
 import { HelpField } from './FieldHelp';
 import { LocalMCPFields, parseProcessEnvironment } from './LocalMCPFields';
 import {MCPArgumentPolicyFields} from './MCPArgumentPolicyFields';
@@ -53,6 +55,8 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
   const [revision,setRevision]=useState<number>();
   const [gitlabInstance,setGitlabInstance]=useState('https://gitlab.com');
   const [token,setToken]=useState('');
+  const [jiraRESTDraft,setJiraRESTDraft]=useState({email:'',token:'',clear:false});
+  const resetJiraRESTSecret=()=>setJiraRESTDraft({email:'',token:'',clear:false});
   const [credentialEmail,setCredentialEmail]=useState('');
   const [clientSecret,setClientSecret]=useState('');
   const [clearClientSecret,setClearClientSecret]=useState(false);
@@ -64,14 +68,15 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
   const [deleting,setDeleting]=useState<MCPConnection>();
   const [deleteID,setDeleteID]=useState('');
   const admin=role==='admin';const operator=admin||role==='operator';
-  const edit=(c?:MCPConnection)=>{setEditing(!!c||presentation!=='detail');setEnvironment('');setReviewedProcess('');setInput(c?{localProcess:c.localProcess,id:c.id,name:c.name,service:c.service,transportProfile:c.transportProfile,atlassianPolicy:c.atlassianPolicy,argumentPolicy:c.argumentPolicy,credentialType:c.credentialType,metadataHeaders:c.metadataHeaders,endpoint:c.endpoint,enabled:c.enabled,callsPerMinute:c.callsPerMinute,template:c.template,templateParameters:c.templateParameters,oauth:c.oauth?{registrationMode:c.oauth.registrationMode,issuer:c.oauth.issuer,clientId:c.oauth.clientId,scopes:c.oauth.scopes}:undefined}:empty);setRevision(c?.revision);setGitlabInstance(c?.service==='gitlab'?c.endpoint.replace(/\/api\/v4\/mcp$/, ''):'https://gitlab.com');setToken('');setCredentialEmail('');setClientSecret('');setClearClientSecret(false);setClear(false);setError(undefined);};
+  const edit=(c?:MCPConnection)=>{setEditing(!!c||presentation!=='detail');setEnvironment('');setReviewedProcess('');resetJiraRESTSecret();setInput(c?{jiraRest:c.jiraRest?{cloudId:c.jiraRest.cloudId}:undefined,localProcess:c.localProcess,id:c.id,name:c.name,service:c.service,transportProfile:c.transportProfile,atlassianPolicy:c.atlassianPolicy,argumentPolicy:c.argumentPolicy,credentialType:c.credentialType,metadataHeaders:c.metadataHeaders,endpoint:c.endpoint,enabled:c.enabled,callsPerMinute:c.callsPerMinute,template:c.template,templateParameters:c.templateParameters,oauth:c.oauth?{registrationMode:c.oauth.registrationMode,issuer:c.oauth.issuer,clientId:c.oauth.clientId,scopes:c.oauth.scopes}:undefined}:empty);setRevision(c?.revision);setGitlabInstance(c?.service==='gitlab'?c.endpoint.replace(/\/api\/v4\/mcp$/, ''):'https://gitlab.com');setToken('');setCredentialEmail('');setClientSecret('');setClearClientSecret(false);setClear(false);setError(undefined);};
   function applyDefaults(){try{setInput({...input,...oauthDefaults(input.service,gitlabInstance),credentialType:undefined,template:undefined,templateParameters:undefined});setToken('');setCredentialEmail('');setClientSecret('');setClear(false);setClearClientSecret(!!revision);setError(undefined);}catch(e){setError(errorMessage(e));}}
   async function save(){
     if(input.localProcess&&reviewedProcess!==processFingerprint){setError('Review the local process before saving.');return;}
     setBusy(true);setError(undefined);setSavedID(undefined);setSaveProgress('Saving connection…');
     try {
-      const result=await saveAndDiscover({...input,processEnvironment:input.localProcess?parseProcessEnvironment(environment):undefined,atlassianPolicy:input.atlassianPolicy?{...input.atlassianPolicy,cloudIds:input.atlassianPolicy.cloudIds.map(id=>id.trim()).filter(Boolean)}:undefined,oauth:input.oauth?{...input.oauth,scopes:input.oauth.scopes.filter(Boolean)}:undefined,credential:input.oauth?undefined:clear?{clear:true}:token?{value:token,...(input.credentialType==='basic'?{username:credentialEmail}:{})}:undefined,oauthClientSecret:input.oauth?(clearClientSecret?{clear:true}:clientSecret?{value:clientSecret}:undefined):undefined},revision,c=>{
-        setEnvironment('');setReviewedProcess('');setToken('');setCredentialEmail('');setClientSecret('');setSavedID(c.id);setEditing(false);
+      const jiraREST=prepareJiraRESTDraft(input,jiraRESTDraft,list.data?.find(c=>c.id===input.id));
+      const result=await saveAndDiscover({...input,...jiraREST,processEnvironment:input.localProcess?parseProcessEnvironment(environment):undefined,atlassianPolicy:input.atlassianPolicy?{...input.atlassianPolicy,cloudIds:input.atlassianPolicy.cloudIds.map(id=>id.trim()).filter(Boolean)}:undefined,oauth:input.oauth?{...input.oauth,scopes:input.oauth.scopes.filter(Boolean)}:undefined,credential:input.oauth?undefined:clear?{clear:true}:token?{value:token,...(input.credentialType==='basic'?{username:credentialEmail}:{})}:undefined,oauthClientSecret:input.oauth?(clearClientSecret?{clear:true}:clientSecret?{value:clientSecret}:undefined):undefined},revision,c=>{
+        resetJiraRESTSecret();setEnvironment('');setReviewedProcess('');setToken('');setCredentialEmail('');setClientSecret('');setSavedID(c.id);setEditing(false);
         setSaveProgress(canDiscover(c)?'Connection saved. Discovering tools…':c.enabled?'Connection saved. Authorization required before tool discovery.':'Connection saved. Disabled connections are not tested.');
       });
       await list.reload();
@@ -126,7 +131,7 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
     {!presentation && <><p>Register remote HTTPS Streamable HTTP servers and discover their tools. Only public network destinations are supported. Credentials stay encrypted in Weft.</p>
     <p>Assign tools to agents in the graph editor to allow calls through the gateway. OAuth supports manual registration, DCR and CIMD with PKCE; templates provide reviewed public defaults.</p></>}
     {oauthQuery!==undefined&&<MCPOAuthReturn key={oauthQuery} query={oauthQuery} canManage={admin} onChanged={list.reload}/> }
-    {presentation!=='detail'&&<MCPTemplates connectionRoutes={!!presentation} query={connectQuery} canManage={admin} onSelect={t=>{edit();setInput({id:t.id,name:t.name,service:t.service,endpoint:t.endpoint,enabled:true,template:{id:t.id,version:t.version},oauth:t.authenticationModes?.length===1&&t.authenticationModes[0]==='oauth'?oauthDefaults(t.service).oauth:undefined});}} />}
+    {presentation!=='detail'&&<MCPTemplates connectionRoutes={!!presentation} query={connectQuery} canManage={admin} onSelect={t=>{edit();setInput({jiraRest:input.jiraRest,id:t.id,name:t.name,service:t.service,endpoint:t.endpoint,enabled:true,template:{id:t.id,version:t.version},oauth:t.authenticationModes?.length===1&&t.authenticationModes[0]==='oauth'?oauthDefaults(t.service).oauth:undefined});}} />}
     {!presentation && reloadButton}
     <ErrorBox error={creating ? undefined : list.error}/><ErrorBox error={error}/>
     {saveProgress&&<p role="status">{saveProgress}</p>}
@@ -154,14 +159,14 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
         }
       }}>
       {!creating && <h3>{revision ? 'Edit connection' : 'New connection'}</h3>}
-      {input.template&&<MCPTemplateSettings key={`${input.template.id}-${input.template.version}-${revision??'new'}`} input={input} onChange={value=>{setInput(value);setToken('');setCredentialEmail('');setClientSecret('');}}/>}
+      {input.template&&<MCPTemplateSettings key={`${input.template.id}-${input.template.version}-${revision??'new'}`} input={input} onChange={value=>{setInput({...value,jiraRest:input.jiraRest});resetJiraRESTSecret();setToken('');setCredentialEmail('');setClientSecret('');}}/>}
       <div className="mcp-setup-group">
       {creating && <h2>Connection details</h2>}
       <HelpField label={"Connection ID"} help={"A stable identifier used in MCP tool names, such as mcp.github.pull_request_read. Use an ID that distinguishes this connection from others."}><input required pattern="[a-z][a-z0-9_-]{0,63}" value={input.id} disabled={!!revision||busy} onChange={e=>setInput({...input,id:e.target.value})}/></HelpField>
       <HelpField label={"Connection name"} help={"A display name for the connection. Include the team or workspace when you have multiple connections to the same service."}><input required maxLength={120} value={input.name} onChange={e=>setInput({...input,name:e.target.value})}/></HelpField>
-      {!revision&&info.data?.nativeProfile&&<HelpField label={"Connection transport"} help={"HTTP connects to a remote MCP server. A local stdio connection starts a process on the Weft host and is available in the native profile."}><select value={input.localProcess?'stdio':'http'} onChange={e=>{setInput({...empty,id:input.id,name:input.name,...(e.target.value==='stdio'?{localProcess:{command:'',args:[],directory:''}}:{})});setEnvironment('');setReviewedProcess('');setToken('');setClear(false);}}><option value="http">Remote HTTP</option><option value="stdio">Local process (stdio)</option></select></HelpField>}
+      {!revision&&info.data?.nativeProfile&&<HelpField label={"Connection transport"} help={"HTTP connects to a remote MCP server. A local stdio connection starts a process on the Weft host and is available in the native profile."}><select value={input.localProcess?'stdio':'http'} onChange={e=>{setInput({...empty,id:input.id,name:input.name,...(e.target.value==='stdio'?{localProcess:{command:'',args:[],directory:''}}:{})});resetJiraRESTSecret();setEnvironment('');setReviewedProcess('');setToken('');setClear(false);}}><option value="http">Remote HTTP</option><option value="stdio">Local process (stdio)</option></select></HelpField>}
       {input.localProcess ? <LocalMCPFields value={input.localProcess} onChange={localProcess=>setInput({...input,localProcess})} environment={environment} onEnvironment={setEnvironment} reviewed={reviewedProcess===processFingerprint} onReview={checked=>setReviewedProcess(checked?processFingerprint:'')} storedKeys={list.data?.find(c=>c.id===input.id)?.environmentKeys}/> : <>
-      <HelpField label={"Service"} help={"Select the service the connection integrates with. Weft uses this to offer provider-specific configuration and review."}><select disabled={!!input.template} value={input.service} onChange={e=>setInput({...input,service:e.target.value})}>{serviceOptions.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></HelpField>
+      <HelpField label={"Service"} help={"Select the service the connection integrates with. Weft uses this to offer provider-specific configuration and review."}><select disabled={!!input.template} value={input.service} onChange={e=>{setInput({...input,service:e.target.value});resetJiraRESTSecret();setToken('');setCredentialEmail('');setClientSecret('');setClearClientSecret(false);setClear(false);}}>{serviceOptions.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></HelpField>
       <HelpField label={"MCP endpoint"} help={"The server URL that handles MCP requests. It must be reachable by Weft. Use the service documentation for the exact URL."}><input type="url" required placeholder="https://mcp.example.com/mcp" readOnly={!!input.template} value={input.endpoint} onChange={e=>setInput({...input,endpoint:e.target.value})}/></HelpField>
       </>}
       </div>
@@ -198,6 +203,7 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
       </>}</>}
       {creating ? <details><summary>Provider setup guide</summary><MCPServiceGuide service={input.service} /></details> : <MCPServiceGuide service={input.service} />}
       </div>}
+      <MCPJiraRESTFields input={input} onChange={setInput} draft={jiraRESTDraft} onDraft={setJiraRESTDraft} saved={list.data?.find(c=>c.id===input.id)} busy={busy}/>
       {creating ? <details className="mcp-advanced-settings"><summary>Advanced settings</summary>{advancedFields}</details> : advancedFields}
       <footer className="mcp-form-footer">
       <HelpField label="Connection enabled" help="Controls whether this connection can supply tools to agents. The connection also needs successful discovery and a workflow grant before it can be used.">
@@ -211,6 +217,7 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
         <section className="card connections-panel" aria-label="Connection overview">
           <h2>Connection overview</h2>
           <ConnectionFacts connection={current} />
+          <JiraRESTStatus connection={current}/>
           <ErrorBox error={current.error} />
           <section aria-label="Connection readiness" className="connection-discovery">
             <div><h3>Tool discovery</h3><DiscoveryStatus connection={current} />
@@ -257,7 +264,7 @@ export function MCPSection({role,connectQuery,oauthQuery,presentation,connection
       <p>{c.localProcess ? (c.environmentKeys?.length ? 'Environment configured' : 'No environment values') : (c.credentialConfigured ? 'Credential configured' : 'No credential')} · revision {c.revision} · catalogue {c.toolsRevision}</p>
       {!!c.argumentPolicy?.length && <p>Tool argument restrictions: {c.argumentPolicy.length} rules. Only listed tools with matching arguments are eligible.</p>}
       {c.atlassianPolicy && <p>Atlassian read boundary: {c.atlassianPolicy.products.join(', ')} · {c.atlassianPolicy.cloudIds.length} allowed sites. Exact agent grants remain required.</p>}
-      <p>Connection quota: {c.callsPerMinute ? `${c.callsPerMinute} calls per UTC minute` : 'Unlimited'}</p>
+      <JiraRESTStatus connection={c}/><p>Connection quota: {c.callsPerMinute ? `${c.callsPerMinute} calls per UTC minute` : 'Unlimited'}</p>
       {c.oauth && <MCPOAuthActions key={c.revision} connection={c} canManage={admin} onChanged={list.reload} />}
       <section aria-label="Connection readiness">
         <p>Connection checks discover available tools. No agent is needed and no tool is called. Local connections launch the reviewed process for discovery.</p>

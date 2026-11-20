@@ -31,6 +31,8 @@ type Credential struct {
 	Clear    bool   `json:"clear,omitempty"`
 }
 type Input struct {
+	JiraREST           *JiraRESTConfig    `json:"jiraRest,omitempty"`
+	JiraRESTCredential *Credential        `json:"jiraRestCredential,omitempty"`
 	LocalProcess       *LocalProcess      `json:"localProcess,omitempty"`
 	ProcessEnvironment *map[string]string `json:"processEnvironment,omitempty"`
 	ArgumentPolicy     []ArgumentRule     `json:"argumentPolicy,omitempty"`
@@ -56,6 +58,7 @@ type Tool struct {
 	InputSchema json.RawMessage `json:"inputSchema"`
 }
 type View struct {
+	JiraREST *JiraRESTView `json:"jiraRest,omitempty"`
 	// ConfigurationUpdatedAt excludes discovery and other transient health writes.
 	ConfigurationUpdatedAt *time.Time        `json:"configurationUpdatedAt,omitempty"`
 	LocalProcess           *LocalProcess     `json:"localProcess,omitempty"`
@@ -86,6 +89,7 @@ type View struct {
 	UpdatedBy              string            `json:"updatedBy"`
 }
 type record struct {
+	JiraRESTSealed           string              `json:"jiraRestSealed,omitempty"`
 	ProcessEnvironmentSealed string              `json:"processEnvironmentSealed,omitempty"`
 	Deleted                  bool                `json:"deleted,omitempty"`
 	Registration             *clientRegistration `json:"registration,omitempty"`
@@ -110,6 +114,9 @@ func New(store storage.Store, box *secrets.Box, bus *events.Bus) *Manager {
 	return &Manager{Store: store, Box: box, Bus: bus, Discover: Discover, Call: Call}
 }
 func validate(in Input) error {
+	if err := validateJiraREST(in); err != nil {
+		return err
+	}
 	if err := validateLocalProcess(in); err != nil {
 		return err
 	}
@@ -180,6 +187,7 @@ func (m *Manager) load(ctx context.Context, id string) (record, error) {
 	}
 	e = json.Unmarshal(s.Value, &r)
 	r.Revision = s.Revision
+	r.syncJiraRESTPresence()
 	if e == nil && r.Deleted {
 		return record{}, storage.ErrNotFound
 	}
@@ -204,6 +212,7 @@ func (m *Manager) List(ctx context.Context) ([]View, error) {
 			continue
 		}
 		r.Revision = s.Revision
+		r.syncJiraRESTPresence()
 		out = append(out, operationCatalogue(r.View))
 	}
 	return out, nil
@@ -221,6 +230,7 @@ func (m *Manager) save(ctx context.Context, r record, rev int64, actor, event st
 	}
 	r.UpdatedBy = actor
 	r.CredentialConfigured = r.Sealed != ""
+	r.syncJiraRESTPresence()
 	if r.OAuth != nil {
 		r.OAuth.ClientSecretConfigured = r.OAuthClientSealed != ""
 		if r.Registration != nil {
@@ -269,6 +279,10 @@ func (m *Manager) Put(ctx context.Context, in Input, revision int64, actor strin
 			return View{}, storage.ErrConflict
 		}
 	}
+	restChanged, err := m.updateJiraREST(&r, in)
+	if err != nil {
+		return View{}, err
+	}
 	if err := m.updateProcess(&r, in); err != nil {
 		return View{}, err
 	}
@@ -309,7 +323,7 @@ func (m *Manager) Put(ctx context.Context, in Input, revision int64, actor strin
 			}
 		}
 	}
-	changed := !reflect.DeepEqual(r.LocalProcess, in.LocalProcess) || in.ProcessEnvironment != nil || !reflect.DeepEqual(r.ArgumentPolicy, in.ArgumentPolicy) || !reflect.DeepEqual(r.AtlassianPolicy, in.AtlassianPolicy) || !reflect.DeepEqual(r.MetadataHeaders, in.MetadataHeaders) || r.CredentialType != in.CredentialType || r.Endpoint != in.Endpoint || in.Credential != nil || r.Enabled != in.Enabled || oauthChanged
+	changed := restChanged || !reflect.DeepEqual(r.LocalProcess, in.LocalProcess) || in.ProcessEnvironment != nil || !reflect.DeepEqual(r.ArgumentPolicy, in.ArgumentPolicy) || !reflect.DeepEqual(r.AtlassianPolicy, in.AtlassianPolicy) || !reflect.DeepEqual(r.MetadataHeaders, in.MetadataHeaders) || r.CredentialType != in.CredentialType || r.Endpoint != in.Endpoint || in.Credential != nil || r.Enabled != in.Enabled || oauthChanged
 	r.LocalProcess = in.LocalProcess
 	r.ArgumentPolicy = in.ArgumentPolicy
 	r.AtlassianPolicy = in.AtlassianPolicy

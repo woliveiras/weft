@@ -44,7 +44,7 @@ type configPrepared struct {
 func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old configObject, plugins map[string]bool) (configPrepared, error) {
 	p := configPrepared{Doc: installation.Clone(d)}
 	spec := p.Doc.Spec
-	for _, field := range []string{"secretRef", "oauthClientSecretRef", "processEnvironmentRefs", "credentialUsernameRef"} {
+	for _, field := range []string{"secretRef", "oauthClientSecretRef", "processEnvironmentRefs", "credentialUsernameRef", "jiraRestSecretRef", "jiraRestUsernameRef"} {
 		if _, ok := spec[field]; ok {
 			supported := d.Kind == "MCPConnection" || (field == "secretRef" && (d.Kind == "ModelProvider" || d.Kind == "SCMConnection" || d.Kind == "IssueConnection" || d.Kind == "Project"))
 			if !supported {
@@ -54,7 +54,7 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 	}
 	resolver := installation.Resolver{Dir: s.Config.Secrets.Dir, DeniedEnv: []string{s.Config.Secrets.KeyEnv, s.Config.Secrets.PreviousKeysEnv}}
 	values := map[string]string{}
-	for field, slot := range map[string]string{"secretRef": "credential", "oauthClientSecretRef": "oauthClient", "credentialUsernameRef": "credentialUsername"} {
+	for field, slot := range map[string]string{"secretRef": "credential", "oauthClientSecretRef": "oauthClient", "credentialUsernameRef": "credentialUsername", "jiraRestSecretRef": "jiraRest", "jiraRestUsernameRef": "jiraRestUsername"} {
 		if raw, ok := spec[field]; ok {
 			var ref installation.SecretRef
 			if err := installation.Decode(raw, &ref, "spec."+field); err != nil {
@@ -74,7 +74,7 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 			}
 		}
 	}
-	for _, forbidden := range []string{"apiKey", "credential", "token", "oauthClientSecret", "processEnvironment", "authentication"} {
+	for _, forbidden := range []string{"apiKey", "credential", "token", "oauthClientSecret", "processEnvironment", "authentication", "jiraRestCredential"} {
 		if _, ok := spec[forbidden]; ok {
 			return p, fmt.Errorf("spec.%s: plaintext credential input is forbidden; use secret references", forbidden)
 		}
@@ -221,6 +221,11 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 	case "MCPConnection":
 		var in mcpconfig.Input
 		spec["id"] = d.Name()
+		// Omitted explicit REST configuration preserves the previously selected
+		// mode, just as the native manager does. Export only its public Cloud ID.
+		if spec["jiraRest"] == nil && old.Doc.Spec["jiraRest"] != nil {
+			spec["jiraRest"] = old.Doc.Spec["jiraRest"]
+		}
 		if err := decode(&in); err != nil {
 			return p, err
 		}
@@ -232,6 +237,14 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 		}
 		if v := values["oauthClient"]; v != "" {
 			in.OAuthClientSecret = &mcpconfig.Credential{Value: v}
+		}
+		_, restTokenSupplied := values["jiraRest"]
+		_, restEmailSupplied := values["jiraRestUsername"]
+		if restTokenSupplied != restEmailSupplied {
+			return p, fmt.Errorf("spec.jiraRestSecretRef: replacement requires jiraRestUsernameRef and jiraRestSecretRef together")
+		}
+		if restTokenSupplied {
+			in.JiraRESTCredential = &mcpconfig.Credential{Username: values["jiraRestUsername"], Value: values["jiraRest"]}
 		}
 		if len(envUpdates) > 0 {
 			env, err := s.MCP.MergeEnvironment(ctx, d.Name(), envUpdates)
@@ -246,6 +259,7 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 		p.Input = in
 		in.Credential = nil
 		in.OAuthClientSecret = nil
+		in.JiraRESTCredential = nil
 		in.ProcessEnvironment = nil
 		p.Doc.Spec = installation.Map(in)
 		delete(p.Doc.Spec, "id")
@@ -462,13 +476,16 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 	}
 	// Compare credentials within their owning managers; never include their bytes or a digest in public state.
 	for slot, value := range values {
-		if slot == "credentialUsername" {
+		if slot == "credentialUsername" || slot == "jiraRestUsername" {
 			continue
 		}
 		if slot == "credential" && d.Kind == "MCPConnection" {
 			if in, ok := p.Input.(mcpconfig.Input); ok && in.CredentialType == "basic" {
 				value = values["credentialUsername"] + ":" + value
 			}
+		}
+		if slot == "jiraRest" && d.Kind == "MCPConnection" {
+			value = values["jiraRestUsername"] + ":" + value
 		}
 		same := false
 		var err error

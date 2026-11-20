@@ -991,3 +991,14 @@ main > .page:not(.fill) {
 .admin-tools-table th:last-child, .admin-tools-table td:last-child { min-width: 180px; }
 .admin-table-scroll .admin-tools-table td:first-child code, .admin-table-scroll .admin-tools-table td:last-child code { white-space: nowrap; }
 .admin-table-scroll .admin-resources-table th:first-child, .admin-table-scroll .admin-resources-table td:first-child { min-width: 56px; width: 56px; }
+
+/* Keep the independent REST credential visibly separate from MCP authentication. */
+.mcp-create-form .mcp-jira-rest, .connection-editor .mcp-jira-rest, .form > .mcp-jira-rest {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: var(--space-3);
+  min-inline-size: 0;
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--border);
+}
+.mcp-jira-rest > p { margin: 0; }

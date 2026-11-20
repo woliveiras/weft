@@ -951,6 +951,7 @@ export interface MCPArgumentRule { tool: string; argument?: string; values?: str
 export interface MCPAtlassianPolicy { products: ('jira'|'confluence')[]; cloudIds: string[] }
 export interface MCPLocalProcess { command:string; args:string[]; directory:string }
 export interface MCPConnection {
+ jiraRest?: { cloudId: string; credentialConfigured: boolean };
  localProcess?: MCPLocalProcess;
  environmentKeys?: string[];
  argumentPolicy?: MCPArgumentRule[];
@@ -968,6 +969,8 @@ export interface MCPConnection {
   lastTest?: string; updatedAt: string; updatedBy: string;
 }
 export interface MCPConnectionInput {
+ jiraRest?: { cloudId: string };
+ jiraRestCredential?: { username?: string; value?: string; clear?: boolean };
  localProcess?: MCPLocalProcess;
  processEnvironment?: Record<string,string>;
  argumentPolicy?: MCPArgumentRule[];

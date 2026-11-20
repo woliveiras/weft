@@ -1070,10 +1070,20 @@ and [review evidence limits](./portable-review-evidence.md).
 ### Jira Cloud workflow profiles
 
 A Cloud workflow profile is a credential-free, explicitly reviewed project scope
-for optional automatic transitions. It references an existing first-party static
-Jira REST-compatible MCP connection and its numeric revision. OAuth MCP tokens,
-custom endpoints and connection policies that forbid REST reuse are rejected;
-they are not converted to a different audience. No live credential is copied.
+for optional automatic transitions. It references an existing first-party MCP
+connection and its numeric revision. Configure independent REST access through
+MCP connection input `jiraRest: {cloudId}` and write-only
+`jiraRestCredential: {username, value}`. The email is limited to 320 bytes and
+the token to 16 KiB; the complete connection JSON request has a 64 KiB envelope
+limit (including JSON escaping and other fields). The public view returns only
+`jiraRest: {cloudId, credentialConfigured}`. Omission preserves the stored pair;
+`jiraRestCredential: {clear: true}` clears it without enabling fallback. A Cloud ID
+change requires replacement or clear. Each change advances the connection
+revision, requiring reviewed profile/trigger adoption. Independent REST dispatch
+uses Basic authentication only to that Cloud ID's fixed api.atlassian.com Jira
+REST3 path. MCP OAuth may coexist, but is never reused for REST. Custom endpoints
+and conflicting policies remain unsupported. Legacy static connections retain
+existing behavior until independent REST is selected.
 
 ```json
 {"name":"cloud-project","mcpConnection":"jira","mcpRevision":1,"cloudId":"11111111-2222-3333-4444-555555555555","siteUrl":"https://api.atlassian.com/ex/jira/11111111-2222-3333-4444-555555555555","projectId":"10001","enabled":true,"projectRestricted":true}

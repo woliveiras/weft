@@ -11,8 +11,8 @@ navigation: [specs/README.md, specs/providers-and-integrations/portable-issue-an
 documentation: [docs/atlassian-bitbucket-setup.md, docs/task-workflows.md, docs/portable-provider-rehearsal.md]
 dependencies: [TASK-006, TASK-007, TASK-008, INT-005, INT-007, RUN-005, RUN-006, RUN-007, OPS-003]
 authority:
-  granted: [specification, implementation, local fixture verification, subagent review, local commits, personal SCRUM rehearsal issue creation, local Compose weftd update]
-  withheld: [live connection changes, secret changes, other live writes, merge, push, other deployment, production qualification]
+  granted: [specification, implementation, local fixture verification, subagent review, local commits, personal SCRUM rehearsal issue creation, local Compose weftd update, personal Cloud integration setup and credential entry]
+  withheld: [connection and secret changes outside the named personal rehearsal, unrelated live writes, merge, push, other deployment, production qualification]
 ---
 
 # Portable Issue and Source Control Integrations
@@ -25,6 +25,12 @@ not qualify real accounts, provider combinations or Data Center versions, and
 automatic portable merge remains unavailable.
 
 ## Maintainer decisions and current boundary
+
+- 2026-11-20: after MCP tool discovery succeeded but Jira REST rejected the same
+  MCP V2 token with HTTP 401/scope failure, the maintainer authorized separating
+  the credentials, tests, subagent review, local deployment and personal Jira /
+  Bitbucket integration setup. This is authority for the named disposable Cloud
+  rehearsal, not corporate resources or arbitrary permission expansion.
 
 - 2026-11-20: for the personal Jira Cloud/Bitbucket Cloud rehearsal, the
   maintainer requires usable Bitbucket authentication rather than a manually
@@ -232,6 +238,51 @@ Unit and integration checks cover encrypted save/reload, API/YAML/console paths,
 Git and PR delivery/review, compatibility and dependency failures; real-account
 authentication remains separately qualified by the live rehearsal.
 
+### AC-010 — Independent Jira Cloud REST authentication
+
+An Atlassian MCP connection may explicitly configure `jiraRest: {cloudId}` and a
+separate write-only `jiraRestCredential: {username, value}` using an Atlassian
+email and a Jira-scoped API token. `clear: true` clears only that REST credential.
+The REST secret is independently encrypted with purpose, connection and Cloud ID
+bound authenticated data. API views expose the Cloud ID and a separate configured
+flag, never either credential value or REST email. MCP discovery/invocation uses
+only the MCP credential; typed Jira REST calls use only the explicit REST slot.
+OAuth MCP may coexist with an explicit REST slot without sharing OAuth tokens.
+
+Explicit REST configuration is limited to supported first-party Atlassian MCP
+connections and the fixed Jira Cloud gateway. Before decryption, quota admission
+or dispatch, its REST path must begin with exactly
+`/ex/jira/<configuredCloudId>/rest/api/3/`; malformed, escaped, traversal or cross-cloud
+URL path components, fragments and alternate authorities are rejected. Ordinary
+encoded query parameters remain supported. Missing/malformed Cloud IDs, malformed
+emails (maximum 320 bytes), header controls, oversized (over 16 KiB) or empty
+replacement tokens, mixed clear/replacement and unsupported endpoint /
+service/policy combinations fail without network access. Credential rotation and
+metadata updates use existing connection CAS. Changing the bound Cloud ID
+requires a replacement REST credential or an explicit clear. Omitted REST input
+preserves a previously explicit configuration; clearing its secret leaves that
+mode configured but unavailable, never reverting to MCP credential reuse.
+Incompatible endpoint/service changes cannot retain the REST slot implicitly.
+
+Configurations that have never selected explicit REST retain their existing
+legacy static first-party behavior; no credential migration occurs. Once selected,
+missing/cleared/corrupt credentials or REST 401/403 never fall back to the MCP
+credential. A REST change advances the existing connection revision, invalidating
+reviewed trigger/profile pins; discovery and transient writes retain the REST slot.
+Existing redirect, TLS, quota, response bounds and credential-reflection protections
+remain effective. Neither raw nor encoded REST credentials may appear in errors,
+API responses, events, exports, plaintext storage, tool output or process arguments.
+
+The console explains the two credentials and exposes replace/clear/preserve states
+without returning saved secrets. MCP Ready means tool discovery only. REST access
+must be qualified by a separate scoped read before trigger activation. YAML uses a
+separate `jiraRestSecretRef` secret reference slot with the email supplied via
+`jiraRestUsernameRef` alongside the replacement; export emits only a preserve
+reference for the credential. Dry-run checks the same
+validation and retained-scope rules as save. Profiles remain credential-free and
+pin the existing connection revision; no automatic grant, transition or task start
+is implied by configuration or a read-only connection test.
+
 ## Implementation batches
 
 These are local delivery units, not remotely created issue records. Keep them
@@ -249,6 +300,7 @@ its own commit. A completed batch does not qualify the remaining capability.
 | INT-009-07 | Integrated cross-provider regression and code-review adoption path | Local cross-provider fixtures and separate pinned portable reviewer example implemented; review-route API/YAML, activation barriers, deduplication and recovery implemented; installed pilot migration and real-account/model/combination qualification remain separate |
 | INT-009-08 | Real-account/target-version qualification under approved resources | Personal Cloud site/workspace/repository and rehearsal issues available; credentials and live execution pending |
 | INT-009-09 | Explicit Bitbucket Cloud email/API-token setup | API, encrypted manager, Git/REST, YAML and console implemented; independent review and local fixtures passed; real credential qualification pending |
+| INT-009-10 | Separate Jira Cloud MCP/REST credentials | Independent encrypted slots, API/YAML/console and TLS/profile fixtures implemented and reviewed; personal Cloud MCP discovery and REST transition inspection passed; complete trigger/delivery qualification pending |
 
 ## Delivery sequence
 

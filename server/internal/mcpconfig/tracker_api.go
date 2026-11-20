@@ -23,6 +23,12 @@ type TrackerAPI struct {
 var ErrTrackerCompatibility = errors.New("a compatible tracker API connection with a static scoped credential is required")
 
 func trackerOrigin(r View, kind string) string {
+	if kind == "jira" && r.JiraREST != nil {
+		if r.Enabled && r.JiraREST.CredentialConfigured && jiraRESTCloudID.MatchString(r.JiraREST.CloudID) && jiraRESTConnection(r) {
+			return "https://api.atlassian.com"
+		}
+		return ""
+	}
 	// Only provider-issued static API tokens from known first-party
 	// connections may be used on the respective vendor API. OAuth tokens
 	// and tokens belonging to custom endpoints keep their original audience.
@@ -63,13 +69,22 @@ func (a *TrackerAPI) Call(ctx context.Context, connection, kind string, revision
 		return nil, 0, errors.New("tracker connection changed")
 	}
 	origin := trackerOrigin(r.View, kind)
-	if origin == "" || !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
+	if origin == "" || !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") ||
+		(kind == "jira" && r.JiraREST != nil && !jiraRESTPath(r.JiraREST.CloudID, path)) {
 		return nil, 0, errors.New("tracker API scope is unavailable")
 	}
 	if err := a.Connections.admitCall(ctx, r); err != nil {
 		return nil, 0, errors.New("tracker connection quota reached")
 	}
-	_, token, err := a.Connections.accessToken(ctx, r)
+	var token string
+	authctx := credentialContext(ctx, r.View)
+	explicitREST := kind == "jira" && r.JiraREST != nil
+	if explicitREST {
+		token, err = a.Connections.jiraRESTToken(r)
+		authctx = context.WithValue(ctx, credentialSchemeKey{}, "basic")
+	} else {
+		_, token, err = a.Connections.accessToken(ctx, r)
+	}
 	if err != nil || token == "" {
 		return nil, 0, errors.New("tracker API credential unavailable")
 	}
@@ -91,7 +106,7 @@ func (a *TrackerAPI) Call(ctx context.Context, connection, kind string, revision
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Authorization", authorizationHeader(credentialContext(ctx, r.View), token))
+	req.Header.Set("Authorization", authorizationHeader(authctx, token))
 	client, closeClient := remoteClient()
 	defer closeClient()
 	if a.Client != nil {
@@ -112,7 +127,9 @@ func (a *TrackerAPI) Call(ctx context.Context, connection, kind string, revision
 		return nil, res.StatusCode, failure
 	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, maxBody+1))
-	if err != nil || len(raw) > maxBody || containsTransportCredential(credentialContext(ctx, r.View), raw, token) {
+	if err != nil || len(raw) > maxBody ||
+		(explicitREST && containsJiraRESTCredential(raw, token)) ||
+		(!explicitREST && containsTransportCredential(authctx, raw, token)) {
 		return nil, res.StatusCode, errors.New("tracker API result rejected")
 	}
 	return raw, res.StatusCode, nil
