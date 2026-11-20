@@ -328,6 +328,13 @@ func TestDeclarativeAllKindsImportAndRoundTrip(t *testing.T) {
 	if adopted := configApplyRequest(t, srv, installation.Request{Files: []string{reviewRouteYAML(t, route)}, RecordConsent: true}); !adopted.OK {
 		t.Fatal(adopted)
 	}
+	cloud := cloudConfigScope(t, a)
+	if applied := configApplyRequest(t, srv, installation.Request{Files: []string{cloudProfileYAML(t, cloud.input)}}); !applied.OK {
+		t.Fatal(applied)
+	}
+	if applied := configApplyRequest(t, srv, installation.Request{Files: []string{cloudMappingYAML("review-step", cloud.input.Name, 1)}}); !applied.OK {
+		t.Fatal(applied)
+	}
 	exported := exportConfig(t, srv)
 	parsed, err := installation.Parse([]string{exported})
 	if err != nil {

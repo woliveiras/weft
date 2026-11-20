@@ -8,6 +8,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/environmentpolicy"
 	"github.com/woliveiras/weft/server/internal/installation"
+	"github.com/woliveiras/weft/server/internal/jiracloud"
 	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
 	"github.com/woliveiras/weft/server/internal/reviewroute"
@@ -54,16 +55,25 @@ func (s *Server) validateConfigDependencies(ctx context.Context, ds []installati
 			err = fmt.Errorf("spec.default: at most one explicit default provider")
 		}
 		switch v := p.Input.(type) {
+		case jiracloud.Input:
+			err = validateCloudProfileDependency(v, current[p.Doc.Key()], ps, plan)
 		case reviewroute.Input:
 			err = validateReviewRouteDependencies(v, current[p.Doc.Key()], ps, plan)
 		case jiradc.MappingInput:
-			err = validateMappingDependency(v, current[p.Doc.Key()], ps, current, plan)
+			if p.Doc.Kind == "JiraCloudWorkflowMapping" {
+				err = s.validateCloudMappingDependency(ctx, v, current[p.Doc.Key()], ps, current, plan)
+			} else {
+				err = validateMappingDependency(v, current[p.Doc.Key()], ps, current, plan)
+			}
 		case *domain.Graph:
 			err = policy.Check(v.Spec.Environment)
 			if err != nil {
 				err = fmt.Errorf("spec.environment: %w", err)
 			}
 		case trigger.Input:
+			if err = validatePlannedCloudConsent(v, ps, plan); err != nil {
+				break
+			}
 			if err = validatePlannedLifecycleMappings(v, ps, plan); err != nil {
 				break
 			}
@@ -78,6 +88,15 @@ func (s *Server) validateConfigDependencies(ctx context.Context, ds []installati
 				manager := s.triggers()
 				original := manager.TrackerRevision
 				manager.TrackerRevision = func(ctx context.Context, id, kind string) (int64, error) {
+					if v.Source.Kind == "jira" && v.Source.ProfileID != "" {
+						// Cloud profile adoption already rejects planned authority
+						// changes. Retain the actual saved MCP revision, including
+						// when an unchanged exported connection is in this bundle.
+						if original == nil {
+							return 0, fmt.Errorf("spec.source.connectionId: saved Cloud tracker authority required")
+						}
+						return original(ctx, id, kind)
+					}
 					if c, ok := connections[id]; ok {
 						credential := c.Credential != nil || current["MCPConnection/"+id].Secrets["credential"]
 						view := mcpconfig.View{ID: id, Service: c.Service, Endpoint: c.Endpoint, Enabled: c.Enabled, CredentialType: c.CredentialType, CredentialConfigured: credential}
@@ -192,12 +211,16 @@ func validateMappingDependency(in jiradc.MappingInput, old configObject, ps []co
 // Trigger consent can review only persisted mapping definitions. Do not validate
 // against the old definition while an earlier object in this batch replaces it.
 func validatePlannedLifecycleMappings(in trigger.Input, ps []configPrepared, plan *installation.Plan) error {
+	kind := "IssueWorkflowMapping"
+	if in.Source.Kind == "jira" && in.Source.ProfileID != "" {
+		kind = "JiraCloudWorkflowMapping"
+	}
 	for _, pin := range []trigger.MappingPin{in.LifecycleMappings.WorkStarted, in.LifecycleMappings.PRDelivered} {
 		if pin.Name == "" {
 			continue
 		}
 		for i, p := range ps {
-			if p.Doc.Kind == "IssueWorkflowMapping" && p.Doc.Name() == pin.Name && plan.Objects[i].Action != "unchanged" {
+			if p.Doc.Kind == kind && p.Doc.Name() == pin.Name && plan.Objects[i].Action != "unchanged" {
 				return fmt.Errorf("spec.lifecycleMappings: apply mapping definitions first, then select their saved revisions and review trigger consent")
 			}
 		}

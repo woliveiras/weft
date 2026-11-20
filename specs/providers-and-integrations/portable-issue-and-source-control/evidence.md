@@ -914,3 +914,34 @@ name assumptions through discovered, scoped workflow mappings.
 - Docker full mcpconfig/jiracloud tests passed, including a second-read dependency
   failure assertion preserving errors.Is. Independent subagent reviews found no
   blockers. No connection, credential or authentication configuration changed.
+
+## INT-009-06p — Declarative Cloud profile and mapping adoption
+
+- Added separate JiraCloudProfile and JiraCloudWorkflowMapping kinds for local
+  plan/preview, CAS apply and export. The existing IssueWorkflowMapping kind
+  retains its DC meaning. Equal mapping names do not cross edition namespaces.
+  Opaque YAML baselines, native MCP revisions, profile revisions and mapping
+  revisions remain distinct and are never calculated or substituted implicitly.
+- Profiles require an already saved compatible MCP connection. Mapping adoption
+  requires an already saved profile and reviewed sample metadata. Plans perform
+  no remote discovery; effective mapping apply uses the shared read-only sample
+  validation. Bundles cannot change MCP/profile/mapping authority and adopt it
+  in the same new trigger consent. Unchanged dependencies may be included.
+  Export/no-op and exact disabling remain available after provider refusal or
+  MCP revocation, without opening a new scope or rewriting retained pins.
+- Unit and real API/SQLite/MCP/verified-TLS fixtures cover invalid/missing pins,
+  denied and stale discovery, separate applies, namespace isolation, safe
+  export, unchanged/offline disable, distinct MCP revision 2 versus profile
+  revision 1, and rejection of mixed-adoption applies before any mutation.
+  The all-kinds round-trip fixture includes the two Cloud kinds through separate
+  saved-definition adoption steps. Its fake provider accepts discovery GETs
+  only; no transition is dispatched by these configuration tests.
+- Docker full API and installation suites passed (45.170 and 0.002 seconds).
+  A final preview edge was then corrected: unchanged MCP dependencies in a
+  profiled Cloud trigger bundle retain their actual saved revision instead of
+  the legacy planned-connection placeholder. The targeted API/installation
+  rerun passed (0.258 and 0.002 seconds), followed by API/installation/MCP/Cloud
+  vet and diff checks. Independent review, including that final edge, found no
+  remaining blockers. No tests or security checks were weakened.
+- No configuration was applied to the running installation. No real account,
+  credential, issue, trigger, workflow or remote permissions were changed.

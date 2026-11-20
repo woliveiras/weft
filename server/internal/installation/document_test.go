@@ -94,3 +94,13 @@ func TestReviewRouteKindOrdersAfterSavedSCMAndGraph(t *testing.T) {
 		}
 	}
 }
+
+func TestCloudWorkflowKindsRemainSeparateAndPrecedeTrigger(t *testing.T) {
+	docs := []Document{New("IssueTrigger", "issues", map[string]any{}), New("JiraCloudWorkflowMapping", "review", map[string]any{}), New("JiraCloudProfile", "cloud", map[string]any{}), New("MCPConnection", "cloud", map[string]any{})}
+	Sort(docs)
+	for i, kind := range []string{"MCPConnection", "JiraCloudProfile", "JiraCloudWorkflowMapping", "IssueTrigger"} {
+		if docs[i].Kind != kind {
+			t.Fatal(docs)
+		}
+	}
+}

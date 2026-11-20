@@ -14,6 +14,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/environmentpolicy"
 	"github.com/woliveiras/weft/server/internal/installation"
+	"github.com/woliveiras/weft/server/internal/jiracloud"
 	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/llmconfig"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
@@ -170,7 +171,7 @@ func (s *Server) buildConfigPlan(ctx context.Context, in installation.Request, d
 					item.Warning = "consent required; trigger will be paused"
 				}
 			}
-			if d.Kind == "IssueWorkflowMapping" && item.Action != "unchanged" {
+			if (d.Kind == "IssueWorkflowMapping" || d.Kind == "JiraCloudWorkflowMapping") && item.Action != "unchanged" {
 				item.Warning = "Apply may revalidate the reviewed sample with read-only Jira discovery, unless exactly disabling the saved definition; no transition is executed"
 			}
 			if d.Kind == "PullRequestReviewRoute" && item.Action != "unchanged" {
@@ -431,6 +432,20 @@ func (s *Server) applyConfigObject(ctx context.Context, p configPrepared, old co
 		return "saved; project permission qualification pending", err
 	case "IssueWorkflowMapping":
 		_, err := (jiradc.WorkflowMappings{Connections: s.IssueConnections}).Put(ctx, p.Input.(jiradc.MappingInput), old.NativeRevision, actor)
+		return "", err
+	case "JiraCloudProfile":
+		manager, err := s.cloudProfiles()
+		if err != nil {
+			return "", err
+		}
+		_, err = manager.Put(ctx, p.Input.(jiracloud.Input), old.NativeRevision, actor)
+		return "", err
+	case "JiraCloudWorkflowMapping":
+		manager, err := s.cloudProfiles()
+		if err != nil {
+			return "", err
+		}
+		_, err = (jiradc.WorkflowMappings{Backend: manager.Backend()}).Put(ctx, p.Input.(jiradc.MappingInput), old.NativeRevision, actor)
 		return "", err
 	case "PullRequestReviewRoute":
 		in := p.Input.(reviewroute.Input)

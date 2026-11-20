@@ -239,6 +239,34 @@ func (s *Server) configSnapshot(ctx context.Context) (map[string]configObject, e
 			cursor = next
 		}
 	}
+	if s.CloudProfiles != nil {
+		profiles, err := s.CloudProfiles.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, profile := range profiles {
+			spec := installation.Map(profile.Input)
+			delete(spec, "name")
+			o := newConfigObject("JiraCloudProfile", profile.Name, spec, profile.Revision)
+			o.NativeRevision = profile.Revision
+			if err := add(o); err != nil {
+				return nil, err
+			}
+		}
+		mappings, err := (jiradc.WorkflowMappings{Backend: s.CloudProfiles.Backend()}).List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, mapping := range mappings {
+			spec := installation.Map(mapping.MappingInput)
+			delete(spec, "name")
+			o := newConfigObject("JiraCloudWorkflowMapping", mapping.Name, spec, mapping.Revision)
+			o.NativeRevision = mapping.Revision
+			if err := add(o); err != nil {
+				return nil, err
+			}
+		}
+	}
 	ps, err := (projectconfig.Manager{Store: s.Store}).List(ctx)
 	if err != nil {
 		return nil, err

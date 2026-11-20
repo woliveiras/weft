@@ -12,6 +12,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/environmentpolicy"
 	"github.com/woliveiras/weft/server/internal/graph"
 	"github.com/woliveiras/weft/server/internal/installation"
+	"github.com/woliveiras/weft/server/internal/jiracloud"
 	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/llmconfig"
@@ -285,7 +286,31 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 		normalized.Token = nil
 		p.Doc.Spec = installation.Map(normalized)
 		delete(p.Doc.Spec, "name")
-	case "IssueWorkflowMapping":
+	case "JiraCloudProfile":
+		var in jiracloud.Input
+		spec["name"] = d.Name()
+		if err := decode(&in); err != nil {
+			return p, err
+		}
+		offline, err := exactCloudProfileInput(in, old)
+		if err != nil {
+			return p, err
+		}
+		if !offline {
+			manager, err := s.cloudProfiles()
+			if err != nil {
+				return p, err
+			}
+			preview, err := manager.Preview(ctx, in)
+			if err != nil {
+				return p, fmt.Errorf("spec: %w", err)
+			}
+			in = preview.Input
+		}
+		p.Input = in
+		p.Doc.Spec = installation.Map(in)
+		delete(p.Doc.Spec, "name")
+	case "IssueWorkflowMapping", "JiraCloudWorkflowMapping":
 		var in jiradc.MappingInput
 		spec["name"] = d.Name()
 		if err := decode(&in); err != nil {

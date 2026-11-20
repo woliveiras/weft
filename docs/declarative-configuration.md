@@ -63,6 +63,8 @@ All documents use `apiVersion: weft.io/v1`, `kind`, `metadata.name`, optional
 | `MCPConnection` | Connection ID as name; connection input including display `name`, `service`, `endpoint`, `enabled`, quota, transport, template, argument policy and OAuth configuration. Use references for credentials. |
 | `IssueConnection` | Native tracker connection name; `kind: jira-dc`, HTTPS `siteUrl`, numeric `projectId`, `enabled`, optional `projectRestricted` confirmation (default false), and `secretRef`. Configuration only: apply makes no provider call and does not grant agent access or enable a trigger. |
 | `IssueWorkflowMapping` | Native Jira Data Center mapping name; exact `connection` and positive `connectionRevision`, discovered `sampleIssueKey`, numeric `sampleIssueId`, `issueTypeId`, `fromStatusId`, `transitionId`, `targetStatusId`, exact `issueUpdated`, and `enabled`. Names/board columns cannot identify transitions. Uses the same reviewed mapping manager as the API. |
+| `JiraCloudProfile` | Credential-free workflow profile: saved `mcpConnection` and native numeric `mcpRevision`, `cloudId`, exact Cloud gateway `siteUrl`, numeric `projectId`, `enabled`, and `projectRestricted` administrator confirmation. Never supplies, copies or converts an MCP/DC credential. |
+| `JiraCloudWorkflowMapping` | Cloud mapping using the same reviewed sample fields as the DC kind, but `connection` names a saved `JiraCloudProfile` and `connectionRevision` is that profile's native numeric revision. Cloud and DC namespaces remain separate even for equal local names. |
 | `SCMConnection` | Connection name; `kind`, `repository`, `apiUrl`, `gitUrl`, `branchPrefix`, `requirePullRequestApproval`, `secretRef`. |
 | `Project` | An alias or exported registered project ID; `url`, optional `ref` (default `HEAD`), `checks`, `executionMode`. Existing local registrations export `path` and `displayName`. |
 | `Graph` | Existing graph metadata and spec, including manual environments. `metadata.id` remains the graph identity; absent IDs derive from the display name. |
@@ -117,6 +119,59 @@ review trigger consent. A changed definition requires explicit trigger adoption;
 YAML does not infer or rewrite lifecycle pins. Existing task history and grants
 remain intact. Automatic confirmed-merge synchronization remains unavailable
 until its independent delivery event and concurrency guarantees are qualified.
+
+## Jira Cloud workflow configuration
+
+Cloud optional transitions use separate `JiraCloudProfile` and
+`JiraCloudWorkflowMapping` kinds. Save the compatible static first-party MCP
+connection first. Then save a credential-free profile using its exact native
+numeric MCP revision, Cloud UUID, numeric project ID and API scope identity:
+
+```yaml
+apiVersion: weft.io/v1
+kind: JiraCloudProfile
+metadata:
+  name: cloud-project
+spec:
+  mcpConnection: atlassian-api
+  mcpRevision: 1
+  cloudId: 11111111-2222-3333-4444-555555555555
+  siteUrl: https://api.atlassian.com/ex/jira/11111111-2222-3333-4444-555555555555
+  projectId: '10001'
+  enabled: true
+  projectRestricted: true
+```
+
+The identifiers above are illustrative. `projectRestricted` records an
+administrator's confirmation that the technical account's remote write
+permissions are restricted to that project. It is not a remote permission
+change or an automatic proof. `siteUrl` is the exact Cloud REST gateway scope,
+not the tenant browser URL or a Data Center site. OAuth MCP credentials and
+custom audiences are not converted to REST credentials.
+
+Profile plan/preview/save perform local reads only. The profile must reference
+an already saved MCP connection; a bundle cannot create or change that
+connection and adopt its calculated future revision. After saving the profile,
+discover the sample issue's transitions through its inspector and save a
+`JiraCloudWorkflowMapping` with the sample IDs/update timestamp. Its `connection`
+is the profile name and its `connectionRevision` is the saved profile revision,
+not the MCP revision. The profile must already exist; profile changes and
+mapping adoption require separate reviewed applies. Mapping plans never contact
+Jira; effective saves validate the sample through read-only Cloud discovery.
+
+Export retains only configuration and opaque per-object baselines. Native MCP,
+profile and mapping revision numbers remain distinct from those baselines.
+Unchanged applies and exact disabling of retained profiles/mappings work without
+provider access. Disabling does not rewrite the original pins. Failed or stale
+discovery leaves the mapping unsaved and does not execute a transition.
+
+Finally, adopt the saved Cloud profile through the trigger's `source.profileId`
+and `source.profileRevision`, retaining the matching MCP `connectionId`, Cloud
+UUID, gateway site and project. Select saved lifecycle mapping name/revision
+pairs and review trigger consent. A consent apply cannot simultaneously replace
+the MCP connection, profile or selected mapping. Legacy Jira Cloud triggers
+without profiles/mappings retain their existing comment/label behavior. The
+existing `IssueWorkflowMapping` kind continues to mean Data Center.
 
 ## Portable pull request review routes
 
