@@ -398,3 +398,23 @@ name assumptions through discovered, scoped workflow mappings.
 - Checkpoint documentation received a final read-only subagent review: statuses,
   commit range and test-log totals were checked without rerunning commands;
   no blockers. Eighteen local Markdown link targets and diff checks passed.
+
+## INT-009-05f — Relative DC labels and project access
+
+- Added a single numeric-issue PUT with relative label add/remove operations,
+  preserving unrelated labels and all assignments. No automatic assignment or
+  undo is exposed: a preflight read cannot protect an assignee against a
+  concurrent human edit without a remote compare-and-swap guarantee.
+- The project-restricted write gate is checked before preflight and before
+  dispatch. Invalid labels, empty removals, reflected credentials, stale stored
+  authority, foreign projects, denied writes and unknown outcomes fail without
+  blindly repeating a mutation. Project access probes use the reviewed numeric
+  project ID and reject divergent or incomplete identities.
+- Docker unit and fsstore/TLS integration checks passed:
+  `./scripts/go.sh test ./internal/jiradc`
+  (`/tmp/weft-jira-labels-v2.log`). Read-only subagent review initially found the
+  assignment race; removal of assignment writes and final test coverage were
+  reviewed with no residual blockers. No real-account operation or deployment.
+- Operational trigger adoption remains a separate batch; this client is not
+  itself a grant. REST 2 contract provenance remains the official Jira reference
+  linked in batch06a.
