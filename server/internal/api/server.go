@@ -251,6 +251,7 @@ func (s *Server) routes() {
 		{"POST /api/v1/issue-connections", A, s.createIssueConnection},
 		{"PUT /api/v1/issue-connections/{name}", A, s.updateIssueConnection},
 		{"POST /api/v1/issue-connections/{name}/test", O, s.testIssueConnection},
+		{"POST /api/v1/issue-connections/{name}/transitions", O, s.discoverIssueTransitions},
 		{"GET /api/v1/scm/kinds", R, s.scmKinds},
 		{"GET /api/v1/scm/connections", R, s.scmConnections},
 		{"POST /api/v1/scm/connections", A, s.createSCMConnection},

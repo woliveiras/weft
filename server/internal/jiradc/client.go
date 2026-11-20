@@ -27,6 +27,15 @@ var ErrHistoryLimit = errors.New("Jira comments exceed the page bound")
 var numericID = regexp.MustCompile(`^[1-9][0-9]{0,19}$`)
 var issueKey = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}-[1-9][0-9]{0,9}$`)
 
+// ValidateIssueKey rejects URLs, paths and unbounded input before opening a
+// credentialed connection. It does not prove project membership.
+func ValidateIssueKey(key string) error {
+	if !issueKey.MatchString(key) {
+		return errors.New("invalid Jira issue key")
+	}
+	return nil
+}
+
 // Client is bound to one reviewed site and immutable numeric project ID.
 // Its token belongs to this native connection, never to an MCP connection.
 type Client struct {
@@ -258,8 +267,8 @@ func (c *Client) validateIssue(i Issue, key string) error {
 }
 func (c *Client) Issue(ctx context.Context, key string) (Issue, error) {
 	var i Issue
-	if !issueKey.MatchString(key) {
-		return Issue{}, errors.New("invalid Jira issue key")
+	if err := ValidateIssueKey(key); err != nil {
+		return Issue{}, err
 	}
 	err := c.do(ctx, "GET", "/issue/"+key+"?fields=summary,description,labels,project,issuetype,status,assignee,reporter,updated,created,issuelinks", nil, &i)
 	if err == nil {

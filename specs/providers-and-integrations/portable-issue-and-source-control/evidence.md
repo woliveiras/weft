@@ -491,3 +491,25 @@ name assumptions through discovered, scoped workflow mappings.
   credential, trigger consent or grant was changed; no deployment was performed.
   Optional mappings, transition recovery, portable review adoption and live
   qualification remain separate incomplete work.
+
+## INT-009-06b — Read-only transition API and console inspector
+
+- Exposed bounded, strictly decoded issue-key discovery to operators/admins with
+  a reviewed If-Match connection revision. No write client, mapping, grant or
+  transition request is created. A connection changed/disabled mid-request
+  returns conflict without presenting obsolete results or errors. HTTP failures,
+  foreign projects and reflected credentials return no partial metadata.
+- Added a dedicated inspector route with contextual help, loading/error states,
+  separate transition/destination IDs, required-field details and 20-row pages.
+  Null field metadata is explicitly unavailable, distinct from a known-empty map.
+  Changing the issue, repeating discovery or reloading clears previous results.
+- Docker unit/integration checks passed: `./scripts/go.sh test ./internal/jiradc
+  ./internal/api` (`/tmp/weft-jira-discovery-api-v2.log`); `make test-web`
+  (TypeScript plus 105 files / 569 tests,
+  `/tmp/weft-jira-discovery-console-v1.log`). Chromium also passed the native
+  connection/inspector journey (`/tmp/weft-jira-discovery-e2e-v1.log`); its remote
+  discovery response is injected, with real verified-TLS adapter/API fixtures
+  independently covering Jira reads, denial, foreign scope and mid-read disable.
+- Read-only subagent review found no blockers. Mappings, transition mutations,
+  durable sync recovery and Jira Cloud adoption are not implemented by this
+  read-only batch. No real account or installation configuration was changed.

@@ -1,0 +1,64 @@
+import {act, cleanup, render, screen, within} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import {afterEach, expect, it} from 'vitest';
+import {fakeApi, apiError} from '../test/fakeApi';
+import {IssueTransitionInspector, transitionRequirements} from './IssueTransitionInspector';
+import type {IssueTransition} from '../api/types';
+
+const connection={name:'native',kind:'jira-dc',siteUrl:'https://jira.example',projectId:'10001',revision:3,enabled:true,projectRestricted:false,credentialConfigured:true};
+const transitions:IssueTransition[]=[{id:'31',name:'Review',to:{id:'20',name:'Revisão'},fields:{}},{id:'32',name:'Review',to:{id:'21',name:'Revisão'},fields:null},{id:'33',name:'Finish',to:{id:'22',name:'Done'},fields:{resolution:{required:true,name:'Resolution',schema:{type:'resolution'},hasDefaultValue:true}}}];
+const result={connection:'native',revision:3,discovery:{site:connection.siteUrl,projectId:'10001',issueId:'10007',issueKey:'APP-7',issueTypeId:'10002',current:{id:'10',name:'Ready'},updated:'2026-11-20T12:00:00Z',transitions}};
+afterEach(cleanup);
+it('distinguishes known-empty metadata, unavailable fields and required fields',()=>{
+ expect(transitions.map(transitionRequirements)).toEqual(['No required fields reported','Field metadata unavailable','1 required field']);
+});
+it('discovers issue-specific IDs using the reviewed connection revision and preserves remote errors',async()=>{
+ let finish!:(value:unknown)=>void;
+ const backend=fakeApi({'GET /api/v1/issue-connections/native':()=>connection,'POST /api/v1/issue-connections/native/transitions':()=>new Promise(resolve=>{finish=resolve;})});
+ render(<IssueTransitionInspector name="native" role="operator"/>);
+ await screen.findByText(/Project ID 10001/);
+ const user=userEvent.setup();
+ const form=screen.getByRole('form',{name:'Inspect issue transitions'});
+ await user.type(within(form).getByLabelText('Issue key'),'APP-7');
+ await user.click(within(form).getByRole('button',{name:'Discover transitions'}));
+ expect(within(form).getByRole('button',{name:'Discovering…'}).closest('fieldset')?.disabled).toBe(true);
+ const call=backend.find('POST','/api/v1/issue-connections/native/transitions')[0];
+ expect(call.body).toEqual({issueKey:'APP-7'});expect(call.headers['If-Match']).toBe('3');
+ await act(async()=>finish(result));
+ const table=await screen.findByRole('region',{name:'Transition table'});
+ expect(within(table).getAllByText('Review')).toHaveLength(2);
+ expect(within(table).getByText('Transition ID 31')).toBeTruthy();
+ expect(within(table).getByText('Status ID 21')).toBeTruthy();
+ expect(within(table).getByText('Field metadata unavailable')).toBeTruthy();
+ await user.click(within(table).getByText('Field requirements'));
+ expect(table.textContent).toContain('Default reported');
+ await user.click(within(form).getByRole('button',{name:'Discover transitions'}));
+ expect(screen.queryByRole('region',{name:'Transition table'})).toBeNull();
+ await act(async()=>finish(apiError(409,'Connection changed','conflict')));
+ expect(await screen.findByRole('alert')).toHaveProperty('textContent','Connection changed');
+ expect(screen.queryByRole('region',{name:'Transition table'})).toBeNull();
+});
+it('refuses malformed issue keys locally and does not offer discovery to viewers',async()=>{
+ const backend=fakeApi({'GET /api/v1/issue-connections/native':()=>connection});
+ const view=render(<IssueTransitionInspector name="native" role="operator"/>);
+ await screen.findByText(/Project ID 10001/);
+ await userEvent.type(screen.getByLabelText('Issue key'),'../APP-7');
+ await userEvent.click(screen.getByRole('button',{name:'Discover transitions'}));
+ expect(await screen.findByRole('alert')).toHaveProperty('textContent','Enter an issue key such as APP-7.');
+ expect(backend.calls.every(c=>c.method==='GET')).toBe(true);
+ view.unmount();render(<IssueTransitionInspector name="native" role="viewer"/>);
+ expect(screen.queryByRole('form')).toBeNull();
+});
+it('paginates bounded metadata without rendering a long unstructured list',async()=>{
+ fakeApi({'GET /api/v1/issue-connections/native':()=>connection,'POST /api/v1/issue-connections/native/transitions':()=>({...result,discovery:{...result.discovery,transitions:Array.from({length:21},(_,i)=>({...transitions[0],id:String(i+1),name:`Transition ${i+1}`}))}})});
+ render(<IssueTransitionInspector name="native" role="admin"/>);
+ await screen.findByText(/Project ID 10001/);
+ await userEvent.type(screen.getByLabelText('Issue key'),'APP-7');
+ await userEvent.click(screen.getByRole('button',{name:'Discover transitions'}));
+ const table=await screen.findByRole('region',{name:'Transition table'});
+ expect(within(table).getAllByRole('row')).toHaveLength(21);
+ expect(within(table).queryByText('Transition 21')).toBeNull();
+ await userEvent.click(screen.getByRole('button',{name:'Next'}));
+ expect(within(table).getAllByRole('row')).toHaveLength(2);
+ expect(within(table).getByText('Transition 21')).toBeTruthy();
+});

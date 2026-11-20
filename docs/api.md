@@ -149,6 +149,7 @@ created by saving or testing a connection.
 | `POST /api/v1/issue-connections` | admin | Create `{name, kind: "jira-dc", siteUrl, projectId, enabled, projectRestricted?, token}`. HTTPS site context paths are supported; `projectId` is the numeric Jira ID. |
 | `PUT /api/v1/issue-connections/{name}` | admin | Requires `If-Match: <revision>`. Omit `token` to retain it for the same site/project; changing scope requires a replacement native credential. |
 | `POST /api/v1/issue-connections/{name}/test` | operator | Requires `If-Match`; tests authenticated identity only, returning `{ok, identity?, scope?, error?}`. This does not qualify project permissions. |
+| `POST /api/v1/issue-connections/{name}/transitions` | operator | Read-only discovery for `{issueKey}` with a positive `If-Match` revision. Returns `{connection, revision, discovery}` for the issue's exact site/project/type/current status. No mapping or transition is saved. |
 
 `projectRestricted` defaults to false. Set it only after reviewing that the
 remote technical account has write permissions restricted to this project.
@@ -955,3 +956,11 @@ investigate the remote outcome. A retry never silently resets the reservation or
 blindly reposts. A deleted/changed summary is no longer confirmed on retry.
 No persistent receipt is automatically deleted. Publication records never store
 the summary text or credential; URLs are redacted before persistence or events.
+
+Native Jira transition discovery reads the issue, its available transitions and
+required-field metadata, then rereads the issue. Connection revision changes or
+disabling during discovery return 409 without publishing obsolete metadata;
+remote failures return 502 with no partial result. Discovery is independent of
+the project-restricted write attestation because it performs no remote mutation.
+`fields: null` means unavailable metadata; `{}` means known-empty requirements.
+Names are display text; transition and destination IDs remain separate.

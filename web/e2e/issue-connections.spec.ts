@@ -69,4 +69,25 @@ test('native issue connections use dedicated pages, scoped credentials and expli
   expect(Math.abs(search!.y-status!.y)).toBeLessThan(2);
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+  await page.setViewportSize({width:1280,height:800});
+  await row.getByRole('link',{name:'Inspect transitions'}).click();
+  await expect(page).toHaveURL(/\/transitions$/);
+  let discoveryCalls=0;
+  await page.route('**/api/v1/issue-connections/e2e-native-jira/transitions',async route=>{
+    discoveryCalls++;
+    expect(route.request().postDataJSON()).toEqual({issueKey:'APP-7'});
+    expect(route.request().headers()['if-match']).toBe('1');
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({connection:'e2e-native-jira',revision:1,discovery:{site:'https://jira.fixture.invalid/context',projectId:'10001',issueId:'10007',issueKey:'APP-7',issueTypeId:'10002',current:{id:'10',name:'Ready'},updated:'2026-11-20T12:00:00Z',transitions:[{id:'31',name:'Review',to:{id:'20',name:'Review'},fields:{}},{id:'32',name:'Review',to:{id:'21',name:'Review'},fields:null}]}})});
+  });
+  const inspector=page.getByRole('form',{name:'Inspect issue transitions'});
+  await inspector.getByLabel('Issue key',{exact:true}).fill('APP-7');
+  await inspector.getByRole('button',{name:'Discover transitions',exact:true}).click();
+  const transitionTable=page.getByRole('region',{name:'Transition table'});
+  await expect(transitionTable.getByRole('row')).toHaveCount(3);
+  await expect(transitionTable).toContainText('Transition ID 31');
+  await expect(transitionTable).toContainText('Field metadata unavailable');
+  expect(discoveryCalls).toBe(1);
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+
 });

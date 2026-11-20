@@ -971,3 +971,19 @@ export interface SCMKind {
   reviewSummary: boolean;
   automaticMerge: boolean;
 }
+
+// Read-only, issue-specific Jira metadata; this is not a reusable workflow ID.
+export interface IssueTransitionDiscovery {
+  connection: string;
+  revision: number;
+  discovery: {
+    site: string; projectId: string; issueId: string; issueKey: string;
+    issueTypeId: string; current: {id: string; name: string}; updated: string;
+    transitions: IssueTransition[];
+  };
+}
+export interface IssueTransition {
+  id: string; name: string; to: {id: string; name: string};
+  fields: Record<string, {required: boolean; name: string; hasDefaultValue?: boolean;
+    operations?: string[]; schema: {type: string; items?: string}; allowedValues?: unknown[]}> | null;
+}

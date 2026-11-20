@@ -33,3 +33,16 @@ func TestNativeConnectionRevisionRequired(t *testing.T) {
 		t.Fatal(rev, err)
 	}
 }
+
+func TestTransitionDiscoveryInputRejectsArbitraryPayloads(t *testing.T) {
+	for _, body := range []string{`{}`, `null`, `{"issueKey":"APP-0"}`, `{"issueKey":"../APP-7"}`, `{"issueKey":"https://jira.example/APP-7"}`, `{"issueKey":"APP-7","fields":{}}`, `{"issueKey":"APP-7"} {}`, `{"issueKey":"APP-7","token":"fixture-secret"}`, strings.Repeat(" ", 1024) + `{"issueKey":"APP-7"}`, `{"issueKey":"APP-7"}` + strings.Repeat(" ", 1024) + `{}`} {
+		r := httptest.NewRequest("POST", "/", strings.NewReader(body))
+		if _, err := decodeTransitionIssue(r); err == nil || strings.Contains(err.Error(), "fixture-secret") {
+			t.Fatal("invalid discovery body accepted", err)
+		}
+	}
+	r := httptest.NewRequest("POST", "/", strings.NewReader(`{"issueKey":"APP-7"}`))
+	if key, err := decodeTransitionIssue(r); err != nil || key != "APP-7" {
+		t.Fatal(key, err)
+	}
+}

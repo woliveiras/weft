@@ -75,3 +75,9 @@ it('round trips settings deep links and falls back to General for an unknown sec
   expect(routeHash(parseRoute('#/g/example/settings/unknown'))).toBe('#/g/example/settings/general');
   expect(routeHash(parseRoute('#/g/example/settings'))).toBe('#/g/example/settings/general');
 });
+
+it('round-trips native issue transition inspection without treating it as connection editing',()=>{
+ const hash='#/connections/issues/c/native/transitions';
+ expect(parseRoute(hash)).toEqual({view:'connections',issueConnectionID:'native',issueTransitions:true});
+ expect(routeHash(parseRoute(hash))).toBe(hash);
+});

@@ -112,6 +112,17 @@ bounded second readiness round. Failed-admission automatic relabel retries are
 unavailable for this edition until actor-specific authorization can be proven;
 retain the stopped task and use a separately reviewed new task when appropriate.
 
+### Inspect the actual Jira workflow
+
+In Connections → Issue trackers, choose **Inspect transitions**, enter an issue
+key in the configured project and choose **Discover transitions**. Operators and
+administrators can inspect; viewers cannot dispatch discovery. Results show the
+issue type, current status and available transition/destination IDs, including
+required fields and unavailable metadata. Equal display names are not collapsed.
+Discovery is read-only and does not save mappings or change the Jira issue.
+Reload after a connection revision conflict. Available transitions are specific
+to the actual issue, state and technical account, not to a board column.
+
 ## The model: configure once, enforce on every call
 
 - **You connect a service once.** Weft stores the credential encrypted and
