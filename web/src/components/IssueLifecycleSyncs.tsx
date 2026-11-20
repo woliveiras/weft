@@ -1,13 +1,13 @@
 import {useState} from 'react';
 import {api,ApiError,errorMessage} from '../api/client';
-import type {LifecycleSync} from '../api/types';
+import type {LifecycleSync,WorkflowEdition} from '../api/types';
 import {useAsync} from '../hooks/useData';
 import {Badge,Btn,ErrorBox,fmtDateTime} from './common';
 import {HelpField} from './FieldHelp';
 
-export function IssueLifecycleSyncs({connection,role}:{connection:string;role?:string}){
+export function IssueLifecycleSyncs({connection,role,edition='jira-dc'}:{connection:string;role?:string;edition?:WorkflowEdition}){
  const [after,setAfter]=useState<string>();const [previous,setPrevious]=useState<(string|undefined)[]>([]);
- const page=useAsync(()=>api.lifecycleSyncs(connection,after),[connection,after]);
+ const page=useAsync(()=>api.lifecycleSyncs(connection,after,edition==='jira'?'jira':undefined),[connection,after,edition]);
  const [query,setQuery]=useState('');const [status,setStatus]=useState('');
  const [busy,setBusy]=useState<string>();const [error,setError]=useState<string>();const [conflict,setConflict]=useState(false);
  const [message,setMessage]=useState<string>();
@@ -48,7 +48,7 @@ function LifecycleRecovery({value:v,role,busy,conflict,onRecover}:{value:Lifecyc
  const evidence=useAsync(()=>open?api.lifecycleSyncEvidence(v.id):Promise.resolve(undefined),[open,v.id,v.revision]);
  const intent=evidence.data?.transition?.intent;
  const changed=!!evidence.data&&evidence.data.sync.revision!==v.revision;
- const issueUrl=v.source.siteUrl?`${v.source.siteUrl}/browse/${encodeURIComponent(v.issueKey)}`:undefined;
+ const issueUrl=v.source.kind!=='jira'&&v.source.siteUrl?`${v.source.siteUrl}/browse/${encodeURIComponent(v.issueKey)}`:undefined;
  return <details onToggle={e=>setOpen(e.currentTarget.open)}><summary>Review recovery</summary>
  {issueUrl&&<p><a href={issueUrl} target="_blank" rel="noreferrer">Open {v.issueKey} in Jira</a></p>}
  <p className="small">Issue ID {v.issueId} · Connection revision {v.connectionRevision}</p>

@@ -16,6 +16,47 @@ const paused: Trigger = {
 
 afterEach(cleanup);
 
+it('shows the retained Cloud revision separately and adopts the current revision only after selection',async()=>{
+ const old={name:'cloud-team',mcpConnection:'atl',mcpRevision:4,cloudId:'11111111-2222-3333-4444-555555555555',siteUrl:'https://api.atlassian.com/ex/jira/11111111-2222-3333-4444-555555555555',projectId:'10001',revision:1,enabled:true,projectRestricted:true};
+ const trigger={...paused,currentTask:undefined,currentIssue:undefined,source:{kind:'jira',connectionId:old.mcpConnection,cloudId:old.cloudId,siteUrl:old.siteUrl,projectId:old.projectId,profileId:old.name,profileRevision:1},lifecycleMappings:{workStarted:{name:'review-step',revision:1}}};
+ const backend=fakeApi({'GET /api/v1/triggers':()=>[trigger],'GET /api/v1/trigger-policy':()=>({}),'GET /api/v1/scm/connections':()=>[],'GET /api/v1/jira-cloud-profiles':()=>[{...old,revision:2}],'GET /api/v1/jira-cloud-workflow-mappings':()=>[],'PUT /api/v1/triggers/trg_1':()=>trigger});
+ const user=userEvent.setup();render(<TriggersSection graph={graph} role="admin"/>);await user.click(await screen.findByRole('button',{name:'Edit'}));
+ const picker=await screen.findByLabelText('Optional Cloud workflow profile');await waitFor(()=>expect(within(picker).getByRole('option',{name:/Revision 2/})).toBeTruthy());
+ expect(picker).toHaveProperty('value','cloud-team@1');expect(within(picker).getByRole('option',{name:/Revision 1.*review required/})).toHaveProperty('disabled',true);
+ await user.selectOptions(picker,'cloud-team@2');await user.click(screen.getByRole('button',{name:'Save trigger'}));await waitFor(()=>expect(backend.find('PUT','/api/v1/triggers/trg_1')).toHaveLength(1));
+ const body=backend.find('PUT','/api/v1/triggers/trg_1')[0].body as {source:unknown;lifecycleMappings?:unknown};expect(body.source).toMatchObject({profileId:'cloud-team',profileRevision:2});expect(body.lifecycleMappings).toBeUndefined();
+});
+
+it('opts into an explicit Cloud profile revision and mapping without changing legacy Cloud settings by default',async()=>{
+ const profile={name:'cloud-team',mcpConnection:'atl',mcpRevision:4,cloudId:'11111111-2222-3333-4444-555555555555',siteUrl:'https://api.atlassian.com/ex/jira/11111111-2222-3333-4444-555555555555',projectId:'10001',revision:2,enabled:true,projectRestricted:true};
+ const backend=fakeApi({'GET /api/v1/triggers':()=>[],'GET /api/v1/trigger-policy':()=>({}),'GET /api/v1/scm/connections':()=>[],
+  'GET /api/v1/jira-cloud-profiles':()=>[profile],
+  'GET /api/v1/jira-cloud-workflow-mappings':()=>[{name:'review-step',connection:profile.name,connectionRevision:2,siteUrl:profile.siteUrl,projectId:'10001',enabled:true,revision:3,issueTypeId:'10002',fromStatusId:'10',targetStatusId:'20'}],
+  'POST /api/v1/triggers':()=>({id:'new'})});
+ const user=userEvent.setup();render(<TriggersSection graph={graph} role="admin"/>);
+ await user.click(await screen.findByRole('button',{name:'Add issue trigger'}));const form=screen.getByRole('form',{name:'Add issue trigger'});
+ await user.type(within(form).getByLabelText('Name'),'Cloud issues');await user.selectOptions(within(form).getByLabelText('Tracker'),'jira');
+ await user.type(within(form).getByLabelText('MCP connection'),'legacy-atl');await user.type(within(form).getByLabelText('Jira cloud ID'),'legacy-cloud');
+ const picker=await within(form).findByLabelText('Optional Cloud workflow profile');expect(picker).toHaveProperty('value','');
+ expect(within(form).getByLabelText('MCP connection')).toHaveProperty('value','legacy-atl');
+ await waitFor(()=>expect(within(picker).getByRole('option',{name:/cloud-team/})).toBeTruthy());await user.selectOptions(picker,'cloud-team@2');
+ expect(within(form).getByLabelText('MCP connection')).toHaveProperty('value','atl');
+ await user.selectOptions(await within(form).findByLabelText('When runtime starts'),'review-step@3');
+ await user.click(within(form).getByRole('button',{name:'Save trigger'}));
+ await waitFor(()=>expect(backend.find('POST','/api/v1/triggers')).toHaveLength(1));expect(backend.find('POST','/api/v1/triggers')[0].body).toMatchObject({source:{kind:'jira',profileId:'cloud-team',profileRevision:2,connectionId:'atl',cloudId:profile.cloudId,siteUrl:profile.siteUrl,projectId:'10001'},lifecycleMappings:{workStarted:{name:'review-step',revision:3}}});
+});
+
+it('clears adopted Cloud mappings when source identity is edited and preserves the legacy save shape',async()=>{
+ const profile={name:'cloud-team',mcpConnection:'atl',mcpRevision:4,cloudId:'11111111-2222-3333-4444-555555555555',siteUrl:'https://api.atlassian.com/ex/jira/11111111-2222-3333-4444-555555555555',projectId:'10001',revision:2,enabled:true,projectRestricted:true};
+ const backend=fakeApi({'GET /api/v1/triggers':()=>[],'GET /api/v1/trigger-policy':()=>({}),'GET /api/v1/scm/connections':()=>[],'GET /api/v1/jira-cloud-profiles':()=>[profile],'GET /api/v1/jira-cloud-workflow-mappings':()=>[],'POST /api/v1/triggers':()=>({id:'new'})});
+ const user=userEvent.setup();render(<TriggersSection graph={graph} role="admin"/>);await user.click(await screen.findByRole('button',{name:'Add issue trigger'}));const form=screen.getByRole('form',{name:'Add issue trigger'});
+ await user.type(within(form).getByLabelText('Name'),'Cloud legacy');await user.selectOptions(within(form).getByLabelText('Tracker'),'jira');const picker=await within(form).findByLabelText('Optional Cloud workflow profile');
+ await waitFor(()=>expect(within(picker).getByRole('option',{name:/cloud-team/})).toBeTruthy());await user.selectOptions(picker,'cloud-team@2');
+ await user.clear(within(form).getByLabelText('Jira cloud ID'));await user.type(within(form).getByLabelText('Jira cloud ID'),'legacy-cloud');expect(picker).toHaveProperty('value','');
+ await user.click(within(form).getByRole('button',{name:'Save trigger'}));await waitFor(()=>expect(backend.find('POST','/api/v1/triggers')).toHaveLength(1));const body=backend.find('POST','/api/v1/triggers')[0].body as {source:unknown;lifecycleMappings?:unknown};
+ expect(body.source).toEqual({kind:'jira',connectionId:'atl',cloudId:'legacy-cloud'});expect(body.lifecycleMappings).toBeUndefined();
+});
+
 it('selects a native DC connection, snapshots its site/project and keeps SCM delivery independent', async () => {
   const native={name:'jira-dc',kind:'jira-dc',siteUrl:'https://jira.example/context',projectId:'10001',enabled:true,credentialConfigured:true,projectRestricted:true,revision:3};
   const backend=fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[{name:'review-step',connection:native.name,connectionRevision:3,siteUrl:native.siteUrl,projectId:'10001',enabled:true,revision:2,issueTypeId:'10002',fromStatusId:'10',targetStatusId:'20'}],

@@ -1,3 +1,4 @@
+import {cloudWorkflowConnection} from './workflowEdition';
 import { LifecycleMappingPicker } from './LifecycleMappingPicker';
 import { HelpField } from './FieldHelp';
 import { useEffect, useState } from 'react';
@@ -46,6 +47,10 @@ export function TriggersSection({ graph, role, onTriggers }: {
   const [draft, setDraft] = useState<TriggerInput>();
   const nativeSelected = draft?.source.kind === 'jira-dc';
   const native = useAsync(() => nativeSelected ? api.issueConnections() : Promise.resolve([]), [nativeSelected]);
+  const cloudSelected=draft?.source.kind==='jira';
+  const cloudProfiles=useAsync(()=>cloudSelected?api.jiraCloudProfiles():Promise.resolve([]),[cloudSelected]);
+  const selectedCloud=cloudProfiles.data?.find(p=>p.name===draft?.source.profileId);
+  const cloudScopeMatches=!!selectedCloud&&selectedCloud.enabled&&selectedCloud.projectRestricted&&selectedCloud.revision===draft?.source.profileRevision&&selectedCloud.mcpConnection===draft?.source.connectionId&&selectedCloud.cloudId===draft?.source.cloudId&&selectedCloud.siteUrl===draft?.source.siteUrl&&selectedCloud.projectId===draft?.source.projectId;
   const selectedNative = native.data?.find(c => c.name === draft?.source.connectionId);
   const nativeScopeMatches = !!selectedNative && selectedNative.enabled && selectedNative.credentialConfigured && selectedNative.projectRestricted && selectedNative.siteUrl === draft?.source.siteUrl && selectedNative.projectId === draft?.source.projectId;
   const [saving, setSaving] = useState(false);
@@ -72,18 +77,21 @@ export function TriggersSection({ graph, role, onTriggers }: {
   }, [nextDeadline, deadlineTick]);
   const set = (patch: Partial<TriggerInput>) => setDraft((d) => ({ ...(d ?? emptyInput(graph)), ...patch }));
   const setSource = (patch: Partial<TriggerInput['source']>) => setDraft((d) => {
-    const cur = d ?? emptyInput(graph);
-    return { ...cur, lifecycleMappings: (patch.connectionId!==undefined&&patch.connectionId!==cur.source.connectionId)||(patch.siteUrl!==undefined&&patch.siteUrl!==cur.source.siteUrl)||(patch.projectId!==undefined&&patch.projectId!==cur.source.projectId)?undefined:cur.lifecycleMappings, source: { ...cur.source, ...patch } };
+    const cur=d??emptyInput(graph);
+    const changedScope=(patch.connectionId!==undefined&&patch.connectionId!==cur.source.connectionId)||(patch.cloudId!==undefined&&patch.cloudId!==cur.source.cloudId)||(patch.siteUrl!==undefined&&patch.siteUrl!==cur.source.siteUrl)||(patch.projectId!==undefined&&patch.projectId!==cur.source.projectId);
+    const clearProfile=cur.source.kind==='jira'&&!!cur.source.profileId&&changedScope;
+    return {...cur,lifecycleMappings:changedScope?undefined:cur.lifecycleMappings,source:{...cur.source,...patch,...(clearProfile?{profileId:undefined,profileRevision:undefined,siteUrl:undefined,projectId:undefined}:{})}};
   });
   const save = async () => {
     if (!draft || saving) return;
     if (nativeSelected && (!nativeScopeMatches || native.loading || native.error)) {setError('Select and review an enabled Jira Data Center connection with a project-restricted account.'); return;}
+    if(cloudSelected&&draft.source.profileId&&(!cloudScopeMatches||cloudProfiles.loading||cloudProfiles.error)){setError('Review the selected Cloud profile revision and scope before saving.');return;}
     setSaving(true);
     setError(undefined);
     try {
       const src: TriggerSource = draft.source.kind === 'github'
         ? { kind: draft.source.kind, connectionId: draft.source.connectionId.trim(), repository: draft.source.repository?.trim(), query: draft.source.query?.trim() || undefined }
-        : draft.source.kind === 'jira-dc' ? {kind: 'jira-dc', connectionId: draft.source.connectionId, siteUrl: draft.source.siteUrl, projectId: draft.source.projectId, query: draft.source.query?.trim() || undefined} : { kind: draft.source.kind, connectionId: draft.source.connectionId.trim(), cloudId: draft.source.cloudId?.trim(), query: draft.source.query?.trim() || undefined };
+        : draft.source.kind === 'jira-dc' ? {kind: 'jira-dc', connectionId: draft.source.connectionId, siteUrl: draft.source.siteUrl, projectId: draft.source.projectId, query: draft.source.query?.trim() || undefined} : { kind: draft.source.kind, connectionId: draft.source.connectionId.trim(), cloudId: draft.source.cloudId?.trim(), ...(draft.source.profileId?{profileId:draft.source.profileId,profileRevision:draft.source.profileRevision,siteUrl:draft.source.siteUrl,projectId:draft.source.projectId}:{}), query: draft.source.query?.trim() || undefined };
       const input = { ...draft, source: src, resultNodeId: draft.resultNodeId || undefined, owner: draft.owner?.trim() || undefined, scmConnection: draft.scmConnection || undefined };
       if (editing) await api.updateTrigger(editing, input);
       else await api.createTrigger(input);
@@ -234,6 +242,17 @@ export function TriggersSection({ graph, role, onTriggers }: {
           </> : <>
             <HelpField label="MCP connection" help="The enabled, discovered MCP connection used to read tracker issues. It needs access to the repository or Jira Cloud site you configure."><input value={draft.source.connectionId} onChange={e => setSource({connectionId: e.target.value})} placeholder="connection id"/></HelpField>
             {draft.source.kind === 'github' ? <HelpField label="Repository" help="The GitHub repository to poll, written as owner/repository. Use a repository the selected connection can read."><input value={draft.source.repository ?? ''} onChange={e => setSource({repository: e.target.value})} placeholder="owner/name"/></HelpField> : <HelpField label="Jira cloud ID" help="Identifies the Jira Cloud site to search. Use the cloud ID associated with the selected Atlassian MCP connection."><input value={draft.source.cloudId ?? ''} onChange={e => setSource({cloudId: e.target.value})}/></HelpField>}
+          </>}
+          {cloudSelected&&<>
+          <HelpField label="Optional Cloud workflow profile" help="Opt in to an explicitly reviewed profile revision for status synchronization. Leaving this empty preserves the existing Jira Cloud issue-trigger configuration. Selecting a profile binds its MCP connection, Cloud site and project; it does not select a transition automatically."><select disabled={cloudProfiles.loading||!!list.data?.find(t=>t.id===editing)?.currentTask} value={draft.source.profileId?`${draft.source.profileId}@${draft.source.profileRevision}`:''} onChange={e=>{
+            const p=cloudProfiles.data?.find(v=>`${v.name}@${v.revision}`===e.target.value);
+            if(p)set({lifecycleMappings:undefined,source:{kind:'jira',connectionId:p.mcpConnection,cloudId:p.cloudId,siteUrl:p.siteUrl,projectId:p.projectId,profileId:p.name,profileRevision:p.revision,query:draft.source.query}});
+            else set({lifecycleMappings:undefined,source:{kind:'jira',connectionId:draft.source.connectionId,cloudId:draft.source.cloudId,query:draft.source.query}});
+          }}><option value="">Keep current behavior — no status synchronization</option>{draft.source.profileId&&!cloudProfiles.data?.some(p=>p.name===draft.source.profileId&&p.revision===draft.source.profileRevision)&&<option value={`${draft.source.profileId}@${draft.source.profileRevision}`} disabled>{draft.source.profileId} · Revision {draft.source.profileRevision} (review required)</option>}{cloudProfiles.data?.map(p=><option key={p.name} value={`${p.name}@${p.revision}`} disabled={!p.enabled||!p.projectRestricted}>{p.name} · Revision {p.revision} · Project {p.projectId}{p.enabled&&p.projectRestricted?'':' · review needed'}</option>)}</select></HelpField>
+          <ErrorBox error={cloudProfiles.error}/>{cloudProfiles.loading&&<p role="status">Loading Cloud workflow profiles…</p>}
+          <div className="btn-row"><Btn small disabled={cloudProfiles.loading} onClick={()=>void cloudProfiles.reload()}>Refresh Cloud profiles</Btn><a href="#/connections/jira-cloud/new">Configure Cloud profile</a></div>
+          {draft.source.profileId&&!cloudScopeMatches&&!cloudProfiles.loading&&<p role="alert">The selected Cloud profile changed or its scope no longer matches. Select a reviewed revision again before saving.</p>}
+          {selectedCloud&&cloudScopeMatches&&<LifecycleMappingPicker edition="jira" connection={cloudWorkflowConnection(selectedCloud)} value={draft.lifecycleMappings} disabled={!!list.data?.find(t=>t.id===editing)?.currentTask} onChange={lifecycleMappings=>set({lifecycleMappings})}/>}
           </>}
           <HelpField label={"Extra query"} help={"Narrows the tracker search using GitHub search syntax or JQL for Jira. Test the filter in your tracker before enabling the trigger."}><input value={draft.source.query ?? ''} onChange={(e) => setSource({ query: e.target.value })} placeholder={draft.source.kind === 'github' ? 'milestone:v1' : 'project = APP'} /></HelpField>
           {nativeSelected&&selectedNative&&nativeScopeMatches&&<LifecycleMappingPicker connection={selectedNative} value={draft.lifecycleMappings} disabled={!!list.data?.find(t=>t.id===editing)?.currentTask} onChange={lifecycleMappings=>set({lifecycleMappings})}/>}

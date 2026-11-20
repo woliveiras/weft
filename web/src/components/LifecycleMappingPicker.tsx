@@ -1,14 +1,14 @@
-import {api} from '../api/client';
-import type {IssueConnection, TriggerLifecycleMappings} from '../api/types';
+import {workflowAPI,workflowConnectionLink} from './workflowEdition';
+import type {WorkflowConnection, WorkflowEdition, TriggerLifecycleMappings} from '../api/types';
 import {useAsync} from '../hooks/useData';
 import {Btn,ErrorBox} from './common';
 import {HelpField} from './FieldHelp';
 
-export function LifecycleMappingPicker({connection,value,disabled,onChange}:{
- connection:IssueConnection;value?:TriggerLifecycleMappings;disabled?:boolean;
+export function LifecycleMappingPicker({connection,value,disabled,onChange,edition='jira-dc'}:{
+ connection:WorkflowConnection;edition?:WorkflowEdition;value?:TriggerLifecycleMappings;disabled?:boolean;
  onChange:(value:TriggerLifecycleMappings|undefined)=>void;
 }){
- const mappings=useAsync(()=>api.issueWorkflowMappings(connection.name),[connection.name,connection.revision]);
+ const mappings=useAsync(()=>workflowAPI(edition).mappings(connection.name),[connection.name,connection.revision,edition]);
  const eligible=mappings.data?.filter(m=>m.enabled&&m.connection===connection.name&&m.connectionRevision===connection.revision&&m.siteUrl===connection.siteUrl&&m.projectId===connection.projectId)??[];
  return <fieldset disabled={disabled} className="form" aria-label="Optional Jira lifecycle mappings">
  <legend>Optional status synchronization</legend>
@@ -28,6 +28,6 @@ export function LifecycleMappingPicker({connection,value,disabled,onChange}:{
   {eligible.map(m=><option key={m.name} value={`${m.name}@${m.revision}`}>{m.name} · Revision {m.revision} · Type {m.issueTypeId} · {m.fromStatusId} → {m.targetStatusId}</option>)}
   </select></HelpField>;
  })}
- <a href={`#/connections/issues/c/${encodeURIComponent(connection.name)}/mappings`}>Manage mappings and synchronization</a>
+ <a href={`${workflowConnectionLink(edition,connection.name)}/mappings`}>Manage mappings and synchronization</a>
  </fieldset>;
 }

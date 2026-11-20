@@ -205,6 +205,11 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 }
 .connections-form > :is(h3, .error-box, .checkbox, .btn-row, .connection-token) { grid-column: 1 / -1; }
 .connections-form > h3 { margin: 0; }
+.connections-page .cloud-profile-form { max-width: none; width: 100%; }
+.cloud-profile-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+.cloud-profile-fields > .checkbox, .cloud-profile-fields > [role="note"] { grid-column: 1 / -1; }
+.cloud-profile-fields :is(input:not([type="checkbox"]), select) { width: 100%; min-width: 0; }
+@media (max-width: 700px) { .cloud-profile-fields { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 720px) {
   .connections-page .connections-form { grid-template-columns: minmax(0, 1fr); }
 }

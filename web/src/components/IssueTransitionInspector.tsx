@@ -1,6 +1,7 @@
+import {workflowAPI} from './workflowEdition';
 import {useState} from 'react';
-import {api, errorMessage} from '../api/client';
-import type {IssueTransition, IssueTransitionDiscovery} from '../api/types';
+import {errorMessage} from '../api/client';
+import type {IssueTransition, IssueTransitionDiscovery, WorkflowEdition} from '../api/types';
 import {useAsync} from '../hooks/useData';
 import {Badge, Btn, ErrorBox} from './common';
 import {HelpField} from './FieldHelp';
@@ -10,8 +11,9 @@ export function transitionRequirements(t: IssueTransition): string {
   const required = Object.entries(t.fields).filter(([,field]) => field.required);
   return required.length ? `${required.length} required field${required.length === 1 ? '' : 's'}` : 'No required fields reported';
 }
-export function IssueTransitionInspector({name, role}: {name: string; role?: string}) {
-  const connection=useAsync(()=>api.issueConnection(name),[name]);
+export function IssueTransitionInspector({name, role, edition='jira-dc'}: {name: string; role?: string; edition?:WorkflowEdition}) {
+  const workflow=workflowAPI(edition);
+  const connection=useAsync(()=>workflow.connection(name),[name,edition]);
   const [issue,setIssue]=useState('');
   const [busy,setBusy]=useState(false);
   const [result,setResult]=useState<IssueTransitionDiscovery>();
@@ -22,7 +24,7 @@ export function IssueTransitionInspector({name, role}: {name: string; role?: str
     if(!allowed||busy||connection.loading||connection.error||!connection.data?.enabled)return;
     if(!/^[A-Z][A-Z0-9_]{0,63}-[1-9][0-9]{0,9}$/.test(issue.trim())){setError('Enter an issue key such as APP-7.');return;}
     setBusy(true);setError(undefined);setResult(undefined);setPage(0);
-    try{setResult(await api.discoverIssueTransitions(name,connection.data.revision,issue.trim()));}
+    try{setResult(await workflow.discover(name,connection.data.revision,issue.trim()));}
     catch(e){setError(errorMessage(e));}finally{setBusy(false);}
   };
   const d=result?.revision===connection.data?.revision?result?.discovery:undefined;

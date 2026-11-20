@@ -37,7 +37,7 @@ export function IssueConnectionsSection({role}: {role?: string}) {
   };
   return <section className="card connections-panel" aria-labelledby="issue-connections-heading">
     <header className="connections-panel-head"><div><h2 id="issue-connections-heading">Issue trackers</h2>
-      <p className="muted">Jira Data Center connections for issue triggers. Configure Jira Cloud through an MCP connection.</p></div>
+      <p className="muted">Jira Data Center connections for issue triggers. Jira Cloud workflow profiles are configured separately below.</p></div>
       {role === 'admin' && <a className="btn btn-primary" href={issueCreateLink} aria-describedby="issue-connections-heading">Add connection</a>}
     </header>
     <div className="connections-toolbar"><ConnectionFilters value={filters} onChange={setFilters} placeholder="Name, site or project ID" statusLabel="Connection status" statuses={statuses}/>

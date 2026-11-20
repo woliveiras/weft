@@ -500,10 +500,20 @@ export interface TriggerSource {
   connectionId: string;
   repository?: string;
   cloudId?: string;
+  profileId?: string;
+  profileRevision?: number;
   siteUrl?: string;
   projectId?: string;
   query?: string;
 }
+
+export interface JiraCloudProfileInput {
+  name: string; mcpConnection: string; mcpRevision: number; cloudId: string;
+  siteUrl: string; projectId: string; enabled: boolean; projectRestricted: boolean;
+}
+export interface JiraCloudProfile extends JiraCloudProfileInput {revision: number; updatedAt: string; updatedBy: string}
+export type WorkflowEdition = 'jira-dc' | 'jira';
+export type WorkflowConnection = Pick<IssueConnection, 'name' | 'siteUrl' | 'projectId' | 'enabled' | 'projectRestricted' | 'revision' | 'credentialConfigured'>;
 
 export interface IssueConnection {
   name: string;

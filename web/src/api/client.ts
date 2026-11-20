@@ -3,7 +3,7 @@ import type {TaskInput, TaskDraft, TaskPage, TaskReview, TaskProgress, Project} 
 import type { ExecutionTree, CancelScope, Cancellation } from './executionTree';
 import type { ActivityQuery, ActivityView, HealthQuery, HealthView } from './activity';
 import type { DelegationPolicy, DelegationPolicyView, DelegationProfile, DelegationProfileView } from './delegation';
-import type { MCPHistoryPage, MCPConnection, MCPConnectionInput, MCPTemplate, IssueConnection, IssueConnectionInput, IssueTransitionDiscovery, IssueWorkflowMapping, IssueWorkflowMappingInput, LifecycleSync, LifecycleSyncPage, LifecycleSyncEvidence } from './types';
+import type { JiraCloudProfile, JiraCloudProfileInput, MCPHistoryPage, MCPConnection, MCPConnectionInput, MCPTemplate, IssueConnection, IssueConnectionInput, IssueTransitionDiscovery, IssueWorkflowMapping, IssueWorkflowMappingInput, LifecycleSync, LifecycleSyncPage, LifecycleSyncEvidence } from './types';
 import type { Skill, SkillInput, InstructionSnapshot } from './instructions';
 import type {
   Approval,
@@ -335,9 +335,17 @@ export const api = {
   triggerMatches: (id: string) => request<TriggerMatches>(`${V1}/triggers/${enc(id)}/matches`),
   scmKinds: () => request<SCMKind[]>(`${V1}/scm/kinds`),
   lifecycleSyncEvidence: (id:string) => request<LifecycleSyncEvidence>(`${V1}/lifecycle-syncs/${enc(id)}`),
-  lifecycleSyncs: (connection:string, after?:string) => request<LifecycleSyncPage>(`${V1}/lifecycle-syncs`, {query:{connection,after}}),
+  lifecycleSyncs: (connection:string, after?:string, kind?:string) => request<LifecycleSyncPage>(`${V1}/lifecycle-syncs`, {query:{connection,after,kind}}),
   reconcileLifecycleSync: (id:string,revision:number) => request<LifecycleSync>(`${V1}/lifecycle-syncs/${enc(id)}/reconcile`,{method:'POST',headers:{'If-Match':String(revision)},body:{confirm:true}}),
   retryLifecycleSync: (id:string,revision:number) => request<LifecycleSync>(`${V1}/lifecycle-syncs/${enc(id)}/retry`,{method:'POST',headers:{'If-Match':String(revision)},body:{confirm:true}}),
+  jiraCloudProfiles: () => request<JiraCloudProfile[]>(`${V1}/jira-cloud-profiles`),
+  jiraCloudProfile: (name:string) => request<JiraCloudProfile>(`${V1}/jira-cloud-profiles/${enc(name)}`),
+  previewJiraCloudProfile: (input:JiraCloudProfileInput) => request<JiraCloudProfile>(`${V1}/jira-cloud-profiles/preview`, {method:'POST',body:input}),
+  saveJiraCloudProfile: (input:JiraCloudProfileInput, revision?:number) => request<JiraCloudProfile>(`${V1}/jira-cloud-profiles${revision===undefined?'':'/'+enc(input.name)}`, {method:revision===undefined?'POST':'PUT',body:input,headers:revision===undefined?undefined:{'If-Match':String(revision)}}),
+  cloudWorkflowMappings: (connection:string) => request<IssueWorkflowMapping[]>(`${V1}/jira-cloud-workflow-mappings`, {query:{connection}}),
+  cloudWorkflowMapping: (name:string) => request<IssueWorkflowMapping>(`${V1}/jira-cloud-workflow-mappings/${enc(name)}`),
+  saveCloudWorkflowMapping: (input:IssueWorkflowMappingInput, revision?:number) => request<IssueWorkflowMapping>(`${V1}/jira-cloud-workflow-mappings${revision===undefined?'':'/'+enc(input.name)}`, {method:revision===undefined?'POST':'PUT',body:input,headers:revision===undefined?undefined:{'If-Match':String(revision)}}),
+  discoverCloudTransitions: (name:string, revision:number, issueKey:string) => request<IssueTransitionDiscovery>(`${V1}/jira-cloud-profiles/${enc(name)}/transitions`, {method:'POST',body:{issueKey},headers:{'If-Match':String(revision)}}),
   issueWorkflowMappings: (connection: string) => request<IssueWorkflowMapping[]>(`${V1}/issue-workflow-mappings`, {query: {connection}}),
   issueWorkflowMapping: (name: string) => request<IssueWorkflowMapping>(`${V1}/issue-workflow-mappings/${enc(name)}`),
   saveIssueWorkflowMapping: (input: IssueWorkflowMappingInput, revision?: number) => request<IssueWorkflowMapping>(`${V1}/issue-workflow-mappings${revision === undefined ? '' : '/'+enc(input.name)}`, {method: revision === undefined ? 'POST' : 'PUT', body: input, headers: revision === undefined ? undefined : {'If-Match': String(revision)}}),

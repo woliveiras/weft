@@ -1,31 +1,31 @@
+import {workflowAPI,workflowConnectionLink} from './workflowEdition';
 import {IssueLifecycleSyncs} from './IssueLifecycleSyncs';
 import {useEffect,useState} from 'react';
-import {api, ApiError, errorMessage} from '../api/client';
-import type {IssueConnection, IssueTransition, IssueTransitionDiscovery, IssueWorkflowMapping, IssueWorkflowMappingInput} from '../api/types';
+import {ApiError, errorMessage} from '../api/client';
+import type {WorkflowConnection, WorkflowEdition, IssueTransition, IssueTransitionDiscovery, IssueWorkflowMapping, IssueWorkflowMappingInput} from '../api/types';
 import {useAsync} from '../hooks/useData';
 import {Badge, Btn, ErrorBox, fmtDateTime} from './common';
 import {HelpField} from './FieldHelp';
-import {issueConnectionLink} from './IssueConnectionsSection';
 
 export const mappingInput=(v:IssueWorkflowMapping):IssueWorkflowMappingInput=>({name:v.name,connection:v.connection,connectionRevision:v.connectionRevision,sampleIssueKey:v.sampleIssueKey,sampleIssueId:v.sampleIssueId,issueTypeId:v.issueTypeId,fromStatusId:v.fromStatusId,transitionId:v.transitionId,targetStatusId:v.targetStatusId,issueUpdated:v.issueUpdated,enabled:v.enabled});
 export function canMapTransition(t:IssueTransition,current:string):boolean{return t.to.id!==current&&t.fields!==null&&Object.values(t.fields).every(f=>f.required===false);}
-export function IssueWorkflowMappingsPage({name,route,role}:{name:string;route:{name?:string;create?:boolean};role?:string}){
- const connection=useAsync(()=>api.issueConnection(name),[name]);
- const base=`${issueConnectionLink(name)}/mappings`;
+export function IssueWorkflowMappingsPage({name,route,role,edition='jira-dc'}:{name:string;route:{name?:string;create?:boolean};role?:string;edition?:WorkflowEdition}){
+ const connection=useAsync(()=>workflowAPI(edition).connection(name),[name,edition]);
+ const base=`${workflowConnectionLink(edition,name)}/mappings`;
  return <section><header className="page-head connection-detail-head"><div><a href="#/connections">Connections</a><h1>{route.create?'New workflow mapping':route.name?'Review workflow mapping':'Jira workflow mappings'}</h1><p className="muted">Select actual Jira transition IDs. Saving a definition does not attach it to a workflow or execute it.</p></div>
  {!route.create&&!route.name&&role==='admin'&&<a className="btn btn-primary" href={`${base}/new`}>New mapping</a>}</header>
  <ErrorBox error={connection.error}/>{connection.loading&&<p role="status">Loading issue connection…</p>}
  {connection.error&&<Btn onClick={()=>void connection.reload()}>Retry loading connection</Btn>}
  {connection.data&&!connection.loading&&!connection.error&&<><p>{name} · {connection.data.siteUrl} · Project ID {connection.data.projectId} · Revision {connection.data.revision}</p>
- {route.create||route.name?<MappingEditor key={route.name??'new'} connection={connection.data} mappingName={route.name} role={role}/>:<><MappingList connection={connection.data} role={role}/><IssueLifecycleSyncs key={connection.data.name} connection={connection.data.name} role={role}/></>}</>}
+ {route.create||route.name?<MappingEditor key={`${edition}/${connection.data.name}/${connection.data.revision}/${route.name??'new'}`} edition={edition} connection={connection.data} mappingName={route.name} role={role}/>:<><MappingList edition={edition} connection={connection.data} role={role}/><IssueLifecycleSyncs key={`${edition}/${connection.data.name}`} edition={edition} connection={connection.data.name} role={role}/></>}</>}
  </section>;
 }
-function MappingList({connection,role}:{connection:IssueConnection;role?:string}){
- const list=useAsync(()=>api.issueWorkflowMappings(connection.name),[connection.name]);
+function MappingList({connection,role,edition}:{connection:WorkflowConnection;role?:string;edition:WorkflowEdition}){
+ const list=useAsync(()=>workflowAPI(edition).mappings(connection.name),[connection.name,edition]);
  const [busy,setBusy]=useState(false);const [error,setError]=useState<string>();
  const disable=async(v:IssueWorkflowMapping)=>{
   if(busy||role!=='admin')return;setBusy(true);setError(undefined);
-  try{await api.saveIssueWorkflowMapping({...mappingInput(v),enabled:false},v.revision);await list.reload();}
+  try{await workflowAPI(edition).save({...mappingInput(v),enabled:false},v.revision);await list.reload();}
   catch(e){setError(errorMessage(e));}finally{setBusy(false);}
  };
  return <section className="card connections-panel" aria-label="Workflow mapping list">
@@ -37,18 +37,18 @@ function MappingList({connection,role}:{connection:IssueConnection;role?:string}
  <td>{v.transitionName} → {v.targetStatusName}<span className="connection-meta small muted">Transition {v.transitionId} · Status {v.fromStatusId} → {v.targetStatusId}</span></td>
  <td>Type {v.issueTypeId}<span className="connection-meta small muted">Project {v.projectId} · Connection revision {v.connectionRevision}</span></td>
  <td><Badge tone={!v.enabled?undefined:v.connectionRevision!==connection.revision?'warn':'ok'}>{!v.enabled?'Disabled':v.connectionRevision!==connection.revision?'Connection changed':'Enabled definition'}</Badge></td>
- <td><time dateTime={v.updatedAt}>{fmtDateTime(v.updatedAt)}</time></td><td><div className="btn-row"><a href={`${issueConnectionLink(connection.name)}/mappings/c/${encodeURIComponent(v.name)}`}>Review definition</a>{role==='admin'&&v.enabled&&<Btn small disabled={busy} onClick={()=>void disable(v)}>{busy?'Saving…':'Disable'}</Btn>}</div></td>
+ <td><time dateTime={v.updatedAt}>{fmtDateTime(v.updatedAt)}</time></td><td><div className="btn-row"><a href={`${workflowConnectionLink(edition,connection.name)}/mappings/c/${encodeURIComponent(v.name)}`}>Review definition</a>{role==='admin'&&v.enabled&&<Btn small disabled={busy} onClick={()=>void disable(v)}>{busy?'Saving…':'Disable'}</Btn>}</div></td>
  </tr>)}</tbody></table></div>}
  </section>;
 }
-function MappingEditor({connection,mappingName,role}:{connection:IssueConnection;mappingName?:string;role?:string}){
- const saved=useAsync(()=>mappingName?api.issueWorkflowMapping(mappingName):Promise.resolve(undefined),[mappingName]);
+function MappingEditor({connection,mappingName,role,edition}:{connection:WorkflowConnection;mappingName?:string;role?:string;edition:WorkflowEdition}){
+ const saved=useAsync(()=>mappingName?workflowAPI(edition).mapping(mappingName):Promise.resolve(undefined),[mappingName,edition]);
  const [name,setName]=useState('');const [sample,setSample]=useState('');
  const [enabled,setEnabled]=useState(true);
  useEffect(()=>{if(saved.data)setEnabled(saved.data.enabled);},[saved.data]);
  const [discovery,setDiscovery]=useState<IssueTransitionDiscovery>();const [transition,setTransition]=useState('');
  const [busy,setBusy]=useState(false);const [conflict,setConflict]=useState(false);const [error,setError]=useState<string>();
- const base=`${issueConnectionLink(connection.name)}/mappings`;
+ const base=`${workflowConnectionLink(edition,connection.name)}/mappings`;
  const d=discovery?.discovery;const picked=d?.transitions.find(t=>t.id===transition);
  const qualified=connection.enabled&&connection.projectRestricted&&connection.credentialConfigured;
  const wrongConnection=!!saved.data&&saved.data.connection!==connection.name;
@@ -56,7 +56,7 @@ function MappingEditor({connection,mappingName,role}:{connection:IssueConnection
   if(busy||!qualified||wrongConnection)return;
   if(!/^[A-Z][A-Z0-9_]{0,63}-[1-9][0-9]{0,9}$/.test(sample.trim())){setError('Enter an issue key such as APP-7.');return;}
   setBusy(true);setError(undefined);setDiscovery(undefined);setTransition('');
-  try{setDiscovery(await api.discoverIssueTransitions(connection.name,connection.revision,sample.trim()));}
+  try{setDiscovery(await workflowAPI(edition).discover(connection.name,connection.revision,sample.trim()));}
   catch(e){setError(errorMessage(e));}finally{setBusy(false);}
  };
  const save=async()=>{
@@ -64,7 +64,7 @@ function MappingEditor({connection,mappingName,role}:{connection:IssueConnection
   const chosenName=mappingName??name.trim();
   if(!/^[a-z][a-z0-9_-]{0,63}$/.test(chosenName)){setError('Choose a lowercase mapping name beginning with a letter, up to 64 characters.');return;}
   const hash=location.hash;setBusy(true);setError(undefined);
-  try{await api.saveIssueWorkflowMapping({name:chosenName,connection:connection.name,connectionRevision:discovery!.revision,sampleIssueKey:d.issueKey,sampleIssueId:d.issueId,issueTypeId:d.issueTypeId,fromStatusId:d.current.id,transitionId:picked.id,targetStatusId:picked.to.id,issueUpdated:d.updated,enabled},saved.data?.revision);if(location.hash===hash)location.hash=base;}
+  try{await workflowAPI(edition).save({name:chosenName,connection:connection.name,connectionRevision:discovery!.revision,sampleIssueKey:d.issueKey,sampleIssueId:d.issueId,issueTypeId:d.issueTypeId,fromStatusId:d.current.id,transitionId:picked.id,targetStatusId:picked.to.id,issueUpdated:d.updated,enabled},saved.data?.revision);if(location.hash===hash)location.hash=base;}
   catch(e){setError(errorMessage(e));setConflict(e instanceof ApiError&&e.status===409);}finally{setBusy(false);}
  };
  return <><p><a href={base}>Back to mappings</a></p>
