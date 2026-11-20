@@ -1162,3 +1162,26 @@ name assumptions through discovered, scoped workflow mappings.
   `/tmp/weft-jira-trigger-green.log`. Independent implementation review found no
   blocking findings. These are synthetic local fixtures; no real issue trigger
   or model execution is claimed by this regression test.
+
+
+### Personal Cloud connection qualification (2026-11-20, 17:08–17:10Z)
+
+- The maintainer completed creation of the scoped Bitbucket API token and
+  authorized storing it in local Weft. At 17:08:45Z the console created
+  `rehearsal-bitbucket`, kind `bitbucket-cloud`, API-token authentication, repository
+  `woliveiras-home-made-software/weft-rehearsal`, branch prefix `weft/` and PR
+  creation approval required. No credential value is retained in this evidence.
+- The actual Weft console connection test returned Connected: authenticated
+  identity `uillaz`, default branch `main`, Can push. This exercises the native
+  Bitbucket Cloud repository and caller-scoped permissions REST requests using
+  the stored API token. It does not prove a Git push, PR creation or comment write
+  succeeded, nor that the named branch already has an importable commit.
+- Jira remains separately configured in `rehearsal-jira`, with independent REST
+  credentials and credential-free profile `rehearsal-scrum`. Its successful
+  SCRUM-5 transition inspection is recorded in batch10. No workflow, grants,
+  trigger consent, selection label, task or PR was activated by this connection
+  setup step. The actual issue-to-PR rehearsal remains pending.
+- The second authorized standard-Dockerfile rebuild for commit 193147c completed
+  with exit 0; the container was healthy and `/healthz` returned `status: ok`.
+  The local connection configuration survived the rebuild. No persistent data
+  was deleted. Documentation-only evidence changes require no new tests.
