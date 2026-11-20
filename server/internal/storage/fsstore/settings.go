@@ -104,6 +104,38 @@ func (s *Store) ListSettings(ctx context.Context, prefix string) ([]*storage.Set
 	return out, nil
 }
 
+func (s *Store) ListSettingsPage(ctx context.Context, prefix, afterKey string, limit int) ([]*storage.Setting, error) {
+	if limit < 1 || limit > 200 {
+		return nil, fmt.Errorf("fsstore: settings page limit must be between 1 and 200")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.check(); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	keys := make([]string, 0)
+	for key := range s.settings {
+		if key > afterKey && strings.HasPrefix(key, prefix) {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	if len(keys) > limit {
+		keys = keys[:limit]
+	}
+	out := make([]*storage.Setting, 0, len(keys))
+	for _, key := range keys {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		out = append(out, cloneSetting(s.settings[key]))
+	}
+	return out, nil
+}
+
 // checkSettingRevisions runs with the store mutex held.
 func (s *Store) checkSettingRevisions(guards []storage.SettingRevision) error {
 	for _, guard := range guards {

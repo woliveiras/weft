@@ -627,3 +627,19 @@ name assumptions through discovered, scoped workflow mappings.
   gates, context failure, fast completion and storage failure before runtime.
   Independent read-only subagent review found no blockers. No live execution or
   installation setting was changed. Lifecycle consumption is a subsequent lot.
+
+
+## INT-009-06h — Bounded settings pagination for synchronization history
+
+- Added the storage ListSettingsPage contract with literal prefix filtering,
+  exclusive key cursor and a validated 1–200 row limit. SQL applies the bound
+  in its query; FS selects keys before cloning values. Existing ListSettings
+  callers retain their original contract. No schema migration or data deletion.
+- Shared conformance fixtures passed for FS/SQLite via Docker
+  `./scripts/go.sh test ./internal/storage/...`; storage vet and diff check also
+  passed. Coverage includes 1,005 records, missing/deleted cursors, literal `%`
+  and `_`, Unicode/case, empty values, copy isolation, cancellation, closed stores
+  and invalid limits. PostgreSQL qualification still requires its existing test
+  DSN. Independent read-only subagent review found no blockers.
+- The lifecycle controller/API will consume bounded pages in the next lot, so
+  growth of completed history does not impose a global stop at 1,000 records.

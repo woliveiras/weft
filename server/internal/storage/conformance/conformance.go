@@ -43,6 +43,9 @@ func Run(t *testing.T, newStore func(t *testing.T) storage.Store) {
 		{"Leases", testLeases},
 		{"LeaseRace", testLeaseRace},
 		{"Settings", testSettings},
+		{"SettingsPage", testSettingsPage},
+		{"SettingsPageBoundaries", testSettingsPageBoundaries},
+		{"SettingsPageFailures", testSettingsPageFailures},
 		{"SettingsRace", testSettingsRace},
 		{"GuardedWrites", testGuardedWrites},
 	}
@@ -961,6 +964,140 @@ func testSettings(t *testing.T, s storage.Store) {
 	must(t, err)
 	if rev != 1 {
 		t.Fatalf("recreated revision = %d", rev)
+	}
+}
+
+func testSettingsPage(t *testing.T, s storage.Store) {
+	// More than one maximum-sized page must remain reachable, without an
+	// offset cursor or a total-history cutoff.
+	const count = 1005
+	for index := count - 1; index >= 0; index-- {
+		key := fmt.Sprintf("sync/%04d", index)
+		_, err := s.PutSetting(ctx, key, []byte(key), 0, "creator")
+		must(t, err)
+	}
+	_, err := s.PutSetting(ctx, "other/0000", []byte("unrelated"), 0, "creator")
+	must(t, err)
+	_, err = s.PutSetting(ctx, "sync/0000", []byte("updated"), 1, "editor")
+	must(t, err)
+	cursor := ""
+	seen := 0
+	for {
+		page, err := s.ListSettingsPage(ctx, "sync/", cursor, 200)
+		must(t, err)
+		if len(page) == 0 {
+			break
+		}
+		if len(page) > 200 {
+			t.Fatalf("page length = %d, exceeds requested limit", len(page))
+		}
+		for _, item := range page {
+			wantKey := fmt.Sprintf("sync/%04d", seen)
+			if item.Key != wantKey || item.UpdatedAt.IsZero() {
+				t.Fatalf("setting %d = %+v, want key %q", seen, item, wantKey)
+			}
+			wantValue, wantBy, wantRevision := wantKey, "creator", int64(1)
+			if seen == 0 {
+				wantValue, wantBy, wantRevision = "updated", "editor", 2
+			}
+			if string(item.Value) != wantValue || item.Revision != wantRevision || item.UpdatedBy != wantBy {
+				t.Fatalf("setting fields lost at %q: %+v", item.Key, item)
+			}
+			seen++
+		}
+		cursor = page[len(page)-1].Key
+	}
+	if seen != count {
+		t.Fatalf("read %d settings, want %d", seen, count)
+	}
+	page, err := s.ListSettingsPage(ctx, "sync/", "", 1)
+	must(t, err)
+	if len(page) != 1 || page[0].Key != "sync/0000" {
+		t.Fatalf("single-item page = %+v", page)
+	}
+	page[0].Value[0] = '!'
+	page[0].UpdatedBy = "modified"
+	stored, err := s.GetSetting(ctx, "sync/0000")
+	must(t, err)
+	if string(stored.Value) != "updated" || stored.UpdatedBy != "editor" {
+		t.Fatal("returned page aliases stored settings")
+	}
+
+	// A keyset cursor remains usable after its row is deleted and excludes
+	// newly inserted keys before the cursor.
+	must(t, s.DeleteSetting(ctx, "sync/0000", 2))
+	_, err = s.PutSetting(ctx, "sync/0000-before", nil, 0, "")
+	must(t, err)
+	page, err = s.ListSettingsPage(ctx, "sync/", "sync/0001", 1)
+	must(t, err)
+	if len(page) != 1 || page[0].Key != "sync/0002" {
+		t.Fatalf("cursor skipped or repeated a key: %+v", page)
+	}
+	page, err = s.ListSettingsPage(ctx, "sync/", "sync/0000", 1)
+	must(t, err)
+	if len(page) != 1 || page[0].Key != "sync/0000-before" || page[0].Value == nil || len(page[0].Value) != 0 {
+		t.Fatalf("deleted cursor or empty value mishandled: %+v", page)
+	}
+}
+
+func testSettingsPageBoundaries(t *testing.T, s storage.Store) {
+	keys := []string{"literal_%/a", "literal_%/b", "literalAB/a", "literalXY/b", "LITERAL_%/a", "ç_%/a", "ç_%/b", "çAB/a"}
+	for _, key := range keys {
+		_, err := s.PutSetting(ctx, key, nil, 0, "")
+		must(t, err)
+	}
+	for _, test := range []struct {
+		prefix, cursor string
+		want           []string
+	}{
+		{"literal_%/", "", []string{"literal_%/a", "literal_%/b"}},
+		{"literal_%/", "literal_%/a", []string{"literal_%/b"}},
+		{"literal_%/", "literal_%/aa", []string{"literal_%/b"}},
+		{"literal_%/", "z", nil},
+		{"ç_%/", "", []string{"ç_%/a", "ç_%/b"}},
+		{"missing", "", nil},
+		{"%", "", nil},
+		{"_", "", nil},
+	} {
+		page, err := s.ListSettingsPage(ctx, test.prefix, test.cursor, 200)
+		must(t, err)
+		if len(page) != len(test.want) {
+			t.Fatalf("prefix %q cursor %q: got %d settings, want %v", test.prefix, test.cursor, len(page), test.want)
+		}
+		for index, want := range test.want {
+			if page[index].Key != want {
+				t.Fatalf("prefix %q cursor %q: item %d = %q, want %q", test.prefix, test.cursor, index, page[index].Key, want)
+			}
+		}
+	}
+	sort.Strings(keys)
+	all, err := s.ListSettingsPage(ctx, "", "", 200)
+	must(t, err)
+	if len(all) != len(keys) {
+		t.Fatalf("empty prefix returned %d settings, want %d", len(all), len(keys))
+	}
+	for index, key := range keys {
+		if all[index].Key != key {
+			t.Fatalf("full list order: item %d = %q, want %q", index, all[index].Key, key)
+		}
+	}
+}
+
+func testSettingsPageFailures(t *testing.T, s storage.Store) {
+	for _, limit := range []int{-1, 0, 201} {
+		page, err := s.ListSettingsPage(ctx, "", "", limit)
+		if err == nil || len(page) != 0 {
+			t.Fatalf("invalid limit %d returned %d settings and error %v", limit, len(page), err)
+		}
+	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if page, err := s.ListSettingsPage(cancelled, "", "", 1); !errors.Is(err, context.Canceled) || len(page) != 0 {
+		t.Fatalf("cancelled page: %v, %v", page, err)
+	}
+	must(t, s.Close())
+	if page, err := s.ListSettingsPage(ctx, "", "", 1); err == nil || len(page) != 0 {
+		t.Fatalf("closed-store page: %v, %v", page, err)
 	}
 }
 

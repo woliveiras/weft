@@ -142,6 +142,38 @@ func (s *Store) ListSettings(ctx context.Context, prefix string) ([]*storage.Set
 	return out, rows.Err()
 }
 
+func (s *Store) ListSettingsPage(ctx context.Context, prefix, afterKey string, limit int) ([]*storage.Setting, error) {
+	if limit < 1 || limit > 200 {
+		return nil, fmt.Errorf("sqlstore: settings page limit must be between 1 and 200")
+	}
+	var w where
+	if prefix != "" {
+		w.add("substr(key, 1, ?) = ?", utf8.RuneCountInString(prefix), prefix)
+	}
+	w.add("key > ?", afterKey)
+	w.args = append(w.args, limit)
+	rows, err := s.db.QueryContext(ctx, s.q(`SELECT key, value, revision, updated_at, updated_by FROM settings`+w.String()+` ORDER BY key LIMIT ?`), w.args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]*storage.Setting, 0)
+	for rows.Next() {
+		st := &storage.Setting{}
+		if err := rows.Scan(&st.Key, &st.Value, &st.Revision, tsScanner{&st.UpdatedAt}, &st.UpdatedBy); err != nil {
+			return nil, err
+		}
+		if st.Value == nil {
+			st.Value = []byte{}
+		}
+		out = append(out, st)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // withSettingRevisions holds the revisions stable through commit. SQLite opens
 // write transactions with BEGIN IMMEDIATE. PostgreSQL uses transaction locks on
 // the setting keys, including absent rows. All settings writers take these locks.

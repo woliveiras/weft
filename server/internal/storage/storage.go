@@ -131,6 +131,10 @@ type Store interface {
 	// ListSettings returns every setting whose key starts with prefix
 	// (literal, case-sensitive), ordered by key.
 	ListSettings(ctx context.Context, prefix string) ([]*Setting, error)
+	// ListSettingsPage returns at most limit settings with a literal,
+	// case-sensitive prefix, ordered by key, strictly after afterKey. The
+	// cursor need not exist. Limit must be between 1 and 200 inclusive.
+	ListSettingsPage(ctx context.Context, prefix, afterKey string, limit int) ([]*Setting, error)
 }
 
 // SettingRevision pins a setting to a revision. Zero requires an absent key.
