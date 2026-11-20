@@ -120,3 +120,28 @@ name assumptions through discovered, scoped workflow mappings.
   product UI/UX checklists were applied; no accessibility-conformance claim is made.
 - Metadata describes implementation availability, not live permissions or supported
   production versions. Portable review and merge are not advertised as delivered.
+
+## INT-009-04a — Portable PR snapshots and immutable diffs
+
+- Added `scm.pull_request.read`, requiring the exact SCM connection grant; no
+  writes or implicit grants. GitHub and both Bitbucket editions normalize PR
+  revision identity and refuse wrong repositories, unknown/incomplete states.
+- Diffs address immutable source/base hashes; PR identity is rechecked afterward.
+  All responses are bounded; Data Center structured truncation flags and response
+  hashes are checked, including nested `truncated` and string flags. Secrets
+  reflected in repository text are removed before JSON encoding (including nested
+  structured diff strings).
+- Unit and HTTP/fsstore/gateway integration tests cover all editions, changed
+  head/base, denied responses, invalid JSON/identity, oversize, scoped denial,
+  unavailable adapters and nested truncation/redaction. SCM, API, taskrun and tools
+  checks passed with `./scripts/go.sh test ./internal/scm ./internal/api ./internal/taskrun ./internal/tools -count=1`; `./scripts/go.sh vet ./internal/scm ./internal/api` and `git diff --check` passed. Final subagent review found no remaining blockers.
+- Review identified the Cloud PR patch redirect and before/after-only ABA race;
+  replaced these with immutable compare endpoints. It also identified escaped
+  and nested JSON reflection; decoding/redacting before serialization and decoded
+  output regressions address those paths.
+- Contracts: [GitHub PR API](https://docs.github.com/en/rest/pulls/pulls),
+  [Bitbucket Cloud comparison](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-commits/),
+  [Data Center REST 1.0 structured diff](https://docs.atlassian.com/bitbucket-server/rest/7.15.3/bitbucket-rest.html).
+  Fixture references do not qualify a live account or production version.
+- Summary publication, guarded mutation and event adoption remain in batch04;
+  this batch alone does not satisfy AC-005/006.

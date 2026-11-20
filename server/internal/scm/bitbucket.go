@@ -33,6 +33,9 @@ func newProviderHTTP(raw, token string) (*providerHTTP, error) {
 	return &providerHTTP{u, token, &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 func (h *providerHTTP) do(ctx context.Context, method, path string, in, out any) error {
+	return h.doMedia(ctx, method, path, in, out, "application/json")
+}
+func (h *providerHTTP) doMedia(ctx context.Context, method, path string, in, out any, accept string) error {
 	u, err := url.Parse(path)
 	if err != nil {
 		return errors.New("invalid SCM API path")
@@ -59,7 +62,7 @@ func (h *providerHTTP) do(ctx context.Context, method, path string, in, out any)
 		return errors.New("invalid SCM request")
 	}
 	req.Header.Set("Authorization", "Bearer "+h.token)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", accept)
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -80,6 +83,10 @@ func (h *providerHTTP) do(ctx context.Context, method, path string, in, out any)
 	}
 	if len(raw) > adapterBodyLimit {
 		return errors.New("SCM response exceeded the size limit")
+	}
+	if text, ok := out.(*string); ok {
+		*text = string(raw)
+		return nil
 	}
 	if out != nil {
 		if err = json.Unmarshal(raw, out); err != nil {

@@ -951,4 +951,5 @@ export interface SCMKind {
   credentialHelp: string;
   push: boolean;
   createPullRequest: boolean;
+  readPullRequest: boolean;
 }

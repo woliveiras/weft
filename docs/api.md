@@ -870,7 +870,7 @@ confinement, import confirmation, recovery and CLI examples.
 `GET /api/v1/scm/kinds` is available to authenticated viewers, operators and
 administrators. It returns the registered built-in delivery adapters, with
 `id`, `name`, `repositoryHint`, `apiUrlHint`, `apiUrlRequired`,
-`credentialHelp`, `push` and `createPullRequest`. This is implementation metadata;
+`credentialHelp`, `push`, `createPullRequest` and `readPullRequest`. This is implementation metadata;
 it performs no external request and does not assert that an account is reachable
 or authorized. Connection testing remains an explicit operator action.
 
@@ -879,3 +879,24 @@ unsaved token and API/Git overrides when changing editions. Data Center requires
 a site base URL; Cloud uses its own endpoint and credential contract. Both
 editions use the existing `SCMConnection` YAML kind with their explicit adapter
 IDs; no implicit edition or credential conversion occurs.
+
+### Portable pull request reading
+
+The gateway tool `scm.pull_request.read` requires an explicit tool grant and a
+`repositories` scope containing the SCM connection name. Input is
+`{connection, number, diff?}`. It returns the connection, provider, repository and
+`pullRequest` snapshot (`number`, `url`, `title`, `body`, `state`, `head`, `base`,
+`headSha`, `baseSha`, `draft`). `diff: true` adds a bounded diff. Repository text
+is untrusted content; it cannot authorize tools or a merge.
+
+GitHub uses the immutable `base...head` comparison; Bitbucket Cloud uses
+`head..base?topic=true` directly on its repository diff endpoint (the PR patch
+endpoint redirects). Data Center uses explicit `sinceId`/`untilId` and returns
+a structured diff as JSON text, rejecting a missing/mismatched hash or a
+truncation flag at any depth. Responses larger than 2 MiB and redirects are
+rejected. All editions re-read the PR after fetching a diff and refuse a changed
+head/base/state. Only same-repository branches are currently supported.
+
+This read operation does not publish a summary, approve a PR, check CI or merge.
+A separate grant and a separately verified mutation contract are required for
+those operations. Existing workflows receive no new grants automatically.
