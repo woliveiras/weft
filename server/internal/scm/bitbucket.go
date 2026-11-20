@@ -20,9 +20,10 @@ const adapterBodyLimit = 2 << 20
 // providerHTTP confines pagination and credentials to the reviewed API origin.
 // Redirects are refused even on the same host: a redirect is not an API result.
 type providerHTTP struct {
-	base   *url.URL
-	token  string
-	client *http.Client
+	base    *url.URL
+	token   string
+	client  *http.Client
+	headers http.Header
 }
 
 func newProviderHTTP(raw, token string) (*providerHTTP, error) {
@@ -30,7 +31,7 @@ func newProviderHTTP(raw, token string) (*providerHTTP, error) {
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "127.0.0.1" || u.Hostname() == "localhost" || u.Hostname() == "::1"))) {
 		return nil, errors.New("SCM API URL must use HTTPS without credentials, query or fragment (HTTP is allowed only for loopback fixtures)")
 	}
-	return &providerHTTP{u, token, &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
+	return &providerHTTP{base: u, token: token, client: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 func (h *providerHTTP) do(ctx context.Context, method, path string, in, out any) error {
 	return h.doMedia(ctx, method, path, in, out, "application/json")
@@ -61,8 +62,18 @@ func (h *providerHTTP) doMedia(ctx context.Context, method, path string, in, out
 	if err != nil {
 		return errors.New("invalid SCM request")
 	}
+	for key, values := range h.headers {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
 	req.Header.Set("Authorization", "Bearer "+h.token)
 	req.Header.Set("Accept", accept)
+	for key, values := range h.headers {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

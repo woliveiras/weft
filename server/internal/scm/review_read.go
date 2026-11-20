@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -124,7 +126,14 @@ func (t readPullRequestTool) Invoke(ctx context.Context, inv *tools.Invocation) 
 	return &tools.Result{Content: string(data), Data: data}, nil
 }
 
-func (g *github) reviewHTTP() (*providerHTTP, error) { return newProviderHTTP(g.api, g.token) }
+func (g *github) reviewHTTP() (*providerHTTP, error) {
+	h, err := newProviderHTTP(g.api, g.token)
+	if err != nil {
+		return nil, err
+	}
+	h.headers = http.Header{"X-GitHub-Api-Version": []string{"2022-11-28"}}
+	return h, nil
+}
 func (g *github) ReadPullRequest(ctx context.Context, number int) (ReviewSnapshot, error) {
 	h, err := g.reviewHTTP()
 	if err != nil {
@@ -272,7 +281,7 @@ func truncatedDiff(value any) bool {
 }
 
 func redactSnapshot(s ReviewSnapshot, token string) ReviewSnapshot {
-	s.URL = redactToken(s.URL, token)
+	s.URL = redactReviewURL(s.URL, token)
 	s.Title = redactToken(s.Title, token)
 	s.Body = redactToken(s.Body, token)
 	s.Head = redactToken(s.Head, token)
@@ -301,4 +310,23 @@ func redactDiffValue(value any, token string) any {
 	default:
 		return value
 	}
+}
+
+func redactReviewURL(raw, token string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return redactToken(raw, token)
+	}
+	u.Path = redactToken(u.Path, token)
+	u.RawPath = ""
+	u.Host = redactToken(u.Host, token)
+	q := u.Query()
+	for key, values := range q {
+		delete(q, key)
+		for _, value := range values {
+			q.Add(redactToken(key, token), redactToken(value, token))
+		}
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
 }

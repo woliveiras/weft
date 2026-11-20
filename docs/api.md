@@ -870,7 +870,7 @@ confinement, import confirmation, recovery and CLI examples.
 `GET /api/v1/scm/kinds` is available to authenticated viewers, operators and
 administrators. It returns the registered built-in delivery adapters, with
 `id`, `name`, `repositoryHint`, `apiUrlHint`, `apiUrlRequired`,
-`credentialHelp`, `push`, `createPullRequest` and `readPullRequest`. This is implementation metadata;
+`credentialHelp`, `push`, `createPullRequest`, `readPullRequest` and `reviewSummary`. This is implementation metadata;
 it performs no external request and does not assert that an account is reachable
 or authorized. Connection testing remains an explicit operator action.
 
@@ -900,3 +900,26 @@ head/base/state. Only same-repository branches are currently supported.
 This read operation does not publish a summary, approve a PR, check CI or merge.
 A separate grant and a separately verified mutation contract are required for
 those operations. Existing workflows receive no new grants automatically.
+
+### Portable review summary publication
+
+`scm.pull_request.review` requires an explicit grant scoped to the SCM connection.
+Input: `{connection, number, headSha, baseSha, verdict, summary}`. Verdict is
+`approved` or `changes_requested`; a nonempty explanation is always required,
+including when no findings exist. This publishes a **summary comment**, not a
+provider-native approval. It does not merge or grant merge permission.
+
+The PR must be open, non-draft and at both exact reviewed revisions. A durable
+CAS reservation under `scm/reviews/` precedes the only POST. A server-generated
+marker and exact comment body are reconciled with a bounded comment search.
+Cloud pending/deleted comments and Data Center pending comments cannot confirm
+publication. A confirmed receipt emits `scm.review_summary_published` and returns
+`status: published`. Connection changes invalidate receipt identity.
+
+Repeated identical requests reconcile the receipt without posting again; a
+different summary/verdict for the same reserved revision pair is refused. If a
+reserved attempt cannot be confirmed, it remains pending: the operator must
+investigate the remote outcome. A retry never silently resets the reservation or
+blindly reposts. A deleted/changed summary is no longer confirmed on retry.
+No persistent receipt is automatically deleted. Publication records never store
+the summary text or credential; URLs are redacted before persistence or events.

@@ -952,4 +952,5 @@ export interface SCMKind {
   push: boolean;
   createPullRequest: boolean;
   readPullRequest: boolean;
+  reviewSummary: boolean;
 }

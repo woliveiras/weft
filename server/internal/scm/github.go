@@ -190,5 +190,9 @@ func (g *github) CreatePullRequest(ctx context.Context, in PullRequestInput) (*P
 }
 
 func (g *github) Comment(ctx context.Context, number int, body string) error {
-	return g.do(ctx, http.MethodPost, fmt.Sprintf("/repos/%s/issues/%d/comments", g.c.Repository, number), map[string]string{"body": body}, nil)
+	h, err := g.reviewHTTP()
+	if err != nil {
+		return err
+	}
+	return h.do(ctx, http.MethodPost, fmt.Sprintf("/repos/%s/issues/%d/comments", g.c.Repository, number), map[string]string{"body": body}, nil)
 }

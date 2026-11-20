@@ -145,3 +145,23 @@ name assumptions through discovered, scoped workflow mappings.
   Fixture references do not qualify a live account or production version.
 - Summary publication, guarded mutation and event adoption remain in batch04;
   this batch alone does not satisfy AC-005/006.
+
+## INT-009-04b — Confirmed review summaries
+
+- Added scoped `scm.pull_request.review` across GitHub and both Bitbucket editions.
+  It publishes a revision-labelled verdict/summary comment; provider approval and
+  automatic merge remain separate operations and are not claimed here.
+- Durable CAS reservation precedes the only POST. Retries reconstruct the provider
+  and reconcile the exact marked comment. Timeout-after-write, failed writes,
+  unavailable comment lists and read/reservation/confirmation storage failures are
+  covered by HTTP + real fsstore integration fixtures for all three adapters.
+- Tests cover simultaneous reservation attempts (one POST), stale revision,
+  cross-connection scope, verdict overwrite, pending comments and URL credential
+  reflection in result, stored receipt and audit events. Unit coverage includes
+  input boundaries, receipt identity and encoded credential redaction.
+- `./scripts/go.sh test ./internal/scm ./internal/api ./internal/taskrun ./internal/tools -count=1`
+  passed; final expanded SCM regressions passed separately. Vet for SCM/API and
+  `git diff --check` passed. Subagent review found no residual blockers after fixes.
+- An unconfirmed reserved attempt never reposts automatically. Its outcome must
+  be reconciled or investigated by the operator; no deletion/reset capability was
+  added. No real external comment, connection change or workflow grant was made.
