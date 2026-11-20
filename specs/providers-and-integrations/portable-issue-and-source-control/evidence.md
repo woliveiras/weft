@@ -243,3 +243,28 @@ name assumptions through discovered, scoped workflow mappings.
 - Domain event/schema consistency and SCM unit/HTTP integration tests passed
   (`/tmp/weft-event-catalog.log`). Subagent review found no blockers; diff check
   passed. Full-suite rerun follows the correction.
+
+## INT-009-05b-base — Jira Data Center REST boundary
+
+- Added isolated native REST 2 client for HTTPS sites/context paths and numeric
+  project scope, using its own PAT Bearer credential. Identity, issue/search,
+  bounded comment history and one-shot comment publication have TLS HTTP fixtures.
+  This base is not wired to app connections, triggers, console or YAML yet and
+  is not advertised as an operational Jira DC connection.
+- Reads validate numeric issue/project/type/status identity; status display names
+  remain presentation data. Subsequent comment operations address the resolved
+  numeric issue ID, so a key alias cannot retarget them.
+- Project validation is a preflight, not an atomic project-membership guarantee.
+  Adoption requires a remote principal restricted to the reviewed project and
+  durable write reservation/reconciliation. A broad PAT must not be described as
+  project-isolated by this client. A timeout never triggers an automatic POST retry.
+- Bounds: verified TLS, 10-second request deadline, no redirects, 1 MiB responses,
+  bounded search offset and 10 comment pages. Invalid/partial/duplicate histories
+  fail without partial evidence. Decoded/URL-encoded credential reflection fails.
+- Unit and TLS HTTP integration tests passed (`/tmp/weft-jiradc-reviewed.log`);
+  Jira DC vet and diff check passed. Subagent found empty-query URL acceptance
+  (`ForceQuery`) and requested negative comment pagination cases; fixed and tested.
+  Final review found no residual blocker for this isolated client.
+- References: [REST 2 resource shapes](https://docs.atlassian.com/software/jira/docs/api/REST/9.12.0/)
+  and [Data Center authentication](https://developer.atlassian.com/server/jira/platform/rest/v10000/).
+  These references describe fixture provenance, not supported production versions.
