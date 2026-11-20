@@ -274,6 +274,21 @@ func (m Manager) validate(in *Input, d document, update bool) *ValidationError {
 	if !repoRe.MatchString(in.Repository) {
 		add("repository", "use owner/name (GitHub) or project/name (Bitbucket)")
 	}
+	if in.Kind == "bitbucket-cloud" {
+		if !validBitbucketRepository(in.Repository) {
+			add("repository", "use workspace/repository without dot segments")
+		}
+		if in.GitURL != "" {
+			if msg := bitbucketGitURL(in.GitURL); msg != "" {
+				add("gitUrl", "%s", msg)
+			}
+		}
+		if in.APIURL != "" {
+			if _, err := newProviderHTTP(in.APIURL, ""); err != nil {
+				add("apiUrl", "%s", err)
+			}
+		}
+	}
 	if msg := checkURL(in.APIURL, "https", "http"); msg != "" {
 		add("apiUrl", "%s", msg)
 	}

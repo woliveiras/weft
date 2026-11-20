@@ -23,7 +23,7 @@ records the next scope; this is not a setup procedure for available adapters.
 | --- | --- | --- |
 | Jira Cloud | Issue reference, polling/readiness, comments and labels have implementation paths; live qualification remains separate | Qualify the full flow and add optional discovered workflow mappings |
 | Jira Data Center | No implemented tracker adapter | Separate instance/authentication/API adapter and qualification |
-| Bitbucket Cloud | MCP profile evidence does not establish native SCM delivery/review | Native SCM adapter and portable PR review/merge capabilities |
+| Bitbucket Cloud | Native delivery adapter has local HTTP/Git fixture coverage; console selection and portable review remain pending | Live qualification and portable PR review/merge capabilities |
 | Bitbucket Data Center | Proposed setup below; no registered native SCM adapter | Separate native SCM adapter, private-network/TLS setup and qualification |
 
 Issue origin and Git destination are independent: Jira can drive work delivered
@@ -126,6 +126,31 @@ stays pending and the error explains what was refused.
 Create a free Atlassian Cloud site, enable API-token access there, and connect it
 as above. This qualifies the whole flow on a site you control before asking for
 company access.
+
+## Bitbucket Cloud delivery (local adapter)
+
+The SCM API/YAML kind is `bitbucket-cloud`, with repository `workspace/slug`.
+The default REST base is `https://api.bitbucket.org/2.0`; the default Git remote
+is `https://bitbucket.org/workspace/slug.git`. The initial credential contract is
+an existing user OAuth Bearer access token with account/repository read access
+for identity/permission checks and the appropriate repository/PR write scopes
+for delivery. Token acquisition/refresh, email-plus-API-token Basic authentication
+and repository/workspace access-token qualification are not supplied by this
+adapter. Tokens are still entered through the reviewed secret mechanisms.
+
+Connection testing reads the configured repository and the caller's effective
+workspace-scoped repository permission. It does not attempt a write. PR lookup
+checks both branches and repositories so a fork with the same branch name cannot
+be returned as the task PR. Queries are bounded to ten pages and 2 MiB per
+response; incomplete/malformed results stop creation. Redirects and pagination
+outside the reviewed resource collection are refused. A failed create is
+reconciled by lookup and is never blindly replayed by the adapter.
+
+HTTPS and normal certificate verification are required for remote API addresses;
+HTTP is accepted only for loopback contract fixtures. No real-account result is
+claimed. Console availability and review/merge operations are separate batches.
+Upstream contracts: [repository and workspace permissions](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-repositories/),
+[pull requests](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/).
 
 ## Bitbucket Data Center (proposed)
 

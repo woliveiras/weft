@@ -83,11 +83,11 @@ The [historical source map](./historical-source-map.md) records the migration of
 
 - [INT-002 — Model Provider Adapters and Conformance](./providers-and-integrations/model-provider-adapters-and-conformance/spec.md) — `in-progress`. Apply a shared provider contract and distinguish adapter delivery from live qualification.
 - [INT-007 — MCP Vendor Profiles and Qualification](./providers-and-integrations/mcp-vendor-profiles-and-qualification/spec.md) — `in-progress`. Preserve provider-specific connection and resource boundaries and qualify each selected profile separately.
+- [INT-009 — Portable Issue and Source Control Integrations](./providers-and-integrations/portable-issue-and-source-control/spec.md) — `in-progress`. Sequential implementation and subagent reviews are authorized; real-account qualification remains separate. Combine independent issue/Git providers, cover Jira and Bitbucket Cloud/Data Center separately, map custom tracker workflows and make PR review portable.
 
 ### Planned
 
 - [INT-008 — Managed MCP Hosting](./providers-and-integrations/managed-mcp-hosting/spec.md) — `planned`. Preserve the reviewed design for isolated, installation-managed MCP server generations.
-- [INT-009 — Portable Issue and Source Control Integrations](./providers-and-integrations/portable-issue-and-source-control/spec.md) — `planned`, pending specification review. Combine independent issue/Git providers, cover Jira and Bitbucket Cloud/Data Center separately, map custom tracker workflows and make PR review portable.
 
 ### Deferred
 

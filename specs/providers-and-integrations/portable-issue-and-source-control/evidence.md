@@ -46,3 +46,31 @@ name assumptions through discovered, scoped workflow mappings.
   passed. No adapter/live qualification, build or deployment is claimed. Exact
   public API schemas and vendor version/authentication choices must be verified
   against official references before implementation.
+
+
+## INT-009-01 — Bitbucket Cloud delivery
+
+- Scope: native `bitbucket-cloud` registry adapter, existing server-held credential
+  storage/gateway tools, repository identity/permission check, bounded PR lookup,
+  creation and comments. Git push uses the existing branch/approval boundaries.
+  User OAuth Bearer access tokens are the initial supported authentication shape;
+  OAuth acquisition/refresh and other Bitbucket credential modes are not claimed.
+- Fail-first: `./scripts/go.sh test ./internal/scm -run TestBitbucketCloud -count=1`
+  failed because `bitbucket-cloud` was not registered (local synthetic fixture).
+  Log: `/tmp/weft-bitbucket-failfirst.log`.
+- Tests exercise actual HTTP handlers, encrypted fsstore connections, the gateway
+  and a temporary bare Git remote, plus pure/default/auth/transport boundary unit
+  checks. Cases cover duplicate creation, foreign repositories/collections,
+  malformed/oversized responses, bounded pagination, redirects, 401/403/404/429/5xx,
+  invalid comments and conflict reconciliation. No live accounts are called.
+- Docker `./scripts/go.sh test ./internal/scm ./internal/api ./internal/installation -count=1`
+  passed (`/tmp/weft-bitbucket-cloud-all.log`). After review fixes, SCM tests passed
+  again (`/tmp/weft-bitbucket-cloud-final.log`); `./scripts/go.sh vet ./internal/scm`
+  and `git diff --check` passed. Go formatting was applied with the Docker toolchain.
+- Subagent `review_bitbucket_cloud` found invalid empty collections, missing OPEN
+  validation, unconfined pagination, HTTP Git transport and dot-segment validation
+  gaps. These were corrected with regressions; final read-only review reported no
+  blocking findings. Reviewer did not rerun tests and made no edits.
+- No UI changes, live connection changes or deployment in this batch. Existing
+  gateway events/audit and approvals remain in use; no remote response bodies or
+  tokens are used as error text. Data Center and portable review remain pending.

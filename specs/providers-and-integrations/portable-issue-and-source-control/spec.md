@@ -2,7 +2,7 @@
 id: INT-009
 title: "Portable Issue and Source Control Integrations"
 summary: "Compose independent issue and Git providers with portable review and explicitly mapped tracker workflows."
-status: planned
+status: in-progress
 scope: [Jira Cloud, Jira Data Center, Bitbucket Cloud, Bitbucket Data Center, cross-provider delivery, portable pull request review]
 risk: external writes and automatic merge
 risk_domains: [authorization, secrets, external access, persistence, concurrency]
@@ -11,8 +11,8 @@ navigation: [specs/README.md, specs/providers-and-integrations/portable-issue-an
 documentation: [docs/atlassian-bitbucket-setup.md, docs/task-workflows.md]
 dependencies: [TASK-006, TASK-007, TASK-008, INT-005, INT-007, RUN-005, RUN-006, RUN-007, OPS-003]
 authority:
-  granted: [specification drafting, documentation]
-  withheld: [implementation, connection changes, secret changes, live writes, merge, push, deployment, production qualification]
+  granted: [specification, implementation, local fixture verification, subagent review, local commits]
+  withheld: [live connection changes, secret changes, live writes, merge, push, deployment, production qualification]
 ---
 
 # Portable Issue and Source Control Integrations
@@ -23,6 +23,11 @@ it does not declare that the adapters or portable review tools already exist.
 
 ## Maintainer decisions and current boundary
 
+- 2026-11-20: the maintainer authorized sequential implementation, subagent code
+  review after each batch and one local commit per important change. No target
+  Data Center version is selected; begin with contract/fixture coverage and retain
+  version-specific/live qualification as pending. Optional transitions must not
+  gain an implicit mandatory policy.
 - 2026-11-20: document the integration plan before further setup questions or
   implementation. Support both Cloud and Data Center editions rather than
   choosing one edition as the product's only target. Coverage includes Jira and
@@ -32,8 +37,9 @@ it does not declare that the adapters or portable review tools already exist.
   difference must not prevent Weft from working.
 - Jira Cloud issue references, polling/readiness, comments and labels already
   have implementation paths. They require separate real-account qualification.
-  Jira Data Center and native Bitbucket SCM adapters are not implemented.
-- The existing SCM registry currently registers GitHub only. The console's
+  Jira Data Center and the Bitbucket Data Center SCM adapter remain pending.
+  Bitbucket Cloud delivery now has local HTTP/Git fixture coverage (batch 01).
+- The SCM registry now registers GitHub and Bitbucket Cloud. The console's
   Bitbucket Data Center option is not evidence of adapter availability.
   The code-review pilot uses GitHub-specific MCP tools.
 - RUN-005 owns bounded push, idempotent PR creation and adapter identity.
@@ -166,6 +172,23 @@ An end-to-end rehearsal covers issue readiness, claim, isolated work/tests,
 PR delivery, review summary, guarded merge and configured tracker write-back.
 Evidence identifies which editions/combinations were actually exercised.
 
+## Implementation batches
+
+These are local delivery units, not remotely created issue records. Keep them
+sequential; each requires unit/integration checks and subagent code review before
+its own commit. A completed batch does not qualify the remaining capability.
+
+| Batch | Scope | Status |
+| --- | --- | --- |
+| INT-009-01 | Bitbucket Cloud delivery adapter and HTTP boundary | Implemented with local HTTP/Git fixtures; reviewed |
+| INT-009-02 | Bitbucket Data Center delivery adapter | Pending |
+| INT-009-03 | Edition-aware connection configuration and capabilities in console/YAML | Pending |
+| INT-009-04 | Portable PR read/review/guarded merge operations and internal events | Pending |
+| INT-009-05 | Independent tracker/SCM identity and Jira Data Center tracker adapter | Pending |
+| INT-009-06 | Discovered Jira mappings and recoverable optional transitions | Pending |
+| INT-009-07 | Integrated cross-provider regression and code-review adoption path | Pending |
+| INT-009-08 | Real-account/target-version qualification under approved resources | Pending external resources |
+
 ## Delivery sequence
 
 1. Inventory and document current boundaries; settle remaining contract choices
@@ -184,8 +207,8 @@ Evidence identifies which editions/combinations were actually exercised.
 
 ## Explicit exclusions
 
-- Implementation or live setup under this documentation request; secret entry,
-  external writes, merges or deployments without their applicable authorization.
+- Live setup, secret entry, external writes, merges or deployments without
+  their applicable authorization.
 - Authenticated external Jira/Git/PR webhooks, generic CI execution, GitLab
   implementation, agent-side credential access or automatic permission expansion.
 - Automatic equivalence between board columns, statuses, status categories and
@@ -214,5 +237,6 @@ Evidence identifies which editions/combinations were actually exercised.
   [INT-007 vendor profiles](../mcp-vendor-profiles-and-qualification/spec.md) and
   [PROD-14 live qualification](../../production-readiness/prod-14/spec.md).
 - [Atlassian and Bitbucket setup](../../../docs/atlassian-bitbucket-setup.md).
-- Specification drafting only; test/implementation review and execution evidence
-  remain pending. No fixture or runtime qualification is claimed here.
+- Implementation is authorized as of the maintainer decision above. Record
+  batch-level tests/reviews in evidence; unexercised adapters and live
+  qualification remain pending.
