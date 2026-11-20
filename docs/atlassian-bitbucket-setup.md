@@ -54,6 +54,22 @@ authorized end-to-end rehearsals. Pilot order, supported Data Center versions,
 authentication modes, test resources and mandatory-transition policy remain
 open. Both editions remain in product scope regardless of pilot order.
 
+## Native Jira Data Center write prerequisite
+
+Native Jira Data Center configuration uses a separate PAT, HTTPS site URL and
+numeric project ID (`IssueConnection` YAML or `/api/v1/issue-connections`).
+Use a technical account whose remote write permissions are restricted to that
+project. Only after reviewing that restriction may the administrator record
+`projectRestricted: true`; the default is false. This flag records the review,
+it does not change or automatically prove Jira permissions.
+
+Read clients cannot write. Opening a native write client additionally requires
+an enabled connection and the current revision. A project preflight cannot make
+a broad PAT safe: an issue can move between projects before the mutation. There
+is no fallback to an MCP credential or an insecure TLS connection. Identity tests
+alone do not qualify project access. Operational trigger adoption, durable write
+reconciliation and live/version qualification remain pending.
+
 ## The model: configure once, enforce on every call
 
 - **You connect a service once.** Weft stores the credential encrypted and

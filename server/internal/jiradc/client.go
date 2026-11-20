@@ -21,16 +21,20 @@ import (
 
 const bodyLimit = 1 << 20
 
+var ErrWriteDisabled = errors.New("native Jira writes require a confirmed project-restricted technical account")
+
 var numericID = regexp.MustCompile(`^[1-9][0-9]{0,19}$`)
 var issueKey = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}-[1-9][0-9]{0,9}$`)
 
 // Client is bound to one reviewed site and immutable numeric project ID.
 // Its token belongs to this native connection, never to an MCP connection.
 type Client struct {
-	site    string
-	project string
-	token   string
-	http    *http.Client
+	site          string
+	project       string
+	token         string
+	http          *http.Client
+	writesEnabled bool
+	writeCheck    func(context.Context) error
 }
 
 func New(site, project, token string) (*Client, error) {
@@ -63,7 +67,21 @@ func (e *HTTPError) TrackerRateLimit() (bool, time.Duration, time.Time) {
 	return e.Status == 429, e.RetryAfter, time.Time{}
 }
 
+func (c *Client) authorizeWrite(ctx context.Context) error {
+	if !c.writesEnabled {
+		return ErrWriteDisabled
+	}
+	if c.writeCheck != nil {
+		return c.writeCheck(ctx)
+	}
+	return nil
+}
 func (c *Client) do(ctx context.Context, method, path string, in, out any) error {
+	if method != http.MethodGet {
+		if err := c.authorizeWrite(ctx); err != nil {
+			return err
+		}
+	}
 	var body io.Reader
 	if in != nil {
 		raw, err := json.Marshal(in)
@@ -323,6 +341,9 @@ func (c *Client) Comments(ctx context.Context, key string) ([]Comment, error) {
 // was written; the caller must reserve and reconcile its durable marker.
 func (c *Client) AddComment(ctx context.Context, key, body string) (Comment, error) {
 	var out Comment
+	if err := c.authorizeWrite(ctx); err != nil {
+		return out, err
+	}
 	if strings.TrimSpace(body) == "" || len(body) > 16000 || strings.Contains(body, c.token) {
 		return out, errors.New("invalid Jira comment body")
 	}

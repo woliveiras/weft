@@ -25,18 +25,20 @@ type Connection struct {
 	SiteURL              string    `json:"siteUrl"`
 	ProjectID            string    `json:"projectId"`
 	Enabled              bool      `json:"enabled"`
+	ProjectRestricted    bool      `json:"projectRestricted"`
 	Revision             int64     `json:"revision"`
 	CredentialConfigured bool      `json:"credentialConfigured"`
 	UpdatedAt            time.Time `json:"updatedAt"`
 	UpdatedBy            string    `json:"updatedBy"`
 }
 type ConnectionInput struct {
-	Name      string  `json:"name"`
-	Kind      string  `json:"kind"`
-	SiteURL   string  `json:"siteUrl"`
-	ProjectID string  `json:"projectId"`
-	Enabled   bool    `json:"enabled"`
-	Token     *string `json:"token,omitempty"`
+	Name              string  `json:"name"`
+	Kind              string  `json:"kind"`
+	SiteURL           string  `json:"siteUrl"`
+	ProjectID         string  `json:"projectId"`
+	Enabled           bool    `json:"enabled"`
+	ProjectRestricted bool    `json:"projectRestricted"`
+	Token             *string `json:"token,omitempty"`
 }
 type connectionRecord struct {
 	Connection
@@ -115,7 +117,7 @@ func (m Connections) Put(ctx context.Context, in ConnectionInput, expected int64
 	} else if expected != old.Revision || expected == 0 {
 		return Connection{}, storage.ErrConflict
 	}
-	next := connectionRecord{Connection: Connection{Name: in.Name, Kind: in.Kind, SiteURL: in.SiteURL, ProjectID: in.ProjectID, Enabled: in.Enabled, UpdatedAt: time.Now().UTC(), UpdatedBy: actor}, SealedToken: old.SealedToken}
+	next := connectionRecord{Connection: Connection{Name: in.Name, Kind: in.Kind, SiteURL: in.SiteURL, ProjectID: in.ProjectID, Enabled: in.Enabled, ProjectRestricted: in.ProjectRestricted, UpdatedAt: time.Now().UTC(), UpdatedBy: actor}, SealedToken: old.SealedToken}
 	if in.Token == nil {
 		if old.SealedToken == "" || old.SiteURL != in.SiteURL || old.ProjectID != in.ProjectID {
 			return invalid("provide a native credential when creating or changing site/project scope")
@@ -135,7 +137,7 @@ func (m Connections) Put(ctx context.Context, in ConnectionInput, expected int64
 	}
 	// Audit contains no URL, project, credential or request payload. Failure prevents
 	// mutation. The record's CAS is the authoritative success/revision boundary.
-	ev := domain.NewEvent("tracker.connection_change_requested", "", map[string]any{"connection": in.Name, "provider": "jira-dc", "expectedRevision": expected}).WithActor(actor)
+	ev := domain.NewEvent("tracker.connection_change_requested", "", map[string]any{"connection": in.Name, "provider": "jira-dc", "expectedRevision": expected, "projectRestricted": in.ProjectRestricted}).WithActor(actor)
 	if err = m.Store.AppendEvent(ctx, ev); err != nil {
 		return Connection{}, err
 	}
@@ -151,6 +153,16 @@ func (m Connections) Put(ctx context.Context, in ConnectionInput, expected int64
 // Open refuses stale/disabled connections before decrypting their native PAT.
 // The returned client is not itself an authorization grant.
 func (m Connections) Open(ctx context.Context, name string, revision int64) (*Client, error) {
+	return m.open(ctx, name, revision, false)
+}
+
+// OpenForWrite requires an administrator's confirmation that the remote account
+// has write permissions restricted to this project. This is a prerequisite, not
+// a permission probe: local preflight cannot constrain a broad PAT remotely.
+func (m Connections) OpenForWrite(ctx context.Context, name string, revision int64) (*Client, error) {
+	return m.open(ctx, name, revision, true)
+}
+func (m Connections) open(ctx context.Context, name string, revision int64, write bool) (*Client, error) {
 	r, err := m.load(ctx, name)
 	if err != nil {
 		return nil, err
@@ -158,9 +170,34 @@ func (m Connections) Open(ctx context.Context, name string, revision int64) (*Cl
 	if revision < 1 || r.Revision != revision || !r.Enabled {
 		return nil, fmt.Errorf("%w: Jira connection changed or is disabled; review its scope again", storage.ErrConflict)
 	}
+	if write && !r.ProjectRestricted {
+		return nil, ErrWriteDisabled
+	}
 	token, err := m.Box.Open(r.SealedToken, connectionAAD(r.Connection))
 	if err != nil {
 		return nil, errors.New("native Jira credential is unavailable")
 	}
-	return New(r.SiteURL, r.ProjectID, string(token))
+	client, err := New(r.SiteURL, r.ProjectID, string(token))
+	if err != nil {
+		return nil, err
+	}
+	client.writesEnabled = write
+	if write {
+		// A cached client cannot bypass a later revision/disable/confirmation edit.
+		// Recheck before reads for a write operation and again immediately before POST.
+		client.writeCheck = func(ctx context.Context) error {
+			current, err := m.load(ctx, name)
+			if err != nil {
+				return err
+			}
+			if current.Revision != revision || !current.Enabled {
+				return storage.ErrConflict
+			}
+			if !current.ProjectRestricted {
+				return ErrWriteDisabled
+			}
+			return nil
+		}
+	}
+	return client, nil
 }

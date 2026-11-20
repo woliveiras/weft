@@ -146,9 +146,16 @@ created by saving or testing a connection.
 |---|---|---|
 | `GET /api/v1/issue-connections` | viewer | Credential-free connection records. |
 | `GET /api/v1/issue-connections/{name}` | viewer | Current record and revision ETag. |
-| `POST /api/v1/issue-connections` | admin | Create `{name, kind: "jira-dc", siteUrl, projectId, enabled, token}`. HTTPS site context paths are supported; `projectId` is the numeric Jira ID. |
+| `POST /api/v1/issue-connections` | admin | Create `{name, kind: "jira-dc", siteUrl, projectId, enabled, projectRestricted?, token}`. HTTPS site context paths are supported; `projectId` is the numeric Jira ID. |
 | `PUT /api/v1/issue-connections/{name}` | admin | Requires `If-Match: <revision>`. Omit `token` to retain it for the same site/project; changing scope requires a replacement native credential. |
 | `POST /api/v1/issue-connections/{name}/test` | operator | Requires `If-Match`; tests authenticated identity only, returning `{ok, identity?, scope?, error?}`. This does not qualify project permissions. |
+
+`projectRestricted` defaults to false. Set it only after reviewing that the
+remote technical account has write permissions restricted to this project.
+It is an administrator confirmation, not an automatic permission test. Native
+clients opened for reads cannot write; write clients require this confirmation,
+a matching current revision and an enabled connection. Agent grants and durable
+write reconciliation are additional requirements for operational adoption.
 
 Stale or disabled connections cannot be tested. Secrets are encrypted with
 site/project-bound associated data and never returned; records expose only

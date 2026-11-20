@@ -347,3 +347,27 @@ name assumptions through discovered, scoped workflow mappings.
 - Contract provenance: [Jira REST 2 transitions](https://docs.atlassian.com/software/jira/docs/api/REST/9.12.0/#api/2/issue-getTransitions).
   This is fixture coverage, not version qualification. Optional mappings,
   synchronization recovery and Cloud discovery adoption remain pending.
+
+## INT-009-05e — Project-restricted native write prerequisite
+
+- The maintainer explicitly approved requiring a project-restricted technical
+  account for automatic Jira DC writes. Added a default-false
+  `projectRestricted` administrator confirmation, persisted/exported with the
+  connection and included in the credential-free change-intent audit.
+- Directly constructed clients and `Connections.Open` are read-only. A write
+  client can be opened only with enabled/current revision and confirmation,
+  checked before decryption. `AddComment` denies read clients before HTTP.
+  Write clients revalidate the revision/enable/confirmation before preflight and
+  again before mutation dispatch; cached clients cannot skip a later edit. A
+  request already dispatched can still finish.
+- The confirmation records an operator review; it is not an automatic proof or
+  remote permission change. Tool grants, per-call revision checks and durable
+  uncertain-write reconciliation remain necessary for trigger adoption.
+- Units cover read-only construction; fsstore/TLS integration covers absent,
+  confirmed, revoked and stale confirmation plus exactly one numeric-issue POST
+  and no POST through a read client. YAML integration round-trips confirmation;
+  existing documents/records default to false.
+- Docker Jira DC/API/installation tests passed
+  (`/tmp/weft-jira-restricted-v4.log`). Subagent review initially highlighted
+  cached clients; revision checks now also run per mutation, with revocation
+  during TLS preflight coverage. Final review found no residual blockers.

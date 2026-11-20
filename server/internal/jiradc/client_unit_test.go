@@ -2,6 +2,7 @@ package jiradc
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -54,5 +55,18 @@ func TestCredentialReflectionRejectedAfterDecoding(t *testing.T) {
 	}
 	if containsSecret(map[string]any{"description": "ordinary issue text"}, token, 0) {
 		t.Fatal("ordinary content rejected")
+	}
+}
+
+func TestConstructedNativeClientStartsReadOnly(t *testing.T) {
+	c, err := New("https://jira.example", "10001", "fixture-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.writesEnabled {
+		t.Fatal("native client default grants writes")
+	}
+	if _, err = c.AddComment(t.Context(), "APP-7", "comment"); !errors.Is(err, ErrWriteDisabled) {
+		t.Fatal("unconfirmed client attempted a write", err)
 	}
 }

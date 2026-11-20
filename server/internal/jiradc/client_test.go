@@ -23,6 +23,8 @@ func fixtureClient(t *testing.T, h http.HandlerFunc) (*Client, *httptest.Server)
 		t.Fatal(err)
 	}
 	c.http = s.Client()
+	// Synthetic fixture represents an explicitly project-restricted remote account.
+	c.writesEnabled = true
 	return c, s
 }
 func TestDataCenterReadSearchAndCommentsOverTLS(t *testing.T) {

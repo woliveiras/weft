@@ -19,7 +19,7 @@ func TestDeclarativeNativeIssueConnectionRoundTripAndScopeFence(t *testing.T) {
 	remote := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls.Add(1); w.WriteHeader(500) }))
 	defer remote.Close()
 	t.Setenv("WEFT_SECRET_JIRA_YAML_FIXTURE", "jira-yaml-synthetic-token")
-	raw := yamlObject("IssueConnection", "jira-native", "  kind: jira-dc\n  siteUrl: "+remote.URL+"/jira/\n  projectId: '10001'\n  enabled: true\n  secretRef: {env: WEFT_SECRET_JIRA_YAML_FIXTURE}")
+	raw := yamlObject("IssueConnection", "jira-native", "  kind: jira-dc\n  siteUrl: "+remote.URL+"/jira/\n  projectId: '10001'\n  enabled: true\n  projectRestricted: true\n  secretRef: {env: WEFT_SECRET_JIRA_YAML_FIXTURE}")
 	req := installation.Request{Files: []string{raw}}
 	plan := configRequest(t, srv, "plan", req)
 	if !plan.OK || len(plan.Objects) != 1 || plan.Objects[0].Action != "create" {
@@ -34,7 +34,7 @@ func TestDeclarativeNativeIssueConnectionRoundTripAndScopeFence(t *testing.T) {
 		t.Fatal(report)
 	}
 	var current jiradc.Connection
-	if code := call(t, srv, "GET", "/api/v1/issue-connections/jira-native", viewerTok, "", "", &current); code != 200 || current.Revision != 1 {
+	if code := call(t, srv, "GET", "/api/v1/issue-connections/jira-native", viewerTok, "", "", &current); code != 200 || current.Revision != 1 || !current.ProjectRestricted {
 		t.Fatal(code, current)
 	}
 	exported := exportConfig(t, srv)

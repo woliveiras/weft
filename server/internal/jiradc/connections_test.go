@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -180,5 +182,132 @@ func TestNativeConnectionPreviewHasNoEffectsAndChecksCredentialAudience(t *testi
 	in.Token = &token
 	if _, err = m.Preview(t.Context(), in); err != nil {
 		t.Fatal("explicit replacement rejected", err)
+	}
+}
+
+func TestNativeWriteAccessRequiresExplicitScopedAccountAndRevision(t *testing.T) {
+	m, _ := connectionManager(t)
+	token := "restricted-fixture-token"
+	in := ConnectionInput{Name: "jira-write", Kind: "jira-dc", SiteURL: "https://jira.example", ProjectID: "10001", Enabled: true, Token: &token}
+	v, err := m.Put(t.Context(), in, 0, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.ProjectRestricted {
+		t.Fatal("write confirmation defaulted true")
+	}
+	if _, err = m.OpenForWrite(t.Context(), in.Name, 1); !errors.Is(err, ErrWriteDisabled) {
+		t.Fatal("unconfirmed writer opened", err)
+	}
+	in.Token = nil
+	in.ProjectRestricted = true
+	v, err = m.Put(t.Context(), in, 1, "admin")
+	if err != nil || v.Revision != 2 || !v.ProjectRestricted {
+		t.Fatal(v, err)
+	}
+	ro, err := m.Open(t.Context(), in.Name, 2)
+	if err != nil || ro.writesEnabled {
+		t.Fatal("read client can write", err)
+	}
+	if _, err = ro.AddComment(t.Context(), "APP-7", "No write"); !errors.Is(err, ErrWriteDisabled) {
+		t.Fatal("read client dispatched", err)
+	}
+	rw, err := m.OpenForWrite(t.Context(), in.Name, 2)
+	if err != nil || !rw.writesEnabled {
+		t.Fatal("confirmed writer unavailable", err)
+	}
+	if _, err = m.OpenForWrite(t.Context(), in.Name, 1); !errors.Is(err, storage.ErrConflict) {
+		t.Fatal("old confirmation accepted", err)
+	}
+	in.ProjectRestricted = false
+	if _, err = m.Put(t.Context(), in, 2, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.OpenForWrite(t.Context(), in.Name, 3); !errors.Is(err, ErrWriteDisabled) {
+		t.Fatal("revoked confirmation accepted", err)
+	}
+	if _, err = rw.AddComment(t.Context(), "APP-7", "Cached client must not dispatch"); !errors.Is(err, storage.ErrConflict) {
+		t.Fatal("cached writer ignored revocation", err)
+	}
+}
+
+func TestNativeConfirmedWriterUsesTLSProjectPreflightAndOneMutation(t *testing.T) {
+	m, _ := connectionManager(t)
+	writes := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer restricted-fixture-token" {
+			t.Error("wrong native credential")
+		}
+		switch r.URL.Path {
+		case "/rest/api/2/issue/APP-7":
+			fmt.Fprint(w, fixtureIssue)
+		case "/rest/api/2/issue/10007/comment":
+			if r.Method != "POST" {
+				t.Error("expected comment mutation")
+			}
+			writes++
+			fmt.Fprint(w, fixtureComment)
+		default:
+			t.Error("unexpected scoped request", r.URL)
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+	token := "restricted-fixture-token"
+	in := ConnectionInput{Name: "jira", Kind: "jira-dc", SiteURL: server.URL, ProjectID: "10001", Enabled: true, Token: &token, ProjectRestricted: true}
+	if _, err := m.Put(t.Context(), in, 0, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.OpenForWrite(t.Context(), in.Name, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.http = server.Client() // Trust only this fixture's certificate; production keeps verified TLS.
+	if _, err = c.AddComment(t.Context(), "APP-7", "Confirmed fixture comment"); err != nil || writes != 1 {
+		t.Fatal(writes, err)
+	}
+	ro, err := m.Open(t.Context(), in.Name, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ro.http = server.Client()
+	if _, err = ro.AddComment(t.Context(), "APP-7", "Must not post"); !errors.Is(err, ErrWriteDisabled) || writes != 1 {
+		t.Fatal("read connection wrote", writes, err)
+	}
+}
+
+func TestNativeWriteRechecksRevisionAfterProjectPreflight(t *testing.T) {
+	m, _ := connectionManager(t)
+	token := "restricted-fixture-token"
+	in := ConnectionInput{Name: "jira", Kind: "jira-dc", ProjectID: "10001", Enabled: true, ProjectRestricted: true, Token: &token}
+	posts := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			posts++
+			fmt.Fprint(w, fixtureComment)
+			return
+		}
+		changed := in
+		changed.Token = nil
+		changed.ProjectRestricted = false
+		if _, err := m.Put(r.Context(), changed, 1, "admin"); err != nil {
+			t.Error("fixture revoke", err)
+			w.WriteHeader(500)
+			return
+		}
+		fmt.Fprint(w, fixtureIssue)
+	}))
+	defer server.Close()
+	in.SiteURL = server.URL
+	if _, err := m.Put(t.Context(), in, 0, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.OpenForWrite(t.Context(), in.Name, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.http = server.Client()
+	if _, err = c.AddComment(t.Context(), "APP-7", "Do not post after revocation"); !errors.Is(err, storage.ErrConflict) || posts != 0 {
+		t.Fatal("revocation during preflight dispatched a write", posts, err)
 	}
 }
