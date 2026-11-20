@@ -10,14 +10,14 @@ test('administrators add an issue trigger to a workflow, preview matching issues
   await expect(section).toBeVisible();
   await section.getByRole('button', { name: 'Add issue trigger', exact: true }).click();
   const form = section.getByRole('form', { name: 'Add issue trigger' });
-  await form.getByLabel('Name').fill('Ready issues');
-  await form.getByLabel('MCP connection').fill('e2e-tracker');
-  await form.getByLabel('Repository').fill('acme/app');
-  await expect(form.getByLabel('Assess issue readiness before work')).toBeChecked();
+  await form.getByLabel('Name', { exact: true }).fill('Ready issues');
+  await form.getByLabel('MCP connection', { exact: true }).fill('e2e-tracker');
+  await form.getByLabel('Repository', { exact: true }).fill('acme/app');
+  await expect(form.getByLabel('Assess issue readiness before work', { exact: true })).toBeChecked();
   await expect(form.getByLabel('Label', { exact: true })).toHaveValue('weft:todo');
   await expect(form).toContainText('Saving records your consent: tasks start as you, with Ask authorization');
   await expect(form).toContainText('16 KiB of input, 512 output tokens and 10 seconds');
-  await expect(form.getByLabel('Result agent')).toHaveValue('');
+  await expect(form.getByLabel('Result agent', { exact: true })).toHaveValue('');
   const created = page.waitForResponse(response => new URL(response.url()).pathname === '/api/v1/triggers' && response.request().method() === 'POST');
   await form.getByRole('button', { name: 'Save trigger', exact: true }).click();
   const saved = await (await created).json();
@@ -39,7 +39,7 @@ test('administrators add an issue trigger to a workflow, preview matching issues
 
   await card.getByRole('button', { name: 'Edit', exact: true }).click();
   const edit = section.getByRole('form', { name: 'Edit issue trigger' });
-  await edit.getByLabel('Assess issue readiness before work').uncheck();
+  await edit.getByLabel('Assess issue readiness before work', { exact: true }).uncheck();
   await edit.getByRole('button', { name: 'Save trigger', exact: true }).click();
   await expect(card).toContainText('Readiness disabled');
   await expect(card.getByText('Active', { exact: true })).toBeVisible();

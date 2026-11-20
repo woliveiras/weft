@@ -7,7 +7,7 @@ test('reviews task scope, confirms modes and preserves consent across reload',as
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));await page.goto(`/#/tasks/${task.id}`);
  const section=page.getByRole('region',{name:'Task authorization'});
  for(const mode of ['workspace','ask','full']){
-  await section.getByLabel('Authorization mode').selectOption(mode);
+  await section.getByLabel('Authorization mode',{exact:true}).selectOption(mode);
   await expect(section.getByRole('button',{name:'Confirm authorization'})).toBeDisabled();
   await section.getByRole('checkbox').check();await section.getByRole('button',{name:'Confirm authorization'}).click();
   await expect(section).toContainText(`Current mode: ${mode}`);await page.reload();await expect(section).toContainText(`Current mode: ${mode}`);
@@ -15,7 +15,7 @@ test('reviews task scope, confirms modes and preserves consent across reload',as
  await page.getByRole('button',{name:'Review requirements'}).click();
  await page.getByLabel('I reviewed the workflow and authorize a separate execution copy.').check();await page.getByRole('button',{name:'Start task',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Needs your decision',exact:true})).toBeVisible();
- await section.getByLabel('Authorization mode').selectOption('ask');await section.getByRole('checkbox').check();await section.getByRole('button',{name:'Confirm authorization'}).click();await expect(section).toContainText('Current mode: ask');
+ await section.getByLabel('Authorization mode',{exact:true}).selectOption('ask');await section.getByRole('checkbox').check();await section.getByRole('button',{name:'Confirm authorization'}).click();await expect(section).toContainText('Current mode: ask');
  await page.reload();await expect(section).toContainText('Current mode: ask');
  await page.getByRole('region',{name:'Task decisions'}).getByRole('button',{name:'Approve',exact:true}).click();
  await expect(page.getByRole('status')).toHaveText('Task status: succeeded');
@@ -48,7 +48,7 @@ test('explains native shell restrictions when Workspace consent is rejected', as
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
  await page.goto(`/#/tasks/${task.id}`);
  const section = page.getByRole('region', {name: 'Task authorization'});
- await section.getByLabel('Authorization mode').selectOption('workspace');
+ await section.getByLabel('Authorization mode',{exact:true}).selectOption('workspace');
  await expect(section).toContainText('Process and Kubernetes isolation both use native shell');
  await section.getByRole('checkbox').check();
  await section.getByRole('button', {name: 'Confirm authorization'}).click();

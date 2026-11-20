@@ -28,6 +28,7 @@ for(const mode of ['required','automatic'] as const){
    const before=await(await page.request.get('/api/v1/graphs/'+id,{headers})).json();
    expect(before.graph.spec.nodes[0].tools.some((g:{name:string})=>g.name.startsWith('mcp.'))).toBe(false);
    await page.goto('/#/g/'+id+'/canvas?sel=node:worker');
+   await page.getByRole('navigation',{name:'Agent inspector sections',exact:true}).getByRole('button',{name:'Configuration',exact:true}).click();
    await page.getByRole('region',{name:'MCP permissions',exact:true}).getByRole('checkbox',{name:'mcp.'+id+'.search',exact:true}).check();
    await page.getByRole('button',{name:'Save graph',exact:true}).click();
    await expect(page.getByRole('button',{name:'Save graph',exact:true})).toBeDisabled();

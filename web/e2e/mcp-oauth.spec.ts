@@ -26,6 +26,7 @@ test('connects from a template link through OAuth consent, renewal and revocatio
  const graphID='oauth-browser-execution';
  const graph=await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id:graphID,name:graphID},spec:{nodes:[{id:'worker',runtime:{kind:'native'},model:{provider:'e2e',name:'fixture'},isolation:{mode:'process'},loop:{mode:'once'},prompt:'mcp-oauth-call-fixture',tools:[]}]}}});expect(graph.status()).toBe(201);
  await page.goto(`/#/g/${graphID}/canvas?sel=node:worker`);
+ await page.getByRole('navigation',{name:'Agent inspector sections',exact:true}).getByRole('button',{name:'Configuration',exact:true}).click();
  const grants=page.getByRole('region',{name:'MCP permissions',exact:true});
  const permission=grants.getByRole('checkbox',{name:'mcp.oauth-browser.search',exact:true});await expect(permission).not.toBeChecked();await permission.check();
  await Promise.all([page.waitForResponse(r=>r.url().endsWith('/api/v1/graphs/'+graphID)&&r.request().method()==='PUT'&&r.status()===200),page.getByRole('button',{name:'Save graph',exact:true}).click()]);
@@ -136,6 +137,7 @@ test('keeps personal, corporate and GitLab OAuth connections and agent grants in
  const graphID='multi-mcp-grants';
  expect((await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id:graphID,name:graphID},spec:{nodes:[{id:'worker',runtime:{kind:'native'},model:{provider:'e2e',name:'fixture'},isolation:{mode:'process'},loop:{mode:'once'},prompt:'test',tools:[]}]}}})).status()).toBe(201);
  await page.goto(`/#/g/${graphID}/canvas?sel=node:worker`);
+ await page.getByRole('navigation',{name:'Agent inspector sections',exact:true}).getByRole('button',{name:'Configuration',exact:true}).click();
  const grants=page.getByRole('region',{name:'MCP permissions',exact:true});
  for(const [id,,service] of connections)await expect(grants.getByRole('checkbox',{name:`mcp.${id}.${service==='atlassian'?'getJiraIssue':'search'}`,exact:true})).not.toBeChecked();
  await grants.getByRole('checkbox',{name:'mcp.personal-mcp.search',exact:true}).check();

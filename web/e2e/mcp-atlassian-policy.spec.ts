@@ -15,9 +15,9 @@ test('persists reviewed Atlassian read boundaries and rejects invalid site polic
  await expect(form.getByRole('article',{name:'MCP Site policy',exact:true})).toBeVisible();
  await page.reload();
  await form.getByRole('button',{name:'Edit Site policy',exact:true}).click();
- await expect(form.getByLabel('Allow Jira reads')).toBeChecked();
- await expect(form.getByLabel('Allow Confluence reads')).not.toBeChecked();
- await expect(form.getByLabel('Allowed Atlassian cloud IDs (one per line)')).toHaveValue('11111111-1111-1111-1111-111111111111');
+ await expect(form.getByLabel('Allow Jira reads',{exact:true})).toBeChecked();
+ await expect(form.getByLabel('Allow Confluence reads',{exact:true})).not.toBeChecked();
+ await expect(form.getByLabel('Allowed Atlassian cloud IDs (one per line)',{exact:true})).toHaveValue('11111111-1111-1111-1111-111111111111');
  const input={id:'bad-policy',name:'Invalid',service:'atlassian',endpoint:'https://mcp.atlassian.com/v2/mcp?tools=all',enabled:false,atlassianPolicy:{products:['jira'],cloudIds:['https://site.atlassian.net']}};
  expect((await page.request.post('/api/v1/mcp/connections',{headers,data:input})).status()).toBe(422);
  input.atlassianPolicy.cloudIds=['11111111-1111-1111-1111-111111111111'];

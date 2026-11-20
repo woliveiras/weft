@@ -981,3 +981,42 @@ name assumptions through discovered, scoped workflow mappings.
   the fixture correction. Independent review found no remaining blockers.
 - This proves configuration, storage and transport collaboration, not a real
   Jira account, installed Data Center version or model-driven live rehearsal.
+
+## INT-009-07d — Console regression compatibility checkpoint
+
+- The first full Chromium run exposed older navigation tests still expecting
+  MCP permissions in the inspector's Overview, ambiguous partial labels matching
+  both a help trigger and its control, and a navigation label that ignored the
+  pending-approval count. Tests now follow Configuration and use exact scoped
+  labels or the anchored approval-count label. All original consent, persistence,
+  denial, revocation, runtime, scope and layout assertions remain in place.
+  No tests, timeouts, retries or security checks were weakened.
+- Restored the useful allowed-hosts help text: one lowercase exact public DNS
+  hostname per line, no wildcard/URL/IP/port, and an empty list denies egress.
+  The viewer component test and existing help browser oracle verify the text
+  without enabling editing or dispatching policy writes.
+- Focused Docker Chromium runs passed 17 MCP/help cases and eight
+  layout/integrated-journey/task-authorization cases. The seven opt-in prompt
+  cases were enabled separately with the deterministic interpretation fixture;
+  its eight-case run passed, including the overlapping unavailable-tool case.
+  This exercises real local Git worktrees and gateway collaboration with a
+  scripted model, not a live model or provider account.
+- Docker `./scripts/go.sh test ./...`, `make lint` and `make build` passed after
+  the Cloud backend/YAML changes. `make test-web` passed after the help correction:
+  109 files / 595 tests, with TypeScript checking. E2E-tagged backend tests and
+  e2e TypeScript checks passed. Python Docker checks passed 16 SDK tests, 14 agent
+  tests and all ten script tests; the Compose configuration checks used a Docker
+  CLI image and synthetic configuration rather than the installed `.env`.
+- Independent subagent review covered each implementation lot and these final
+  regression corrections. The setup guide and rehearsal checklist distinguish
+  local evidence from pending actual account/version/combination qualification.
+- Final standard Chromium run passed: 163 cases, with the seven existing
+  deterministic-prompt opt-ins exercised in the separate successful eight-case
+  run above. Commands used `pnpm exec playwright test --project chromium` and
+  `WEFT_E2E_PROMPT_MODEL=1` for the two prompt test files. A prior overlapping
+  browser run was interrupted after a second build replaced shared `web/dist`
+  assets mid-test; the final run used one browser build at a time and passed
+  without retries or changed oracles. Logs: `/tmp/weft-portability-browser-final-serial.log`,
+  `/tmp/weft-portability-browser-prompts-final.log` and
+  `/tmp/weft-portability-web-final.log`. No real credentials, installed
+  configuration, remote account or running pilot was changed or deployed.

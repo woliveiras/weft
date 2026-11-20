@@ -21,7 +21,7 @@ for(const mode of ['ask','workspace','full'])test(`prompt to real Git worktree a
  await page.getByRole('button',{name:'Prepare repository',exact:true}).click();
  const importer=page.getByRole('region',{name:'Import repository'});await importer.getByRole('checkbox').check();await importer.getByRole('button',{name:'Import repository',exact:true}).click();await expect(importer.getByRole('status')).toContainText('ready:');await importer.getByRole('button',{name:'Use imported project'}).click();
  await page.getByRole('button',{name:'Resolve request',exact:true}).click();await expect(page.getByLabel('Request interpretation')).toContainText('Request interpreted and draft saved');
- const auth=page.getByRole('region',{name:'Task authorization'});await auth.getByLabel('Authorization mode').selectOption(mode);
+ const auth=page.getByRole('region',{name:'Task authorization'});await auth.getByLabel('Authorization mode',{exact:true}).selectOption(mode);
  if(mode==='full')await auth.getByLabel('Remember this mode as a project suggestion').check();
  await auth.getByLabel('I reviewed this task, its workflow permissions, execution location, file and network access, external actions and commit/push scope.').check();await auth.getByRole('button',{name:'Confirm authorization'}).click();await expect(auth).toContainText(`Current mode: ${mode}`);
  await page.reload();await expect(auth).toContainText(`Current mode: ${mode}`);

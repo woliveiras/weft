@@ -6,7 +6,12 @@ import { NetworkPolicySection } from './NetworkPolicySection';
 import type { NetworkPolicyView } from '../api/types';
 
 const current: NetworkPolicyView = { revision: 2, source: 'installation', network: { setupNetworks: ['none', 'egress'], runNetworks: ['none'], egressHosts: ['example.com'] }, usage: [{ graph: 'project', state: 'running', hosts: ['example.com'], blocked: false }] };
-afterEach(cleanup);
+const dialogMethod = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
+afterEach(() => {
+  cleanup();
+  if (dialogMethod) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', dialogMethod);
+  else Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
+});
 
 it('shows policy and host usage to viewers without write controls', async () => {
   const backend = fakeApi({ 'GET /api/v1/network-policy': () => current });
@@ -14,6 +19,14 @@ it('shows policy and host usage to viewers without write controls', async () => 
   expect(await screen.findByText('project')).toBeTruthy();
   expect(screen.getByText(/Administrator access/)).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Review network policy' })).toBeNull();
+  expect((screen.getByRole('textbox') as HTMLTextAreaElement).disabled).toBe(true);
+  // jsdom lacks the dialog top layer; Chromium covers the real browser behavior.
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value(this: HTMLDialogElement) { this.setAttribute('open', ''); } });
+  await userEvent.setup().click(screen.getByRole('button', { name: /^Help for Installation allowed hosts/ }));
+  const help = screen.getByRole('dialog', { name: /^Installation allowed hosts/ });
+  expect(help.textContent).toContain('one exact hostname per line');
+  expect(help.textContent).toContain('wildcards, URLs, IP addresses or ports');
+  expect(help.textContent).toContain('An empty list denies all egress destinations');
   expect((screen.getByRole('textbox') as HTMLTextAreaElement).disabled).toBe(true);
   expect(backend.calls).toHaveLength(1);
 });

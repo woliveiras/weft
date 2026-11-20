@@ -6,7 +6,8 @@ for(const width of [2560,1440,390])test(`main destinations share content edges a
  await page.setViewportSize({width,height:1000});await page.goto('/#/activity');
  const nav=page.getByRole('navigation',{name:'Main navigation'});
  for(const name of destinations){
-  await nav.getByRole('button',{name,exact:true}).click();await expect(page.getByRole('heading',{name,level:1,exact:true})).toBeVisible();
+  const destination=name==='Approvals'?nav.getByRole('button',{name:/^Approvals(?: \d+)?$/}):nav.getByRole('button',{name,exact:true});
+  await destination.click();await expect(page.getByRole('heading',{name,level:1,exact:true})).toBeVisible();
   const box=await page.locator('main').evaluate(main=>{
    const root=main.querySelector(':scope > .page')!;
    const frame=main.getBoundingClientRect();const content=root.getBoundingClientRect();const heading=root.querySelector('h1')!.getBoundingClientRect();const style=getComputedStyle(root);

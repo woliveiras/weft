@@ -9,8 +9,8 @@ test('reviews DCR, authorizes, reuses registration and offers manual fallback on
  await page.getByLabel('Connection ID',{exact:true}).fill('dcr-browser');
  await page.getByLabel('Connection name',{exact:true}).fill('DCR browser');
  await page.getByLabel('MCP endpoint',{exact:true}).fill(config.endpoint);
- await page.getByLabel('Use browser OAuth').check();
- await page.getByLabel('Client registration method').selectOption('auto');
+ await page.getByRole('checkbox',{name:'Use browser OAuth',exact:true}).check();
+ await page.getByRole('combobox',{name:'Client registration method',exact:true}).selectOption('auto');
  await expect(page.getByLabel('OAuth client ID',{exact:true})).toHaveCount(0);
  await page.getByLabel('OAuth issuer',{exact:true}).fill(config.oauth.issuer);
  await page.getByLabel('OAuth scopes (space separated)',{exact:true}).fill('read');
@@ -31,9 +31,9 @@ test('reviews DCR, authorizes, reuses registration and offers manual fallback on
  await card.getByRole('button',{name:'Confirm dcr and authorize DCR browser',exact:true}).click();await page.getByRole('button',{name:'Deny fixture access'}).click();await page.getByRole('button',{name:'Complete OAuth connection'}).click();
  await expect(page.getByText(/authorization cancelled or denied/)).toBeVisible();expect(await stats()).toBe(before+1);
  await page.goto('/#/integrations');await card.getByRole('button',{name:'Edit DCR browser',exact:true}).click();
- await page.getByLabel('Client registration method').selectOption('cimd');await page.getByRole('button',{name:'Save MCP connection',exact:true}).click();
+ await page.getByRole('combobox',{name:'Client registration method',exact:true}).selectOption('cimd');await page.getByRole('button',{name:'Save MCP connection',exact:true}).click();
  await card.getByRole('button',{name:'Review OAuth setup DCR browser',exact:true}).click();await expect(card).toContainText('CIMD requires a provider-reachable public HTTPS');
- await card.getByRole('button',{name:'Edit DCR browser',exact:true}).click();await page.getByLabel('Client registration method').selectOption('manual');
+ await card.getByRole('button',{name:'Edit DCR browser',exact:true}).click();await page.getByRole('combobox',{name:'Client registration method',exact:true}).selectOption('manual');
  await expect(page.getByLabel('OAuth client ID',{exact:true})).toBeVisible();
 });
 test('registration dependency failure is visible and never automatically retried; manual remains usable',async({page})=>{
@@ -48,7 +48,7 @@ test('registration dependency failure is visible and never automatically retried
  const count=(await (await page.request.get(config.oauth.issuer+'/stats')).json()).registrations;
  await expect(card).toContainText('Provider HTTP 503');await expect(card.getByRole('button',{name:'Confirm dcr and authorize DCR failure'})).toHaveCount(0);
  await page.reload();await expect(card).toContainText('Provider HTTP 503');await expect(card).toContainText('uncertain');await card.getByRole('button',{name:'Review OAuth setup DCR failure'}).click();await expect(card).toContainText('No automatic retry');expect((await (await page.request.get(config.oauth.issuer+'/stats')).json()).registrations).toBe(count);
- await card.getByRole('button',{name:'Edit DCR failure'}).click();await page.getByLabel('Client registration method').selectOption('manual');await page.getByLabel('OAuth client ID',{exact:true}).fill('fixture-client');await page.getByRole('button',{name:'Save MCP connection',exact:true}).click();
+ await card.getByRole('button',{name:'Edit DCR failure'}).click();await page.getByRole('combobox',{name:'Client registration method',exact:true}).selectOption('manual');await page.getByLabel('OAuth client ID',{exact:true}).fill('fixture-client');await page.getByRole('button',{name:'Save MCP connection',exact:true}).click();
  await card.getByRole('button',{name:'Authorize DCR failure',exact:true}).click();await page.getByRole('button',{name:'Allow fixture access'}).click();await page.getByRole('button',{name:'Complete OAuth connection'}).click();await expect(page.getByRole('region',{name:'OAuth return',exact:true}).getByRole('status')).toContainText('OAuth connected');
  }finally {await page.request.post(config.oauth.issuer+'/registration-failure?enabled=false');}
 });
