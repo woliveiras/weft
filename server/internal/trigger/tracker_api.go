@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/tools"
 )
 
@@ -109,15 +110,21 @@ func trackerIdentityPath(source SourceConfig) string {
 }
 
 type trackerTool struct {
-	name string
-	call TrackerCall
+	name   string
+	call   TrackerCall
+	native *jiradc.Connections
 }
 
-func TrackerTools(call TrackerCall) []tools.Tool {
-	return []tools.Tool{
-		trackerTool{trackerGet, call}, trackerTool{trackerComments, call}, trackerTool{trackerRequeue, call},
-		trackerTool{trackerLabels, call}, trackerTool{trackerComment, call}, trackerTool{trackerIdentity, call},
+func TrackerTools(call TrackerCall, native ...jiradc.Connections) []tools.Tool {
+	var connections *jiradc.Connections
+	if len(native) == 1 {
+		connections = &native[0]
 	}
+	var out []tools.Tool
+	for _, name := range []string{trackerGet, trackerComments, trackerRequeue, trackerLabels, trackerComment, trackerIdentity, trackerSearch} {
+		out = append(out, trackerTool{name: name, call: call, native: connections})
+	}
+	return out
 }
 
 func (t trackerTool) Name() string            { return t.name }
@@ -152,11 +159,17 @@ func trackerPath(source SourceConfig, key string) (string, error) {
 func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.Result, error) {
 	scope, _ := ctx.Value(trackerScopeKey{}).(*Trigger)
 	if scope == nil || inv.Principal.GraphID != "trigger-"+scope.ID || inv.Principal.ExecutionID != scope.ID ||
-		!slices.Contains(scope.Consent.Operations, t.name) || t.call == nil {
+		!slices.Contains(scope.Consent.Operations, t.name) {
 		return nil, tools.ErrDenied
 	}
 	var a trackerArgs
 	if json.Unmarshal(inv.Args, &a) != nil {
+		return nil, tools.ErrDenied
+	}
+	if scope.Source.Kind == "jira-dc" {
+		return t.invokeNative(ctx, scope, a)
+	}
+	if t.call == nil || t.name == trackerSearch {
 		return nil, tools.ErrDenied
 	}
 	path, err := trackerPath(scope.Source, a.Key)

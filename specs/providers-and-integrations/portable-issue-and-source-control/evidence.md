@@ -418,3 +418,47 @@ name assumptions through discovered, scoped workflow mappings.
 - Operational trigger adoption remains a separate batch; this client is not
   itself a grant. REST 2 contract provenance remains the official Jira reference
   linked in batch06a.
+
+## INT-009-05g — Native DC operational trigger lifecycle
+
+- Native sources explicitly snapshot `kind: jira-dc`, connection ID, HTTPS
+  `siteUrl` and numeric `projectId`. Site/project must match an enabled,
+  credentialed connection with confirmed remote project restriction. Consent
+  fences its revision; edits/revocation pause work before new remote calls.
+  The native gateway branch cannot use MCP credentials or be invoked solely by
+  granting an agent the same tool names: private trigger scope is also required.
+- Search uses bounded native REST pages, the selection label and provider `new`
+  category key, without matching status display names. Issue data is re-read for
+  readiness/claim. Standard inward `is blocked by` links to non-Done categories
+  and the `blocked` label prevent admission; unavailable link metadata or blocker
+  category fails closed. Custom relationship-type mappings are not provided.
+- Claims and completion use relative labels/comments; DC preserves assignees.
+  Owner logins control eligibility and accepted clarification replies. Active
+  reporter/owner replies participate in bounded readiness rounds. Immutable
+  comment keys/IDs reconcile uncertain publication through existing hold state.
+- Native site/project-scoped processed keys and global admission journals avoid
+  equal-key collisions across instances. Credential/query changes do not reset
+  history; DNS case, trailing dot and default HTTPS port spellings share the
+  same admission identity. Old GitHub/Cloud fingerprint encodings are unchanged.
+- Trusted native issue origin (site/project/key/connection revision and canonical
+  link) reaches the real task launch separately from its untrusted request.
+  A native source requires actual PR delivery and does not add an agent-side MCP
+  read. Shared scope validation prevents a connection-valid context path from
+  failing only after claim when the task origin is saved.
+- DC cannot prove a relabel actor's project-admin permission using the
+  current-user endpoint. Relabel-only readiness requeue becomes an explicit
+  operator hold; resolve it through the existing console/API before reselection.
+  Automatic failed-admission relabel retries remain unavailable for this edition.
+  This limitation is not bypassed with the connection user's permissions.
+- Unit and fsstore/TLS integration cover normalization, malicious/incomplete
+  identities, grant-without-context denial, consent revocation, foreign projects,
+  HTTP denial, readiness questions/replies, manual-requeue safety, history limits,
+  site-separated admissions/credential rotation, claim/completion/audit and real
+  API-to-task launch. The history-limit operator hold is not rescanned on each
+  poll. No real model/provider/issue write or deployment is included.
+- Docker checks passed: `./scripts/go.sh test ./internal/jiradc
+  ./internal/trigger ./internal/taskconfig ./internal/app ./internal/api
+  ./internal/installation` (`/tmp/weft-jira-native-trigger-v6.log`).
+  Read-only subagent review identified history-limit translation, blocking links,
+  shared scope validation and real launch coverage; all were corrected and the
+  final delta review found no residual blockers. `git diff --check` passed.

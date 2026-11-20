@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const fixtureIssue = `{"id":"10007","key":"APP-7","fields":{"summary":"Fix parser","description":"Expected result","project":{"id":"10001"},"issuetype":{"id":"10002"},"status":{"id":"10","name":"Review","statusCategory":{"key":"indeterminate"}},"labels":["weft:todo"],"assignee":null}}`
+const fixtureIssue = `{"id":"10007","key":"APP-7","fields":{"summary":"Fix parser","description":"Expected result","project":{"id":"10001"},"issuetype":{"id":"10002"},"status":{"id":"10","name":"Review","statusCategory":{"key":"indeterminate"}},"labels":["weft:todo"],"assignee":null,"issuelinks":[]}}`
 const fixtureComment = `{"id":"10009","body":"Review summary","author":{"key":"bot-id","name":"bot"},"created":"2026-11-20T10:00:00.000+0000"}`
 
 func fixtureClient(t *testing.T, h http.HandlerFunc) (*Client, *httptest.Server) {

@@ -16,6 +16,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/events"
 	"github.com/woliveiras/weft/server/internal/graph"
+	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskauth"
@@ -210,6 +211,7 @@ func validate(in *Input) error {
 // Manager stores triggers.
 type Manager struct {
 	TrackerRevision    func(context.Context, string, string) (int64, error)
+	NativeConnections  *jiradc.Connections
 	ReadinessMaxMicros int64
 	Models             *llm.Registry
 
@@ -518,7 +520,23 @@ func (m Manager) reviewedScope(ctx context.Context, in Input, g *domain.Graph) (
 	c := Consent{WorkflowVersion: g.Metadata.Version, ProjectID: in.ProjectID, ExecutionMode: in.ExecutionMode,
 		Authorization: in.Authorization, PolicyVersion: taskauth.PolicyVersion}
 	c.Operations = append(source.Tools(), trackerGet, trackerLabels, trackerComment)
-	if m.TrackerRevision != nil {
+	if in.Source.Kind == "jira-dc" {
+		fe := &FieldError{}
+		if m.NativeConnections == nil {
+			fe.add("source.connectionId", "native Jira Data Center connections are unavailable")
+			return Consent{}, fe
+		}
+		connection, lookupErr := m.NativeConnections.Get(ctx, in.Source.ConnectionID)
+		if lookupErr != nil || !connection.Enabled || !connection.CredentialConfigured || !connection.ProjectRestricted || connection.SiteURL != in.Source.SiteURL || connection.ProjectID != in.Source.ProjectID {
+			fe.add("source.connectionId", "review an enabled native connection with matching site/project and a confirmed project-restricted account")
+			return Consent{}, fe
+		}
+		if strings.Contains(in.Label, " ") {
+			fe.add("label", "Jira Data Center selection labels cannot contain spaces")
+			return Consent{}, fe
+		}
+		c.TrackerRevision = connection.Revision
+	} else if m.TrackerRevision != nil {
 		c.TrackerRevision, err = m.TrackerRevision(ctx, in.Source.ConnectionID, in.Source.Kind)
 		if err != nil {
 			fe := &FieldError{}

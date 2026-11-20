@@ -15,6 +15,9 @@ import (
 // remain conservative fences because their original site cannot be inferred.
 func DedupKey(t *Trigger, i Issue) string {
 	legacy := i.Source + ":" + i.Key + "@" + t.Workflow
+	if i.Source == "jira-dc" {
+		return "jira-dc:" + nativeScopeIdentity(t.Source) + ":" + i.Key + "@" + t.Workflow
+	}
 	_, legacyReadiness := t.RetainedReadiness[legacy]
 	if i.Source != "jira" || t.Source.CloudID == "" || t.Processed[legacy] != "" || legacyReadiness {
 		return legacy
@@ -81,6 +84,12 @@ func (r *Runner) Match(ctx context.Context, t *Trigger) (Matches, Source, Invoke
 		return Matches{}, nil, nil, err
 	}
 	call := GatewayInvoker(r.Gateway, Principal(t))
+	if t.Source.Kind == "jira-dc" {
+		base := call
+		call = func(ctx context.Context, name string, args any) (*tools.Result, error) {
+			return base(context.WithValue(ctx, trackerScopeKey{}, t), name, args)
+		}
+	}
 	if t.Source.Kind == "github" {
 		call = r.boundGitHubSearch(t, call, nil)
 	}

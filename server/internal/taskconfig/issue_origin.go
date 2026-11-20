@@ -3,6 +3,7 @@ package taskconfig
 import (
 	"context"
 	"fmt"
+	"github.com/woliveiras/weft/server/internal/jiradc"
 	"net/url"
 	"strings"
 )
@@ -15,6 +16,7 @@ type IssueOrigin struct {
 	ConnectionID       string `json:"connectionId"`
 	ConnectionRevision int64  `json:"connectionRevision"`
 	Instance           string `json:"instance"`
+	ProjectID          string `json:"projectId,omitempty"`
 	Key                string `json:"key"`
 	URL                string `json:"url,omitempty"`
 }
@@ -25,6 +27,13 @@ func (o IssueOrigin) Validate() error {
 		return invalid
 	}
 	switch o.Kind {
+	case "jira-dc":
+		if jiradc.ValidateScope(o.Instance, o.ProjectID) != nil || strings.HasSuffix(o.Instance, "/") || !jiraIssue.MatchString(o.Key) {
+			return invalid
+		}
+		if o.URL != "" && o.URL != o.Instance+"/browse/"+o.Key {
+			return invalid
+		}
 	case "github":
 		match := githubIssue.FindStringSubmatch(o.Key)
 		if match == nil || match[2] == "." || match[2] == ".." || o.Instance != "https://api.github.com" {

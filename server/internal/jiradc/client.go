@@ -22,6 +22,7 @@ import (
 const bodyLimit = 1 << 20
 
 var ErrWriteDisabled = errors.New("native Jira writes require a confirmed project-restricted technical account")
+var ErrHistoryLimit = errors.New("Jira comments exceed the page bound")
 
 var numericID = regexp.MustCompile(`^[1-9][0-9]{0,19}$`)
 var issueKey = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}-[1-9][0-9]{0,9}$`)
@@ -37,23 +38,38 @@ type Client struct {
 	writeCheck    func(context.Context) error
 }
 
-func New(site, project, token string) (*Client, error) {
+// ValidateScope applies the same site/project contract to connections, trigger
+// snapshots and trusted task origins without constructing a credentialed client.
+func ValidateScope(site, project string) error {
+	_, err := parseScope(site, project)
+	return err
+}
+
+func parseScope(site, project string) (string, error) {
 	u, err := url.Parse(strings.TrimRight(site, "/"))
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.RawPath != "" || strings.Contains(u.Path, "/rest/") {
-		return nil, errors.New("Jira Data Center requires an HTTPS site URL without credentials, query, fragment or REST path")
+		return "", errors.New("Jira Data Center requires an HTTPS site URL without credentials, query, fragment or REST path")
 	}
 	for _, segment := range strings.Split(u.Path, "/") {
 		if segment == "." || segment == ".." {
-			return nil, errors.New("invalid Jira site context path")
+			return "", errors.New("invalid Jira site context path")
 		}
 	}
 	if !numericID.MatchString(project) {
-		return nil, errors.New("select a numeric Jira project ID")
+		return "", errors.New("select a numeric Jira project ID")
+	}
+	return u.String(), nil
+}
+
+func New(site, project, token string) (*Client, error) {
+	canonical, err := parseScope(site, project)
+	if err != nil {
+		return nil, err
 	}
 	if token == "" || len(token) > 4096 || strings.TrimSpace(token) != token || strings.ContainsAny(token, "\r\n") {
 		return nil, errors.New("a single-line native Jira personal access token is required")
 	}
-	return &Client{site: u.String(), project: project, token: token, http: &http.Client{Timeout: 10 * time.Second}}, nil
+	return &Client{site: canonical, project: project, token: token, http: &http.Client{Timeout: 10 * time.Second}}, nil
 }
 
 // HTTPError retains status and bounded retry metadata, never response content.
@@ -166,8 +182,9 @@ func containsSecret(value any, token string, depth int) bool {
 // Actor keeps the provider's stable key distinct from the account login used in
 // assignment requests. Names are presentation data, never authorization.
 type Actor struct {
-	Key  string `json:"key"`
-	Name string `json:"name"`
+	Key    string `json:"key"`
+	Name   string `json:"name"`
+	Active bool   `json:"active"`
 }
 
 func (c *Client) Identity(ctx context.Context) (Actor, error) {
@@ -202,16 +219,35 @@ type Issue struct {
 				Key string `json:"key"`
 			} `json:"statusCategory"`
 		} `json:"status"`
-		Assignee *Actor `json:"assignee"`
-		Reporter *Actor `json:"reporter"`
-		Updated  string `json:"updated"`
-		Created  string `json:"created"`
+		Assignee   *Actor      `json:"assignee"`
+		Reporter   *Actor      `json:"reporter"`
+		IssueLinks []IssueLink `json:"issuelinks"`
+		Updated    string      `json:"updated"`
+		Created    string      `json:"created"`
 	} `json:"fields"`
+}
+
+type IssueLink struct {
+	Type struct {
+		Inward string `json:"inward"`
+	} `json:"type"`
+	InwardIssue *struct {
+		Fields struct {
+			Status struct {
+				StatusCategory struct {
+					Key string `json:"key"`
+				} `json:"statusCategory"`
+			} `json:"status"`
+		} `json:"fields"`
+	} `json:"inwardIssue"`
 }
 
 func (c *Client) validateIssue(i Issue, key string) error {
 	if !numericID.MatchString(i.ID) || !issueKey.MatchString(i.Key) || (key != "" && i.Key != key) || i.Fields.Project.ID != c.project || !numericID.MatchString(i.Fields.Status.ID) || !numericID.MatchString(i.Fields.IssueType.ID) {
 		return errors.New("Jira issue is incomplete or outside the reviewed project")
+	}
+	if i.Fields.IssueLinks == nil || len(i.Fields.IssueLinks) > 1000 {
+		return errors.New("Jira issue link metadata is unavailable or exceeds the bound")
 	}
 	switch i.Fields.Status.StatusCategory.Key {
 	case "new", "indeterminate", "done":
@@ -225,7 +261,7 @@ func (c *Client) Issue(ctx context.Context, key string) (Issue, error) {
 	if !issueKey.MatchString(key) {
 		return Issue{}, errors.New("invalid Jira issue key")
 	}
-	err := c.do(ctx, "GET", "/issue/"+key+"?fields=summary,description,labels,project,issuetype,status,assignee,reporter,updated,created", nil, &i)
+	err := c.do(ctx, "GET", "/issue/"+key+"?fields=summary,description,labels,project,issuetype,status,assignee,reporter,updated,created,issuelinks", nil, &i)
 	if err == nil {
 		err = c.validateIssue(i, key)
 	}
@@ -250,7 +286,7 @@ func (c *Client) Search(ctx context.Context, query string, start int) (SearchPag
 	if len(query) > 1000 || strings.TrimSpace(query) == "" || strings.ContainsAny(query, "\r\n") || strings.Contains(strings.ToUpper(query), "ORDER BY") || start < 0 || start > 500 {
 		return SearchPage{}, -1, errors.New("invalid bounded Jira search")
 	}
-	q := url.Values{"jql": {"project = " + c.project + " AND (" + query + ") ORDER BY created ASC"}, "startAt": {strconv.Itoa(start)}, "maxResults": {"50"}, "fields": {"summary,description,labels,project,issuetype,status,assignee,reporter,updated,created"}}
+	q := url.Values{"jql": {"project = " + c.project + " AND (" + query + ") ORDER BY created ASC"}, "startAt": {strconv.Itoa(start)}, "maxResults": {"50"}, "fields": {"summary,description,labels,project,issuetype,status,assignee,reporter,updated,created,issuelinks"}}
 	if err := c.do(ctx, "GET", "/search?"+q.Encode(), nil, &p); err != nil {
 		return SearchPage{}, -1, err
 	}
@@ -331,7 +367,7 @@ func (c *Client) Comments(ctx context.Context, key string) ([]Comment, error) {
 			return nil, errors.New("Jira comment pagination made no progress")
 		}
 	}
-	return nil, errors.New("Jira comments exceed the page bound")
+	return nil, ErrHistoryLimit
 }
 
 // AddComment targets the resolved numeric issue ID and performs one mutation only.

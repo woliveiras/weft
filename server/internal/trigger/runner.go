@@ -343,9 +343,13 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 	if r.Tasks == nil {
 		return "", errors.New("no task starter is configured")
 	}
+	cloudScope := t.Source.CloudID
+	if t.Source.Kind == "jira-dc" {
+		cloudScope = nativeScopeIdentity(t.Source)
+	}
 	admission := "trigger-admissions/" + triggerFingerprint(struct {
 		Source, Cloud, Issue, Workflow string
-	}{i.Source, t.Source.CloudID, strings.ToLower(i.Key), t.Workflow})
+	}{i.Source, cloudScope, strings.ToLower(i.Key), t.Workflow})
 	if pendingFailedRetry(t, DedupKey(t, i)) {
 		admission += "/" + t.FailedRetries[DedupKey(t, i)].Generation
 	}

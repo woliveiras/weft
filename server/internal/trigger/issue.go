@@ -16,12 +16,13 @@ import (
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/tools"
 )
 
 // Issue is a tracker issue normalized across sources.
 type Issue struct {
-	Source         string   `json:"source"` // github | jira
+	Source         string   `json:"source"` // github | jira | jira-dc
 	Key            string   `json:"key"`    // owner/repo#12 or PROJ-12
 	Title          string   `json:"title"`
 	Author         string   `json:"author,omitempty"`
@@ -60,10 +61,13 @@ type Source interface {
 
 // SourceConfig selects a tracker.
 type SourceConfig struct {
-	Kind         string `json:"kind"`         // github | jira
-	ConnectionID string `json:"connectionId"` // MCP connection
+	Kind         string `json:"kind"`         // github | jira | jira-dc
+	ConnectionID string `json:"connectionId"` // MCP or native issue connection
 	Repository   string `json:"repository,omitempty"`
 	CloudID      string `json:"cloudId,omitempty"`
+	// Native DC identity is explicitly reviewed and must match the connection.
+	SiteURL   string `json:"siteUrl,omitempty"`
+	ProjectID string `json:"projectId,omitempty"`
 	// Query narrows the search: extra GitHub search terms or a JQL clause.
 	Query string `json:"query,omitempty"`
 }
@@ -78,7 +82,7 @@ var (
 // Open validates the config and returns its source.
 func (c SourceConfig) Open() (Source, error) {
 	if !connRe.MatchString(c.ConnectionID) {
-		return nil, errors.New("name an MCP connection")
+		return nil, errors.New("name a tracker connection")
 	}
 	if len(c.Query) > 500 || strings.ContainsAny(c.Query, "\r\n") {
 		return nil, errors.New("the query must be one line of at most 500 characters")
@@ -94,6 +98,11 @@ func (c SourceConfig) Open() (Source, error) {
 			return nil, errors.New("the Jira site needs its cloud ID")
 		}
 		return jira{c: c}, nil
+	case "jira-dc":
+		if jiradc.ValidateScope(c.SiteURL, c.ProjectID) != nil || strings.HasSuffix(c.SiteURL, "/") || c.CloudID != "" || c.Repository != "" {
+			return nil, errors.New("select the native Jira Data Center site and numeric project ID")
+		}
+		return nativeJira{c: c}, nil
 	}
 	return nil, fmt.Errorf("unsupported issue source %q", c.Kind)
 }

@@ -133,6 +133,8 @@ func ReadinessReason(reason string) string {
 		return "The issue needs operator intervention after two question rounds."
 	case "history_limit":
 		return "The tracker comment or label history exceeded the readiness scan limit. Review the issue and resolve the hold before selecting it again."
+	case "manual_requeue_unverified":
+		return errNativeRequeueProof.Error()
 	case "input_limit":
 		return "The issue and replies exceed the 16 KiB evaluation limit."
 	case "output_limit":
@@ -248,6 +250,9 @@ func holdFailureOutcome(h Hold) string {
 func trackerRead[T any](ctx context.Context, call Invoker, name string, args trackerArgs) (T, error) {
 	var out T
 	res, err := call(ctx, name, args)
+	if err == nil && res != nil && res.IsError && name == trackerRequeue && bytes.Equal(res.Data, nativeRequeueProofResult) {
+		return out, errNativeRequeueProof
+	}
 	if err == nil && res != nil && res.IsError && (name == trackerComments || name == trackerRequeue) &&
 		bytes.Equal(res.Data, trackerHistoryLimitResult) {
 		return out, errTrackerHistoryLimit
@@ -733,6 +738,10 @@ func (r *Runner) checkHeld(ctx context.Context, t *Trigger, src Source, call Inv
 	signal := ""
 	if i.HasLabel(LabelTodo) {
 		signal, err = trackerRead[string](ctx, call, trackerRequeue, trackerArgs{Key: h.Key, Since: h.RoundAt})
+		if errors.Is(err, errNativeRequeueProof) {
+			h.State, h.Reason, h.Intervention = "operator", "manual_requeue_unverified", true
+			return false, r.saveHold(ctx, t, h)
+		}
 		if errors.Is(err, errTrackerHistoryLimit) {
 			return false, r.holdForHistoryLimit(ctx, t, h)
 		}
@@ -772,7 +781,7 @@ func hasConsecutiveMissingObservation(t *Trigger, h Hold) bool {
 }
 
 func missingHoldDisposition(t *Trigger, h Hold, failure trackerHTTPFailure, now time.Time) (release bool, reason string, err error) {
-	if t.Source.Kind == "github" || t.Source.Kind == "jira" {
+	if t.Source.Kind == "github" || t.Source.Kind == "jira" || t.Source.Kind == "jira-dc" {
 		if failure.RateLimited {
 			return false, "", errHeldIssueAccessUnverified
 		}
@@ -781,7 +790,7 @@ func missingHoldDisposition(t *Trigger, h Hold, failure trackerHTTPFailure, now 
 		}
 		switch failure.AccessStatus {
 		case http.StatusNotFound, http.StatusForbidden:
-			if t.Source.Kind == "jira" {
+			if t.Source.Kind == "jira" || t.Source.Kind == "jira-dc" {
 				return false, "", errHeldProjectAccess
 			}
 			return false, "", errHeldRepositoryAccess
@@ -859,7 +868,7 @@ func recordIssueAccessFailure(h *Hold, source string, now time.Time, failure tra
 	h.Eligibility = "requires operator review because repository or project access could not be verified"
 	resource := "GitHub repository"
 	guidance := "Check tracker availability, the connection credential and repository access."
-	if source == "jira" {
+	if source == "jira" || source == "jira-dc" {
 		resource = "Jira project"
 		guidance = "Check tracker availability and the connection credential. " + jiraProjectAccessGuidance
 	}

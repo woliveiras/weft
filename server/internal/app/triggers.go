@@ -51,6 +51,9 @@ func (x triggerTasks) Start(ctx context.Context, t *trigger.Trigger, i trigger.I
 		origin.URL = "https://github.com/" + repo + "/issues/" + num
 	case "jira":
 		origin.Instance = "https://api.atlassian.com/ex/jira/" + t.Source.CloudID
+	case "jira-dc":
+		origin.Instance, origin.ProjectID = t.Source.SiteURL, t.Source.ProjectID
+		origin.URL = origin.Instance + "/browse/" + i.Key
 	}
 	d, err := (taskconfig.Manager{Store: x.a.Store}).SaveTriggeredIssue(ctx, in, actor, origin)
 	if err != nil {

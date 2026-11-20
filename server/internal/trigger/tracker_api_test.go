@@ -17,7 +17,7 @@ import (
 
 func TestTrackerOperationsRequireTrustedTriggerScope(t *testing.T) {
 	dispatched := false
-	op := trackerTool{trackerLabels, func(context.Context, string, string, int64, string, string, any) (json.RawMessage, int, error) {
+	op := trackerTool{name: trackerLabels, call: func(context.Context, string, string, int64, string, string, any) (json.RawMessage, int, error) {
 		dispatched = true
 		return nil, 200, nil
 	}}
@@ -168,7 +168,7 @@ func TestJiraCommentScanAdvancesByReturnedRows(t *testing.T) {
 func TestTracker401RequiresIdentityConfirmation(t *testing.T) {
 	for _, probe := range []int{200, 401, 503} {
 		requests := 0
-		op := trackerTool{trackerLabels, func(_ context.Context, _, _ string, _ int64, method, path string, _ any) (json.RawMessage, int, error) {
+		op := trackerTool{name: trackerLabels, call: func(_ context.Context, _, _ string, _ int64, method, path string, _ any) (json.RawMessage, int, error) {
 			requests++
 			if requests == 1 && method == "POST" && strings.HasSuffix(path, "/labels") {
 				return nil, 401, errors.New("fixture unauthorized")

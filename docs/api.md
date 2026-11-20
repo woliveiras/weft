@@ -138,8 +138,8 @@ advisory — a model that writes the call as text fails it). Errors are returned
 ## Native issue connections
 
 Native Jira Data Center connections have their own credential store, independent
-of MCP and source control. These endpoints and declarative `IssueConnection` documents prepare configuration
-only; trigger and console adoption remain pending. No agent permission is
+of MCP and source control. These endpoints and declarative `IssueConnection` documents configure the native REST 2 adapter. The scoped trigger lifecycle
+is supported; native connection selection in the console remains pending. No agent permission is
 created by saving or testing a connection.
 
 | Method and path | Role | Purpose |
@@ -155,7 +155,10 @@ remote technical account has write permissions restricted to this project.
 It is an administrator confirmation, not an automatic permission test. Native
 clients opened for reads cannot write; write clients require this confirmation,
 a matching current revision and an enabled connection. Agent grants and durable
-write reconciliation are additional requirements for operational adoption.
+write reconciliation still apply; saving a connection alone does not authorize
+a trigger or an agent. Native trigger sources carry `kind: "jira-dc"`, the
+connection ID and exact `siteUrl`/numeric `projectId`; consent fences its current
+revision. Existing GitHub/Jira Cloud source fields are unchanged.
 
 Stale or disabled connections cannot be tested. Secrets are encrypted with
 site/project-bound associated data and never returned; records expose only
