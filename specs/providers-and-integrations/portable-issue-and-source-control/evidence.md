@@ -1106,7 +1106,7 @@ name assumptions through discovered, scoped workflow mappings.
   scope rejection. The maintainer explicitly authorized the blocking correction,
   tests, independent review and local update. Specification/test reviews preceded
   implementation; fail-first API/core logs reproduced missing input/state and
-  wrong-audience behavior. A separate maximum-token API test first returned400.
+  wrong-audience behavior. A separate maximum-token API test first returned 400.
 - AC010 uses a separate encrypted `jiraRest` slot and Cloud/purpose/connection AAD.
   Unit and real TLS/storage tests cover separate authentication headers, MCP OAuth
   coexistence, restart/discovery preservation, credential clearing without fallback,
@@ -1114,28 +1114,51 @@ name assumptions through discovered, scoped workflow mappings.
   transport/HTTP errors and credential reflections. API/profile integration checks
   REST reads and stale profile refusal after REST-only clearing. YAML round trips
   use independent secret references and preserve-only exports, with no public
-  email/token/ciphertext. The64KiB JSON envelope bound is independent of per-field
+  email/token/ciphertext. The 64 KiB JSON envelope bound is independent of per-field
   byte limits. No remote secret is used in fixtures.
 - Frontend unit/component tests and a Chromium journey against a disposable real
   Go API cover creation, blank edit, independent clear, incompatibility, no echoed
-  secrets, keyboard help and390px overflow. Docker web verification passed112files/
-  631tests, TypeScript and production build; final focused42tests also passed.
-- Root `make test-go lint build` completed with exit0. Focused API tests passed
+  secrets, keyboard help and 390 px overflow. Docker web verification passed 112 files /
+  631 tests, TypeScript and production build; final focused 42 tests also passed.
+- Root `make test-go lint build` completed with exit 0. Focused API tests passed
   in `/tmp/weft-jira-rest-api-green.log`; full Go/vet/build evidence is in
   `/tmp/weft-jira-rest-full-go.log`. Independent implementation review found no
   blocking findings in core/API/YAML/UI/docs. Additional trigger TLS integration
   exposed a pre-existing Jira MCP-envelope decoding defect; that correction and
   its separate evidence are pending, rather than treating the search as qualified.
 - The authorized local standard-Dockerfile update used
-  `docker compose up -d --build --no-deps weftd`, exit0, with healthy container.
-  At17:03:16Z the administrator saved independent REST credentials in personal
+  `docker compose up -d --build --no-deps weftd`, exit 0, with healthy container.
+  At 17:03:16Z the administrator saved independent REST credentials in personal
   connection `rehearsal-jira`; discovery preserved MCP authentication and produced
-  connection/catalogue revision4, Ready23tools. Values remain encrypted and are
+  connection/catalogue revision 4, Ready, 23 tools. Values remain encrypted and are
   absent from this evidence. No grants or trigger were activated.
-- At17:03:38Z, credential-free profile `rehearsal-scrum` revision1 pinned connection4,
-  Cloud ID `eca45cd2-875d-4ff3-a84e-cb02398b8c88`, project10000. Read-only transition
-  discovery of SCRUM-5 succeeded through local Weft to real Jira Cloud: issue10004,
-  type10003, current status10000 (To Do), transition IDs11/21/31/41 to statuses
+- At 17:03:38Z, credential-free profile `rehearsal-scrum` revision 1 pinned connection 4,
+  Cloud ID `eca45cd2-875d-4ff3-a84e-cb02398b8c88`, project 10000. Read-only transition
+  discovery of SCRUM-5 succeeded through local Weft to real Jira Cloud: issue 10004,
+  type 10003, current status 10000 (To Do), transition IDs 11/21/31/41 to statuses
   10000/3/10001/10002. This qualifies the scoped REST read boundary only. No issue
   mutation occurred. `projectRestricted` remains false; a personal administrator
   account is not asserted to be a project-restricted technical account.
+
+
+### Batch10b — Jira MCP search envelope regression (2026-11-20)
+
+- The added real TLS trigger integration initially observed MCP search 1, REST
+  reads 0/writes 0 and tasks 0 without an error. The Jira decoder read the MCP
+  envelope as a direct issue page, silently treating valid results as no work.
+  This is a bug restoring existing polling behavior, without a new acceptance
+  criterion or relaxed scope. The maintainer's authorization covers blocking
+  Jira/Bitbucket corrections.
+- Independent TEST review preceded the decoder correction. Unit cases cover
+  legacy direct pages, structured content, one textual block, legitimate empty
+  results, invalid/null/error results, dependency failures and scoped pagination.
+  Every page now uses the same decoder and malformed results fail explicitly.
+- `TestJiraCloudTriggerSeparatesMCPAndRESTCredentialsOverTLS` exercises the real
+  Runner, Gateway, manager, encrypted filesystem store and separate MCP/REST TLS
+  servers. It asserts MCP discovery/search receives only MCP authentication,
+  Jira issue reads/claim/completion labels/comments receive only REST Basic,
+  one task is admitted, and REST rotation invalidates old trigger consent.
+- `./scripts/go.sh test ./internal/trigger -count=1` passed in 6.956 s; log
+  `/tmp/weft-jira-trigger-green.log`. Independent implementation review found no
+  blocking findings. These are synthetic local fixtures; no real issue trigger
+  or model execution is claimed by this regression test.

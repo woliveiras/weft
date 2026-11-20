@@ -3,6 +3,7 @@ package trigger_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -178,5 +179,111 @@ func TestGitHubSearchDecodesMCPEnvelopes(t *testing.T) {
 		if err != nil || len(issues) != 1 || issues[0].Key != "acme/app#1" || !issues[0].HasLabel("weft") || issues[0].Assignee != "owner" {
 			t.Fatalf("search result: %+v, %v", issues, err)
 		}
+	}
+}
+
+func TestJiraSearchDecodesLegacyAndMCPEnvelopes(t *testing.T) {
+	src, err := (trigger.SourceConfig{Kind: "jira", ConnectionID: "atl", CloudID: cloud}).Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	issue := jiraIssue("APP-1", "Export", "weft")
+	raw, err := json.Marshal(map[string]any{"issues": []any{issue}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, payload := range map[string]any{
+		"legacy":                    map[string]any{"issues": []any{issue}},
+		"null structured with text": map[string]any{"structuredContent": nil, "content": []any{map[string]string{"type": "text", "text": string(raw)}}},
+		"structured":                map[string]any{"content": []any{}, "structuredContent": json.RawMessage(raw)},
+		"text":                      map[string]any{"content": []any{map[string]string{"type": "text", "text": string(raw)}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			call := func(context.Context, string, any) (*tools.Result, error) { return ok(payload), nil }
+			issues, err := src.Search(t.Context(), call, "weft")
+			if err != nil || len(issues) != 1 || issues[0].Key != "APP-1" || issues[0].Body != "Details of Export" || !issues[0].HasLabel("weft") {
+				t.Fatalf("Jira search result: %+v %v", issues, err)
+			}
+		})
+	}
+	call := func(context.Context, string, any) (*tools.Result, error) {
+		return ok(map[string]any{"content": []any{}, "structuredContent": map[string]any{"issues": []any{}}}), nil
+	}
+	if issues, err := src.Search(t.Context(), call, "weft"); err != nil || len(issues) != 0 {
+		t.Fatalf("valid empty search: %+v %v", issues, err)
+	}
+}
+
+func TestJiraSearchRejectsInvalidOrFailedMCPEnvelopes(t *testing.T) {
+	src, err := (trigger.SourceConfig{Kind: "jira", ConnectionID: "atl", CloudID: cloud}).Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	validText := map[string]string{"type": "text", "text": `{"issues":[]}`}
+	for name, result := range map[string]*tools.Result{
+		"null issues":               ok(map[string]any{"issues": nil}),
+		"structured null issues":    ok(map[string]any{"content": []any{}, "structuredContent": map[string]any{"issues": nil}}),
+		"missing reply":             nil,
+		"tool failure":              {IsError: true, Content: `{"issues":[]}`},
+		"malformed JSON":            {Content: `{`},
+		"missing issues":            ok(map[string]any{}),
+		"structured wrong shape":    ok(map[string]any{"structuredContent": map[string]any{"issues": "invalid"}, "content": []any{validText}}),
+		"structured missing issues": ok(map[string]any{"structuredContent": map[string]any{}, "content": []any{validText}}),
+		"text wrong shape":          ok(map[string]any{"content": []any{map[string]string{"type": "text", "text": `{"issues":{}}`}}}),
+		"text malformed JSON":       ok(map[string]any{"content": []any{map[string]string{"type": "text", "text": "not JSON"}}}),
+		"text missing issues":       ok(map[string]any{"content": []any{map[string]string{"type": "text", "text": `{}`}}}),
+		"resource block":            ok(map[string]any{"content": []any{map[string]string{"type": "resource", "text": `{"issues":[]}`}}}),
+		"ambiguous blocks":          ok(map[string]any{"content": []any{validText, validText}}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			call := func(context.Context, string, any) (*tools.Result, error) { return result, nil }
+			if issues, err := src.Search(t.Context(), call, "weft"); err == nil || len(issues) != 0 {
+				t.Fatalf("invalid result became an empty successful scan: %+v %v", issues, err)
+			}
+		})
+	}
+	call := func(context.Context, string, any) (*tools.Result, error) {
+		return ok(map[string]any{"issues": []any{}}), errors.New("fixture MCP transport failed")
+	}
+	if issues, err := src.Search(t.Context(), call, "weft"); err == nil || len(issues) != 0 {
+		t.Fatalf("dependency failure became successful scan: %+v %v", issues, err)
+	}
+}
+
+func TestJiraSearchPaginatesMCPEnvelopesWithinPinnedProject(t *testing.T) {
+	src, err := (trigger.SourceConfig{Kind: "jira", ConnectionID: "atl", CloudID: cloud, SiteURL: "https://api.atlassian.com/ex/jira/" + cloud, ProjectID: "10001", ProfileID: "fixture-profile", ProfileRevision: 1}).Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	makeIssue := func(key, id string) map[string]any {
+		i := jiraIssue(key, "Export", "weft")
+		i["id"], i["self"] = id, "https://team.atlassian.net/rest/api/3/issue/"+id
+		f := i["fields"].(map[string]any)
+		f["project"], f["issuetype"] = map[string]string{"id": "10001"}, map[string]string{"id": "10002"}
+		f["status"].(map[string]any)["id"] = "10"
+		return i
+	}
+	calls := 0
+	call := func(_ context.Context, _ string, args any) (*tools.Result, error) {
+		calls++
+		a := args.(map[string]any)
+		if calls == 1 {
+			if a["nextPageToken"] != nil {
+				t.Error("first page reused a cursor")
+			}
+			return ok(map[string]any{"content": []any{}, "structuredContent": map[string]any{"issues": []any{makeIssue("APP-1", "10007")}, "nextPageToken": "fixture-page-2"}}), nil
+		}
+		if calls != 2 || a["nextPageToken"] != "fixture-page-2" {
+			t.Error("second page lost the scoped cursor")
+		}
+		raw, err := json.Marshal(map[string]any{"issues": []any{makeIssue("APP-2", "10008")}})
+		if err != nil {
+			return nil, err
+		}
+		return ok(map[string]any{"content": []any{map[string]string{"type": "text", "text": string(raw)}}}), nil
+	}
+	issues, err := src.Search(t.Context(), call, "weft")
+	if err != nil || calls != 2 || len(issues) != 2 || issues[0].Key != "APP-1" || issues[1].Key != "APP-2" {
+		t.Fatalf("enveloped Jira pagination: %+v calls=%d error=%v", issues, calls, err)
 	}
 }

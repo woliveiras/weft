@@ -426,6 +426,43 @@ func (j jira) MatchesHeld(ctx context.Context, call Invoker, issue Issue, label 
 	return false, nil
 }
 
+type jiraSearchReply struct {
+	Issues []jiraIssue `json:"issues"`
+	Next   string      `json:"nextPageToken"`
+}
+
+// MCP returns search data either as structured content or a single text block.
+// Direct replies remain supported for legacy callers. Missing or malformed
+// issue arrays are failures, rather than evidence that no work is eligible.
+func decodeJiraSearch(res *tools.Result, err error) (jiraSearchReply, error) {
+	var envelope struct {
+		jiraSearchReply
+		Structured json.RawMessage `json:"structuredContent"`
+		Content    []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := decode(res, err, &envelope); err != nil {
+		return jiraSearchReply{}, err
+	}
+	if envelope.Issues != nil {
+		return envelope.jiraSearchReply, nil
+	}
+	payload := envelope.Structured
+	if len(payload) == 0 || string(payload) == "null" {
+		if len(envelope.Content) != 1 || envelope.Content[0].Type != "text" {
+			return jiraSearchReply{}, errors.New("unexpected Jira issue search result")
+		}
+		payload = []byte(envelope.Content[0].Text)
+	}
+	var reply jiraSearchReply
+	if json.Unmarshal(payload, &reply) != nil || reply.Issues == nil {
+		return jiraSearchReply{}, errors.New("unexpected Jira issue search result")
+	}
+	return reply, nil
+}
+
 func (j jira) search(ctx context.Context, call Invoker, label, key string) ([]Issue, error) {
 	jql := fmt.Sprintf(`labels = "%s" AND statusCategory = "To Do"`, label)
 	if j.c.ProfileID != "" {
@@ -438,13 +475,10 @@ func (j jira) search(ctx context.Context, call Invoker, label, key string) ([]Is
 		jql += fmt.Sprintf(` AND key = "%s"`, key)
 	}
 	jql += " ORDER BY created ASC"
-	var out struct {
-		Issues []jiraIssue `json:"issues"`
-		Next   string      `json:"nextPageToken"`
-	}
 	args := map[string]any{"cloudId": j.c.CloudID, "jql": jql, "maxResults": trackerSearchLimit, "fields": jiraFields}
 	res, err := call(ctx, tool(j.c, "searchJiraIssuesUsingJql"), args)
-	if err := decode(res, err, &out); err != nil {
+	out, err := decodeJiraSearch(res, err)
+	if err != nil {
 		return nil, err
 	}
 	if key != "" && len(out.Issues) == 0 && out.Next != "" {
@@ -472,9 +506,9 @@ func (j jira) search(ctx context.Context, call Invoker, label, key string) ([]Is
 			return nil, errors.New("Jira Cloud issue search exceeds the bounded scan")
 		}
 		args["nextPageToken"] = out.Next
-		out.Issues, out.Next = nil, ""
 		res, err = call(ctx, tool(j.c, "searchJiraIssuesUsingJql"), args)
-		if err := decode(res, err, &out); err != nil {
+		out, err = decodeJiraSearch(res, err)
+		if err != nil {
 			return nil, err
 		}
 	}
