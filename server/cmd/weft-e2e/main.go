@@ -280,6 +280,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	closeJiraFixture, err := installNativeJiraFixture(ctx, a)
+	if err != nil {
+		return err
+	}
+	defer closeJiraFixture()
 	importFixture, err := importtest.New(ctx, filepath.Join(cfg.Workspaces.Root, ".import-fixture-remote"))
 	if err != nil {
 		return err

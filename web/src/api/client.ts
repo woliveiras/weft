@@ -3,7 +3,7 @@ import type {TaskInput, TaskDraft, TaskPage, TaskReview, TaskProgress, Project} 
 import type { ExecutionTree, CancelScope, Cancellation } from './executionTree';
 import type { ActivityQuery, ActivityView, HealthQuery, HealthView } from './activity';
 import type { DelegationPolicy, DelegationPolicyView, DelegationProfile, DelegationProfileView } from './delegation';
-import type { MCPHistoryPage, MCPConnection, MCPConnectionInput, MCPTemplate, IssueConnection, IssueConnectionInput, IssueTransitionDiscovery } from './types';
+import type { MCPHistoryPage, MCPConnection, MCPConnectionInput, MCPTemplate, IssueConnection, IssueConnectionInput, IssueTransitionDiscovery, IssueWorkflowMapping, IssueWorkflowMappingInput } from './types';
 import type { Skill, SkillInput, InstructionSnapshot } from './instructions';
 import type {
   Approval,
@@ -334,6 +334,9 @@ export const api = {
   resolveTriggerHold: (id: string, key: string, generation: string, force: boolean) => request<Trigger>(`${V1}/triggers/${enc(id)}/resolve-hold`, { method: 'POST', body: { key, generation, force } }),
   triggerMatches: (id: string) => request<TriggerMatches>(`${V1}/triggers/${enc(id)}/matches`),
   scmKinds: () => request<SCMKind[]>(`${V1}/scm/kinds`),
+  issueWorkflowMappings: (connection: string) => request<IssueWorkflowMapping[]>(`${V1}/issue-workflow-mappings`, {query: {connection}}),
+  issueWorkflowMapping: (name: string) => request<IssueWorkflowMapping>(`${V1}/issue-workflow-mappings/${enc(name)}`),
+  saveIssueWorkflowMapping: (input: IssueWorkflowMappingInput, revision?: number) => request<IssueWorkflowMapping>(`${V1}/issue-workflow-mappings${revision === undefined ? '' : '/'+enc(input.name)}`, {method: revision === undefined ? 'POST' : 'PUT', body: input, headers: revision === undefined ? undefined : {'If-Match': String(revision)}}),
   discoverIssueTransitions: (name: string, revision: number, issueKey: string) => request<IssueTransitionDiscovery>(`${V1}/issue-connections/${enc(name)}/transitions`, {method: 'POST', headers: {'If-Match': String(revision)}, body: {issueKey}}),
   issueConnections: () => request<IssueConnection[]>(`${V1}/issue-connections`),
   issueConnection: (name: string) => request<IssueConnection>(`${V1}/issue-connections/${enc(name)}`),

@@ -987,3 +987,14 @@ export interface IssueTransition {
   fields: Record<string, {required: boolean; name: string; hasDefaultValue?: boolean;
     operations?: string[]; schema: {type: string; items?: string}; allowedValues?: unknown[]}> | null;
 }
+
+export interface IssueWorkflowMappingInput {
+  name: string; connection: string; connectionRevision: number;
+  sampleIssueKey: string; sampleIssueId: string; issueTypeId: string;
+  fromStatusId: string; transitionId: string; targetStatusId: string;
+  issueUpdated: string; enabled: boolean;
+}
+export interface IssueWorkflowMapping extends IssueWorkflowMappingInput {
+  siteUrl: string; projectId: string; transitionName: string; targetStatusName: string;
+  revision: number; updatedAt: string; updatedBy: string;
+}

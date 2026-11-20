@@ -91,3 +91,30 @@ test('native issue connections use dedicated pages, scoped credentials and expli
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
 
 });
+
+test('reviews and saves native workflow mappings through real verified-TLS discovery and persistent API storage',async({page})=>{
+ await page.goto('/#/connections');await page.evaluate(()=>localStorage.setItem('weftToken','e2e-admin-token'));await page.reload();
+ const row=page.getByRole('region',{name:'Issue trackers',exact:true}).getByRole('row',{name:/jira-mapping-fixture/});
+ await row.getByRole('link',{name:'Workflow mappings'}).click();
+ await page.getByRole('link',{name:'New mapping',exact:true}).click();
+ const form=page.getByRole('form',{name:'Workflow mapping configuration'});
+ await form.getByLabel('Mapping name',{exact:true}).fill('browser-review-step');
+ await form.getByLabel('Sample issue key',{exact:true}).fill('APP-7');
+ await form.getByRole('button',{name:'Discover available transitions',exact:true}).click();
+ const picker=form.getByLabel('Transition',{exact:true});
+ await expect(picker.getByRole('option',{name:/\(32\)/})).toBeDisabled();
+ await picker.selectOption('31');
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+ await form.getByRole('button',{name:'Save mapping',exact:true}).click();
+ await expect(page).toHaveURL(/\/mappings$/);
+ const table=page.getByRole('region',{name:'Workflow mapping table'});
+ const mappingRow=table.getByRole('row',{name:/browser-review-step/});
+ await expect(mappingRow).toContainText('Transition 31');await expect(mappingRow).toContainText('Status 10 → 20');
+ const saved=await(await page.request.get('/api/v1/issue-workflow-mappings/browser-review-step',{headers:{Authorization:'Bearer e2e-admin-token'}})).json();
+ expect(saved.connection).toBe('jira-mapping-fixture');expect(saved.issueTypeId).toBe('10002');expect(saved.sampleIssueId).toBe('10007');expect(saved.revision).toBe(1);
+ expect(saved).not.toHaveProperty('token');expect(saved).not.toHaveProperty('sealedToken');
+ await mappingRow.getByRole('button',{name:'Disable',exact:true}).click();await expect(mappingRow).toContainText('Disabled');
+ await mappingRow.getByRole('link',{name:'Review definition',exact:true}).click();
+ await expect(page.getByText('browser-review-step · Revision 2',{exact:true})).toBeVisible();
+ await expect(page.getByRole('form',{name:'Workflow mapping configuration'}).getByLabel('Mapping name',{exact:true})).toBeDisabled();
+});

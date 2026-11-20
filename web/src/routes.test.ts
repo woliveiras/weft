@@ -81,3 +81,10 @@ it('round-trips native issue transition inspection without treating it as connec
  expect(parseRoute(hash)).toEqual({view:'connections',issueConnectionID:'native',issueTransitions:true});
  expect(routeHash(parseRoute(hash))).toBe(hash);
 });
+
+it('round-trips native workflow mapping list, create and named review routes',()=>{
+ for(const hash of ['#/connections/issues/c/native/mappings','#/connections/issues/c/native/mappings/new','#/connections/issues/c/native/mappings/c/new']){
+  expect(routeHash(parseRoute(hash))).toBe(hash);
+ }
+ expect(parseRoute('#/connections/issues/c/native/mappings/new')).toEqual({view:'connections',issueConnectionID:'native',issueMapping:{create:true}});
+});

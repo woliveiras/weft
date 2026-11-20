@@ -41,7 +41,7 @@ type Route =
   | { view: 'projects'; projectView?: ProjectView }
   | { view: 'tasks'; taskId?: string; create?: boolean }
   | { view: 'approvals' }
-  | { view: 'connections'; connectionID?: string; connectionTab?: ConnectionTab; create?: boolean; sourceControlCreate?: boolean; issueConnectionCreate?: boolean; issueConnectionID?: string; issueTransitions?: boolean; history?: boolean; connectQuery?: string; oauthQuery?: string }
+  | { view: 'connections'; connectionID?: string; connectionTab?: ConnectionTab; create?: boolean; sourceControlCreate?: boolean; issueConnectionCreate?: boolean; issueConnectionID?: string; issueTransitions?: boolean; issueMapping?: {name?: string; create?: boolean}; history?: boolean; connectQuery?: string; oauthQuery?: string }
   | ({ view: 'models' } & ModelsRoute)
   | { view: 'administration'; section: AdministrationSection; profileId?:string; profileCreate?:boolean }
   | { view: 'skills'; skills?: SkillsRoute }
@@ -67,7 +67,7 @@ export function parseRoute(hash: string): Route {
   if (parts[0] === 'connections' && parts[1] === 'c') return { view: 'connections', connectionID: parts[2] ?? '', connectionTab: connectionTabs.includes(parts[3] as ConnectionTab) ? parts[3] as ConnectionTab : 'overview' };
   if (parts[0] === 'connections' && parts[1] === 'source-control' && parts[2] === 'new') return { view: 'connections', sourceControlCreate: true };
   if (parts[0] === 'connections' && parts[1] === 'issues' && parts[2] === 'new') return {view: 'connections', issueConnectionCreate: true};
-  if (parts[0] === 'connections' && parts[1] === 'issues' && parts[2] === 'c') return {view: 'connections', issueConnectionID: decodeURIComponent(parts[3] ?? ''), ...(parts[4] === 'transitions' ? {issueTransitions: true} : {})};
+  if (parts[0] === 'connections' && parts[1] === 'issues' && parts[2] === 'c') return {view: 'connections', issueConnectionID: decodeURIComponent(parts[3] ?? ''), ...(parts[4] === 'transitions' ? {issueTransitions: true} : parts[4] === 'mappings' ? {issueMapping: parts[5] === 'new' ? {create:true} : parts[5] === 'c' && parts[6] ? {name: decodeURIComponent(parts[6])} : {}} : {})};
   if (parts[0] === 'connections' && parts[1] === 'new') return { view: 'connections', create: true };
   if (parts[0] === 'connections' && parts[1] === 'history') return { view: 'connections', history: true };
   if (parts[0] === 'integrations' || parts[0] === 'connections') return { view: 'connections', connectQuery: parts[1] === 'connect' ? (hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : '') : undefined, oauthQuery: parts[1] === 'oauth' ? (qs ?? '') : undefined };
@@ -104,7 +104,7 @@ export function routeHash(r: Route): string {
     if (r.connectionID !== undefined) return `#/connections/c/${encodeURIComponent(r.connectionID)}/${r.connectionTab ?? 'overview'}`;
     if (r.sourceControlCreate) return scmCreateLink;
     if (r.issueConnectionCreate) return '#/connections/issues/new';
-    if (r.issueConnectionID !== undefined) return `#/connections/issues/c/${encodeURIComponent(r.issueConnectionID)}${r.issueTransitions ? "/transitions" : ""}`;
+    if (r.issueConnectionID !== undefined) return `#/connections/issues/c/${encodeURIComponent(r.issueConnectionID)}${r.issueTransitions ? "/transitions" : r.issueMapping ? `/mappings${r.issueMapping.create ? "/new" : r.issueMapping.name ? `/c/${encodeURIComponent(r.issueMapping.name)}` : ""}` : ""}`;
     if (r.create) return '#/connections/new';
     if (r.history) return '#/connections/history';
     if (r.connectQuery !== undefined) return `#/connections/connect?${r.connectQuery}`;
@@ -259,7 +259,7 @@ function Shell() {
             workflows={workflows} workflowsLoading={graphs.loading} workflowsError={graphs.error} onReloadWorkflows={graphs.reload} canEdit={info.data?.identity?.role==='admin'}/>}
           {route.view === 'skills' && <SkillsView role={info.data?.identity?.role} route={route.skills} onNavigate={skills=>go({view:'skills',skills})} onChanged={() => void graphs.reload()} />}
           {route.view === 'approvals' && <ApprovalsView role={info.data?.identity?.role} onChanged={() => void approvals.reload()} />}
-          {route.view === 'connections' && <ConnectionsPage info={info.data} connectionID={route.connectionID} connectionTab={route.connectionTab} create={route.create} sourceControlCreate={route.sourceControlCreate} issueConnectionCreate={route.issueConnectionCreate} issueConnectionID={route.issueConnectionID} issueTransitions={route.issueTransitions} history={route.history} connectQuery={route.connectQuery} oauthQuery={route.oauthQuery} />}
+          {route.view === 'connections' && <ConnectionsPage info={info.data} connectionID={route.connectionID} connectionTab={route.connectionTab} create={route.create} sourceControlCreate={route.sourceControlCreate} issueConnectionCreate={route.issueConnectionCreate} issueConnectionID={route.issueConnectionID} issueTransitions={route.issueTransitions} issueMapping={route.issueMapping} history={route.history} connectQuery={route.connectQuery} oauthQuery={route.oauthQuery} />}
           {route.view === 'models' && <ModelsPage info={info.data} modelSection={route.modelSection} providerEditor={route.providerEditor} />}
           {route.view === 'administration' && <AdministrationPage info={info.data} infoError={info.error} section={route.section} profileEditor={route.profileCreate?{create:true}:route.profileId?{id:route.profileId}:undefined} onProfileNavigate={editor=>go({view:'administration',section:'delegation',...(editor?.create?{profileCreate:true}:editor?.id?{profileId:editor.id}:{})})} onDraftState={onAdministrationDraft} />}
           {Object.entries(visibleSessions).map(([id, session]) => {

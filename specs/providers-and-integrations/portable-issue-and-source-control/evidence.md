@@ -570,3 +570,26 @@ name assumptions through discovered, scoped workflow mappings.
   residual blockers after the revision and corrupted-key checks were corrected.
 - Mapping editor/selection, lifecycle pins/adoption, optional synchronization
   recovery and Cloud adoption remain incomplete. No live configuration changed.
+
+
+## INT-009-06e — Dedicated workflow mapping console
+
+- Added connection-scoped mapping list, creation and review pages. The editor
+  discovers a sample issue, displays transition and destination IDs, rejects
+  unsupported field requirements and saves the reviewed connection/mapping
+  revisions. Changing the sample clears discovery; conflicts retain the draft
+  and require reloading. Existing disabled definitions stay disabled on edit.
+- Administrators can disable an exact saved definition without contacting Jira,
+  including after connection rotation. Viewers cannot save; a mapping belonging
+  to another connection cannot be edited through a foreign connection URL.
+  Saving does not attach a workflow or execute a transition.
+- Docker TypeScript and Vitest passed (106 files / 576 tests,
+  `/tmp/weft-jira-mappings-console-v1.log`). The isolated Chromium suite passed
+  both journeys (`/tmp/weft-jira-mappings-e2e-v1.log`): the mapping journey uses
+  the real browser/API/fsstore boundary and a verified-TLS fake Jira, including
+  discovery, save, reopen, disabling and narrow-screen overflow assertions.
+  The fake is compiled only into the disposable e2e backend and rejects all
+  vendor mutations. No production TLS setting was changed.
+- Final read-only subagent review found no blockers. Lifecycle pins/adoption,
+  operator recovery, declarative mapping configuration and Cloud adoption remain
+  incomplete; no live connection, consent or workflow was changed.

@@ -1,0 +1,71 @@
+import {cleanup,render,screen,waitFor,within} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import {afterEach,expect,it} from 'vitest';
+import {fakeApi,apiError} from '../test/fakeApi';
+import {canMapTransition,IssueWorkflowMappingsPage,mappingInput} from './IssueWorkflowMappingsPage';
+import type {IssueWorkflowMapping,IssueTransition} from '../api/types';
+const connection={name:'native',kind:'jira-dc',siteUrl:'https://jira.example',projectId:'10001',revision:3,enabled:true,projectRestricted:true,credentialConfigured:true};
+const mapping:IssueWorkflowMapping={name:'review-step',connection:'native',connectionRevision:3,sampleIssueKey:'APP-7',sampleIssueId:'10007',issueTypeId:'10002',fromStatusId:'10',transitionId:'31',targetStatusId:'20',issueUpdated:'2026-11-20T12:00:00Z',enabled:true,siteUrl:connection.siteUrl,projectId:'10001',transitionName:'Revisão',targetStatusName:'Review',revision:2,updatedAt:'2026-11-20T12:00:00Z',updatedBy:'admin'};
+const transition:IssueTransition={id:'31',name:'Revisão',to:{id:'20',name:'Review'},fields:{}};
+const discovery={connection:'native',revision:3,discovery:{site:connection.siteUrl,projectId:'10001',issueId:'10007',issueKey:'APP-7',issueTypeId:'10002',current:{id:'10',name:'Ready'},updated:mapping.issueUpdated,transitions:[transition,{...transition,id:'32',fields:null}]}};
+afterEach(()=>{cleanup();history.replaceState(null,'','/');});
+it('permits only supported discovered transitions and strips stored display metadata from writes',()=>{
+ expect(canMapTransition(transition,'10')).toBe(true);
+ expect(canMapTransition(transition,'20')).toBe(false);
+ expect(canMapTransition({...transition,fields:null},'10')).toBe(false);
+ expect(canMapTransition({...transition,fields:{resolution:{name:'Resolution',required:true,schema:{type:'resolution'},hasDefaultValue:true}}},'10')).toBe(false);
+ expect(mappingInput(mapping)).not.toHaveProperty('siteUrl');expect(mappingInput(mapping)).not.toHaveProperty('revision');
+});
+it('creates a mapping from actual issue IDs and pins the discovered connection revision',async()=>{
+ const backend=fakeApi({'GET /api/v1/issue-connections/native':()=>connection,'POST /api/v1/issue-connections/native/transitions':()=>discovery,'POST /api/v1/issue-workflow-mappings':()=>mapping});
+ render(<IssueWorkflowMappingsPage name="native" route={{create:true}} role="admin"/>);
+ const form=await screen.findByRole('form',{name:'Workflow mapping configuration'});
+ const user=userEvent.setup();
+ await user.type(within(form).getByLabelText('Mapping name'),'review-step');
+ await user.type(within(form).getByLabelText('Sample issue key'),'APP-7');
+ await user.click(within(form).getByRole('button',{name:'Discover available transitions'}));
+ const picker=await within(form).findByLabelText('Transition');
+ expect(within(picker).getByRole('option',{name:/\(32\)/})).toHaveProperty('disabled',true);
+ await user.selectOptions(picker,'31');
+ await user.click(within(form).getByRole('button',{name:'Save mapping'}));
+ await waitFor(()=>expect(backend.find('POST','/api/v1/issue-workflow-mappings')).toHaveLength(1));
+ expect(backend.find('POST','/api/v1/issue-workflow-mappings')[0].body).toEqual(mappingInput(mapping));
+ expect(backend.find('POST','/api/v1/issue-connections/native/transitions')[0].headers['If-Match']).toBe('3');
+ expect(backend.calls.some(c=>c.path.includes('/triggers'))).toBe(false);
+});
+it('keeps conflict edits and requires reload instead of overwriting a definition',async()=>{
+ const backend=fakeApi({'GET /api/v1/issue-connections/native':()=>connection,'GET /api/v1/issue-workflow-mappings/review-step':()=>({...mapping,enabled:false}),'POST /api/v1/issue-connections/native/transitions':()=>discovery,'PUT /api/v1/issue-workflow-mappings/review-step':()=>apiError(409,'Mapping changed','conflict')});
+ render(<IssueWorkflowMappingsPage name="native" route={{name:'review-step'}} role="admin"/>);
+ const form=await screen.findByRole('form',{name:'Workflow mapping configuration'});const user=userEvent.setup();
+ expect(within(form).getByLabelText('Mapping name')).toHaveProperty('disabled',true);
+ await user.type(within(form).getByLabelText('Sample issue key'),'APP-7');await user.click(within(form).getByRole('button',{name:'Discover available transitions'}));
+ await user.selectOptions(await within(form).findByLabelText('Transition'),'31');
+ expect(within(form).getByRole('checkbox',{name:'Mapping enabled'})).toHaveProperty('checked',false);
+ await user.click(within(form).getByRole('button',{name:'Save mapping'}));
+ expect(await screen.findByRole('alert')).toHaveProperty('textContent','Mapping changed');
+ expect(within(form).getByLabelText('Sample issue key')).toHaveProperty('value','APP-7');
+ expect(within(form).getByLabelText('Transition')).toHaveProperty('value','31');
+ expect(within(form).getByRole('button',{name:'Save mapping'}).closest('fieldset')?.disabled).toBe(true);
+ const call=backend.find('PUT','/api/v1/issue-workflow-mappings/review-step')[0];expect(call.headers['If-Match']).toBe('2');expect(call.body).toMatchObject({enabled:false});
+});
+it('shows safe discovery errors, invalidates stale selection on sample edits and makes no write without a selection',async()=>{
+ let fail=true;const backend=fakeApi({'GET /api/v1/issue-connections/native':()=>connection,'POST /api/v1/issue-connections/native/transitions':()=>fail?apiError(502,'Tracker unavailable','tracker_discovery'):discovery});
+ render(<IssueWorkflowMappingsPage name="native" route={{create:true}} role="admin"/>);const form=await screen.findByRole('form',{name:'Workflow mapping configuration'});const user=userEvent.setup();
+ await user.type(within(form).getByLabelText('Sample issue key'),'APP-7');await user.click(within(form).getByRole('button',{name:'Discover available transitions'}));
+ expect(await screen.findByRole('alert')).toHaveProperty('textContent','Tracker unavailable');fail=false;
+ await user.click(within(form).getByRole('button',{name:'Discover available transitions'}));await user.selectOptions(await within(form).findByLabelText('Transition'),'31');
+ await user.type(within(form).getByLabelText('Sample issue key'),'0');expect(within(form).queryByLabelText('Transition')).toBeNull();
+ expect(backend.find('POST','/api/v1/issue-workflow-mappings')).toHaveLength(0);
+});
+it('disables the exact saved definition with CAS even after its connection changed',async()=>{
+ const backend=fakeApi({'GET /api/v1/issue-connections/native':()=>({...connection,revision:4,enabled:false}),'GET /api/v1/issue-workflow-mappings':()=>[mapping],'PUT /api/v1/issue-workflow-mappings/review-step':()=>({...mapping,enabled:false,revision:3})});
+ render(<IssueWorkflowMappingsPage name="native" route={{}} role="admin"/>);await screen.findByText('Connection changed');
+ await userEvent.click(screen.getByRole('button',{name:'Disable'}));await waitFor(()=>expect(backend.find('PUT','/api/v1/issue-workflow-mappings/review-step')).toHaveLength(1));
+ const call=backend.find('PUT','/api/v1/issue-workflow-mappings/review-step')[0];expect(call.headers['If-Match']).toBe('2');expect(call.body).toEqual({...mappingInput(mapping),enabled:false});
+});
+it('keeps viewer read-only and refuses editing a mapping through the wrong connection',async()=>{
+ const backend=fakeApi({'GET /api/v1/issue-connections/native':()=>connection,'GET /api/v1/issue-workflow-mappings/review-step':()=>({...mapping,connection:'other'})});
+ render(<IssueWorkflowMappingsPage name="native" route={{name:'review-step'}} role="viewer"/>);
+ expect(await screen.findByRole('alert')).toHaveProperty('textContent','This mapping belongs to another connection. Open it from its own connection.');
+ expect(screen.queryByRole('form')).toBeNull();expect(backend.calls.every(c=>c.method==='GET')).toBe(true);
+});
