@@ -148,7 +148,7 @@ reconciled by lookup and is never blindly replayed by the adapter.
 
 HTTPS and normal certificate verification are required for remote API addresses;
 HTTP is accepted only for loopback contract fixtures. No real-account result is
-claimed. Console availability and review/merge operations are separate batches.
+claimed. The console exposes this adapter with its edition-specific credential guidance. Review/merge operations remain a separate batch.
 Upstream contracts: [repository and workspace permissions](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-repositories/),
 [pull requests](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/).
 
@@ -167,7 +167,7 @@ pagination, forks, denied/malformed responses and conflict reconciliation. No
 installed version or real account is qualified. The
 [REST contract reference](https://docs.atlassian.com/bitbucket-server/rest/7.15.3/bitbucket-rest.html)
 is fixture provenance, not a supported-version or production recommendation.
-Custom CA configuration and console selection are separate work; the adapter
+Custom CA configuration remains separate work; the adapter
 uses the server's normal verified TLS trust and never disables verification.
 
 ### Proposed steps
@@ -181,8 +181,8 @@ uses the server's normal verified TLS trust and never disables verification.
    Personal tokens work too, but they carry everything the person can do.
 4. Custom CA entry is planned. Until available, the Weft server must already
    trust the internal certificate authority; certificate verification stays on.
-5. Select **Test connection**. Weft reads the token's identity and lists the
-   repositories it can see.
+5. Select **Test connection**. Weft checks read/write access to the configured repository
+   and reads its default branch. This does not push or open a pull request.
 
 ### How the token is used
 

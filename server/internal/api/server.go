@@ -244,6 +244,7 @@ func (s *Server) routes() {
 		{"POST /api/v1/triggers/{trigger}/pause", A, s.pauseTrigger},
 		{"POST /api/v1/triggers/{trigger}/resume", A, s.resumeTrigger},
 		{"POST /api/v1/triggers/{trigger}/retry-failed", A, s.retryFailedTrigger},
+		{"GET /api/v1/scm/kinds", R, s.scmKinds},
 		{"GET /api/v1/scm/connections", R, s.scmConnections},
 		{"POST /api/v1/scm/connections", A, s.createSCMConnection},
 		{"PUT /api/v1/scm/connections/{name}", A, s.updateSCMConnection},

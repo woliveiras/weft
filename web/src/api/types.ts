@@ -940,3 +940,15 @@ export interface MCPConnectionInput {
 
 export interface MCPHistoryEntry {seq:number;time:string;type:string;connection:string;graph:string;node:string;execution:string;tool:string;outcome:string;durationMs:number;approval?:string;summary:string}
 export interface MCPHistoryPage {entries:MCPHistoryEntry[];nextBefore?:number;hasMore:boolean}
+
+/** Implemented SCM delivery capabilities; independent of credential access. */
+export interface SCMKind {
+  id: string;
+  name: string;
+  repositoryHint: string;
+  apiUrlHint: string;
+  apiUrlRequired: boolean;
+  credentialHelp: string;
+  push: boolean;
+  createPullRequest: boolean;
+}

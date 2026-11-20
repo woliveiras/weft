@@ -75,3 +75,8 @@ func (s *Server) testSCMConnection(w http.ResponseWriter, r *http.Request) error
 	writeJSON(w, 200, map[string]any{"ok": true, "identity": id})
 	return nil
 }
+
+func (s *Server) scmKinds(w http.ResponseWriter, r *http.Request) error {
+	writeJSON(w, http.StatusOK, scm.Kinds())
+	return nil
+}

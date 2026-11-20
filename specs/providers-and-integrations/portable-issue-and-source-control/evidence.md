@@ -101,3 +101,22 @@ name assumptions through discovered, scoped workflow mappings.
 - Target-version/live qualification, personal DC projects and custom CA entry
   remain unsupported/unqualified as documented. No live connection or deployment
   changed. Existing gateway observability/approval contracts are retained.
+
+## INT-009-03 — Edition-aware configuration
+
+- Added authenticated read-only `/api/v1/scm/kinds` with registered built-in
+  delivery capabilities and edition-specific URL/repository/credential guidance.
+- Console creation handles loading, unavailable/empty catalogue and retry, preserves
+  GitHub defaults, requires the Data Center site URL and clears unsaved credentials
+  and API/Git overrides when switching editions. No connection is tested implicitly.
+- Go units plus real API/storage/YAML round trips passed:
+  `./scripts/go.sh test ./internal/scm ./internal/api ./internal/installation -count=1`.
+- `make test-web` passed (typecheck and Vitest), including loading, empty, failure,
+  retry and edition switching. Chromium connection journeys passed (4 tests), using
+  the disposable Go backend and saved synthetic credentials; no vendor was called.
+- `./scripts/go.sh vet ./internal/scm ./internal/api` and `git diff --check` passed.
+- Subagent review found no blockers; its suggestions to document the endpoint and
+  cover catalogue loading/empty states were incorporated and checked. React and
+  product UI/UX checklists were applied; no accessibility-conformance claim is made.
+- Metadata describes implementation availability, not live permissions or supported
+  production versions. Portable review and merge are not advertised as delivered.

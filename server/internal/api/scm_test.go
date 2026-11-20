@@ -146,3 +146,19 @@ func TestTaskSCMHandOffThroughAPI(t *testing.T) {
 		t.Fatalf("progress delivery: %d %+v", c, v.Delivery)
 	}
 }
+
+func TestSCMKindsThroughAPI(t *testing.T) {
+	srv, _ := setupApp(t, nil)
+	for _, tok := range []string{viewerTok, operatorTok, adminTok} {
+		var kinds []scm.Kind
+		if c := call(t, srv, "GET", "/api/v1/scm/kinds", tok, "", "", &kinds); c != 200 || len(kinds) != 3 {
+			t.Fatalf("kinds: %d %+v", c, kinds)
+		}
+		if kinds[1].ID != "bitbucket-cloud" || kinds[2].ID != "bitbucket-dc" {
+			t.Fatalf("editions: %+v", kinds)
+		}
+	}
+	if c := call(t, srv, "GET", "/api/v1/scm/kinds", "", "", "", nil); c != 401 {
+		t.Fatalf("anonymous kinds: %d", c)
+	}
+}

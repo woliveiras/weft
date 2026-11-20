@@ -18,7 +18,7 @@ const testStatuses: Record<ConnectionTest['state'] | 'untested', { label: string
   limited: { label: 'Limited access', tone: 'warn' },
   failed: { label: 'Connection failed', tone: 'bad' },
 };
-const serviceNames: Record<string, string> = { github: 'GitHub', 'bitbucket-dc': 'Bitbucket Data Center' };
+const serviceNames: Record<string, string> = { github: 'GitHub', 'bitbucket-cloud': 'Bitbucket Cloud', 'bitbucket-dc': 'Bitbucket Data Center' };
 
 /** Server-held source control connections for push and pull request tools. */
 export function SCMConnectionsSection({ role }: { role?: string }) {
@@ -123,13 +123,15 @@ export function SCMConnectionsSection({ role }: { role?: string }) {
 }
 
 export function SCMConnectionCreate({ role }: { role?: string }) {
+  const kinds = useAsync(api.scmKinds, []);
   const [draft, setDraft] = useState<Draft>(empty);
+  const kind = kinds.data?.find(item => item.id === draft.kind);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const set = (patch: Partial<Draft>) => setDraft(current => ({ ...current, ...patch }));
 
   const save = async () => {
-    if (saving || role !== 'admin') return;
+    if (saving || role !== 'admin' || !kind) return;
     const saveRoute = location.hash;
     setSaving(true);
     setError(undefined);
@@ -153,16 +155,20 @@ export function SCMConnectionCreate({ role }: { role?: string }) {
     </div></header>
     {role === 'admin' ? <form className="card form connections-form" aria-label="Add source control connection" onSubmit={e => { e.preventDefault(); void save(); }}>
       <ErrorBox error={error} />
-      <HelpField label={"Name"} help={"A stable connection name for workflow and task hand-offs. Use a name that makes the intended repository easy to identify."}><input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="team-github" /></HelpField>
-      <HelpField label={"Kind"} help={"The source-control service Weft calls to open pull requests. It determines the default API and Git addresses."}><select value={draft.kind} onChange={(e) => set({ kind: e.target.value })}><option value="github">GitHub</option><option value="bitbucket-dc">Bitbucket Data Center</option></select></HelpField>
-      <HelpField label={"Repository"} help={"The single repository this connection is allowed to use. Enter it as owner/name."}><input value={draft.repository} onChange={(e) => set({ repository: e.target.value })} placeholder="owner/name" /></HelpField>
+      {kinds.loading && <p role="status">Loading source control services…</p>}
+      {kinds.error && <div><ErrorBox error={`Could not load source control services: ${kinds.error}`} /><Btn onClick={() => void kinds.reload()}>Retry loading services</Btn></div>}
+      {!kinds.loading && !kinds.error && !kinds.data?.length && <Empty>No source control adapter is available.</Empty>}
+      <HelpField label={"Name"} help={"A stable connection name for workflow and task hand-offs. Use a name that makes the intended repository easy to identify."}><input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="team-repository" /></HelpField>
+      <HelpField label={"Kind"} help={"The source-control service Weft calls to open pull requests. It determines the default API and Git addresses."}><select disabled={kinds.loading || !kinds.data?.length} value={draft.kind} onChange={(e) => set({ kind: e.target.value, apiUrl: '', gitUrl: '', token: '' })}>{kinds.data?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></HelpField>
+      <HelpField label={"Repository"} help={"The single repository this connection is allowed to use. Use the repository format shown for the selected service."}><input value={draft.repository} onChange={(e) => set({ repository: e.target.value })} placeholder={kind?.repositoryHint ?? 'Repository identifier'} /></HelpField>
       <HelpField label={"Branch prefix"} help={"Only branches under this prefix can be pushed through this connection. For example, weft/ separates task branches from release branches."}><input value={draft.branchPrefix} onChange={(e) => set({ branchPrefix: e.target.value })} placeholder="weft/" /></HelpField>
-      <HelpField label={"API URL"} help={"The source-control API address used to open pull requests. Set it for a self-hosted service or leave it empty to use the default for the selected kind."}><input value={draft.apiUrl} onChange={(e) => set({ apiUrl: e.target.value })} placeholder="Default for the kind" inputMode="url" /></HelpField>
+      <HelpField label={"API URL"} help={"The source-control API address used to open pull requests. Set it for a self-hosted service or leave it empty to use the default for the selected kind."}><input value={draft.apiUrl} onChange={(e) => set({ apiUrl: e.target.value })} placeholder={kind?.apiUrlHint ?? 'Service API URL'} required={kind?.apiUrlRequired} inputMode="url" /></HelpField>
       <HelpField label={"Git URL"} help={"The Git address used to push a task branch. Set it when the repository uses a different Git host or address."}><input value={draft.gitUrl} onChange={(e) => set({ gitUrl: e.target.value })} placeholder="Default for the kind" inputMode="url" /></HelpField>
+      <p className="muted connection-token" role="note">{kind?.credentialHelp}</p>
       <HelpField className="connection-token" label={"Token"} help={"A credential for the configured repository. Give it only the permissions needed for task branches and pull requests."}><input type="password" autoComplete="off" value={draft.token} onChange={(e) => set({ token: e.target.value })} /></HelpField>
       <HelpField className="checkbox" label={"Opening a pull request needs a person's approval"} help="Holds a pull request action until a person approves it. The repo, branch, and connection scope are still checked when the action runs."><input type="checkbox" checked={draft.approval} onChange={(e) => set({ approval: e.target.checked })} /></HelpField>
       <div className="btn-row">
-        <Btn type="submit" tone="primary" disabled={saving}>{saving ? 'Saving…' : 'Save connection'}</Btn>
+        <Btn type="submit" tone="primary" disabled={saving || !kind}>{saving ? 'Saving…' : 'Save connection'}</Btn>
         {saving ? <Btn disabled>Cancel</Btn> : <a href="#/connections">Cancel</a>}
       </div>
     </form> : <p>An administrator must create this connection.</p>}

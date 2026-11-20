@@ -864,3 +864,18 @@ status; SCM reports its existing connection test. MCP views include optional
 
 See the [operator guide](declarative-configuration.md) for kinds, reference
 confinement, import confirmation, recovery and CLI examples.
+
+### SCM edition capabilities
+
+`GET /api/v1/scm/kinds` is available to authenticated viewers, operators and
+administrators. It returns the registered built-in delivery adapters, with
+`id`, `name`, `repositoryHint`, `apiUrlHint`, `apiUrlRequired`,
+`credentialHelp`, `push` and `createPullRequest`. This is implementation metadata;
+it performs no external request and does not assert that an account is reachable
+or authorized. Connection testing remains an explicit operator action.
+
+The console uses this catalogue for source control creation and clears the
+unsaved token and API/Git overrides when changing editions. Data Center requires
+a site base URL; Cloud uses its own endpoint and credential contract. Both
+editions use the existing `SCMConnection` YAML kind with their explicit adapter
+IDs; no implicit edition or credential conversion occurs.

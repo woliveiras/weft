@@ -102,3 +102,24 @@ test('viewer detail is read-only and unknown connections are explicit at narrow 
  await expect(page.getByRole('alert')).toContainText('Connection not found');
  await expect(page.getByRole('button',{name:'Save MCP connection'})).toHaveCount(0);
 });
+
+test('configures each Bitbucket edition through the real SCM API without contacting the vendor', async ({page}) => {
+ await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+ await page.setViewportSize({width: 600, height: 850});
+ for (const kind of ['bitbucket-cloud', 'bitbucket-dc']) {
+  await page.goto('/#/connections/source-control/new');
+  await page.getByLabel('Kind', {exact:true}).selectOption(kind);
+  await page.getByLabel('Name', {exact:true}).fill(kind);
+  await page.getByLabel('Repository', {exact:true}).fill('ACME/app');
+  if (kind === 'bitbucket-dc') await page.getByLabel('API URL', {exact:true}).fill('https://bitbucket.fixture.invalid/context');
+  await page.getByLabel('Token', {exact:true}).fill('synthetic-contract-token');
+  await page.getByRole('button', {name:'Save connection', exact:true}).click();
+  await expect(page).toHaveURL(/#\/connections$/);
+  const response = await page.request.get('/api/v1/scm/connections', {headers});
+  const saved = (await response.json()).find((c: {name:string}) => c.name === kind);
+  expect(saved.kind).toBe(kind);
+  expect(saved.tokenConfigured).toBe(true);
+  expect(saved.token).toBeUndefined();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(600);
+ }
+});

@@ -4,6 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiError, fakeApi, json } from '../test/fakeApi';
 import { SCMConnectionCreate, SCMConnectionsSection, scmCreateLink } from './SCMConnectionsSection';
 
+const kinds = [
+  { id: 'github', name: 'GitHub', repositoryHint: 'owner/name', apiUrlHint: 'https://api.github.com', credentialHelp: 'Repository token' },
+  { id: 'bitbucket-cloud', name: 'Bitbucket Cloud', repositoryHint: 'workspace/repository-slug', apiUrlHint: 'https://api.bitbucket.org/2.0', credentialHelp: 'User OAuth access token' },
+  { id: 'bitbucket-dc', name: 'Bitbucket Data Center', repositoryHint: 'PROJECT/repository-slug', apiUrlHint: 'https://bitbucket.example.com/context', apiUrlRequired: true, credentialHelp: 'HTTP access token sent as Bearer' },
+];
 const gh = { name: 'gh', kind: 'github', repository: 'acme/app', tokenConfigured: true };
 
 afterEach(() => {
@@ -62,6 +67,7 @@ describe('SCMConnectionsSection', () => {
   it('saves the dedicated form with the token once and returns to Connections', async () => {
     history.replaceState(null, '', scmCreateLink);
     const api = fakeApi({
+      'GET /api/v1/scm/kinds': () => kinds,
       'POST /api/v1/scm/connections': () => json({ name: 'team', tokenConfigured: true }, 201),
     });
     const user = userEvent.setup();
@@ -81,6 +87,7 @@ describe('SCMConnectionsSection', () => {
   it('shows validation errors and keeps viewers read-only', async () => {
     fakeApi({
       'GET /api/v1/scm/connections': () => [gh],
+      'GET /api/v1/scm/kinds': () => kinds,
       'POST /api/v1/scm/connections': () => apiError(422, 'invalid SCM connection: repository: use owner/name', 'invalid'),
     });
     const user = userEvent.setup();
@@ -127,4 +134,50 @@ describe('SCMConnectionsSection', () => {
     expect(within(row).queryByText('Connection failed')).toBeNull();
     expect(backend.find('POST', '/api/v1/scm/connections/gh/test')).toHaveLength(2);
   });
+});
+
+it('separates edition settings and credentials and submits the chosen Cloud contract', async () => {
+  const backend = fakeApi({
+    'GET /api/v1/scm/kinds': () => kinds,
+    'POST /api/v1/scm/connections': () => json({ name: 'bb' }, 201),
+  });
+  render(<SCMConnectionCreate role="admin" />);
+  await screen.findByRole('option', { name: 'Bitbucket Cloud' });
+  await userEvent.type(screen.getByLabelText('Token'), 'old-service-credential');
+  await userEvent.type(screen.getByLabelText('API URL'), 'https://old.example');
+  await userEvent.selectOptions(screen.getByLabelText('Kind'), 'bitbucket-dc');
+  expect((screen.getByLabelText('Token') as HTMLInputElement).value).toBe('');
+  expect((screen.getByLabelText('API URL') as HTMLInputElement).required).toBe(true);
+  expect((screen.getByLabelText('API URL') as HTMLInputElement).value).toBe('');
+  expect(screen.getByPlaceholderText('PROJECT/repository-slug')).toBeTruthy();
+  expect(screen.getByRole('note').textContent).toContain('Bearer');
+  await userEvent.selectOptions(screen.getByLabelText('Kind'), 'bitbucket-cloud');
+  expect((screen.getByLabelText('API URL') as HTMLInputElement).required).toBe(false);
+  await userEvent.type(screen.getByLabelText('Name'), 'bb');
+  await userEvent.type(screen.getByLabelText('Repository'), 'team/app');
+  await userEvent.type(screen.getByLabelText('Token'), 'cloud-fixture-token');
+  await userEvent.click(screen.getByRole('button', { name: 'Save connection' }));
+  expect(backend.find('POST', '/api/v1/scm/connections')[0].body).toEqual({ name: 'bb', kind: 'bitbucket-cloud', repository: 'team/app', token: 'cloud-fixture-token' });
+});
+
+it('blocks submission while service discovery fails and offers a retry', async () => {
+  let fail = true;
+  fakeApi({ 'GET /api/v1/scm/kinds': () => fail ? apiError(503, 'Unavailable', 'unavailable') : kinds });
+  render(<SCMConnectionCreate role="admin" />);
+  await screen.findByRole('alert');
+  expect((screen.getByRole('button', { name: 'Save connection' }) as HTMLButtonElement).disabled).toBe(true);
+  fail = false;
+  await userEvent.click(screen.getByRole('button', { name: 'Retry loading services' }));
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Save connection' }) as HTMLButtonElement).disabled).toBe(false));
+});
+
+it('shows loading and an empty adapter catalogue without enabling save', async () => {
+  let finish!: (response: Response) => void;
+  fakeApi({ 'GET /api/v1/scm/kinds': () => new Promise<Response>(resolve => { finish = resolve; }) });
+  render(<SCMConnectionCreate role="admin" />);
+  expect(screen.getByRole('status').textContent).toContain('Loading source control services');
+  expect((screen.getByLabelText('Kind') as HTMLSelectElement).disabled).toBe(true);
+  await act(async () => finish(json([])));
+  expect(await screen.findByText('No source control adapter is available.')).toBeTruthy();
+  expect((screen.getByRole('button', { name: 'Save connection' }) as HTMLButtonElement).disabled).toBe(true);
 });

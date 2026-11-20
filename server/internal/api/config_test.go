@@ -652,3 +652,25 @@ func TestDeclarativeMCPUnavailableReportsSanitizedDiscovery(t *testing.T) {
 		t.Fatal("discovery response leaked credential")
 	}
 }
+
+func TestDeclarativeBitbucketEditionsRoundTrip(t *testing.T) {
+	srv, _ := setupApp(t, nil)
+	t.Setenv("WEFT_SECRET_BITBUCKET_FIXTURE", "synthetic-bb-declarative-token")
+	for _, kind := range []string{"bitbucket-cloud", "bitbucket-dc"} {
+		raw := yamlObject("SCMConnection", kind, "  kind: "+kind+"\n  repository: ACME/app\n  apiUrl: https://bitbucket.fixture.invalid/context\n  requirePullRequestApproval: true\n  secretRef: {env: WEFT_SECRET_BITBUCKET_FIXTURE}")
+		plan := configApplyRequest(t, srv, installation.Request{Files: []string{raw}})
+		if !plan.OK {
+			t.Fatalf("%s: %+v", kind, plan.Objects)
+		}
+	}
+	exported := exportConfig(t, srv)
+	if strings.Contains(exported, "synthetic-bb-declarative-token") {
+		t.Fatal("credential exported")
+	}
+	plan := configApplyRequest(t, srv, installation.Request{Files: []string{exported}})
+	for _, object := range plan.Objects {
+		if object.Result != "unchanged" {
+			t.Fatalf("round trip: %+v", object)
+		}
+	}
+}
