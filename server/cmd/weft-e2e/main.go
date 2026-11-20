@@ -515,6 +515,11 @@ func run() error {
 	if err := prepareReadinessFixture(ctx, a); err != nil {
 		return err
 	}
+	closeCloud, err := installCloudWorkflowFixture(ctx, a)
+	if err != nil {
+		return err
+	}
+	defer closeCloud()
 	if err := prepareBudgetRecovery(ctx, a, cfg.Instance); err != nil {
 		return err
 	}

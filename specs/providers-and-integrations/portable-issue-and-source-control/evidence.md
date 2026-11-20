@@ -945,3 +945,39 @@ name assumptions through discovered, scoped workflow mappings.
   remaining blockers. No tests or security checks were weakened.
 - No configuration was applied to the running installation. No real account,
   credential, issue, trigger, workflow or remote permissions were changed.
+
+## INT-009-06q — Cloud console adoption and verified-TLS browser journey
+
+- Added dedicated credential-free Cloud profile pages, explicit saved MCP and
+  profile revision selection, scoped transition discovery/mapping pages and
+  edition-specific synchronization history/recovery. Existing unmapped Cloud
+  trigger behavior is preserved. A saved profile does not enable a trigger or
+  grant tools. Project-only account permissions require explicit administrator
+  attestation; local preview cannot prove or change remote permissions.
+- Independent review caught cross-edition editor-state reuse and a catalogue
+  failure blocking exact offline disable. Both were fixed with regressions.
+  Selecting a profile revision is explicit (`name@revision`); stale pins stay
+  visible and changing scope clears dependent mappings. The editor mounts after
+  its saved snapshot arrives, avoiding a draft initialization race.
+- Component unit and API-boundary integration checks passed. Docker TypeScript
+  checks, Vite build and the full web suite passed: 109 files / 595 tests. An
+  initial concurrent run hit the existing SkillsView revision/deletion timing
+  failure; that unchanged test passed alone (13 tests), then the unchanged full
+  suite passed with two workers. No assertion, timeout or test was weakened.
+- Added a disposable backend fixture with actual verified TLS, real MCP/Cloud
+  scope checks and persistent API storage. It rejects vendor mutations and
+  unrelated origins; its GitHub fallback is the existing offline readiness
+  fixture. A fixture unit test checks these boundaries. The browser creates and
+  reviews a profile, discovers duplicate-named transitions, refuses missing
+  field metadata, saves a mapping, verifies the DC namespace is separate and
+  reloads an exact disable. Desktop and 390px screenshots were visually checked;
+  both forms remain within the viewport. No public network or live credentials
+  are used.
+- Docker e2e-tagged backend tests and TypeScript e2e checks passed. The targeted
+  Chromium run passed all four Cloud/DC journeys, including DC read-only unknown
+  reconciliation. An initial fixture-only failure revealed readiness setup
+  replacing the Cloud transport; installation now follows that setup, preserving
+  both deterministic transports. The original discovery assertion passed after
+  the fixture correction. Independent review found no remaining blockers.
+- This proves configuration, storage and transport collaboration, not a real
+  Jira account, installed Data Center version or model-driven live rehearsal.

@@ -1,0 +1,52 @@
+import {test,expect} from '@playwright/test';
+
+// The disposable backend installs a first-party REST transport backed
+// by verified TLS. The fake rejects every remote mutation and external origin.
+test('reviews a Cloud profile and mapping through browser, API, storage and verified TLS',async({page},info)=>{
+ await page.goto('/#/connections');
+ await page.evaluate(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+ await page.reload();
+ const section=page.getByRole('region',{name:'Jira Cloud workflow profiles',exact:true});
+ await section.getByRole('link',{name:'Add profile',exact:true}).click();
+ const form=page.getByRole('form',{name:'Jira Cloud workflow profile',exact:true});
+ await form.getByLabel('Profile name',{exact:true}).fill('browser-cloud-project');
+ await form.getByLabel('MCP connection',{exact:true}).selectOption('cloud-browser-api');
+ await expect(form.getByLabel('Reviewed MCP revision',{exact:true})).toHaveValue('1');
+ await form.getByLabel('Jira cloud ID',{exact:true}).fill('11111111-2222-3333-4444-555555555555');
+ await form.getByLabel('Project ID',{exact:true}).fill('10001');
+ await form.getByRole('checkbox',{name:'I verified that the technical account can write only to this project',exact:true}).check();
+ await expect(form.getByRole('button',{name:'Save profile',exact:true})).toBeDisabled();
+ await form.getByRole('button',{name:'Review profile',exact:true}).click();
+ await expect(form.getByRole('status')).toContainText('Profile reviewed');
+ await page.screenshot({path:info.outputPath('cloud-profile-desktop.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+ await page.screenshot({path:info.outputPath('cloud-profile-mobile.png'),fullPage:true});
+ await form.getByRole('button',{name:'Save profile',exact:true}).click();
+ await expect(page).toHaveURL(/#\/connections$/);
+ const row=page.getByRole('region',{name:'Jira Cloud profile list'}).getByRole('row',{name:/browser-cloud-project/});
+ await expect(row).toContainText('MCP revision 1');
+ await row.getByRole('link',{name:'Workflow mappings',exact:true}).click();
+ await page.getByRole('link',{name:'New mapping',exact:true}).click();
+ const mapping=page.getByRole('form',{name:'Workflow mapping configuration'});
+ await mapping.getByLabel('Mapping name',{exact:true}).fill('browser-cloud-review');
+ await mapping.getByLabel('Sample issue key',{exact:true}).fill('APP-7');
+ await mapping.getByRole('button',{name:'Discover available transitions',exact:true}).click();
+ const transitions=mapping.getByLabel('Transition',{exact:true});
+ await expect(transitions.getByRole('option',{name:/\(32\)/})).toBeDisabled();
+ await transitions.selectOption('31');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+ await page.screenshot({path:info.outputPath('cloud-mapping-mobile.png'),fullPage:true});
+ await mapping.getByRole('button',{name:'Save mapping',exact:true}).click();
+ await expect(page).toHaveURL(/\/mappings$/);
+ const savedRow=page.getByRole('region',{name:'Workflow mapping table'}).getByRole('row',{name:/browser-cloud-review/});
+ await expect(savedRow).toContainText('Transition 31');
+ const headers={Authorization:'Bearer e2e-admin-token'};
+ const saved=await(await page.request.get('/api/v1/jira-cloud-workflow-mappings/browser-cloud-review',{headers})).json();
+ expect(saved.connection).toBe('browser-cloud-project');expect(saved.projectId).toBe('10001');expect(saved.issueTypeId).toBe('10002');expect(saved.revision).toBe(1);
+ expect((await page.request.get('/api/v1/issue-workflow-mappings/browser-cloud-review',{headers})).status()).toBe(404);
+ await savedRow.getByRole('button',{name:'Disable',exact:true}).click();
+ await expect(savedRow).toContainText('Disabled');
+ await page.reload();await expect(page.getByRole('region',{name:'Workflow mapping table'})).toContainText('Disabled');
+ expect(await page.locator('body').textContent()).not.toContain('cloud-browser-fixture-token');
+});
