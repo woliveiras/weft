@@ -3,7 +3,7 @@ import type {TaskInput, TaskDraft, TaskPage, TaskReview, TaskProgress, Project} 
 import type { ExecutionTree, CancelScope, Cancellation } from './executionTree';
 import type { ActivityQuery, ActivityView, HealthQuery, HealthView } from './activity';
 import type { DelegationPolicy, DelegationPolicyView, DelegationProfile, DelegationProfileView } from './delegation';
-import type { MCPHistoryPage, MCPConnection, MCPConnectionInput, MCPTemplate } from './types';
+import type { MCPHistoryPage, MCPConnection, MCPConnectionInput, MCPTemplate, IssueConnection, IssueConnectionInput } from './types';
 import type { Skill, SkillInput, InstructionSnapshot } from './instructions';
 import type {
   Approval,
@@ -334,6 +334,12 @@ export const api = {
   resolveTriggerHold: (id: string, key: string, generation: string, force: boolean) => request<Trigger>(`${V1}/triggers/${enc(id)}/resolve-hold`, { method: 'POST', body: { key, generation, force } }),
   triggerMatches: (id: string) => request<TriggerMatches>(`${V1}/triggers/${enc(id)}/matches`),
   scmKinds: () => request<SCMKind[]>(`${V1}/scm/kinds`),
+  issueConnections: () => request<IssueConnection[]>(`${V1}/issue-connections`),
+  issueConnection: (name: string) => request<IssueConnection>(`${V1}/issue-connections/${enc(name)}`),
+  saveIssueConnection: (input: IssueConnectionInput, revision?: number) => request<IssueConnection>(`${V1}/issue-connections${revision === undefined ? '' : '/'+enc(input.name)}`, {
+    method: revision === undefined ? 'POST' : 'PUT', body: input, headers: revision === undefined ? undefined : {'If-Match': String(revision)},
+  }),
+  testIssueConnection: (name: string, revision: number) => request<{ok: boolean; error?: string; identity?: {key: string; name: string}}>(`${V1}/issue-connections/${enc(name)}/test`, {method: 'POST', headers: {'If-Match': String(revision)}}),
   scmConnections: () => request<SCMConnection[]>(`${V1}/scm/connections`),
   createSCMConnection: (input: SCMConnectionInput) => request<SCMConnection>(`${V1}/scm/connections`, { method: 'POST', body: input }),
   deleteSCMConnection: (name: string) => request<void>(`${V1}/scm/connections/${enc(name)}`, { method: 'DELETE' }),

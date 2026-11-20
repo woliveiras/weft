@@ -495,12 +495,28 @@ export interface ProviderTypeInfo {
 }
 
 export interface TriggerSource {
-  kind: 'github' | 'jira';
+  kind: 'github' | 'jira' | 'jira-dc';
   connectionId: string;
   repository?: string;
   cloudId?: string;
+  siteUrl?: string;
+  projectId?: string;
   query?: string;
 }
+
+export interface IssueConnection {
+  name: string;
+  kind: 'jira-dc';
+  siteUrl: string;
+  projectId: string;
+  enabled: boolean;
+  projectRestricted: boolean;
+  revision: number;
+  credentialConfigured: boolean;
+  updatedAt: string;
+  updatedBy: string;
+}
+export type IssueConnectionInput = Pick<IssueConnection, 'name' | 'kind' | 'siteUrl' | 'projectId' | 'enabled' | 'projectRestricted'> & {token?: string};
 
 export interface TriggerIssue {
   source: string;

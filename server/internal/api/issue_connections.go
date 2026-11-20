@@ -89,6 +89,6 @@ func (s *Server) testIssueConnection(w http.ResponseWriter, r *http.Request) err
 		writeJSON(w, 200, map[string]any{"ok": false, "error": err.Error()})
 		return nil
 	}
-	writeJSON(w, 200, map[string]any{"ok": true, "identity": identity, "scope": "authenticated identity only; project permissions are checked for each issue"})
+	writeJSON(w, 200, map[string]any{"ok": true, "identity": identity, "scope": "authenticated identity only; project permission qualification remains an operator responsibility"})
 	return nil
 }

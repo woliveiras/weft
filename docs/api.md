@@ -139,7 +139,7 @@ advisory — a model that writes the call as text fails it). Errors are returned
 
 Native Jira Data Center connections have their own credential store, independent
 of MCP and source control. These endpoints and declarative `IssueConnection` documents configure the native REST 2 adapter. The scoped trigger lifecycle
-is supported; native connection selection in the console remains pending. No agent permission is
+is supported. The Connections console offers a dedicated native issue-tracker form and trigger selection. No agent permission is
 created by saving or testing a connection.
 
 | Method and path | Role | Purpose |

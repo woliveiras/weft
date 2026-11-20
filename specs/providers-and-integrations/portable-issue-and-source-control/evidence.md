@@ -462,3 +462,32 @@ name assumptions through discovered, scoped workflow mappings.
   Read-only subagent review identified history-limit translation, blocking links,
   shared scope validation and real launch coverage; all were corrected and the
   final delta review found no residual blockers. `git diff --check` passed.
+
+## INT-009-05h — Native DC console configuration and trigger selection
+
+- Added a credential-free issue-tracker table with combined search/status filters,
+  dedicated create/edit routes, contextual help and identity-check loading/error
+  feedback. Identity verification explicitly does not certify project-only write
+  permissions. Admin edits use If-Match; a conflict preserves the draft and
+  requires an explicit reload before resubmission.
+- PATs are write-only and cleared after save. Changing site/project clears any
+  typed PAT and the project-restriction attestation; replacing a PAT also clears
+  that attestation. These corrections came from subagent security review.
+- Trigger configuration selects native DC connections independently from SCM,
+  snapshots exact site/project scope and requires explicit adoption after scope
+  changes. Unqualified/disabled connections and discovery failures block save.
+  A pending trigger save disables editing/cancellation so an older response cannot
+  discard a newer draft. GitHub and Jira Cloud fields remain edition-specific.
+- Verification: Docker `make test-web` passed TypeScript and 104 files / 564 tests
+  (`/tmp/weft-native-issue-console-v5.log`). One earlier full run encountered the
+  previously recorded intermittent SkillsView history test; the next two full
+  runs passed without changing or skipping it. The isolated Chromium journey
+  passed against the real disposable API/storage backend, including responsive
+  layout, help, native connection creation/editing and secret-free responses
+  (`/tmp/weft-native-console-e2e-v3.log`); only the remote identity-check response
+  is injected, and no vendor is contacted. Docker `./scripts/go.sh test
+  ./internal/api` passed (`/tmp/weft-native-console-api-v1.log`).
+- Final read-only subagent review found no residual blocker. No live connection,
+  credential, trigger consent or grant was changed; no deployment was performed.
+  Optional mappings, transition recovery, portable review adoption and live
+  qualification remain separate incomplete work.

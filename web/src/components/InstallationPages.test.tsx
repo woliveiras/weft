@@ -10,14 +10,14 @@ const info = (role: string) => ({ identity: { role } } as Info);
 
 describe('installation pages through the real API client', () => {
   it('loads only connection resources and retains viewer read-only controls', async () => {
-    const fixture = fakeApi({ 'GET /api/v1/mcp/connections': () => [], 'GET /api/v1/scm/connections': () => [] });
+    const fixture = fakeApi({ 'GET /api/v1/mcp/connections': () => [], 'GET /api/v1/scm/connections': () => [], 'GET /api/v1/issue-connections': () => [] });
     render(<ConnectionsPage info={info('viewer')} />);
     expect(await screen.findByText('No MCP connections configured.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save MCP connection' })).toBeNull();
     expect(screen.queryByRole('region', { name: 'Model providers' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Add connection' })).toBeNull();
-    // Connections holds MCP and source control connections; nothing else is loaded.
-    expect(fixture.calls.every(c => c.path.startsWith('/api/v1/mcp/') || c.path.startsWith('/api/v1/scm/'))).toBe(true);
+    // Connections holds MCP, issue tracker and source control connections; nothing else is loaded.
+    expect(fixture.calls.every(c => c.path.startsWith('/api/v1/mcp/') || c.path.startsWith('/api/v1/scm/') || c.path === '/api/v1/issue-connections')).toBe(true);
   });
   it('shows provider errors without mounting unrelated policy forms', async () => {
     const fixture = fakeApi({

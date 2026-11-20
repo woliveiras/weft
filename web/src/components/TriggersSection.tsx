@@ -1,7 +1,7 @@
 import { HelpField } from './FieldHelp';
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
-import type { Graph, Trigger, TriggerInput, TriggerMatches } from '../api/types';
+import type { Graph, Trigger, TriggerInput, TriggerMatches, TriggerSource } from '../api/types';
 import { useAsync } from '../hooks/useData';
 import { Badge, Btn, ErrorBox, fmtDateTime } from './common';
 
@@ -43,6 +43,11 @@ export function TriggersSection({ graph, role, onTriggers }: {
   const scm = useAsync(() => api.scmConnections().catch(() => []), []);
   const [editing, setEditing] = useState<string>();
   const [draft, setDraft] = useState<TriggerInput>();
+  const nativeSelected = draft?.source.kind === 'jira-dc';
+  const native = useAsync(() => nativeSelected ? api.issueConnections() : Promise.resolve([]), [nativeSelected]);
+  const selectedNative = native.data?.find(c => c.name === draft?.source.connectionId);
+  const nativeScopeMatches = !!selectedNative && selectedNative.enabled && selectedNative.credentialConfigured && selectedNative.projectRestricted && selectedNative.siteUrl === draft?.source.siteUrl && selectedNative.projectId === draft?.source.projectId;
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const [matches, setMatches] = useState<Record<string, TriggerMatches | string>>({});
   const [resolving, setResolving] = useState<string>();
@@ -70,12 +75,14 @@ export function TriggersSection({ graph, role, onTriggers }: {
     return { ...cur, source: { ...cur.source, ...patch } };
   });
   const save = async () => {
-    if (!draft) return;
+    if (!draft || saving) return;
+    if (nativeSelected && (!nativeScopeMatches || native.loading || native.error)) {setError('Select and review an enabled Jira Data Center connection with a project-restricted account.'); return;}
+    setSaving(true);
     setError(undefined);
     try {
-      const src = draft.source.kind === 'github'
+      const src: TriggerSource = draft.source.kind === 'github'
         ? { kind: draft.source.kind, connectionId: draft.source.connectionId.trim(), repository: draft.source.repository?.trim(), query: draft.source.query?.trim() || undefined }
-        : { kind: draft.source.kind, connectionId: draft.source.connectionId.trim(), cloudId: draft.source.cloudId?.trim(), query: draft.source.query?.trim() || undefined };
+        : draft.source.kind === 'jira-dc' ? {kind: 'jira-dc', connectionId: draft.source.connectionId, siteUrl: draft.source.siteUrl, projectId: draft.source.projectId, query: draft.source.query?.trim() || undefined} : { kind: draft.source.kind, connectionId: draft.source.connectionId.trim(), cloudId: draft.source.cloudId?.trim(), query: draft.source.query?.trim() || undefined };
       const input = { ...draft, source: src, resultNodeId: draft.resultNodeId || undefined, owner: draft.owner?.trim() || undefined, scmConnection: draft.scmConnection || undefined };
       if (editing) await api.updateTrigger(editing, input);
       else await api.createTrigger(input);
@@ -84,7 +91,7 @@ export function TriggersSection({ graph, role, onTriggers }: {
       await list.reload();
     } catch (e) {
       setError(errorMessage(e));
-    }
+    } finally {setSaving(false);}
   };
   const edit = (t: Trigger) => {
     setEditing(t.id);
@@ -128,7 +135,7 @@ export function TriggersSection({ graph, role, onTriggers }: {
     }
   };
   return (
-    <fieldset aria-label="Issue triggers">
+    <fieldset aria-label="Issue triggers" disabled={saving}>
       <legend>Issue triggers</legend>
       <p className="muted tiny">
         A trigger checks issues with its selection label, assesses readiness and starts one task at a time under reviewed consent.
@@ -145,7 +152,7 @@ export function TriggersSection({ graph, role, onTriggers }: {
               </span>
             </div>
             <p className="small">
-              {t.source.kind === 'github' ? `GitHub ${t.source.repository}` : 'Jira'} via {t.source.connectionId} · label <code>{t.label}</code> · every {t.intervalMinutes} min · {modes[t.authorizationMode].split(' — ')[0]}
+              {t.source.kind === 'github' ? `GitHub ${t.source.repository}` : t.source.kind === 'jira-dc' ? `Jira Data Center · ${t.source.siteUrl} · project ${t.source.projectId}` : 'Jira Cloud'} via {t.source.connectionId} · label <code>{t.label}</code> · every {t.intervalMinutes} min · {modes[t.authorizationMode].split(' — ')[0]}
               {t.scmConnection && ` · hands off to ${t.scmConnection}`}
             </p>
             <p className="small muted">Runs as {t.consent.actor} for workflow version {t.consent.workflowVersion} (consent recorded {fmtDateTime(t.consent.recordedAt)}).</p>
@@ -210,26 +217,38 @@ export function TriggersSection({ graph, role, onTriggers }: {
       {draft && (
         <div className="card form" role="form" aria-label={editing ? 'Edit issue trigger' : 'Add issue trigger'}>
           <label>Name<input value={draft.name} onChange={(e) => set({ name: e.target.value })} /></label>
-          <HelpField label={"Tracker"} help={"Choose GitHub or Jira. The choice determines how issues are queried and which repository or Jira site you need to identify."}><select value={draft.source.kind} onChange={(e) => setSource({ kind: e.target.value as 'github' | 'jira' })}><option value="github">GitHub</option><option value="jira">Jira</option></select></HelpField>
-          <HelpField label={"MCP connection"} help={"The enabled, discovered connection used to read tracker issues. It needs access to the repository or Jira site you configure."}><input value={draft.source.connectionId} onChange={(e) => setSource({ connectionId: e.target.value })} placeholder="connection id" /></HelpField>
-          {draft.source.kind === 'github'
-            ? <HelpField label={"Repository"} help={"The GitHub repository to poll, written as owner/repository. Use a repository the selected connection can read."}><input value={draft.source.repository ?? ''} onChange={(e) => setSource({ repository: e.target.value })} placeholder="owner/name" /></HelpField>
-            : <HelpField label={"Jira cloud ID"} help={"Identifies the Jira site to search. Use the cloud ID associated with the selected Atlassian connection."}><input value={draft.source.cloudId ?? ''} onChange={(e) => setSource({ cloudId: e.target.value })} /></HelpField>}
+          <HelpField label="Tracker" help="GitHub and Jira Cloud use MCP connections. Jira Data Center uses its separate project-scoped REST connection. Source control delivery is selected independently."><select value={draft.source.kind} onChange={e => set({source: {kind: e.target.value as TriggerSource['kind'], connectionId: '', ...(e.target.value === 'github' ? {repository: ''} : {})}})}><option value="github">GitHub</option><option value="jira">Jira Cloud</option><option value="jira-dc">Jira Data Center</option></select></HelpField>
+          {nativeSelected ? <>
+            <HelpField label="Issue tracker connection" help="Select an enabled native connection whose account has been reviewed as remotely restricted to its project. The exact site, numeric project and connection revision are included in trigger consent."><select disabled={native.loading} value={draft.source.connectionId} onChange={e => {
+              const c = native.data?.find(row => row.name === e.target.value);
+              setSource({connectionId: c?.name ?? '', siteUrl: c?.siteUrl, projectId: c?.projectId});
+            }}><option value="">Select connection</option>{draft.source.connectionId && !native.data?.some(c => c.name === draft.source.connectionId) && <option value={draft.source.connectionId} disabled>{draft.source.connectionId} (unavailable)</option>}{native.data?.map(c => <option key={c.name} value={c.name} disabled={!c.enabled || !c.projectRestricted || !c.credentialConfigured}>{c.name} · project {c.projectId}{!c.enabled ? ' · disabled' : !c.projectRestricted || !c.credentialConfigured ? ' · account review needed' : ''}</option>)}</select></HelpField>
+            {native.loading && <p role="status">Loading issue connections…</p>}
+            <ErrorBox error={native.error}/>
+            <div className="btn-row"><Btn small disabled={native.loading} onClick={() => void native.reload()}>Refresh issue connections</Btn><a href="#/connections/issues/new">Configure issue connection</a></div>
+            <HelpField label="Reviewed site" help="The saved HTTPS site, including its context path. Weft rejects a trigger when this snapshot does not match the native connection."><input readOnly value={draft.source.siteUrl ?? ''}/></HelpField>
+            <HelpField label="Reviewed project ID" help="The numeric Jira project identity bound to this trigger, independent of its task project or source control repository."><input readOnly value={draft.source.projectId ?? ''}/></HelpField>
+            {selectedNative && !nativeScopeMatches && <p role="alert">The connection scope or write prerequisite changed. Review it before saving. {selectedNative.enabled && selectedNative.projectRestricted && selectedNative.credentialConfigured && <Btn small onClick={() => setSource({siteUrl: selectedNative.siteUrl, projectId: selectedNative.projectId})}>Use current connection scope</Btn>}</p>}
+            <p className="small muted">Jira Data Center claims preserve assignees and update labels. Eligibility uses the issue's new status-category key, regardless of its display name. Resolve readiness holds in the console before manual reselection; a relabel alone cannot prove its actor's permissions.</p>
+          </> : <>
+            <HelpField label="MCP connection" help="The enabled, discovered MCP connection used to read tracker issues. It needs access to the repository or Jira Cloud site you configure."><input value={draft.source.connectionId} onChange={e => setSource({connectionId: e.target.value})} placeholder="connection id"/></HelpField>
+            {draft.source.kind === 'github' ? <HelpField label="Repository" help="The GitHub repository to poll, written as owner/repository. Use a repository the selected connection can read."><input value={draft.source.repository ?? ''} onChange={e => setSource({repository: e.target.value})} placeholder="owner/name"/></HelpField> : <HelpField label="Jira cloud ID" help="Identifies the Jira Cloud site to search. Use the cloud ID associated with the selected Atlassian MCP connection."><input value={draft.source.cloudId ?? ''} onChange={e => setSource({cloudId: e.target.value})}/></HelpField>}
+          </>}
           <HelpField label={"Extra query"} help={"Narrows the tracker search using GitHub search syntax or JQL for Jira. Test the filter in your tracker before enabling the trigger."}><input value={draft.source.query ?? ''} onChange={(e) => setSource({ query: e.target.value })} placeholder={draft.source.kind === 'github' ? 'milestone:v1' : 'project = APP'} /></HelpField>
           <HelpField label={'Assess issue readiness before work'} help="Checks whether an eligible issue describes enough work to begin. Add the missing requirements to the tracker issue before retrying."><input type="checkbox" checked={!draft.readinessDisabled} onChange={(e) => set({ readinessDisabled: !e.target.checked })} /></HelpField>
           <HelpField label={"Label"} help={"Only issues with this tracker label are considered. Use a dedicated label to control which issues can start workflow tasks."}><input value={draft.label} onChange={(e) => set({ label: e.target.value })} /></HelpField>
-          <HelpField label={"Owner (tracker login or account id)"} help={"Limits eligible issues by assignee. Use the account identifier expected by the selected tracker."}><input value={draft.owner ?? ''} onChange={(e) => set({ owner: e.target.value })} /></HelpField>
+          <HelpField label={"Owner (tracker login or account id)"} help={"Limits eligible issues by assignee and identifies whose clarification replies can contribute. Jira Data Center uses a login and preserves the assignee; Jira Cloud expects an account ID."}><input value={draft.owner ?? ''} onChange={(e) => set({ owner: e.target.value })} /></HelpField>
           <HelpField label={"Entry agent"} help={"The node that receives the task when an eligible issue starts a run. Pick the agent that knows how to turn issue details into work."}><select value={draft.nodeId} onChange={(e) => set({ nodeId: e.target.value })}>{nodes.map((n) => <option key={n.id} value={n.id}>{n.name || n.id}</option>)}</select></HelpField>
           <HelpField label={"Result agent"} help={"The node that supplies the task result. Leave it empty when the entry agent finishes the task itself."}><select value={draft.resultNodeId ?? ''} onChange={(e) => set({ resultNodeId: e.target.value })}><option value="">Same as entry</option>{nodes.map((n) => <option key={n.id} value={n.id}>{n.name || n.id}</option>)}</select></HelpField>
           <HelpField label={"Check every (minutes)"} help={"Controls how often Weft polls the tracker. Shorter intervals pick up eligible issues sooner and make more tracker calls."}><input type="number" min={5} max={1440} value={draft.intervalMinutes} onChange={(e) => set({ intervalMinutes: Number(e.target.value) })} /></HelpField>
           <HelpField label={"Authorization"} help={"Controls decisions during generated tasks. Ask prompts for gated actions. Workspace access covers reviewed worktree operations. Full access preauthorizes reviewed grants within scope; mandatory policies still apply."}><select value={draft.authorizationMode} onChange={(e) => set({ authorizationMode: e.target.value as TriggerInput['authorizationMode'] })}>{Object.entries(modes).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></HelpField>
           {(scm.data ?? []).length > 0 && <HelpField label={"Source control hand-off"} help={"Select the connection that delivers the result to source control. It determines the destination and whether opening a pull request requires approval."}><select value={draft.scmConnection ?? ''} onChange={(e) => set({ scmConnection: e.target.value })}><option value="">None</option>{scm.data!.map((c) => <option key={c.name} value={c.name}>{c.name} ({c.repository})</option>)}</select></HelpField>}
-          <p className="small">Saving records your consent: tasks start as you, with {modes[draft.authorizationMode].split(' — ')[0]} authorization, for workflow version {graph.metadata.version}. Tracker access includes issue lookup, label updates and comments. {!draft.readinessDisabled && 'Readiness also reads replies and label history and sends the issue and replies to the entry agent’s model within the installation limits.'} Saving a changed scope records your consent again. A paused trigger stays paused until you resume it.</p>
+          <p className="small">Saving records your consent: tasks start as you, with {modes[draft.authorizationMode].split(' — ')[0]} authorization, for workflow version {graph.metadata.version}. Tracker access includes issue lookup, label updates and comments. {!draft.readinessDisabled && (nativeSelected ? 'Readiness also reads replies and sends the issue and eligible replies to the entry agent’s model within the installation limits. DC manual requeue requires console review.' : 'Readiness also reads replies and label history and sends the issue and replies to the entry agent’s model within the installation limits.')} Saving a changed scope records your consent again. A paused trigger stays paused until you resume it.</p>
           {!draft.readinessDisabled && policy.data && (
             <p className="small">Each assessment uses one call, up to {policy.data.inputBytes / 1024} KiB of input, {policy.data.outputTokens} output tokens and {policy.data.seconds} seconds. The monetary limit is {policy.data.moneyMicros / 1_000_000} {policy.data.currency} per assessment.</p>
           )}
           <div className="row">
-            <Btn tone="primary" onClick={() => void save()}>Save trigger</Btn>
+            <Btn tone="primary" disabled={saving || (nativeSelected && (!nativeScopeMatches || native.loading || !!native.error))} onClick={() => void save()}>{saving ? 'Saving…' : 'Save trigger'}</Btn>
             <Btn onClick={() => { setDraft(undefined); setEditing(undefined); }}>Cancel</Btn>
           </div>
         </div>

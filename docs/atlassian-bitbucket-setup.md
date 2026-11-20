@@ -23,7 +23,7 @@ distinguishes available building blocks from unfinished operational flows.
 | Product/edition | Current boundary | Planned work |
 | --- | --- | --- |
 | Jira Cloud | Issue reference, polling/readiness, comments and labels have implementation paths; live qualification remains separate | Qualify the full flow and add optional discovered workflow mappings |
-| Jira Data Center | Native REST 2 client, connection API/YAML, read-only transition discovery and scoped issue-trigger lifecycle have local fixture coverage | Console wiring, optional mappings, transition reconciliation and live qualification |
+| Jira Data Center | Native REST 2 client, connection API/YAML, read-only transition discovery and scoped issue-trigger lifecycle and console configuration have local fixture coverage | Optional mappings, transition reconciliation and live qualification |
 | Bitbucket Cloud | Native delivery, console/YAML selection, immutable PR reads and durable summary comments have local fixture coverage | Event/workflow adoption and live qualification; automatic merge remains unavailable |
 | Bitbucket Data Center | Native REST 1.0 delivery, console/YAML selection, immutable PR reads and durable summary comments have local fixture coverage | Event/workflow adoption, corporate network/CA and target-version qualification; automatic merge remains unavailable |
 
@@ -75,8 +75,12 @@ an enabled connection and the current revision. A project preflight cannot make
 a broad PAT safe: an issue can move between projects before the mutation. There
 is no fallback to an MCP credential or an insecure TLS connection. Identity tests
 alone do not qualify project access. Native triggers can now poll, assess
-readiness and update labels/comments through the trigger-only gateway. Console
-selection, optional status transitions and live/version qualification remain
+readiness and update labels/comments through the trigger-only gateway. Configure the
+connection in Connections → Issue trackers, then explicitly select it in a trigger.
+Changing the site, project or PAT clears the account restriction confirmation in
+the form. Saving a new connection revision requires reviewing trigger consent
+again. Identity checks confirm the authenticated account, not project-only
+permissions. Optional status transitions and live/version qualification remain
 pending.
 
 A native trigger source uses the explicit snapshot below. Its site and numeric

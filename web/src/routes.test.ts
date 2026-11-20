@@ -42,6 +42,10 @@ it('round-trips connection destinations and falls back from unknown sections', (
  for (const hash of ['#/connections/new', '#/connections/source-control/new', '#/connections/history', '#/connections/c/team/tools', '#/connections/c/team/settings']) expect(routeHash(parseRoute(hash))).toBe(hash);
  expect(parseRoute('#/connections/c/team/unknown')).toMatchObject({connectionID:'team',connectionTab:'overview'});
 });
+
+it('round-trips native issue connection editors without reserving a valid connection name', () => {
+ for (const hash of ['#/connections/issues/new', '#/connections/issues/c/jira-team', '#/connections/issues/c/new']) expect(routeHash(parseRoute(hash))).toBe(hash);
+});
 it('round-trips agent configuration deep links and rejects unknown sections',()=>{
  const route=parseRoute('#/g/example/agent?agent=reviewer&section=tools');
  expect(route).toMatchObject({tab:'agent',agentId:'reviewer',agentSection:'tools'});

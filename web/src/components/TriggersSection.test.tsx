@@ -16,6 +16,65 @@ const paused: Trigger = {
 
 afterEach(cleanup);
 
+it('selects a native DC connection, snapshots its site/project and keeps SCM delivery independent', async () => {
+  const native={name:'jira-dc',kind:'jira-dc',siteUrl:'https://jira.example/context',projectId:'10001',enabled:true,credentialConfigured:true,projectRestricted:true,revision:3};
+  const backend=fakeApi({
+    'GET /api/v1/triggers':()=>[],
+    'GET /api/v1/trigger-policy':()=>({inputBytes:16384,outputTokens:512,seconds:10,moneyMicros:10000,currency:'USD'}),
+    'GET /api/v1/scm/connections':()=>[{name:'bitbucket',kind:'bitbucket-dc',repository:'TEAM/app',tokenConfigured:true}],
+    'GET /api/v1/issue-connections':()=>[native,{...native,name:'unreviewed',projectRestricted:false}],
+    'POST /api/v1/triggers':c=>({...c.body as object,id:'native-trigger',state:'active'}),
+  });
+  const user=userEvent.setup();
+  render(<TriggersSection graph={graph} role="admin"/>);
+  await user.click(await screen.findByRole('button',{name:'Add issue trigger'}));
+  const form=screen.getByRole('form',{name:'Add issue trigger'});
+  await user.type(within(form).getByLabelText('Name'),'Native issues');
+  await user.type(within(form).getByLabelText('MCP connection'),'discarded-mcp');
+  await user.type(within(form).getByLabelText('Repository'),'discarded/repo');
+  await user.selectOptions(within(form).getByLabelText('Tracker'),'jira-dc');
+  const picker=await within(form).findByLabelText('Issue tracker connection');
+  await waitFor(()=>expect(within(picker).getByRole('option',{name:/jira-dc/})).toBeTruthy());
+  expect(within(picker).getByRole('option',{name:/unreviewed/})).toHaveProperty('disabled',true);
+  await user.selectOptions(picker,'jira-dc');
+  expect(within(form).getByLabelText('Reviewed site')).toHaveProperty('value',native.siteUrl);
+  expect(within(form).getByLabelText('Reviewed project ID')).toHaveProperty('value','10001');
+  expect(within(form).queryByLabelText('MCP connection')).toBeNull();
+  await user.selectOptions(within(form).getByLabelText('Source control hand-off'),'bitbucket');
+  await user.click(within(form).getByRole('button',{name:'Save trigger'}));
+  await waitFor(()=>expect(backend.find('POST','/api/v1/triggers')).toHaveLength(1));
+  expect(backend.find('POST','/api/v1/triggers')[0].body).toMatchObject({source:{kind:'jira-dc',connectionId:'jira-dc',siteUrl:native.siteUrl,projectId:'10001'},scmConnection:'bitbucket'});
+  const body=backend.find('POST','/api/v1/triggers')[0].body as {source:Record<string,unknown>};
+  expect(body.source).not.toHaveProperty('repository');
+  expect(body.source).not.toHaveProperty('cloudId');
+});
+
+it('blocks saving on native connection load failure and permits scoped recovery without assuming the saved scope', async () => {
+  let fail=true;
+  const nativeTrigger={...paused,currentTask:undefined,source:{kind:'jira-dc',connectionId:'native',siteUrl:'https://old.example',projectId:'10001'}};
+  const backend=fakeApi({
+    'GET /api/v1/triggers':()=>[nativeTrigger],
+    'GET /api/v1/scm/connections':()=>[],
+    'GET /api/v1/trigger-policy':()=>({}),
+    'GET /api/v1/issue-connections':()=>fail?apiError(503,'Native registry unavailable','unavailable'):[{name:'native',kind:'jira-dc',siteUrl:'https://new.example',projectId:'10002',enabled:true,credentialConfigured:true,projectRestricted:true,revision:4}],
+  });
+  render(<TriggersSection graph={graph} role="admin"/>);
+  await userEvent.click(await screen.findByRole('button',{name:'Edit'}));
+  const form=screen.getByRole('form',{name:'Edit issue trigger'});
+  await within(form).findByRole('alert');
+  expect(within(form).getByRole('button',{name:'Save trigger'})).toHaveProperty('disabled',true);
+  fail=false;
+  await userEvent.click(within(form).getByRole('button',{name:'Refresh issue connections'}));
+  const adopt=await within(form).findByRole('button',{name:'Use current connection scope'});
+  expect(within(form).getByLabelText('Reviewed site')).toHaveProperty('value','https://old.example');
+  expect(within(form).getByRole('button',{name:'Save trigger'})).toHaveProperty('disabled',true);
+  await userEvent.click(adopt);
+  expect(within(form).getByLabelText('Reviewed site')).toHaveProperty('value','https://new.example');
+  expect(within(form).getByLabelText('Reviewed project ID')).toHaveProperty('value','10002');
+  expect(within(form).getByRole('button',{name:'Save trigger'})).toHaveProperty('disabled',false);
+  expect(backend.calls.every(c=>c.method==='GET')).toBe(true);
+});
+
 describe('TriggersSection', () => {
   it('shows a paused trigger with its reason, work and notes, and resumes it', async () => {
     let list = [paused];
@@ -228,4 +287,27 @@ it('shows the blocked delivery summary and links the original task',async()=>{
  expect(within(card).getByRole('status').textContent).toContain('Agent summary: Dependency registry unavailable.');
  expect(within(card).getByRole('link',{name:'Open failed task'}).getAttribute('href')).toBe('#/tasks/tsk_blocked');
  expect(card.textContent).not.toContain('succeeded');
+});
+
+it('keeps edits and cancellation disabled until a pending trigger save finishes', async () => {
+  let finish!: (value: unknown)=>void;
+  const backend=fakeApi({
+    'GET /api/v1/triggers':()=>[paused],
+    'GET /api/v1/scm/connections':()=>[],
+    'PUT /api/v1/triggers/trg_1':()=>new Promise(resolve=>{finish=resolve;}),
+  });
+  const user=userEvent.setup();
+  render(<TriggersSection graph={graph} role="admin"/>);
+  await user.click(await screen.findByRole('button',{name:/^Edit$/}));
+  const form=screen.getByRole('form',{name:'Edit issue trigger'});
+  await user.click(within(form).getByRole('button',{name:'Save trigger'}));
+  const cancel=within(form).getByRole('button',{name:'Cancel'});
+  expect(cancel.closest('fieldset')?.disabled).toBe(true);
+  await user.click(cancel);
+  await user.type(within(form).getByLabelText('Name'),'ignored');
+  expect(within(form).getByLabelText('Name')).toHaveProperty('value','Ready');
+  expect(screen.getByRole('form',{name:'Edit issue trigger'})).toBeTruthy();
+  expect(backend.find('PUT','/api/v1/triggers/trg_1')).toHaveLength(1);
+  await act(async()=>finish(paused));
+  await waitFor(()=>expect(screen.queryByRole('form')).toBeNull());
 });
