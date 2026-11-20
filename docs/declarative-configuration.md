@@ -62,6 +62,7 @@ All documents use `apiVersion: weft.io/v1`, `kind`, `metadata.name`, optional
 | `NetworkPolicy` | Name `installation`; `setupNetworks`, `runNetworks`, `egressHosts`. Existing installation restrictions remain in force. |
 | `MCPConnection` | Connection ID as name; connection input including display `name`, `service`, `endpoint`, `enabled`, quota, transport, template, argument policy and OAuth configuration. Use references for credentials. |
 | `IssueConnection` | Native tracker connection name; `kind: jira-dc`, HTTPS `siteUrl`, numeric `projectId`, `enabled`, optional `projectRestricted` confirmation (default false), and `secretRef`. Configuration only: apply makes no provider call and does not grant agent access or enable a trigger. |
+| `IssueWorkflowMapping` | Native Jira Data Center mapping name; exact `connection` and positive `connectionRevision`, discovered `sampleIssueKey`, numeric `sampleIssueId`, `issueTypeId`, `fromStatusId`, `transitionId`, `targetStatusId`, exact `issueUpdated`, and `enabled`. Names/board columns cannot identify transitions. Uses the same reviewed mapping manager as the API. |
 | `SCMConnection` | Connection name; `kind`, `repository`, `apiUrl`, `gitUrl`, `branchPrefix`, `requirePullRequestApproval`, `secretRef`. |
 | `Project` | An alias or exported registered project ID; `url`, optional `ref` (default `HEAD`), `checks`, `executionMode`. Existing local registrations export `path` and `displayName`. |
 | `Graph` | Existing graph metadata and spec, including manual environments. `metadata.id` remains the graph identity; absent IDs derive from the display name. |
@@ -72,7 +73,7 @@ Prices use micro-units per **million tokens**. Weft does not fetch or update
 vendor prices automatically. Review example rates against your own agreement.
 
 Provider activation precedes instances. Cost and network policy, connections and
-projects precede graphs; graphs precede triggers. Within a kind, names are sorted; explicit default providers follow other providers.
+projects precede graphs; native issue connections precede workflow mappings; graphs and mappings precede triggers. Within a kind, names are sorted; explicit default providers follow other providers.
 A failure stops remaining writes and reports each object as `applied`,
 `unchanged`, `failed` or `not-applied`. Earlier writes remain; this is not a
 transaction across services. Administrator writes on the same server wait while
@@ -80,6 +81,41 @@ a batch is applying, including during imports; viewer reads and operator runtime
 controls remain available. Native store revision checks also fence writes across
 server instances. Retry uses the same identities and retains completed
 work. Omitted installation objects are never deleted.
+
+## Native Jira workflow mappings
+
+Discover transitions for the actual sample issue through the connection inspector
+or `POST /api/v1/issue-connections/{name}/transitions` with the reviewed connection
+revision. Copy the returned numeric identifiers and exact issue update timestamp;
+display names and board columns are never substitutes. See the illustrative
+[mapping document](../examples/installation/jira-dc-workflow-mapping.yaml).
+
+Planning validates only the document shape and saved/planned connection scope.
+It never calls Jira. An effective mapping apply uses the existing manager to
+read the sample again, confirm its identity/type/source status/update timestamp,
+validate the selected transition and destination, and reject unsupported required
+fields. This is read-only discovery: saving a mapping never executes a transition.
+Provider permission loss, stale discovery and concurrent scope changes fail the
+mapping save. Earlier objects in a batch remain applied and later objects are
+reported as not applied. Refresh discovery before retrying a changed sample.
+
+`connectionRevision` is the native positive numeric revision shown by the
+connection API, distinct from the opaque YAML `metadata.revision` of the mapping.
+Its value is always explicit. When creating a connection in the same batch, its
+revision is `1`; an effective update advances the saved revision by one. A pin
+must match that reviewed result; the planner never rewrites it. A connection
+must be enabled and reviewed as project restricted. A new/changed mapping still
+requires sample validation, even when created disabled. Disabling exactly the
+saved definition succeeds without Jira access. An unchanged export/apply performs
+no discovery, save or audit event, even if the provider is unavailable.
+
+Saving a definition does not enable lifecycle synchronization or grant a tool.
+Apply the definition first, read its saved numeric revision, then explicitly
+select that name/revision in the trigger's optional lifecycle mapping fields and
+review trigger consent. A changed definition requires explicit trigger adoption;
+YAML does not infer or rewrite lifecycle pins. Existing task history and grants
+remain intact. Automatic confirmed-merge synchronization remains unavailable
+until its independent delivery event and concurrency guarantees are qualified.
 
 ## Revisions and console edits
 

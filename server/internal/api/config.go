@@ -169,6 +169,9 @@ func (s *Server) buildConfigPlan(ctx context.Context, in installation.Request, d
 					item.Warning = "consent required; trigger will be paused"
 				}
 			}
+			if d.Kind == "IssueWorkflowMapping" && item.Action != "unchanged" {
+				item.Warning = "Apply may revalidate the reviewed sample with read-only Jira discovery, unless exactly disabling the saved definition; no transition is executed"
+			}
 			if d.Kind == "Project" && item.Action == "create" {
 				item.Warning = "Confirm repository download into a managed directory"
 			}
@@ -413,6 +416,9 @@ func (s *Server) applyConfigObject(ctx context.Context, p configPrepared, old co
 	case "IssueConnection":
 		_, err := s.IssueConnections.Put(ctx, p.Input.(jiradc.ConnectionInput), old.NativeRevision, actor)
 		return "saved; project permission qualification pending", err
+	case "IssueWorkflowMapping":
+		_, err := (jiradc.WorkflowMappings{Connections: s.IssueConnections}).Put(ctx, p.Input.(jiradc.MappingInput), old.NativeRevision, actor)
+		return "", err
 	case "Project":
 		return s.applyConfigProject(ctx, p, old, actor)
 	case "Graph":

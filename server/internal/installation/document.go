@@ -19,7 +19,7 @@ import (
 
 const MaxBytes = 4 << 20
 
-var Kinds = []string{"InferencePlugin", "ModelProvider", "PriceCatalog", "CostPolicy", "Budget", "NetworkPolicy", "MCPConnection", "SCMConnection", "IssueConnection", "Project", "Graph", "IssueTrigger"}
+var Kinds = []string{"InferencePlugin", "ModelProvider", "PriceCatalog", "CostPolicy", "Budget", "NetworkPolicy", "MCPConnection", "SCMConnection", "IssueConnection", "IssueWorkflowMapping", "Project", "Graph", "IssueTrigger"}
 
 type Document struct {
 	Extensions map[string]any `json:"-" yaml:"-"`

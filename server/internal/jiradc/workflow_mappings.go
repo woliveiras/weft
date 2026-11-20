@@ -43,6 +43,10 @@ type WorkflowMapping struct {
 }
 type WorkflowMappings struct{ Connections Connections }
 
+// Validate checks the input shape without opening a connection or discovering Jira.
+// Saving still revalidates the reviewed sample through WorkflowMappings.Put.
+func (v MappingInput) Validate() error { return v.validate() }
+
 func (v MappingInput) validate() error {
 	if !connectionName.MatchString(v.Name) || !validIssueUpdated(v.IssueUpdated) {
 		return fmt.Errorf("%w: name a mapping and review valid issue update metadata", ErrInvalid)

@@ -8,6 +8,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/environmentpolicy"
 	"github.com/woliveiras/weft/server/internal/installation"
+	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
 	"github.com/woliveiras/weft/server/internal/trigger"
 )
@@ -52,12 +53,17 @@ func (s *Server) validateConfigDependencies(ctx context.Context, ds []installati
 			err = fmt.Errorf("spec.default: at most one explicit default provider")
 		}
 		switch v := p.Input.(type) {
+		case jiradc.MappingInput:
+			err = validateMappingDependency(v, current[p.Doc.Key()], ps, current, plan)
 		case *domain.Graph:
 			err = policy.Check(v.Spec.Environment)
 			if err != nil {
 				err = fmt.Errorf("spec.environment: %w", err)
 			}
 		case trigger.Input:
+			if err = validatePlannedLifecycleMappings(v, ps, plan); err != nil {
+				break
+			}
 			g := graphs[v.Workflow]
 			if g == nil {
 				g, err = s.Store.GetGraph(ctx, v.Workflow, 0)
@@ -110,4 +116,66 @@ func (s *Server) validateConfigDependencies(ctx context.Context, ds []installati
 			plan.OK = false
 		}
 	}
+}
+
+// A mapping pins the numeric connection revision explicitly. Never rewrite that
+// pin to accommodate another object in the batch. New connections start at 1;
+// each effective configuration save advances the reviewed native revision once.
+func validateMappingDependency(in jiradc.MappingInput, old configObject, ps []configPrepared, current map[string]configObject, plan *installation.Plan) error {
+	if old.Doc.Kind != "" && !in.Enabled {
+		var previous jiradc.MappingInput
+		if err := installation.Decode(old.Doc.Spec, &previous, "spec"); err != nil {
+			return err
+		}
+		previous.Name, previous.Enabled = in.Name, false
+		if in == previous {
+			return nil // Exact disabling remains available while Jira is inaccessible.
+		}
+	}
+	key := "IssueConnection/" + in.Connection
+	c, found := current[key]
+	var connection jiradc.ConnectionInput
+	if found {
+		if err := installation.Decode(c.Doc.Spec, &connection, "spec"); err != nil {
+			return err
+		}
+	}
+	revision := c.NativeRevision
+	for i, p := range ps {
+		if p.Doc.Key() != key {
+			continue
+		}
+		if plan.Objects[i].Action == "error" || plan.Objects[i].Action == "conflict" {
+			return fmt.Errorf("spec.connection: reviewed connection plan required")
+		}
+		connection = p.Input.(jiradc.ConnectionInput)
+		found = true
+		if plan.Objects[i].Action != "unchanged" {
+			revision++
+		}
+		break
+	}
+	if !found || connection.Kind != "jira-dc" || !connection.Enabled || !connection.ProjectRestricted {
+		return fmt.Errorf("spec.connection: enabled project-restricted native Jira connection required")
+	}
+	if revision != in.ConnectionRevision {
+		return fmt.Errorf("spec.connectionRevision: must explicitly match the saved or planned connection revision (%d); discover and review the sample for that scope", revision)
+	}
+	return nil
+}
+
+// Trigger consent can review only persisted mapping definitions. Do not validate
+// against the old definition while an earlier object in this batch replaces it.
+func validatePlannedLifecycleMappings(in trigger.Input, ps []configPrepared, plan *installation.Plan) error {
+	for _, pin := range []trigger.MappingPin{in.LifecycleMappings.WorkStarted, in.LifecycleMappings.PRDelivered} {
+		if pin.Name == "" {
+			continue
+		}
+		for i, p := range ps {
+			if p.Doc.Kind == "IssueWorkflowMapping" && p.Doc.Name() == pin.Name && plan.Objects[i].Action != "unchanged" {
+				return fmt.Errorf("spec.lifecycleMappings: apply mapping definitions first, then select their saved revisions and review trigger consent")
+			}
+		}
+	}
+	return nil
 }

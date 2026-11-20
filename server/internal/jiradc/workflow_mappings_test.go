@@ -18,13 +18,13 @@ func mappingInput() MappingInput {
 	return MappingInput{Name: "review-step", Connection: "jira-team", ConnectionRevision: 1, SampleIssueKey: "APP-7", SampleIssueID: "10007", IssueTypeID: "10002", FromStatusID: "10", TransitionID: "31", TargetStatusID: "20", IssueUpdated: "2026-11-20T12:00:00.000+0000", Enabled: true}
 }
 func TestWorkflowMappingInputRequiresActualIdentifiersAndDiscoveryRevision(t *testing.T) {
-	if err := mappingInput().validate(); err != nil {
+	if err := mappingInput().Validate(); err != nil {
 		t.Fatal(err)
 	}
 	for _, edit := range []func(*MappingInput){func(v *MappingInput) { v.Name = "../mapping" }, func(v *MappingInput) { v.ConnectionRevision = 0 }, func(v *MappingInput) { v.IssueUpdated = "" }, func(v *MappingInput) { v.TransitionID = "In Review" }, func(v *MappingInput) { v.TargetStatusID = v.FromStatusID }} {
 		v := mappingInput()
 		edit(&v)
-		if !errors.Is(v.validate(), ErrInvalid) {
+		if !errors.Is(v.Validate(), ErrInvalid) {
 			t.Fatal(v)
 		}
 	}

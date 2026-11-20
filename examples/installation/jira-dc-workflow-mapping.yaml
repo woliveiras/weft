@@ -1,0 +1,22 @@
+# Illustrative values only. Discover the actual issue/current transitions first
+# and replace every identifier and timestamp with that reviewed response.
+# The connection must already exist (or precede this mapping in the same batch),
+# be enabled and have its project-restricted account confirmation recorded.
+# Saving performs read-only sample validation. It never transitions an issue or
+# automatically attaches the mapping to an issue trigger.
+apiVersion: weft.io/v1
+kind: IssueWorkflowMapping
+metadata:
+  name: reviewed-delivery-step
+spec:
+  connection: jira-team
+  # Numeric connection API revision, not an opaque YAML metadata.revision.
+  connectionRevision: 1
+  sampleIssueKey: APP-7
+  sampleIssueId: '10007'
+  issueTypeId: '10002'
+  fromStatusId: '10'
+  transitionId: '31'
+  targetStatusId: '20'
+  issueUpdated: '2026-11-20T12:00:00.000+0000'
+  enabled: true

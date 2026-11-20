@@ -741,3 +741,23 @@ name assumptions through discovered, scoped workflow mappings.
   scope denial and credential reflection. Independent final review found no
   remaining blockers. Provider references and limitations are recorded in
   docs/portable-review-evidence.md. No real service was called or deployed.
+
+
+## INT-009-06k — Declarative workflow mapping definitions
+
+- Added IssueWorkflowMapping to installation parser, dependency order, structural
+  dry-run, CAS apply, snapshot/export and reference diagnostics. Numeric sample,
+  issue-type/status/transition IDs and connectionRevision remain explicit.
+  Dry-run makes no vendor call; effective apply uses the existing read-only
+  sample/discovery validation. Unchanged round-trips and exact disabling are
+  offline. Export excludes discovered labels and credentials.
+- Planned connection saves require their exact resulting revision; it is never
+  rewritten into a mapping silently. Trigger consent can select only definitions
+  already saved: creating/replacing a definition and adopting it in the same
+  bundle is refused before writes, with instructions to review the saved version.
+- Docker full installation/jiradc/API/cmd-weft tests, corresponding vet and
+  weft/weftd builds passed. Unit and real SQLite/verified-TLS API fixtures cover
+  explicit revision forecasting, no-op/export, offline disable, stale plans,
+  concurrent connection changes, sample change/denial, partial apply recovery
+  and same-bundle consent protection. Independent code review and targeted
+  reruns found no blockers. No YAML was applied to the running installation.

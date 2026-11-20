@@ -192,6 +192,13 @@ atomically guards the reviewed connection revision. Arbitrary Jira field values,
 credentials and board column names are not accepted by this schema. Lifecycle
 adoption and operator synchronization recovery remain separate work.
 
+The administrator-only installation plan/apply/export API also supports
+`kind: IssueWorkflowMapping` with the same `MappingInput` fields (name in
+`metadata.name`). Plan performs no discovery. Effective apply calls the same
+reviewed-sample/CAS manager; it never executes a transition. Export excludes
+presentation-only discovered names and retains explicit numeric identifiers and
+connection revision. See [declarative mappings](./declarative-configuration.md#native-jira-workflow-mappings).
+
 ## Source control connections
 
 Push and pull request tools act through server-held SCM connections; agents

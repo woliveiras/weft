@@ -284,6 +284,18 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 		normalized.Token = nil
 		p.Doc.Spec = installation.Map(normalized)
 		delete(p.Doc.Spec, "name")
+	case "IssueWorkflowMapping":
+		var in jiradc.MappingInput
+		spec["name"] = d.Name()
+		if err := decode(&in); err != nil {
+			return p, err
+		}
+		if err := in.Validate(); err != nil {
+			return p, fmt.Errorf("spec: %w", err)
+		}
+		p.Input = in
+		p.Doc.Spec = installation.Map(in)
+		delete(p.Doc.Spec, "name")
 	case "Project":
 		var in configProject
 		if err := decode(&in); err != nil {

@@ -74,3 +74,13 @@ func TestGraphExtensionsAndDuplicateDocuments(t *testing.T) {
 		t.Fatal("duplicate graph accepted")
 	}
 }
+
+func TestWorkflowMappingKindOrdersAfterConnectionBeforeTrigger(t *testing.T) {
+	docs := []Document{New("IssueTrigger", "issues", map[string]any{}), New("IssueWorkflowMapping", "review", map[string]any{}), New("IssueConnection", "native", map[string]any{})}
+	Sort(docs)
+	for i, kind := range []string{"IssueConnection", "IssueWorkflowMapping", "IssueTrigger"} {
+		if docs[i].Kind != kind {
+			t.Fatal(docs)
+		}
+	}
+}

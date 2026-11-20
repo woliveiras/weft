@@ -198,6 +198,21 @@ func (s *Server) configSnapshot(ctx context.Context) (map[string]configObject, e
 			}
 		}
 	}
+	if s.IssueConnections.Store != nil {
+		vs, err := (jiradc.WorkflowMappings{Connections: s.IssueConnections}).List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, v := range vs {
+			spec := installation.Map(v.MappingInput)
+			delete(spec, "name")
+			o := newConfigObject("IssueWorkflowMapping", v.Name, spec, v.Revision)
+			o.NativeRevision = v.Revision
+			if err = add(o); err != nil {
+				return nil, err
+			}
+		}
+	}
 	ps, err := (projectconfig.Manager{Store: s.Store}).List(ctx)
 	if err != nil {
 		return nil, err
