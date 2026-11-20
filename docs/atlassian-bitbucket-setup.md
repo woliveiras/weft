@@ -14,17 +14,18 @@ with your own hosts.
 | Atlassian Cloud through the official MCP server | Implemented; live qualification pending ([evidence](mcp.md#qualification-and-remaining-external-acceptance)) |
 | Bitbucket Data Center access with an HTTP access token | Native REST/Git adapter implemented with local fixtures; live/version qualification pending |
 
-## Planned portable integrations
+## Portable integration delivery status
 
 The [INT-009 specification](../specs/providers-and-integrations/portable-issue-and-source-control/spec.md)
-records the next scope; this is not a setup procedure for available adapters.
+records the implementation batches and remaining qualification. The table
+distinguishes available building blocks from unfinished operational flows.
 
 | Product/edition | Current boundary | Planned work |
 | --- | --- | --- |
 | Jira Cloud | Issue reference, polling/readiness, comments and labels have implementation paths; live qualification remains separate | Qualify the full flow and add optional discovered workflow mappings |
-| Jira Data Center | No implemented tracker adapter | Separate instance/authentication/API adapter and qualification |
-| Bitbucket Cloud | Native delivery adapter has local HTTP/Git fixture coverage; console selection and portable review remain pending | Live qualification and portable PR review/merge capabilities |
-| Bitbucket Data Center | Native REST 1.0 delivery adapter has local HTTP/Git fixture coverage | Console configuration, private-network/TLS and target-version qualification |
+| Jira Data Center | Native REST 2 client, sealed connection API/YAML, read-only transition discovery and explicit project-restricted write gate have local fixture coverage | Operational trigger/console wiring, optional mappings, reconciliation and live qualification |
+| Bitbucket Cloud | Native delivery, console/YAML selection, immutable PR reads and durable summary comments have local fixture coverage | Event/workflow adoption and live qualification; automatic merge remains unavailable |
+| Bitbucket Data Center | Native REST 1.0 delivery, console/YAML selection, immutable PR reads and durable summary comments have local fixture coverage | Event/workflow adoption, corporate network/CA and target-version qualification; automatic merge remains unavailable |
 
 Issue origin and Git destination are independent: Jira can drive work delivered
 to GitHub or either Bitbucket edition; GitHub Issues can drive Bitbucket work.
@@ -40,6 +41,12 @@ instance/workflow-scoped identifiers. Without a mapping, no automatic transition
 is attempted. Missing or unavailable transitions must expose a recoverable sync
 failure without erasing task/PR delivery; whether a transition can be mandatory
 is a recorded open decision, not an implicit blocking policy.
+
+Portable `scm.pull_request.read` and `scm.pull_request.review` now provide bounded
+revision reads and durable summary comments for all three native SCM adapters.
+`scm.pull_request.merge` is explicitly unavailable: expected-head protection alone
+does not atomically guard the approved destination against PR retargeting. A safe
+provider guarantee must be qualified before automatic merge can be enabled.
 
 The code-review pilot still uses GitHub MCP tools. Planned Weft review operations
 must read PRs/diffs/checks, post summaries/findings and guard merges through the

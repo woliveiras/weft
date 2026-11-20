@@ -371,3 +371,30 @@ name assumptions through discovered, scoped workflow mappings.
   (`/tmp/weft-jira-restricted-v4.log`). Subagent review initially highlighted
   cached clients; revision checks now also run per mutation, with revocation
   during TLS preflight coverage. Final review found no residual blockers.
+
+## Regression checkpoint after native write gate — 2026-11-20
+
+- `./scripts/go.sh test ./...` passed with live model URL/key variables removed
+  from the process environment (`/tmp/weft-portability-go-milestone15.log`).
+  No live provider or broker qualification is claimed by these local fixtures.
+- `make test-web` passed: TypeScript and 103 Vitest files / 552 tests
+  (`/tmp/weft-portability-web-milestone15.log`). A previous full run had an
+  intermittent Skills history-test failure; the isolated test and subsequent
+  full runs passed without changing that unrelated code or weakening the test.
+- `make test-python` passed: SDK 16, example agents 14 and scripts 10 tests
+  (`/tmp/weft-portability-python-final.log`).
+- `make lint` and `make build` passed after the native write gate
+  (`/tmp/weft-portability-lint-milestone15.log`,
+  `/tmp/weft-portability-build-milestone15.log`). No stack deployment or push.
+- The 15 implementation/fix commits from `5d19387` through `807234a` were
+  separately reviewed by the read-only subagent before commit. Each behavior
+  batch has unit and component-boundary integration coverage recorded above.
+- The overall INT-009 capability is **not complete**. Remaining implementation:
+  native DC trigger/console integration, DC operational admission identity,
+  optional mapping configuration and durable tracker synchronization recovery,
+  integrated event/workflow adoption and code-review migration. Automatic merge
+  has the concrete atomic-destination blocker in batch04c. Live/version/pair
+  rehearsals require separately authorized resources; no version is inferred.
+- Checkpoint documentation received a final read-only subagent review: statuses,
+  commit range and test-log totals were checked without rerunning commands;
+  no blockers. Eighteen local Markdown link targets and diff checks passed.
