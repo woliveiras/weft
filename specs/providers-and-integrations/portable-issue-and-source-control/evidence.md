@@ -719,3 +719,25 @@ name assumptions through discovered, scoped workflow mappings.
   credential, policy, issue or PR changed; nothing was deployed. Declarative
   mapping definitions, portable review routing/adoption, Jira Cloud transition
   adoption and real-account/version qualification remain pending.
+
+
+## INT-009-04e — Revision-scoped file and reported-check evidence
+
+- Extended the existing portable read operation with optional files/checks.
+  Evidence reads recheck head/base, branches, draft and PR state; no writes,
+  credentials, new grants or merge capability are added. GitHub file comparison
+  pins immutable IDs and refuses its 300-file boundary; Cloud follows an exact
+  topic comparison with unfiltered, bounded pagination. DC file inventory remains
+  explicitly unavailable while its existing structured diff remains supported.
+- GitHub reads combined statuses plus check runs; Bitbucket editions read build
+  reports for the exact head. Missing/malformed collections and excessive pages
+  fail. Unknown/skipped/neutral states are unknown; empty reports never prove
+  passing tests. Required rules remain unavailable. Independent review identified
+  the DC API's newest-100 cap and query changes on Cloud next links; fixes retain
+  incomplete DC coverage and reject any unreviewed topic/filter query.
+- Docker full SCM suite passed (/tmp/weft-review-evidence-v4.log) and SCM vet
+  passed. Unit plus gateway→adapter→HTTP fixtures cover all three editions,
+  success/empty/unknown/error, changed revisions, limits, malicious pagination,
+  scope denial and credential reflection. Independent final review found no
+  remaining blockers. Provider references and limitations are recorded in
+  docs/portable-review-evidence.md. No real service was called or deployed.
