@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/jiracloud"
 	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/tools"
 )
@@ -115,6 +116,7 @@ type trackerTool struct {
 	name   string
 	call   TrackerCall
 	native *jiradc.Connections
+	cloud  *jiracloud.Profiles
 }
 
 func TrackerTools(call TrackerCall, native ...jiradc.Connections) []tools.Tool {
@@ -122,9 +124,18 @@ func TrackerTools(call TrackerCall, native ...jiradc.Connections) []tools.Tool {
 	if len(native) == 1 {
 		connections = &native[0]
 	}
+	return trackerTools(call, connections, nil)
+}
+
+// TrackerToolsWithCloud preserves the private trigger gateway while adding the
+// separately reviewed Cloud profile backend. It never grants transition tools.
+func TrackerToolsWithCloud(call TrackerCall, native jiradc.Connections, cloud jiracloud.Profiles) []tools.Tool {
+	return trackerTools(call, &native, &cloud)
+}
+func trackerTools(call TrackerCall, connections *jiradc.Connections, cloud *jiracloud.Profiles) []tools.Tool {
 	var out []tools.Tool
 	for _, name := range []string{trackerGet, trackerComments, trackerRequeue, trackerLabels, trackerComment, trackerIdentity, trackerSearch, trackerTransition} {
-		out = append(out, trackerTool{name: name, call: call, native: connections})
+		out = append(out, trackerTool{name: name, call: call, native: connections, cloud: cloud})
 	}
 	return out
 }
@@ -167,6 +178,26 @@ func (t trackerTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.
 	var a trackerArgs
 	if json.Unmarshal(inv.Args, &a) != nil {
 		return nil, tools.ErrDenied
+	}
+	if t.name == trackerTransition {
+		var manager Manager
+		switch scope.Source.Kind {
+		case "jira-dc":
+			if t.native == nil || t.native.Store == nil {
+				return nil, tools.ErrDenied
+			}
+			manager = Manager{Store: t.native.Store, NativeConnections: t.native}
+		case "jira":
+			if t.cloud == nil || t.cloud.Store == nil || scope.Source.ProfileID == "" {
+				return nil, tools.ErrDenied
+			}
+			manager = Manager{Store: t.cloud.Store, CloudProfiles: t.cloud}
+		default:
+			return nil, tools.ErrDenied
+		}
+		v, err := manager.processLifecycleSync(ctx, scope, a.SyncID)
+		raw, marshalErr := json.Marshal(v)
+		return &tools.Result{Data: raw, IsError: err != nil, Content: v.Error}, errors.Join(err, marshalErr)
 	}
 	if scope.Source.Kind == "jira-dc" {
 		return t.invokeNative(ctx, scope, a)
@@ -558,6 +589,9 @@ func readIssue(req apiRequest, source SourceConfig, path, key string) (Issue, er
 	raw, err := readJSON[jiraIssue](req, http.MethodGet, path+"?fields="+strings.Join(jiraFields, ","), nil)
 	if err == nil && raw.Key != key {
 		err = errors.New("tracker returned a different issue")
+	}
+	if err == nil {
+		err = validateCloudIssue(source, raw)
 	}
 	return raw.issue(), err
 }

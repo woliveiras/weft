@@ -86,3 +86,20 @@ func TestGetLifecycleSyncOnlyTreatsMissingCoreAsAbsent(t *testing.T) {
 		})
 	}
 }
+
+func TestLifecycleSourceFilterSeparatesProfileFromMCPScope(t *testing.T) {
+	cloud := trigger.SourceConfig{Kind: "jira", ConnectionID: "shared", ProfileID: "project-cloud"}
+	dc := trigger.SourceConfig{Kind: "jira-dc", ConnectionID: "project-cloud"}
+	for _, tc := range []struct {
+		source           trigger.SourceConfig
+		kind, connection string
+		want             bool
+	}{
+		{cloud, "jira", "project-cloud", true}, {cloud, "jira", "shared", false}, {dc, "jira", "project-cloud", false},
+		{dc, "jira-dc", "project-cloud", true}, {cloud, "", "shared", true}, {cloud, "jira", "", true},
+	} {
+		if got := lifecycleSourceMatches(tc.source, tc.kind, tc.connection); got != tc.want {
+			t.Fatal(tc, got)
+		}
+	}
+}

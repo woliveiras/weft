@@ -999,7 +999,8 @@ Names are display text; transition and destination IDs remain separate.
 
 ### Optional Jira lifecycle synchronization
 
-Native Jira DC trigger input optionally accepts:
+Jira DC trigger input, or Cloud input with an explicit reviewed workflow profile,
+optionally accepts:
 
 ```json
 {"lifecycleMappings":{"workStarted":{"name":"start-work","revision":1},"prDelivered":{"name":"send-to-review","revision":2}}}
@@ -1065,3 +1066,53 @@ not review completion. Track the execution and
 dispatch is `unknown` and cannot be blindly retried. These routes grant no merge
 capability. See the [separate adoption example](../examples/portable-code-review/README.md)
 and [review evidence limits](./portable-review-evidence.md).
+
+### Jira Cloud workflow profiles
+
+A Cloud workflow profile is a credential-free, explicitly reviewed project scope
+for optional automatic transitions. It references an existing first-party static
+Jira REST-compatible MCP connection and its numeric revision. OAuth MCP tokens,
+custom endpoints and connection policies that forbid REST reuse are rejected;
+they are not converted to a different audience. No live credential is copied.
+
+```json
+{"name":"cloud-project","mcpConnection":"jira","mcpRevision":1,"cloudId":"11111111-2222-3333-4444-555555555555","siteUrl":"https://api.atlassian.com/ex/jira/11111111-2222-3333-4444-555555555555","projectId":"10001","enabled":true,"projectRestricted":true}
+```
+
+`siteUrl` is the exact Cloud gateway identity for the selected `cloudId`;
+`projectId` is numeric. `projectRestricted` records the administrator's review
+that the technical account's remote write permissions are limited to this
+project. A local preflight cannot enforce that account configuration remotely or
+atomically prevent a concurrent project move. Without that prerequisite, writes
+remain unavailable. Profiles and mappings have separate Cloud/DC namespaces.
+
+| Route | Minimum role | Contract |
+| --- | --- | --- |
+| `GET /api/v1/jira-cloud-profiles` | viewer | Bounded credential-free catalogue. |
+| `GET /api/v1/jira-cloud-profiles/{name}` | viewer | Saved scope with ETag revision. |
+| `POST /api/v1/jira-cloud-profiles/preview` | admin | Local input/REST-compatibility/revision validation; no save or remote request. |
+| `POST /api/v1/jira-cloud-profiles` | admin | Save reviewed scope with profile/MCP CAS; no issue mutation. |
+| `PUT /api/v1/jira-cloud-profiles/{name}` | admin | Positive `If-Match`; input name matches URL. Exact disabling remains offline. |
+| `POST /api/v1/jira-cloud-profiles/{name}/transitions` | operator | Positive `If-Match` and `{"issueKey":"APP-7"}`; issue-specific GET discovery with profile/MCP revision recheck. |
+| `GET /api/v1/jira-cloud-workflow-mappings?connection=<profile>` | viewer | Cloud mappings only, optional profile filter. |
+| `GET /api/v1/jira-cloud-workflow-mappings/{name}` | viewer | Cloud mapping with ETag revision. |
+| `POST /api/v1/jira-cloud-workflow-mappings` | admin | Existing mapping input contract; `connection` names the Cloud profile and `connectionRevision` pins its revision. Saving rechecks the sample issue and available transition IDs. |
+| `PUT /api/v1/jira-cloud-workflow-mappings/{name}` | admin | Positive `If-Match`; same sample/discovery rules, exact disable offline. |
+
+Transition and status names are display text. A column named `Review`,
+`In Review` or a localized name is never guessed. Required transition fields
+remain unsupported and visibly refused. Existing Cloud triggers without profiles
+or mappings retain their comments/labels behavior. Optional profile adoption
+pins its revision separately from the MCP credential connection revision.
+
+For Cloud adoption, source kind remains `jira` and connectionId remains the MCP
+connection. Add explicit `profileId`, positive `profileRevision`, and the profile's
+exact `cloudId`, `siteUrl` and numeric `projectId`. MCP consent revision and profile
+revision are independent. Changing these pins requires reviewed trigger consent
+and cannot retarget an already admitted task. A mapping's `connection` names the
+profile, while tracker reads/comments/labels continue using the MCP connection.
+
+`GET /api/v1/lifecycle-syncs?kind=jira&connection=<profile>` filters Cloud history
+by profile; `kind=jira-dc` filters by native connection. Without kind, the previous
+connectionId (MCP/native) filter is preserved. Filters apply to each bounded page;
+follow `next` even if a filtered page is empty. An invalid kind returns 400.

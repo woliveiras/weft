@@ -35,6 +35,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/events"
 	"github.com/woliveiras/weft/server/internal/graph"
 	"github.com/woliveiras/weft/server/internal/hitl"
+	"github.com/woliveiras/weft/server/internal/jiracloud"
 	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/llmconfig"
@@ -63,6 +64,7 @@ type Deps struct {
 	MCP               *mcpconfig.Manager
 	SCM               scm.Manager
 	IssueConnections  jiradc.Connections
+	CloudProfiles     *jiracloud.Profiles
 	Reviews           *review.Manager
 	PreviewGateway    *review.Gateway
 	// Gateway runs server-side tool calls (issue triggers) under the same
@@ -267,6 +269,16 @@ func (s *Server) routes() {
 		{"GET /api/v1/lifecycle-syncs/{id}", R, s.getLifecycleSync},
 		{"POST /api/v1/lifecycle-syncs/{id}/reconcile", O, s.reconcileLifecycleSync},
 		{"POST /api/v1/lifecycle-syncs/{id}/retry", A, s.retryLifecycleSync},
+		{"GET /api/v1/jira-cloud-profiles", R, s.listCloudProfiles},
+		{"GET /api/v1/jira-cloud-profiles/{name}", R, s.getCloudProfile},
+		{"POST /api/v1/jira-cloud-profiles/preview", A, s.previewCloudProfile},
+		{"POST /api/v1/jira-cloud-profiles", A, s.saveCloudProfile},
+		{"PUT /api/v1/jira-cloud-profiles/{name}", A, s.saveCloudProfile},
+		{"POST /api/v1/jira-cloud-profiles/{name}/transitions", O, s.discoverCloudTransitions},
+		{"GET /api/v1/jira-cloud-workflow-mappings", R, s.issueWorkflowMappings},
+		{"GET /api/v1/jira-cloud-workflow-mappings/{name}", R, s.getIssueWorkflowMapping},
+		{"POST /api/v1/jira-cloud-workflow-mappings", A, s.createIssueWorkflowMapping},
+		{"PUT /api/v1/jira-cloud-workflow-mappings/{name}", A, s.updateIssueWorkflowMapping},
 		{"GET /api/v1/issue-workflow-mappings", R, s.issueWorkflowMappings},
 		{"GET /api/v1/issue-workflow-mappings/{name}", R, s.getIssueWorkflowMapping},
 		{"POST /api/v1/issue-workflow-mappings", A, s.createIssueWorkflowMapping},
@@ -368,10 +380,14 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid", err.Error(), map[string]any{"valid": false, "errors": pve.Errors})
 	case errors.Is(err, mcpconfig.ErrOAuth):
 		writeErr(w, http.StatusBadGateway, "oauth", err.Error(), nil)
-	case errors.Is(err, mcpconfig.ErrInvalid), errors.Is(err, jiradc.ErrInvalid):
+	case errors.Is(err, mcpconfig.ErrInvalid), errors.Is(err, jiradc.ErrInvalid), errors.Is(err, jiracloud.ErrInvalid):
 		writeErr(w, http.StatusUnprocessableEntity, "invalid", err.Error(), nil)
 	case errors.Is(err, secrets.ErrNoKey):
 		writeErr(w, http.StatusConflict, "secret_key_missing", err.Error(), nil)
+	case errors.Is(err, jiracloud.ErrUnavailable):
+		writeErr(w, 503, "tracker_unavailable", "Jira Cloud workflow configuration is unavailable", nil)
+	case errors.Is(err, jiracloud.ErrWriteDisabled):
+		writeErr(w, 409, "tracker_write_disabled", "Confirm a technical account restricted to the selected project before adopting automatic transitions", nil)
 	case errors.Is(err, reviewroute.ErrUnavailable):
 		writeErr(w, 503, "review_route_unavailable", "Review routing is unavailable on this controller", nil)
 	case errors.Is(err, engine.ErrNotFound), errors.Is(err, storage.ErrNotFound):

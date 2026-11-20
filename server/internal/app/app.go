@@ -30,6 +30,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/events"
 	"github.com/woliveiras/weft/server/internal/graph"
 	"github.com/woliveiras/weft/server/internal/hitl"
+	"github.com/woliveiras/weft/server/internal/jiracloud"
 	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/llm"
 	_ "github.com/woliveiras/weft/server/internal/llm/providers"
@@ -72,6 +73,7 @@ type App struct {
 	TrackerAPI        *mcpconfig.TrackerAPI
 	SCM               scm.Manager
 	IssueConnections  jiradc.Connections
+	CloudProfiles     jiracloud.Profiles
 	Triggers          *trigger.Runner
 	Tools             *tools.Registry
 	Gateway           *tools.Gateway
@@ -165,10 +167,11 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	a.Gateway.TaskAuthorization = (taskauth.Manager{Store: a.Store}).Check
 	a.Gateway.ResolveTool = a.MCP.Resolve
 	a.TrackerAPI = &mcpconfig.TrackerAPI{Connections: a.MCP}
-	a.Tools.MustRegister(trigger.TrackerTools(a.TrackerAPI.Call, a.IssueConnections)...)
+	a.CloudProfiles = jiracloud.Profiles{Store: a.Store, API: a.TrackerAPI}
+	a.Tools.MustRegister(trigger.TrackerToolsWithCloud(a.TrackerAPI.Call, a.IssueConnections, a.CloudProfiles)...)
 	a.Triggers = &trigger.Runner{
 		Triggers: trigger.Manager{Store: a.Store, Bus: a.Bus, Tools: a.Tools, Models: a.Models,
-			TrackerRevision: a.TrackerAPI.Revision, NativeConnections: &a.IssueConnections, ReadinessMaxMicros: cfg.ReadinessMaxMicros},
+			TrackerRevision: a.TrackerAPI.Revision, NativeConnections: &a.IssueConnections, CloudProfiles: &a.CloudProfiles, ReadinessMaxMicros: cfg.ReadinessMaxMicros},
 		Store: a.Store, Instance: cfg.Instance, Gateway: a.Gateway, BaseURL: cfg.Server.PublicURL, Log: log.With("component", "trigger"),
 		Assessor: trigger.ModelAssessor{Models: a.Models, Store: a.Store, Budgets: cost.Budgets{Store: a.Store, Bus: a.Bus}},
 	}
@@ -319,7 +322,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	a.API = api.New(api.Deps{
 		ReviewRoutes:      a.ReviewRoutes,
 		RepositoryImports: a.RepositoryImports, TriggerManager: &a.Triggers.Triggers,
-		Reviews: a.Reviews, PreviewGateway: a.PreviewGateway, MCP: a.MCP, SCM: a.SCM, IssueConnections: a.IssueConnections, Gateway: a.Gateway,
+		Reviews: a.Reviews, PreviewGateway: a.PreviewGateway, MCP: a.MCP, SCM: a.SCM, IssueConnections: a.IssueConnections, CloudProfiles: &a.CloudProfiles, Gateway: a.Gateway,
 		Config: cfg, Engine: a.Engine, Store: a.Store, Broker: a.Broker, Bus: a.Bus, Approvals: a.Approvals,
 		Models: a.Models, Providers: a.Providers, Tools: a.Tools, Workspaces: ws, Auth: auth, Log: log,
 		Environments: a.Environments, Proposals: a.Proposals, Metrics: journalMetrics,

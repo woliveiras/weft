@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
@@ -33,8 +32,8 @@ func (v LifecycleMappings) validate(source SourceConfig) error {
 	if v.empty() {
 		return nil
 	}
-	if source.Kind != "jira-dc" {
-		return fmt.Errorf("lifecycle mappings require a native Jira Data Center source")
+	if source.Kind != "jira-dc" && (source.Kind != "jira" || source.ProfileID == "" || source.ProfileRevision < 1) {
+		return fmt.Errorf("lifecycle mappings require a native Jira Data Center source or an explicit Jira Cloud workflow profile")
 	}
 	for _, p := range []MappingPin{v.WorkStarted, v.PRDelivered} {
 		if p == (MappingPin{}) {
@@ -56,22 +55,38 @@ func (m Manager) reviewLifecycleMappings(ctx context.Context, in Input) error {
 	if in.LifecycleMappings.empty() {
 		return nil
 	}
-	if m.NativeConnections == nil {
-		return fmt.Errorf("native Jira connections are unavailable")
-	}
-	c, err := m.NativeConnections.Get(ctx, in.Source.ConnectionID)
+	mappings, _, err := m.workflowServices(in.Source)
 	if err != nil {
 		return err
+	}
+	revision := in.Source.ProfileRevision
+	if in.Source.Kind == "jira-dc" {
+		c, err := m.NativeConnections.Get(ctx, in.Source.ConnectionID)
+		if err != nil {
+			return err
+		}
+		revision = c.Revision
+	} else {
+		if m.TrackerRevision == nil {
+			return storage.ErrConflict
+		}
+		trackerRevision, err := m.TrackerRevision(ctx, in.Source.ConnectionID, "jira")
+		if err != nil {
+			return err
+		}
+		if _, err := m.cloudProfile(ctx, in.Source, trackerRevision); err != nil {
+			return err
+		}
 	}
 	for _, p := range []MappingPin{in.LifecycleMappings.WorkStarted, in.LifecycleMappings.PRDelivered} {
 		if p == (MappingPin{}) {
 			continue
 		}
-		v, err := (jiradc.WorkflowMappings{Connections: *m.NativeConnections}).Get(ctx, p.Name)
+		v, err := mappings.Get(ctx, p.Name)
 		if err != nil {
 			return err
 		}
-		if !v.Enabled || v.Revision != p.Revision || v.Connection != c.Name || v.ConnectionRevision != c.Revision || v.SiteURL != in.Source.SiteURL || v.ProjectID != in.Source.ProjectID {
+		if !v.Enabled || v.Revision != p.Revision || v.Connection != workflowConnection(in.Source) || v.ConnectionRevision != revision || v.SiteURL != in.Source.SiteURL || v.ProjectID != in.Source.ProjectID {
 			return fmt.Errorf("%w: select an enabled mapping for the reviewed tracker scope", storage.ErrConflict)
 		}
 	}

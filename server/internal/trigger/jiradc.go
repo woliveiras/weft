@@ -82,11 +82,6 @@ func (t trackerTool) invokeNative(ctx context.Context, scope *Trigger, a tracker
 	if t.native == nil {
 		return nil, tools.ErrDenied
 	}
-	if t.name == trackerTransition {
-		v, err := (Manager{Store: t.native.Store, NativeConnections: t.native}).processLifecycleSync(ctx, scope, a.SyncID)
-		raw, marshalErr := json.Marshal(v)
-		return &tools.Result{Data: raw, IsError: err != nil, Content: v.Error}, errors.Join(err, marshalErr)
-	}
 	connection, err := t.native.Get(ctx, scope.Source.ConnectionID)
 	if err != nil {
 		return nil, err

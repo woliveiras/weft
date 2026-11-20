@@ -874,3 +874,32 @@ name assumptions through discovered, scoped workflow mappings.
   [REST API token authentication](https://developer.atlassian.com/cloud/jira/platform/basic-auth-for-rest-apis/)
   and [REST OAuth audience](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/).
   These fixtures do not qualify a real account or OAuth REST integration.
+
+## INT-009-06n — Cloud lifecycle adoption, configuration and recovery API
+
+- Cloud trigger opt-in explicitly pins profileId/profileRevision plus exact
+  cloud/site/project, independently of its MCP consent revision. Legacy sources
+  without profiles/mappings remain readable and retain their prior behavior.
+  Opt-in issue reads require numeric issue/type/project/status metadata. Search
+  uses numeric project scope and stable status-category keys with bounded pages;
+  it does not assume a column/status display name.
+- The private trigger gateway dispatches the shared lifecycle core by edition.
+  Durable runtime/PR evidence, per-task ordering, optional failure, preflight-only
+  admin retry and read-only unknown reconciliation remain intact. Historical
+  detail reads validate the exact edition/profile/scope/intent; Cloud profile
+  filtering uses kind=jira separately from legacy MCP connection filtering.
+- Added role-guarded profile preview/CAS configuration, read-only discovery and
+  separate Cloud mapping endpoints. No credential fields or implicit audience
+  migration are accepted. Dependency failures and missing historical evidence
+  remain distinct. The existing fault-injection test caught an API detail read
+  through the runtime manager's storage instead of the API controller's boundary;
+  the handler now uses its configured backend and that test passes unchanged.
+- Docker unit and FS/private-gateway/backend integration passed for trigger;
+  full suite passed repeatedly, plus the final added Cloud recovery case and vet.
+  API unit plus real SQLite/MCP/verified-TLS integration covers strict input,
+  roles, explicit scopes, revision errors, discovery refusal, offline disable
+  and cross-edition history. API/app/trigger/jiracloud/jiradc/installation full
+  suites passed together (/tmp/weft-cloud-backend-regression-v1.log); focused API
+  recovery/failure/history tests passed (/tmp/weft-cloud-api-v5.log).
+  Independent subagent review found no blockers. No installed connection, issue,
+  policy or running workflow was changed.

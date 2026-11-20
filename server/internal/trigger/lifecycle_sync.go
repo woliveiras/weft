@@ -53,7 +53,7 @@ func lifecycleID(triggerID, taskID, stage string) string {
 var providerID = regexp.MustCompile(`^[1-9][0-9]{0,19}$`)
 
 func (v LifecycleSync) valid() bool {
-	if v.ID != lifecycleID(v.TriggerID, v.TaskID, v.Stage) || v.TriggerID == "" || v.TaskID == "" || v.Evidence == "" || len(v.Evidence) > 200 || v.Actor == "" || v.ConsentScope == "" || v.ConnectionRevision < 1 || v.Source.Kind != "jira-dc" {
+	if v.ID != lifecycleID(v.TriggerID, v.TaskID, v.Stage) || v.TriggerID == "" || v.TaskID == "" || v.Evidence == "" || len(v.Evidence) > 200 || v.Actor == "" || v.ConsentScope == "" || v.ConnectionRevision < 1 || (v.Source.Kind != "jira-dc" && (v.Source.Kind != "jira" || v.Source.ProfileID == "" || v.ConnectionRevision != v.Source.ProfileRevision)) {
 		return false
 	}
 	if _, err := v.Source.Open(); err != nil {
@@ -197,7 +197,7 @@ func (r *Runner) queueLifecycle(ctx context.Context, t *Trigger, stage, evidence
 		return err
 	}
 	now := r.Triggers.now()
-	v := LifecycleSync{ID: id, TriggerID: t.ID, TaskID: t.CurrentTask, Stage: stage, Evidence: evidence, IssueID: t.CurrentIssue.ID, IssueTypeID: t.CurrentIssue.IssueTypeID, IssueKey: t.CurrentIssue.Key, Source: t.CurrentSource, ConnectionRevision: t.Consent.TrackerRevision, Mapping: pin, ConsentScope: t.Consent.Scope, Actor: t.Consent.Actor, State: "queued", CreatedAt: now, UpdatedAt: now}
+	v := LifecycleSync{ID: id, TriggerID: t.ID, TaskID: t.CurrentTask, Stage: stage, Evidence: evidence, IssueID: t.CurrentIssue.ID, IssueTypeID: t.CurrentIssue.IssueTypeID, IssueKey: t.CurrentIssue.Key, Source: t.CurrentSource, ConnectionRevision: workflowRevision(t.CurrentSource, t.Consent.TrackerRevision), Mapping: pin, ConsentScope: t.Consent.Scope, Actor: t.Consent.Actor, State: "queued", CreatedAt: now, UpdatedAt: now}
 	if stage == "work_started" {
 		delivered, err := r.Triggers.GetLifecycleSync(ctx, lifecycleID(t.ID, t.CurrentTask, "pr_delivered"))
 		if err == nil && delivered.State != "queued" {
@@ -224,25 +224,21 @@ func (m Manager) processLifecycleSync(ctx context.Context, t *Trigger, id string
 	if err != nil {
 		return v, err
 	}
-	if v.TriggerID != t.ID || v.ConsentScope != t.Consent.Scope || v.Actor != t.Consent.Actor || v.Source != t.Source || v.ConnectionRevision != t.Consent.TrackerRevision || v.Mapping != t.LifecycleMappings.pin(v.Stage) {
+	if v.TriggerID != t.ID || v.ConsentScope != t.Consent.Scope || v.Actor != t.Consent.Actor || v.Source != t.Source || v.ConnectionRevision != workflowRevision(t.Source, t.Consent.TrackerRevision) || v.Mapping != t.LifecycleMappings.pin(v.Stage) {
 		return v, tools.ErrDenied
 	}
 	if v.State != "queued" {
 		return v, nil
 	}
-	if m.NativeConnections == nil {
-		return v, errors.New("native tracker synchronization is unavailable")
+	mappings, syncer, err := m.workflowServices(v.Source)
+	if err != nil {
+		return v, err
 	}
-	syncer := jiradc.TransitionSync{Connections: *m.NativeConnections}
 	// The stable adapter operation is namespaced separately from untrusted keys.
 	operation := "lifecycle:" + v.ID
-	retained, getErr := syncer.Get(ctx, operation)
+	retained, getErr := m.LifecycleTransition(ctx, v)
 	var result jiradc.SyncRecord
 	if getErr == nil {
-		p := retained.Intent
-		if p.Connection != v.Source.ConnectionID || p.ConnectionRevision != v.ConnectionRevision || p.MappingName != v.Mapping.Name || p.MappingRevision != v.Mapping.Revision || p.IssueID != v.IssueID || p.IssueKey != v.IssueKey || p.IssueTypeID != v.IssueTypeID {
-			return v, storage.ErrConflict
-		}
 		if v.RetryRevision > 0 {
 			result, err = syncer.RetryFailed(ctx, operation, v.RetryRevision, "system:trigger")
 		} else {
@@ -251,11 +247,11 @@ func (m Manager) processLifecycleSync(ctx context.Context, t *Trigger, id string
 	} else if !errors.Is(getErr, storage.ErrNotFound) {
 		err = getErr
 	} else {
-		mapping, lookupErr := (jiradc.WorkflowMappings{Connections: *m.NativeConnections}).Get(ctx, v.Mapping.Name)
+		mapping, lookupErr := mappings.Get(ctx, v.Mapping.Name)
 		if lookupErr != nil {
 			err = lookupErr
 		} else {
-			result, err = syncer.Apply(ctx, jiradc.TransitionIntent{OperationID: operation, MappingName: v.Mapping.Name, MappingRevision: v.Mapping.Revision, Connection: v.Source.ConnectionID, ConnectionRevision: v.ConnectionRevision, IssueKey: v.IssueKey, IssueID: v.IssueID, IssueTypeID: v.IssueTypeID, FromStatusID: mapping.FromStatusID, TransitionID: mapping.TransitionID, TargetStatusID: mapping.TargetStatusID}, "system:trigger")
+			result, err = syncer.Apply(ctx, jiradc.TransitionIntent{OperationID: operation, MappingName: v.Mapping.Name, MappingRevision: v.Mapping.Revision, Connection: workflowConnection(v.Source), ConnectionRevision: v.ConnectionRevision, IssueKey: v.IssueKey, IssueID: v.IssueID, IssueTypeID: v.IssueTypeID, FromStatusID: mapping.FromStatusID, TransitionID: mapping.TransitionID, TargetStatusID: mapping.TargetStatusID}, "system:trigger")
 		}
 	}
 	v.RetryRevision = 0
@@ -363,11 +359,9 @@ func (r *Runner) drainLifecycleSyncs(ctx context.Context) {
 					latest.State = "unknown"
 					// The adapter reserves before POST. Absence or a retained failed
 					// preflight proves this operation never crossed dispatch.
-					if r.Triggers.NativeConnections != nil {
-						core, coreErr := (jiradc.TransitionSync{Connections: *r.Triggers.NativeConnections}).Get(ctx, "lifecycle:"+latest.ID)
-						if errors.Is(coreErr, storage.ErrNotFound) || (coreErr == nil && core.State == "failed") {
-							latest.State = "failed"
-						}
+					core, coreErr := r.Triggers.LifecycleTransition(ctx, latest)
+					if errors.Is(coreErr, storage.ErrNotFound) || (coreErr == nil && core.State == "failed") {
+						latest.State = "failed"
 					}
 					latest.Error = "The original trigger authorization is unavailable or the synchronization was interrupted. Review before recovery."
 					if _, saveErr := r.Triggers.saveLifecycleSync(ctx, latest, latest.Revision); saveErr != nil {
@@ -390,16 +384,13 @@ func (m Manager) ReconcileLifecycleSync(ctx context.Context, id string, expected
 	if expected < 1 || v.Revision != expected {
 		return v, storage.ErrConflict
 	}
-	if m.NativeConnections == nil {
-		return v, errors.New("native tracker synchronization is unavailable")
-	}
-	syncer := jiradc.TransitionSync{Connections: *m.NativeConnections}
-	core, err := syncer.Get(ctx, "lifecycle:"+v.ID)
+	_, syncer, err := m.workflowServices(v.Source)
 	if err != nil {
 		return v, err
 	}
-	if core.Intent.Connection != v.Source.ConnectionID || core.Intent.ConnectionRevision != v.ConnectionRevision || core.Intent.IssueID != v.IssueID || core.Intent.IssueTypeID != v.IssueTypeID || core.Intent.IssueKey != v.IssueKey || core.Intent.MappingName != v.Mapping.Name || core.Intent.MappingRevision != v.Mapping.Revision {
-		return v, storage.ErrConflict
+	core, err := m.LifecycleTransition(ctx, v)
+	if err != nil {
+		return v, err
 	}
 	if core.State == "failed" {
 		return v, errors.New("transition failed before dispatch; review an explicit preflight retry")
@@ -457,7 +448,7 @@ func (m Manager) RetryLifecycleSync(ctx context.Context, id string, expected int
 	if err != nil {
 		return v, err
 	}
-	if t.State != Active || t.Source != v.Source || t.Consent.Scope != v.ConsentScope || t.Consent.Actor != v.Actor || t.Consent.TrackerRevision != v.ConnectionRevision || t.LifecycleMappings.pin(v.Stage) != v.Mapping {
+	if t.State != Active || t.Source != v.Source || t.Consent.Scope != v.ConsentScope || t.Consent.Actor != v.Actor || workflowRevision(t.Source, t.Consent.TrackerRevision) != v.ConnectionRevision || t.LifecycleMappings.pin(v.Stage) != v.Mapping {
 		return v, storage.ErrConflict
 	}
 	problem, err := m.ConsentProblem(ctx, t)
@@ -467,10 +458,7 @@ func (m Manager) RetryLifecycleSync(ctx context.Context, id string, expected int
 	if problem != "" {
 		return v, storage.ErrConflict
 	}
-	if m.NativeConnections == nil {
-		return v, errors.New("native tracker synchronization is unavailable")
-	}
-	core, err := (jiradc.TransitionSync{Connections: *m.NativeConnections}).Get(ctx, "lifecycle:"+v.ID)
+	core, err := m.LifecycleTransition(ctx, v)
 	if err == nil {
 		if core.State != "failed" {
 			return v, storage.ErrConflict

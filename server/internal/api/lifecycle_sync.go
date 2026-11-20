@@ -12,20 +12,39 @@ import (
 	"github.com/woliveiras/weft/server/internal/trigger"
 )
 
+func lifecycleSourceMatches(v trigger.SourceConfig, kind, connection string) bool {
+	if kind != "" && v.Kind != kind {
+		return false
+	}
+	if connection == "" {
+		return true
+	}
+	if kind == "jira" {
+		return v.ProfileID == connection
+	}
+	return v.ConnectionID == connection
+}
 func (s *Server) lifecycleSyncs(w http.ResponseWriter, r *http.Request) error {
+	kind := r.URL.Query().Get("kind")
+	if kind != "" && kind != "jira" && kind != "jira-dc" {
+		return badRequest("kind must be jira or jira-dc")
+	}
+
 	rows, next, err := s.triggers().LifecycleSyncPage(r.Context(), r.URL.Query().Get("after"), 100)
 	if err != nil {
 		return err
 	}
-	if connection := r.URL.Query().Get("connection"); connection != "" {
+	connection := r.URL.Query().Get("connection")
+	if kind != "" || connection != "" {
 		filtered := []trigger.LifecycleSync{}
 		for _, v := range rows {
-			if v.Source.ConnectionID == connection {
+			if lifecycleSourceMatches(v.Source, kind, connection) {
 				filtered = append(filtered, v)
 			}
 		}
 		rows = filtered
 	}
+
 	writeJSON(w, 200, map[string]any{"items": rows, "next": next})
 	return nil
 }
@@ -38,14 +57,16 @@ func (s *Server) getLifecycleSync(w http.ResponseWriter, r *http.Request) error 
 		Sync       trigger.LifecycleSync `json:"sync"`
 		Transition *jiradc.SyncRecord    `json:"transition,omitempty"`
 	}{Sync: v}
-	core, err := (jiradc.TransitionSync{Connections: s.IssueConnections}).Get(r.Context(), "lifecycle:"+v.ID)
+	m := s.triggers()
+	// Read through this API controller's configured storage boundary, including
+	// its dependency-failure instrumentation. Trigger runtime clients may differ.
+	m.NativeConnections = &s.IssueConnections
+	m.CloudProfiles = s.CloudProfiles
+	core, err := m.LifecycleTransition(r.Context(), v)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return err
 	}
 	if err == nil {
-		if core.SiteURL != v.Source.SiteURL || core.ProjectID != v.Source.ProjectID || core.Intent.Connection != v.Source.ConnectionID || core.Intent.ConnectionRevision != v.ConnectionRevision || core.Intent.IssueID != v.IssueID || core.Intent.IssueTypeID != v.IssueTypeID || core.Intent.IssueKey != v.IssueKey || core.Intent.MappingName != v.Mapping.Name || core.Intent.MappingRevision != v.Mapping.Revision {
-			return storage.ErrConflict
-		}
 		out.Transition = &core
 	}
 	writeJSON(w, 200, out)

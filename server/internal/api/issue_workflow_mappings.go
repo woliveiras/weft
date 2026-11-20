@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/woliveiras/weft/server/internal/jiradc"
 )
@@ -25,8 +26,22 @@ func decodeWorkflowMapping(r *http.Request) (jiradc.MappingInput, error) {
 	}
 	return in, nil
 }
+func (s *Server) workflowMappings(r *http.Request) (jiradc.WorkflowMappings, error) {
+	if strings.HasPrefix(r.URL.Path, "/api/v1/jira-cloud-workflow-mappings") {
+		profiles, err := s.cloudProfiles()
+		if err != nil {
+			return jiradc.WorkflowMappings{}, err
+		}
+		return jiradc.WorkflowMappings{Backend: profiles.Backend()}, nil
+	}
+	return jiradc.WorkflowMappings{Connections: s.IssueConnections}, nil
+}
 func (s *Server) issueWorkflowMappings(w http.ResponseWriter, r *http.Request) error {
-	rows, err := (jiradc.WorkflowMappings{Connections: s.IssueConnections}).List(r.Context())
+	m, err := s.workflowMappings(r)
+	if err != nil {
+		return err
+	}
+	rows, err := m.List(r.Context())
 	if err != nil {
 		return err
 	}
@@ -43,7 +58,11 @@ func (s *Server) issueWorkflowMappings(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 func (s *Server) getIssueWorkflowMapping(w http.ResponseWriter, r *http.Request) error {
-	out, err := (jiradc.WorkflowMappings{Connections: s.IssueConnections}).Get(r.Context(), r.PathValue("name"))
+	m, err := s.workflowMappings(r)
+	if err != nil {
+		return err
+	}
+	out, err := m.Get(r.Context(), r.PathValue("name"))
 	if err != nil {
 		return err
 	}
@@ -73,7 +92,11 @@ func (s *Server) saveIssueWorkflowMapping(w http.ResponseWriter, r *http.Request
 	if update {
 		in.Name = r.PathValue("name")
 	}
-	out, err := (jiradc.WorkflowMappings{Connections: s.IssueConnections}).Put(r.Context(), in, revision, identityFrom(r.Context()).Name)
+	m, err := s.workflowMappings(r)
+	if err != nil {
+		return err
+	}
+	out, err := m.Put(r.Context(), in, revision, identityFrom(r.Context()).Name)
 	if errors.Is(err, jiradc.ErrMappingDiscovery) {
 		writeErr(w, http.StatusBadGateway, "tracker_mapping_discovery", err.Error(), nil)
 		return nil

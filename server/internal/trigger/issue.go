@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 type Issue struct {
 	ID             string   `json:"id,omitempty"`
 	IssueTypeID    string   `json:"issueTypeId,omitempty"`
+	StatusID       string   `json:"statusId,omitempty"`
 	Source         string   `json:"source"` // github | jira | jira-dc
 	Key            string   `json:"key"`    // owner/repo#12 or PROJ-12
 	Title          string   `json:"title"`
@@ -63,11 +65,13 @@ type Source interface {
 
 // SourceConfig selects a tracker.
 type SourceConfig struct {
-	Kind         string `json:"kind"`         // github | jira | jira-dc
-	ConnectionID string `json:"connectionId"` // MCP or native issue connection
-	Repository   string `json:"repository,omitempty"`
-	CloudID      string `json:"cloudId,omitempty"`
-	// Native DC identity is explicitly reviewed and must match the connection.
+	Kind            string `json:"kind"`         // github | jira | jira-dc
+	ConnectionID    string `json:"connectionId"` // MCP or native issue connection
+	Repository      string `json:"repository,omitempty"`
+	CloudID         string `json:"cloudId,omitempty"`
+	ProfileID       string `json:"profileId,omitempty"`
+	ProfileRevision int64  `json:"profileRevision,omitempty"`
+	// Native DC or profiled Cloud identity must match the reviewed authority.
 	SiteURL   string `json:"siteUrl,omitempty"`
 	ProjectID string `json:"projectId,omitempty"`
 	// Query narrows the search: extra GitHub search terms or a JQL clause.
@@ -83,6 +87,9 @@ var (
 
 // Open validates the config and returns its source.
 func (c SourceConfig) Open() (Source, error) {
+	if (c.ProfileID != "" || c.ProfileRevision != 0) && (c.Kind != "jira" || !connRe.MatchString(c.ProfileID) || c.ProfileRevision < 1 || c.SiteURL != "https://api.atlassian.com/ex/jira/"+c.CloudID || !providerID.MatchString(c.ProjectID)) {
+		return nil, errors.New("select a complete Jira Cloud profile pin with its exact REST site and numeric project")
+	}
 	if !connRe.MatchString(c.ConnectionID) {
 		return nil, errors.New("name a tracker connection")
 	}
@@ -337,13 +344,18 @@ func (j jira) Tools() []string {
 }
 
 type jiraIssue struct {
+	ID     string `json:"id"`
 	Self   string `json:"self"`
 	Key    string `json:"key"`
 	Fields struct {
 		Summary     string          `json:"summary"`
 		Description json.RawMessage `json:"description"`
 		Labels      []string        `json:"labels"`
-		Status      struct {
+		IssueType   struct {
+			ID string `json:"id"`
+		} `json:"issuetype"`
+		Status struct {
+			ID             string `json:"id"`
 			StatusCategory struct {
 				Key string `json:"key"`
 			} `json:"statusCategory"`
@@ -371,11 +383,11 @@ type jiraIssue struct {
 	} `json:"fields"`
 }
 
-var jiraFields = []string{"summary", "description", "labels", "status", "assignee", "issuelinks", "reporter", "updated", "project"}
+var jiraFields = []string{"summary", "description", "labels", "status", "assignee", "issuelinks", "reporter", "updated", "project", "issuetype"}
 
 func (raw jiraIssue) issue() Issue {
 	f := raw.Fields
-	i := Issue{Source: "jira", Key: raw.Key, Title: f.Summary, Body: describe(f.Description), Labels: f.Labels,
+	i := Issue{ID: raw.ID, IssueTypeID: f.IssueType.ID, StatusID: f.Status.ID, Source: "jira", Key: raw.Key, Title: f.Summary, Body: describe(f.Description), Labels: f.Labels,
 		Open: f.Status.StatusCategory.Key == "new", Author: f.Reporter.human("jira"), Updated: f.Updated,
 		Assignee: f.Assignee.AccountID}
 	if u, err := url.Parse(raw.Self); err == nil && u.Scheme == "https" && u.User == nil && u.Port() == "" &&
@@ -416,6 +428,9 @@ func (j jira) MatchesHeld(ctx context.Context, call Invoker, issue Issue, label 
 
 func (j jira) search(ctx context.Context, call Invoker, label, key string) ([]Issue, error) {
 	jql := fmt.Sprintf(`labels = "%s" AND statusCategory = "To Do"`, label)
+	if j.c.ProfileID != "" {
+		jql = "project = " + j.c.ProjectID + " AND labels = " + strconv.Quote(label)
+	}
 	if j.c.Query != "" {
 		jql = "(" + j.c.Query + ") AND " + jql
 	}
@@ -436,12 +451,33 @@ func (j jira) search(ctx context.Context, call Invoker, label, key string) ([]Is
 		return nil, errHeldScopeUnverified
 	}
 	issues := make([]Issue, 0, len(out.Issues))
-	for _, raw := range out.Issues {
-		if trackerKey.MatchString(raw.Key) {
-			issues = append(issues, raw.issue())
+	seen := map[string]bool{}
+	for page := 0; ; page++ {
+		for _, raw := range out.Issues {
+			if err := validateCloudIssue(j.c, raw); err != nil {
+				return nil, err
+			}
+			if trackerKey.MatchString(raw.Key) {
+				if j.c.ProfileID != "" && seen[raw.ID] {
+					return nil, errors.New("Jira Cloud search changed during pagination")
+				}
+				seen[raw.ID] = true
+				issues = append(issues, raw.issue())
+			}
+		}
+		if j.c.ProfileID == "" || out.Next == "" {
+			return issues, nil
+		}
+		if page >= 9 {
+			return nil, errors.New("Jira Cloud issue search exceeds the bounded scan")
+		}
+		args["nextPageToken"] = out.Next
+		out.Issues, out.Next = nil, ""
+		res, err = call(ctx, tool(j.c, "searchJiraIssuesUsingJql"), args)
+		if err := decode(res, err, &out); err != nil {
+			return nil, err
 		}
 	}
-	return issues, nil
 }
 
 // describe flattens a Jira description (plain text or Atlassian Document
@@ -506,4 +542,21 @@ func Grants(s Source) []domain.ToolGrant {
 		out = append(out, domain.ToolGrant{Name: t})
 	}
 	return out
+}
+
+// Legacy Cloud reads retain their existing permissive shape. An explicit workflow
+// profile requires immutable numeric issue/type/status identities and project scope.
+func validateCloudIssue(source SourceConfig, raw jiraIssue) error {
+	if source.ProfileID == "" {
+		return nil
+	}
+	if !providerID.MatchString(raw.ID) || !providerID.MatchString(raw.Fields.IssueType.ID) || !providerID.MatchString(raw.Fields.Status.ID) || raw.Fields.Project.ID != source.ProjectID || !trackerKey.MatchString(raw.Key) {
+		return errors.New("Jira Cloud workflow issue identity or reviewed project is unavailable")
+	}
+	switch raw.Fields.Status.StatusCategory.Key {
+	case "new", "indeterminate", "done":
+	default:
+		return errors.New("Jira Cloud issue status category is unavailable")
+	}
+	return nil
 }

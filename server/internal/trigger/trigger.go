@@ -16,6 +16,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/events"
 	"github.com/woliveiras/weft/server/internal/graph"
+	"github.com/woliveiras/weft/server/internal/jiracloud"
 	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/storage"
@@ -218,6 +219,7 @@ func validate(in *Input) error {
 type Manager struct {
 	TrackerRevision    func(context.Context, string, string) (int64, error)
 	NativeConnections  *jiradc.Connections
+	CloudProfiles      *jiracloud.Profiles
 	ReadinessMaxMicros int64
 	Models             *llm.Registry
 
@@ -569,6 +571,11 @@ func (m Manager) reviewedScope(ctx context.Context, in Input, g *domain.Graph) (
 			fe := &FieldError{}
 			fe.add("source.connectionId", "%s", err)
 			return Consent{}, fe
+		}
+	}
+	if in.Source.ProfileID != "" {
+		if _, err := m.cloudProfile(ctx, in.Source, c.TrackerRevision); err != nil {
+			return Consent{}, err
 		}
 	}
 	if !in.ReadinessDisabled {

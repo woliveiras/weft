@@ -260,3 +260,44 @@ func (s lifecycleCoreReadFailure) GetSetting(ctx context.Context, key string) (*
 	}
 	return s.Store.GetSetting(ctx, key)
 }
+
+func TestLifecycleHistoryFiltersCloudProfilesAndEditionsIndependently(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	now := time.Now().UTC()
+	for _, source := range []trigger.SourceConfig{
+		{Kind: "jira", ConnectionID: "mcp-shared", ProfileID: "project-cloud", ProfileRevision: 1, CloudID: "11111111-2222-3333-4444-555555555555", SiteURL: "https://api.atlassian.com/ex/jira/11111111-2222-3333-4444-555555555555", ProjectID: "10001"},
+		{Kind: "jira-dc", ConnectionID: "project-cloud", SiteURL: "https://jira.example", ProjectID: "10001"},
+	} {
+		task := "task-" + source.Kind
+		identity, _ := json.Marshal([]string{"trg_filter", task, "pr_delivered"})
+		sum := sha256.Sum256(identity)
+		id := hex.EncodeToString(sum[:])
+		v := trigger.LifecycleSync{ID: id, TriggerID: "trg_filter", TaskID: task, Stage: "pr_delivered", Evidence: "event-pr", IssueID: "10007", IssueTypeID: "10002", IssueKey: "APP-7", Source: source, ConnectionRevision: 1, Mapping: trigger.MappingPin{Name: "review", Revision: 1}, ConsentScope: "consent", Actor: "admin", State: "failed", CreatedAt: now, UpdatedAt: now}
+		raw, _ := json.Marshal(v)
+		if _, err := a.Store.PutSetting(t.Context(), trigger.LifecycleSyncPrefix+id, raw, 0, "fixture"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		query, kind string
+		count       int
+	}{
+		{"?kind=jira&connection=project-cloud", "jira", 1}, {"?kind=jira-dc&connection=project-cloud", "jira-dc", 1},
+		{"?kind=jira&connection=mcp-shared", "", 0}, {"?connection=mcp-shared", "jira", 1},
+	} {
+		var page struct {
+			Items []trigger.LifecycleSync `json:"items"`
+		}
+		if code := call(t, srv, "GET", "/api/v1/lifecycle-syncs"+tc.query, viewerTok, "", "", &page); code != 200 || len(page.Items) != tc.count {
+			t.Fatal(tc, code, page)
+		}
+		for _, v := range page.Items {
+			if v.Source.Kind != tc.kind {
+				t.Fatal("cross-edition history", tc, v)
+			}
+		}
+	}
+	if code := call(t, srv, "GET", "/api/v1/lifecycle-syncs?kind=guess", viewerTok, "", "", nil); code != 400 {
+		t.Fatal("invalid edition filter", code)
+	}
+}
