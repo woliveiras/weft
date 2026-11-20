@@ -9,10 +9,17 @@ import (
 	"github.com/woliveiras/weft/server/internal/tools"
 )
 
-// DedupKey identifies an issue for a workflow: an issue starts at most one
-// task per workflow, however often it is relabelled.
+// DedupKey identifies a tracker resource for a workflow. Jira Cloud keys are
+// scoped to the reviewed cloud ID; changing a query or credential connection
+// within that site does not create a new resource. Historical unscoped outcomes
+// remain conservative fences because their original site cannot be inferred.
 func DedupKey(t *Trigger, i Issue) string {
-	return i.Source + ":" + i.Key + "@" + t.Workflow
+	legacy := i.Source + ":" + i.Key + "@" + t.Workflow
+	_, legacyReadiness := t.RetainedReadiness[legacy]
+	if i.Source != "jira" || t.Source.CloudID == "" || t.Processed[legacy] != "" || legacyReadiness {
+		return legacy
+	}
+	return "jira:" + t.Source.CloudID + ":" + i.Key + "@" + t.Workflow
 }
 
 // Reason says why an issue cannot start a task now, or "" when it can.

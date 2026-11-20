@@ -953,3 +953,14 @@ delegation trees and file inspection. Review configuration
 when a mandatory policy denies an operation; approval cannot override that denial.
 Task authorization modes and their native limitations are documented in
 [Task authorization](task-authorization.md).
+
+### Jira Cloud history scope
+
+New trigger outcomes and retained readiness allowances distinguish equal issue
+keys on different reviewed cloud IDs. Editing a query or selecting another
+credential connection for the same site does not reset those outcomes.
+Historical Jira records without a cloud ID stay conservative: Weft retains
+these admission fences and readiness limits instead of guessing a site and
+starting work again. Global admission records remain intact. Jira Data Center
+operational adoption and instance-scoped admission are not established by this
+compatibility change.

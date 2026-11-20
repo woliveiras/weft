@@ -1524,7 +1524,7 @@ func TestJiraMissingHoldRequiresProjectAccess(t *testing.T) {
 				t.Fatalf("expected same-connection project checks: %v", atl.rest)
 			}
 			if tc.projectStatus == 0 {
-				if len(tr.Holds) != 0 || len(tr.HoldResolutions) != 1 || tr.RetainedReadiness["jira:APP-1@factory"].Round != 1 {
+				if len(tr.Holds) != 0 || len(tr.HoldResolutions) != 1 || tr.RetainedReadiness[trigger.DedupKey(tr, trigger.Issue{Source: "jira", Key: "APP-1"})].Round != 1 {
 					t.Fatalf("verified absence did not preserve progress: %+v", tr)
 				}
 			} else if len(tr.Holds) != 1 || len(tr.HoldResolutions) != 0 ||

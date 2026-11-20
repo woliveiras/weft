@@ -178,3 +178,93 @@ func TestStartFailureMarksTheIssueAndPausesTheTrigger(t *testing.T) {
 		t.Fatalf("issue = %+v %v", labels, gh.comments)
 	}
 }
+
+func TestJiraCloudScopeEditPreservesIndependentProcessedHistory(t *testing.T) {
+	st := triggerStore(t)
+	atl := newTracker("atl")
+	atl.issues = []map[string]any{jiraIssue("APP-1", "First site", "weft")}
+	c := &clock{t: time.Now().UTC()}
+	r := runner(st, c, "cloud-scope", atl)
+	fake := &tasks{status: map[string]trigger.TaskStatus{}}
+	r.Tasks = fake
+	in := input()
+	in.Source = trigger.SourceConfig{Kind: "jira", ConnectionID: "atl", CloudID: cloud}
+	in.Owner = "acc-1"
+	tr, err := r.Triggers.Create(t.Context(), in, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	if len(fake.started) != 1 || tr.CurrentTask == "" {
+		t.Fatal("first site not admitted", tr.LastError)
+	}
+	originalKey := trigger.DedupKey(tr, trigger.Issue{Source: "jira", Key: "APP-1"})
+	fake.status[tr.CurrentTask] = trigger.TaskStatus{State: "succeeded", PullRequestURL: "https://example.test/pull/1"}
+	tr = advance(r, c, t, tr.ID)
+	if tr.CurrentTask != "" {
+		t.Fatal("completion not reconciled", tr.LastError)
+	}
+	in.Source.CloudID = "22222222-2222-3333-4444-555555555555"
+	tr, err = r.Triggers.Edit(t.Context(), tr.ID, in, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	atl.issues = []map[string]any{jiraIssue("APP-1", "Second site", "weft")}
+	tr = advance(r, c, t, tr.ID)
+	if len(fake.started) != 2 || len(tr.Processed) != 2 || tr.Processed[originalKey] == "" {
+		t.Fatal("site history collision or lost fence", len(fake.started), tr.Processed, tr.LastError)
+	}
+	fake.status[tr.CurrentTask] = trigger.TaskStatus{State: "succeeded", PullRequestURL: "https://example.test/pull/2"}
+	tr = advance(r, c, t, tr.ID)
+	// Returning to the first site with a changed query still cannot launch it again.
+	in.Source.CloudID = cloud
+	in.Source.Query = "project = APP"
+	if _, err = r.Triggers.Edit(t.Context(), tr.ID, in, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	atl.issues = []map[string]any{jiraIssue("APP-1", "First site again", "weft")}
+	tr = advance(r, c, t, tr.ID)
+	if len(fake.started) != 2 || tr.CurrentTask != "" {
+		t.Fatal("return to site bypassed deduplication", tr.LastError)
+	}
+	admissions, err := st.ListSettings(t.Context(), "trigger-admissions/")
+	if err != nil || len(admissions) != 2 {
+		t.Fatal("global admission records changed", len(admissions), err)
+	}
+}
+
+func TestLegacyJiraReadinessCannotResetExhaustedAllowances(t *testing.T) {
+	st := triggerStore(t)
+	atl := newTracker("atl")
+	atl.issues = []map[string]any{jiraIssue("APP-1", "Legacy held issue", "weft")}
+	c := &clock{t: time.Now().UTC()}
+	r := runner(st, c, "legacy-progress", atl)
+	fake := &tasks{}
+	r.Tasks = fake
+	assessments := 0
+	r.Assessor = assessFunc(func(context.Context, *trigger.Trigger, string) trigger.ReadinessAssessment {
+		assessments++
+		return ready(context.Background(), nil, "")
+	})
+	in := input()
+	in.Source = trigger.SourceConfig{Kind: "jira", ConnectionID: "atl", CloudID: cloud}
+	in.Owner = "acc-1"
+	tr, err := r.Triggers.Create(t.Context(), in, "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = r.Triggers.Update(t.Context(), tr.ID, "fixture", func(tr *trigger.Trigger) error {
+		tr.RetainedReadiness = map[string]trigger.ReadinessProgress{"jira:APP-1@factory": {RetainedAt: c.now(), Round: 2, SnapshotEdits: 2, Intervention: true, State: "operator", Reason: "snapshot_round_limit"}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	tr = advance(r, c, t, tr.ID)
+	if assessments != 0 || len(fake.started) != 0 || len(tr.Holds) != 1 {
+		t.Fatal("legacy readiness limits bypassed", assessments, len(fake.started), tr.LastError)
+	}
+	h := tr.Holds[0]
+	if h.Round != 2 || h.SnapshotEdits != 2 || !h.Intervention || h.State != "operator" || h.Reason != "snapshot_round_limit" {
+		t.Fatal("legacy allowance changed", h)
+	}
+}

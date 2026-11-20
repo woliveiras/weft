@@ -288,3 +288,22 @@ name assumptions through discovered, scoped workflow mappings.
   Vet for Jira DC/API/app and diff checks passed. Subagent review requested the
   positive revision fence and additional role/ETag/TLS cases; implemented and
   verified. Final read-only review found no residual blockers.
+
+## INT-009-05c — Jira Cloud processed-history scope
+
+- New Jira processed/readiness history keys include the reviewed cloud ID.
+  Returning to a previously processed site retains its outcome; query or
+  credential-connection selection does not create a new remote resource.
+- Historical Jira entries without a cloud ID remain conservative fences;
+  their original site is not guessed. Legacy retained readiness allowances
+  remain effective, including exhausted rounds, snapshot edits and intervention.
+  No persisted history is deleted or rewritten by this change. The global
+  admission journal already includes cloud ID and is unchanged.
+- Subagent review identified the indirect readiness-key migration; added the
+  conservative fallback plus an integration regression proving zero additional
+  assessments/starts with exhausted legacy allowances. Final review found no
+  residual blockers. Units cover identities/fallback; integration uses the real
+  trigger manager, gateway and fsstore across site edits and completion.
+- Docker `./scripts/go.sh test ./internal/trigger ./internal/api ./internal/taskconfig -count=1`
+  passed after the compatibility fix (`/tmp/weft-jira-scope-final-v3.log`), as did
+  the isolated exhausted-legacy regression and trigger vet. Diff check passed.

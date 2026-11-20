@@ -77,3 +77,36 @@ func TestMatchSortsIssuesAndWaitsForTheCurrentTask(t *testing.T) {
 		t.Fatalf("recorded skips = %+v", got.Skipped)
 	}
 }
+
+func TestJiraProcessedIdentityIncludesTheReviewedCloud(t *testing.T) {
+	a := &trigger.Trigger{Workflow: "factory", Label: "weft", Source: trigger.SourceConfig{Kind: "jira", ConnectionID: "atl", CloudID: cloud}, Processed: map[string]string{}}
+	i := trigger.Issue{Source: "jira", Key: "APP-1", Open: true, Labels: []string{"weft"}}
+	key := trigger.DedupKey(a, i)
+	a.Processed[key] = "tsk_a"
+	b := *a
+	b.Source.CloudID = "22222222-2222-3333-4444-555555555555"
+	if key == trigger.DedupKey(&b, i) || trigger.Reason(&b, i) != "" {
+		t.Fatal("different sites share history")
+	}
+	b.Source.CloudID = a.Source.CloudID
+	b.Source.ConnectionID = "replacement"
+	b.Source.Query = "project = APP"
+	if trigger.Reason(&b, i) == "" {
+		t.Fatal("query/credential selection bypassed site dedup")
+	}
+	a.Processed["jira:APP-1@factory"] = "tsk_legacy"
+	if trigger.DedupKey(a, i) != "jira:APP-1@factory" || !strings.Contains(trigger.Reason(a, i), "tsk_legacy") {
+		t.Fatal("legacy history fence lost")
+	}
+	b.Source.CloudID = "22222222-2222-3333-4444-555555555555"
+	if !strings.Contains(trigger.Reason(&b, i), "tsk_legacy") {
+		t.Fatal("ambiguous legacy history must not launch again")
+	}
+}
+
+func TestLegacyJiraReadinessAllowancesKeepTheirHistoryKey(t *testing.T) {
+	tr := &trigger.Trigger{Workflow: "factory", Source: trigger.SourceConfig{Kind: "jira", CloudID: cloud}, RetainedReadiness: map[string]trigger.ReadinessProgress{"jira:APP-1@factory": {Round: 2}}}
+	if key := trigger.DedupKey(tr, trigger.Issue{Source: "jira", Key: "APP-1"}); key != "jira:APP-1@factory" {
+		t.Fatal("legacy round allowance lost", key)
+	}
+}
