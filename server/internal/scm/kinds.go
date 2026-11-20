@@ -3,6 +3,7 @@ package scm
 // Kind describes a registered delivery adapter without credentials or network calls.
 // Capabilities describe implemented operations, not a live-account qualification.
 type Kind struct {
+	AutomaticMerge    bool   `json:"automaticMerge"`
 	ReviewSummary     bool   `json:"reviewSummary"`
 	ReadPullRequest   bool   `json:"readPullRequest"`
 	ID                string `json:"id"`

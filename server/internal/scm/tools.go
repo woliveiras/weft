@@ -23,7 +23,7 @@ const (
 
 // Tools returns the SCM gateway tools backed by m.
 func Tools(m Manager) []tools.Tool {
-	return []tools.Tool{pushTool{m: m}, pullRequestTool{m: m}, readPullRequestTool{m: m}, reviewSummaryTool{m: m}}
+	return []tools.Tool{pushTool{m: m}, pullRequestTool{m: m}, readPullRequestTool{m: m}, reviewSummaryTool{m: m}, mergePullRequestTool{m: m}}
 }
 
 type pushTool struct{ m Manager }

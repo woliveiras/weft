@@ -215,3 +215,14 @@ create a test repository and a repository access token, and connect it as above.
 | Discovery works but a call is denied | The agent has no grant for that exact operation, or the scope was not requested. |
 | A Jira or Confluence call fails with a site error | The operation needs a `cloudId` and the site is outside the configured read boundary. |
 | Bitbucket test connection fails with a certificate error (proposed) | The server uses an internal CA; add it to the connection. |
+
+### Portable automatic merge availability
+
+`scm.pull_request.read` and `scm.pull_request.review` support the registered SCM
+adapters. Automatic merge is currently unavailable in the portable gateway
+(`automaticMerge: false`). An expected-head-only mutation leaves a PR retarget
+race; a preflight or readback cannot prevent a merge into a changed destination.
+The merge tool returns an explicit error without calling the provider. Use the
+provider's separately authorized review/merge process until atomic head and
+destination protection is qualified. This does not change existing workflow
+versions, MCP grants or the GitHub pilot.

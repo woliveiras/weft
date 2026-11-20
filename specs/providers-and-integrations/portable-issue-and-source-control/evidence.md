@@ -165,3 +165,26 @@ name assumptions through discovered, scoped workflow mappings.
 - An unconfirmed reserved attempt never reposts automatically. Its outcome must
   be reconciled or investigated by the operator; no deletion/reset capability was
   added. No real external comment, connection change or workflow grant was made.
+
+## INT-009-04c — Automatic merge capability boundary
+
+- Subagent review rejected the uncommitted merge prototype: an expected-head
+  mutation does not atomically constrain the destination. A concurrent retarget
+  can preserve the same head while changing the branch being updated. Preflight
+  checks and post-write readback cannot prevent that unauthorized effect.
+- The prototype mutation is not shipped. `scm.pull_request.merge` returns an
+  explicit unavailable result without contacting a provider; `automaticMerge`
+  is false for all current built-in adapters. Wildcards do not authorize this
+  capability. Existing pilot workflows/grants were not changed.
+- Remediation: qualify a remote operation that enforces the reviewed head and
+  authorized destination atomically, including provider rules without a bypass.
+  Until then, review summaries remain usable and merge uses the provider's
+  separately authorized review process. AC-005 automatic merge remains blocked.
+- Contract evidence: [GitHub REST merge](https://docs.github.com/en/rest/pulls/pulls#merge-a-pull-request)
+  documents an expected head SHA; [GraphQL PullRequest](https://docs.github.com/en/graphql/reference/pulls#pullrequest)
+  documents bypass capability. Neither establishes an atomic expected destination
+  for the attempted implementation. No production version was qualified.
+- SCM/API/tools Docker tests passed (`/tmp/weft-merge-gate.log`). Unit coverage
+  checks capability metadata; integration invokes the real gateway/store for all
+  three editions and retries, asserting zero remote calls and wildcard refusal.
+  Final subagent review found no blockers; `git diff --check` passed.

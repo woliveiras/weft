@@ -953,4 +953,5 @@ export interface SCMKind {
   createPullRequest: boolean;
   readPullRequest: boolean;
   reviewSummary: boolean;
+  automaticMerge: boolean;
 }
