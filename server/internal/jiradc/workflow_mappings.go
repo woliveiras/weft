@@ -161,7 +161,7 @@ func (m WorkflowMappings) Put(ctx context.Context, in MappingInput, expected int
 			return WorkflowMapping{}, err
 		}
 	}
-	ev := domain.NewEvent("tracker.workflow_mapping_change_requested", "", map[string]any{"mapping": in.Name, "connection": in.Connection, "expectedRevision": expected, "enabled": in.Enabled}).WithActor(actor)
+	ev := domain.NewEvent("tracker.workflow_mapping_change_requested", "", map[string]any{"mapping": in.Name, "connection": in.Connection, "siteUrl": next.SiteURL, "projectId": next.ProjectID, "expectedRevision": expected, "enabled": in.Enabled}).WithActor(actor)
 	if err = m.backend().Store().AppendEvent(ctx, ev); err != nil {
 		return WorkflowMapping{}, err
 	}

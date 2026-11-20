@@ -283,7 +283,7 @@ func (m TransitionSync) apply(ctx context.Context, v TransitionIntent, actor str
 			record.State = "already_target"
 		}
 	}
-	ev := domain.NewEvent("tracker.transition_sync_requested", "", map[string]any{"connection": v.Connection, "operation": v.OperationID, "state": record.State}).WithActor(actor)
+	ev := domain.NewEvent("tracker.transition_sync_requested", "", map[string]any{"connection": v.Connection, "siteUrl": record.SiteURL, "projectId": record.ProjectID, "operation": v.OperationID, "state": record.State}).WithActor(actor)
 	if err = m.backend().Store().AppendEvent(ctx, ev); err != nil {
 		return SyncRecord{}, err
 	}

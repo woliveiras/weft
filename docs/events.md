@@ -76,9 +76,10 @@ be stored before proceeding.
 | `scm.review_route_change_requested` | Administrative route save requests an activation barrier; route CAS determines whether it took effect | `{route, expectedRevision, enabled}`; no credential or PR content |
 | `scm.review_summary_published` | A revision-scoped review summary was confirmed on the provider and stored | `{connection, provider, repository, number, headSha, baseSha, verdict, url}` |
 | `tracker.connection_change_requested` | A native tracker connection write was reviewed; record CAS determines success | `{connection, provider, expectedRevision, projectRestricted}` |
-| `tracker.transition_sync_requested` | An internal Jira DC lifecycle transition intent passed local review; journal CAS precedes any remote POST, and the stored sync record determines outcome | `{connection, operation, state}`; no issue body, field values or credential |
+| `tracker.transition_sync_requested` | An internal Jira DC lifecycle transition intent passed local review; journal CAS precedes any remote POST, and the stored sync record determines outcome | `{connection, siteUrl, projectId, operation, state}`; no issue body, field values or credential |
 | `tracker.lifecycle_sync_recovery_requested` | An administrator explicitly requested CAS-reviewed retry of a known pre-dispatch lifecycle failure; unknown dispatches cannot be reposted | `{sync, task, stage, expectedRevision}`; no issue body or credential |
-| `tracker.workflow_mapping_change_requested` | A scoped native Jira workflow mapping save was reviewed; mapping CAS determines success | `{mapping, connection, expectedRevision, enabled}` |
+| `tracker.jira_cloud_profile_change_requested` | A credential-free Cloud workflow profile save was reviewed; profile/MCP CAS determines success | `{profile, mcpConnection, mcpRevision, cloudId, siteUrl, projectId, expectedRevision, enabled, projectRestricted}` |
+| `tracker.workflow_mapping_change_requested` | A scoped native Jira workflow mapping save was reviewed; mapping CAS determines success | `{mapping, connection, siteUrl, projectId, expectedRevision, enabled}` |
 | `trigger.note` | something a person should know about a trigger's task (missing Jira transition, failed comment) | `{trigger, task, message}` (graph id = the task run) |
 | `trigger.run` | one trigger run (no graph id) | `{trigger, outcome, error?}` |
 | `trigger.changed` | trigger created, updated, paused, resumed or deleted (no graph id) | `{trigger, action, state, workflow}` (actor = caller or `system:trigger`) |

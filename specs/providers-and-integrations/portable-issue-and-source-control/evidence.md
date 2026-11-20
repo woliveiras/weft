@@ -844,3 +844,33 @@ name assumptions through discovered, scoped workflow mappings.
   second-authority races/lookup failure, read-only clients, reservation before
   send, lost response and reopen/reconcile after mapping disable with one POST.
   Independent subagent review found no blocking regression. No live change.
+
+## INT-009-06m — Explicit Jira Cloud project profiles and transition adapter
+
+- Added credential-free Cloud workflow profiles referencing an existing exact
+  MCP connection/revision. Preview/save validate first-party static REST
+  compatibility without opening credentials or making remote calls. MCP OAuth,
+  custom audiences and incompatible policies remain rejected. Technical-account
+  project restriction is an explicit administrator attestation, not a claim that
+  local code can configure remote permissions or atomically prevent issue moves.
+- Cloud discovery uses a minimal project/type/status/update snapshot, independent
+  of ADF descriptions. Scoped IDs and actual transition field metadata feed the
+  shared journal; no column-name guesses, arbitrary fields or same-status action.
+  Profile and MCP guards bind reservation/write. Once entering TrackerAPI.Call,
+  failure is conservatively uncertain, even if transport dispatch is unavailable.
+  Cloud namespaces are separate from DC; no PAT or audience fallback.
+- Mapping/sync audit events now include effective site/project, distinguishing
+  equal local names across editions. The Cloud profile audit includes its site,
+  cloud and project scope. No credential or issue body is logged.
+- Docker full jiracloud, jiradc and mcpconfig tests and vet passed. Unit plus
+  real fsstore/MCP manager/TrackerAPI/verified TLS fixtures cover missing pins,
+  incompatible credentials, CAS races across profile/MCP/journal, revocation,
+  cross-project issue, required fields, malformed metadata, credential reflection,
+  403/429, lost response, storage reopen and read-only reconciliation with one
+  POST. Audit-scope assertions passed on a further Cloud rerun. Independent
+  subagent review found no blockers; no real service or installed configuration
+  was changed.
+- Provider contract references checked: [Jira Cloud REST v3 issue transitions](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/),
+  [REST API token authentication](https://developer.atlassian.com/cloud/jira/platform/basic-auth-for-rest-apis/)
+  and [REST OAuth audience](https://developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps/).
+  These fixtures do not qualify a real account or OAuth REST integration.
