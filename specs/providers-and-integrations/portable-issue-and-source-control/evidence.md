@@ -903,3 +903,14 @@ name assumptions through discovered, scoped workflow mappings.
   recovery/failure/history tests passed (/tmp/weft-cloud-api-v5.log).
   Independent subagent review found no blockers. No installed connection, issue,
   policy or running workflow was changed.
+
+## INT-009-06o — Preserve Cloud compatibility versus dependency errors
+
+- TrackerAPI.Revision now returns a typed compatibility refusal separately from
+  actual manager/storage failures. Cloud profiles translate only incompatible or
+  missing MCP configuration into invalid input; a transient second-read storage
+  failure propagates instead of becoming an apparent operator configuration error.
+  The compatibility message and static first-party audience rules are unchanged.
+- Docker full mcpconfig/jiracloud tests passed, including a second-read dependency
+  failure assertion preserving errors.Is. Independent subagent reviews found no
+  blockers. No connection, credential or authentication configuration changed.

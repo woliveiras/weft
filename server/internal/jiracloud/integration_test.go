@@ -443,3 +443,27 @@ func TestCloudProfileStorageFailurePropagatesWithoutProviderAccess(t *testing.T)
 		t.Fatal("dependency read failure was hidden as configuration success", err)
 	}
 }
+
+type cloudSecondReadFailure struct {
+	storage.Store
+	reads   atomic.Int32
+	failure error
+}
+
+func (s *cloudSecondReadFailure) GetSetting(ctx context.Context, key string) (*storage.Setting, error) {
+	if strings.HasPrefix(key, "mcp/connections/") && s.reads.Add(1) == 2 {
+		return nil, s.failure
+	}
+	return s.Store.GetSetting(ctx, key)
+}
+
+func TestCloudProfileSecondMCPReadFailureRemainsDependencyFailure(t *testing.T) {
+	f := newCloudFixture(t)
+	failure := errors.New("fixture second MCP metadata read unavailable")
+	store := &cloudSecondReadFailure{Store: f.store, failure: failure}
+	f.profiles.Store = store
+	f.api.Connections = mcpconfig.New(store, f.box, nil)
+	if _, err := f.profiles.Preview(t.Context(), f.input); !errors.Is(err, failure) || errors.Is(err, jiracloud.ErrInvalid) || f.calls.Load() != 0 {
+		t.Fatal("second storage failure was classified as invalid user configuration", err)
+	}
+}

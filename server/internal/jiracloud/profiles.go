@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/mcpconfig"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
@@ -127,8 +128,11 @@ func (m Profiles) mcpGuard(ctx context.Context, in Input) (storage.SettingRevisi
 		return storage.SettingRevision{}, storage.ErrConflict
 	}
 	revision, err := m.API.Revision(ctx, in.MCPConnection, "jira")
-	if err != nil {
+	if errors.Is(err, mcpconfig.ErrTrackerCompatibility) || errors.Is(err, storage.ErrNotFound) {
 		return storage.SettingRevision{}, fmt.Errorf("%w: a first-party static Jira REST-compatible MCP connection is required", ErrInvalid)
+	}
+	if err != nil {
+		return storage.SettingRevision{}, err
 	}
 	if row.Revision != revision {
 		return storage.SettingRevision{}, storage.ErrConflict

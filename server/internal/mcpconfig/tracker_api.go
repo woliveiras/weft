@@ -20,6 +20,8 @@ type TrackerAPI struct {
 	Client      *http.Client
 }
 
+var ErrTrackerCompatibility = errors.New("a compatible tracker API connection with a static scoped credential is required")
+
 func trackerOrigin(r View, kind string) string {
 	// Only provider-issued static API tokens from known first-party
 	// connections may be used on the respective vendor API. OAuth tokens
@@ -44,8 +46,11 @@ func trackerOrigin(r View, kind string) string {
 
 func (a *TrackerAPI) Revision(ctx context.Context, connection, kind string) (int64, error) {
 	r, err := a.Connections.Get(ctx, connection)
-	if err != nil || trackerOrigin(r, kind) == "" {
-		return 0, errors.New("a compatible tracker API connection with a static scoped credential is required")
+	if err != nil {
+		return 0, err
+	}
+	if trackerOrigin(r, kind) == "" {
+		return 0, ErrTrackerCompatibility
 	}
 	return r.Revision, nil
 }
