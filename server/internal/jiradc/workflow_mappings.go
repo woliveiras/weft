@@ -41,14 +41,17 @@ type WorkflowMapping struct {
 	UpdatedAt        time.Time `json:"updatedAt"`
 	UpdatedBy        string    `json:"updatedBy"`
 }
-type WorkflowMappings struct{ Connections Connections }
+type WorkflowMappings struct {
+	Connections Connections
+	Backend     WorkflowBackend
+}
 
 // Validate checks the input shape without opening a connection or discovering Jira.
 // Saving still revalidates the reviewed sample through WorkflowMappings.Put.
 func (v MappingInput) Validate() error { return v.validate() }
 
 func (v MappingInput) validate() error {
-	if !connectionName.MatchString(v.Name) || !validIssueUpdated(v.IssueUpdated) {
+	if !connectionName.MatchString(v.Name) || !ValidIssueUpdated(v.IssueUpdated) {
 		return fmt.Errorf("%w: name a mapping and review valid issue update metadata", ErrInvalid)
 	}
 	return (TransitionIntent{OperationID: "mapping", Connection: v.Connection, ConnectionRevision: v.ConnectionRevision, IssueKey: v.SampleIssueKey, IssueID: v.SampleIssueID, IssueTypeID: v.IssueTypeID, FromStatusID: v.FromStatusID, TransitionID: v.TransitionID, TargetStatusID: v.TargetStatusID}).validate()
@@ -57,19 +60,19 @@ func (m WorkflowMappings) Get(ctx context.Context, name string) (WorkflowMapping
 	if !connectionName.MatchString(name) {
 		return WorkflowMapping{}, ErrInvalid
 	}
-	row, err := m.Connections.Store.GetSetting(ctx, MappingPrefix+name)
+	row, err := m.backend().Store().GetSetting(ctx, m.backend().MappingPrefix()+name)
 	if err != nil {
 		return WorkflowMapping{}, err
 	}
 	var out WorkflowMapping
-	if json.Unmarshal(row.Value, &out) != nil || out.Name != name || out.MappingInput.validate() != nil || ValidateScope(out.SiteURL, out.ProjectID) != nil || out.TransitionName == "" || out.TargetStatusName == "" || out.UpdatedAt.IsZero() {
+	if json.Unmarshal(row.Value, &out) != nil || out.Name != name || out.MappingInput.validate() != nil || m.backend().ValidateScope(out.SiteURL, out.ProjectID) != nil || out.TransitionName == "" || out.TargetStatusName == "" || out.UpdatedAt.IsZero() {
 		return WorkflowMapping{}, errors.New("stored Jira workflow mapping is corrupt")
 	}
 	out.Revision = row.Revision
 	return out, nil
 }
 func (m WorkflowMappings) List(ctx context.Context) ([]WorkflowMapping, error) {
-	rows, err := m.Connections.Store.ListSettings(ctx, MappingPrefix)
+	rows, err := m.backend().Store().ListSettings(ctx, m.backend().MappingPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +82,7 @@ func (m WorkflowMappings) List(ctx context.Context) ([]WorkflowMapping, error) {
 	out := make([]WorkflowMapping, 0, len(rows))
 	for _, row := range rows {
 		var v WorkflowMapping
-		if json.Unmarshal(row.Value, &v) != nil || row.Key != MappingPrefix+v.Name {
+		if json.Unmarshal(row.Value, &v) != nil || row.Key != m.backend().MappingPrefix()+v.Name {
 			return nil, errors.New("stored Jira workflow mapping is corrupt")
 		}
 		v, err = m.Get(ctx, v.Name)
@@ -115,14 +118,14 @@ func (m WorkflowMappings) Put(ctx context.Context, in MappingInput, expected int
 		next.SiteURL, next.ProjectID = old.SiteURL, old.ProjectID
 		next.TransitionName, next.TargetStatusName = old.TransitionName, old.TargetStatusName
 	} else {
-		c, err := m.Connections.Get(ctx, in.Connection)
+		c, err := m.backend().GetConnection(ctx, in.Connection)
 		if err != nil {
 			return WorkflowMapping{}, err
 		}
 		if c.Revision != in.ConnectionRevision || !c.Enabled {
 			return WorkflowMapping{}, storage.ErrConflict
 		}
-		client, err := m.Connections.OpenForWrite(ctx, in.Connection, in.ConnectionRevision)
+		client, err := m.backend().Open(ctx, in.Connection, in.ConnectionRevision, true, nil)
 		if err != nil {
 			return WorkflowMapping{}, err
 		}
@@ -153,17 +156,20 @@ func (m WorkflowMappings) Put(ctx context.Context, in MappingInput, expected int
 			return WorkflowMapping{}, fmt.Errorf("%w: select a discovered transition available for this issue", ErrInvalid)
 		}
 		next.SiteURL, next.ProjectID = c.SiteURL, c.ProjectID
-		guards = append(guards, storage.SettingRevision{Key: ConnectionPrefix + in.Connection, Revision: in.ConnectionRevision})
+		guards, err = m.backend().SettingGuards(ctx, in.Connection, in.ConnectionRevision)
+		if err != nil {
+			return WorkflowMapping{}, err
+		}
 	}
 	ev := domain.NewEvent("tracker.workflow_mapping_change_requested", "", map[string]any{"mapping": in.Name, "connection": in.Connection, "expectedRevision": expected, "enabled": in.Enabled}).WithActor(actor)
-	if err = m.Connections.Store.AppendEvent(ctx, ev); err != nil {
+	if err = m.backend().Store().AppendEvent(ctx, ev); err != nil {
 		return WorkflowMapping{}, err
 	}
 	raw, err := json.Marshal(next)
 	if err != nil {
 		return WorkflowMapping{}, err
 	}
-	rev, err := m.Connections.Store.PutSettingIf(ctx, MappingPrefix+in.Name, raw, expected, actor, guards)
+	rev, err := m.backend().Store().PutSettingIf(ctx, m.backend().MappingPrefix()+in.Name, raw, expected, actor, guards)
 	if err != nil {
 		return WorkflowMapping{}, err
 	}

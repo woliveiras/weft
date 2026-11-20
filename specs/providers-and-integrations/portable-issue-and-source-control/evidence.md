@@ -827,3 +827,20 @@ name assumptions through discovered, scoped workflow mappings.
   (/tmp/weft-portability-go-final-current.log), including full API/engine suites.
   Independent route/recovery/API/YAML review found no remaining blockers after
   the example-oracle correction. Cloud backend work is a separate later lot.
+
+## INT-009-06l — Shared edition-specific workflow backend
+
+- Extracted a narrow WorkflowBackend/WorkflowClient seam around scope, read-only
+  discovery, authorization, storage guards and the single transition write.
+  Mapping validation, durable reservation, snapshot rechecks and reconciliation
+  remain one implementation. Nil backend preserves existing DC keys/contracts;
+  explicit backends do not fall back to DC on failure.
+- Every backend supplies guards for all persisted authorities, including linked
+  credential-connection revisions. Alternate mapping/sync namespaces cannot
+  collide with native DC records. Once a transport may dispatch, errors remain
+  unknown; recovery does not repeat POST.
+- Docker full jiradc tests and vet passed. New unit and TLS/fsstore integration
+  tests cover shared preparation, unchanged native keys, alternate namespace,
+  second-authority races/lookup failure, read-only clients, reservation before
+  send, lost response and reopen/reconcile after mapping disable with one POST.
+  Independent subagent review found no blocking regression. No live change.

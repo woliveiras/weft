@@ -48,6 +48,10 @@ type TransitionDiscovery struct {
 
 var fieldName = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,127}$`)
 
+// ValidateTransitionMetadata checks the bounded discovery subset shared by
+// edition adapters. Nil fields remain unavailable, distinct from empty fields.
+func ValidateTransitionMetadata(v []Transition) error { return validateTransitions(v) }
+
 func validateTransitions(v []Transition) error {
 	if v == nil || len(v) > 100 {
 		return errors.New("Jira transition metadata is missing or exceeds the bound")

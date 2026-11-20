@@ -60,6 +60,11 @@ func syncKey(operation string) string {
 	return SyncPrefix + hex.EncodeToString(sum[:])
 }
 
+func (m TransitionSync) syncKey(operation string) string {
+	sum := sha256.Sum256([]byte(operation))
+	return m.backend().SyncPrefix() + hex.EncodeToString(sum[:])
+}
+
 // SyncRecord is durable evidence, separate from task status. TargetObserved means
 // the desired state was read; it does not attribute that change to this account.
 // An uncertain POST is never automatically repeated, including after restart.
@@ -74,14 +79,18 @@ type SyncRecord struct {
 	UpdatedAt        time.Time        `json:"updatedAt"`
 	Revision         int64            `json:"revision"`
 }
-type TransitionSync struct{ Connections Connections }
+type TransitionSync struct {
+	Connections Connections
+	Backend     WorkflowBackend
+}
 
 type preparedTransition struct {
 	issue         Issue
 	alreadyTarget bool
 }
 
-func validIssueUpdated(value string) bool {
+// ValidIssueUpdated accepts the reviewed timestamp forms supported by Jira editions.
+func ValidIssueUpdated(value string) bool {
 	for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05.999Z0700"} {
 		if at, err := time.Parse(layout, value); err == nil && !at.IsZero() {
 			return true
@@ -90,8 +99,8 @@ func validIssueUpdated(value string) bool {
 	return false
 }
 
-func (c *Client) prepareTransition(ctx context.Context, v TransitionIntent) (preparedTransition, error) {
-	if err := c.authorizeWrite(ctx); err != nil {
+func prepareTransition(ctx context.Context, c WorkflowClient, v TransitionIntent) (preparedTransition, error) {
+	if err := c.AuthorizeWrite(ctx); err != nil {
 		return preparedTransition{}, err
 	}
 	i, err := c.Issue(ctx, v.IssueKey)
@@ -107,7 +116,7 @@ func (c *Client) prepareTransition(ctx context.Context, v TransitionIntent) (pre
 	if i.Fields.Status.ID != v.FromStatusID {
 		return preparedTransition{}, errors.New("issue is outside the reviewed source status; rediscover its workflow")
 	}
-	if !validIssueUpdated(i.Fields.Updated) {
+	if !ValidIssueUpdated(i.Fields.Updated) {
 		return preparedTransition{}, errors.New("issue update metadata is unavailable")
 	}
 	d, err := c.DiscoverTransitions(ctx, v.IssueKey)
@@ -139,7 +148,7 @@ func (c *Client) prepareTransition(ctx context.Context, v TransitionIntent) (pre
 func sameIssueSnapshot(a, b Issue) bool {
 	return a.ID == b.ID && a.Fields.Project.ID == b.Fields.Project.ID && a.Fields.IssueType.ID == b.Fields.IssueType.ID && a.Fields.Status.ID == b.Fields.Status.ID && a.Fields.Updated == b.Fields.Updated
 }
-func (c *Client) sendPreparedTransition(ctx context.Context, v TransitionIntent, p preparedTransition) (bool, error) {
+func sendPreparedTransition(ctx context.Context, c WorkflowClient, v TransitionIntent, p preparedTransition) (bool, error) {
 	// The journal is already reserved. Recheck the issue after that local boundary;
 	// Jira REST has no status CAS, so this is a preflight, not an atomic remote fence.
 	i, err := c.Issue(ctx, v.IssueKey)
@@ -149,24 +158,21 @@ func (c *Client) sendPreparedTransition(ctx context.Context, v TransitionIntent,
 	if !sameIssueSnapshot(p.issue, i) {
 		return false, errors.New("issue changed before transition dispatch")
 	}
-	if err = c.authorizeWrite(ctx); err != nil {
+	if err = c.AuthorizeWrite(ctx); err != nil {
 		return false, err
 	}
-	payload := map[string]any{"transition": map[string]string{"id": v.TransitionID}}
-	// Once this boundary is reached, failures are conservatively uncertain. Even
-	// HTTP rejection can pass through a proxy with an ambiguous remote outcome.
-	return true, c.do(ctx, "POST", "/issue/"+v.IssueID+"/transitions", payload, nil)
+	return c.SendTransition(ctx, v)
 }
 func (m TransitionSync) Get(ctx context.Context, operation string) (SyncRecord, error) {
 	if !operationID.MatchString(operation) {
 		return SyncRecord{}, ErrInvalid
 	}
-	row, err := m.Connections.Store.GetSetting(ctx, syncKey(operation))
+	row, err := m.backend().Store().GetSetting(ctx, m.syncKey(operation))
 	if err != nil {
 		return SyncRecord{}, err
 	}
 	var out SyncRecord
-	if json.Unmarshal(row.Value, &out) != nil || out.Intent.OperationID != operation || out.Intent.validate() != nil || ValidateScope(out.SiteURL, out.ProjectID) != nil {
+	if json.Unmarshal(row.Value, &out) != nil || out.Intent.OperationID != operation || out.Intent.validate() != nil || m.backend().ValidateScope(out.SiteURL, out.ProjectID) != nil {
 		return SyncRecord{}, errors.New("stored transition synchronization is corrupt")
 	}
 	switch out.State {
@@ -190,13 +196,16 @@ func (m TransitionSync) store(ctx context.Context, v SyncRecord, actor string, e
 	if err != nil {
 		return SyncRecord{}, err
 	}
-	guards := []storage.SettingRevision{{Key: ConnectionPrefix + v.Intent.Connection, Revision: v.Intent.ConnectionRevision}}
+	guards, err := m.backend().SettingGuards(ctx, v.Intent.Connection, v.Intent.ConnectionRevision)
+	if err != nil {
+		return SyncRecord{}, err
+	}
 	// Only reservation authorizes dispatch. Historical reconciliation remains a
 	// read even after the mapping is disabled or edited.
 	if v.State == "pending" && v.Intent.MappingName != "" {
-		guards = append(guards, storage.SettingRevision{Key: MappingPrefix + v.Intent.MappingName, Revision: v.Intent.MappingRevision})
+		guards = append(guards, storage.SettingRevision{Key: m.backend().MappingPrefix() + v.Intent.MappingName, Revision: v.Intent.MappingRevision})
 	}
-	revision, err := m.Connections.Store.PutSettingIf(ctx, syncKey(v.Intent.OperationID), raw, expected, actor, guards)
+	revision, err := m.backend().Store().PutSettingIf(ctx, m.syncKey(v.Intent.OperationID), raw, expected, actor, guards)
 	if err != nil {
 		return SyncRecord{}, err
 	}
@@ -235,7 +244,7 @@ func (m TransitionSync) apply(ctx context.Context, v TransitionIntent, actor str
 	if !fresh && old.Intent != v {
 		return old, storage.ErrConflict
 	}
-	connection, err := m.Connections.Get(ctx, v.Connection)
+	connection, err := m.backend().GetConnection(ctx, v.Connection)
 	if err != nil {
 		return old, err
 	}
@@ -259,19 +268,12 @@ func (m TransitionSync) apply(ctx context.Context, v TransitionIntent, actor str
 	if err := m.checkMapping(ctx, v, connection); err != nil {
 		return SyncRecord{}, err
 	}
-	client, err := m.Connections.OpenForWrite(ctx, v.Connection, v.ConnectionRevision)
+	client, err := m.backend().Open(ctx, v.Connection, v.ConnectionRevision, true, func(ctx context.Context) error { return m.checkMapping(ctx, v, connection) })
 	if err != nil {
 		return SyncRecord{}, err
 	}
-	connectionCheck := client.writeCheck
-	client.writeCheck = func(ctx context.Context) error {
-		if err := connectionCheck(ctx); err != nil {
-			return err
-		}
-		return m.checkMapping(ctx, v, connection)
-	}
 	record := SyncRecord{Intent: v, SiteURL: connection.SiteURL, ProjectID: connection.ProjectID, State: "pending", CreatedAt: time.Now().UTC()}
-	p, preflightErr := client.prepareTransition(ctx, v)
+	p, preflightErr := prepareTransition(ctx, client, v)
 	if preflightErr != nil {
 		record.State = "failed"
 		record.Error = preflightErr.Error()
@@ -282,7 +284,7 @@ func (m TransitionSync) apply(ctx context.Context, v TransitionIntent, actor str
 		}
 	}
 	ev := domain.NewEvent("tracker.transition_sync_requested", "", map[string]any{"connection": v.Connection, "operation": v.OperationID, "state": record.State}).WithActor(actor)
-	if err = m.Connections.Store.AppendEvent(ctx, ev); err != nil {
+	if err = m.backend().Store().AppendEvent(ctx, ev); err != nil {
 		return SyncRecord{}, err
 	}
 	expected := int64(0)
@@ -300,7 +302,7 @@ func (m TransitionSync) apply(ctx context.Context, v TransitionIntent, actor str
 	if p.alreadyTarget {
 		return record, nil
 	}
-	dispatched, sendErr := client.sendPreparedTransition(ctx, v, p)
+	dispatched, sendErr := sendPreparedTransition(ctx, client, v, p)
 	if sendErr != nil {
 		record.State = "failed"
 		if dispatched {
@@ -316,7 +318,7 @@ func (m TransitionSync) apply(ctx context.Context, v TransitionIntent, actor str
 	return m.reconcile(ctx, record, actor)
 }
 func (m TransitionSync) reconcile(ctx context.Context, record SyncRecord, actor string) (SyncRecord, error) {
-	client, err := m.Connections.Open(ctx, record.Intent.Connection, record.Intent.ConnectionRevision)
+	client, err := m.backend().Open(ctx, record.Intent.Connection, record.Intent.ConnectionRevision, false, nil)
 	if err != nil {
 		return record, err
 	}
@@ -344,11 +346,11 @@ func (m TransitionSync) reconcile(ctx context.Context, record SyncRecord, actor 
 
 // checkMapping binds dispatch to the reviewed definition, not its display name.
 // Unmapped internal intents remain supported for the low-level conformance tests.
-func (m TransitionSync) checkMapping(ctx context.Context, v TransitionIntent, c Connection) error {
+func (m TransitionSync) checkMapping(ctx context.Context, v TransitionIntent, c WorkflowScope) error {
 	if v.MappingName == "" {
 		return nil
 	}
-	mapping, err := (WorkflowMappings{Connections: m.Connections}).Get(ctx, v.MappingName)
+	mapping, err := (WorkflowMappings{Connections: m.Connections, Backend: m.Backend}).Get(ctx, v.MappingName)
 	if err != nil {
 		return err
 	}
