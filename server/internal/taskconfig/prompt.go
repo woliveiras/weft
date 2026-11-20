@@ -75,6 +75,7 @@ func (m Manager) savePrompt(ctx context.Context, p PromptInput, actor, newID str
 		d.Input = old.Input
 		d.EnvironmentApprovalID = old.EnvironmentApprovalID
 		d.TriggerGitHubIssue = old.TriggerGitHubIssue
+		d.TriggerIssueOrigin = old.TriggerIssueOrigin
 		d.Submitted = old.Submitted
 		d.CreatedAt = old.CreatedAt
 		d.CreatedBy = old.CreatedBy

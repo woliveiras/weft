@@ -43,11 +43,16 @@ func (x triggerTasks) Start(ctx context.Context, t *trigger.Trigger, i trigger.I
 		in.ProjectID, in.BaseCommit = p.ID, p.Head
 	}
 	actor := t.Consent.Actor
-	githubIssueKey := ""
-	if i.Source == "github" {
-		githubIssueKey = i.Key
+	origin := taskconfig.IssueOrigin{Kind: t.Source.Kind, ConnectionID: t.Source.ConnectionID, ConnectionRevision: t.Consent.TrackerRevision, Key: i.Key, URL: i.URL}
+	switch t.Source.Kind {
+	case "github":
+		origin.Instance = "https://api.github.com"
+		repo, num, _ := strings.Cut(i.Key, "#")
+		origin.URL = "https://github.com/" + repo + "/issues/" + num
+	case "jira":
+		origin.Instance = "https://api.atlassian.com/ex/jira/" + t.Source.CloudID
 	}
-	d, err := (taskconfig.Manager{Store: x.a.Store}).SaveTriggered(ctx, in, actor, githubIssueKey)
+	d, err := (taskconfig.Manager{Store: x.a.Store}).SaveTriggeredIssue(ctx, in, actor, origin)
 	if err != nil {
 		return "", trigger.NewLaunchError("draft", err)
 	}

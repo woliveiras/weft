@@ -167,14 +167,17 @@ func (t pullRequestTool) Invoke(ctx context.Context, inv *tools.Invocation) (*to
 			return nil, err
 		}
 	}
-	if c.Kind == "github" && strings.HasPrefix(inv.Principal.GraphID, domain.TaskRunGraphPrefix) {
+	if strings.HasPrefix(inv.Principal.GraphID, domain.TaskRunGraphPrefix) {
 		taskID := "tsk_" + strings.TrimPrefix(inv.Principal.GraphID, domain.TaskRunGraphPrefix)
 		draft, err := (taskconfig.Manager{Store: t.m.Store}).Get(ctx, taskID)
 		if err != nil && !errors.Is(err, storage.ErrNotFound) {
 			return &tools.Result{Content: "the admitted issue identity could not be verified", IsError: true}, nil
 		}
-		if err == nil && draft.ExecutionGraphID == inv.Principal.GraphID && draft.TriggerGitHubIssue != "" {
-			args.Body = appendClosingIssue(args.Body, c.Repository, draft.TriggerGitHubIssue)
+		if err == nil && draft.ExecutionGraphID == inv.Principal.GraphID {
+			args.Body, err = appendTaskIssue(args.Body, c, draft)
+			if err != nil {
+				return &tools.Result{IsError: true, Content: "the admitted issue origin is invalid; no pull request was opened"}, nil
+			}
 			if len(args.Body) > MaxBody {
 				return &tools.Result{Content: "shorten the pull request body to leave room for the trigger issue reference", IsError: true}, nil
 			}
@@ -185,6 +188,31 @@ func (t pullRequestTool) Invoke(ctx context.Context, inv *tools.Invocation) (*to
 		return &tools.Result{Content: "the pull request could not be opened: " + redact(err, token), IsError: true}, nil
 	}
 	return t.result(ctx, inv, c, pr, token), nil
+}
+
+func appendTaskIssue(body string, c Connection, d *taskconfig.Draft) (string, error) {
+	if o := d.TriggerIssueOrigin; o != nil {
+		if err := o.Validate(); err != nil {
+			return "", err
+		}
+		if o.Kind == "github" && c.Kind == "github" && (c.APIURL == "" || strings.TrimRight(c.APIURL, "/") == "https://api.github.com") {
+			return appendClosingIssue(body, c.Repository, o.Key), nil
+		}
+		ref := o.URL
+		if ref == "" {
+			ref = o.Key
+		}
+		line := "Source issue: " + ref
+		if strings.TrimSpace(body) == "" {
+			return line, nil
+		}
+		return strings.TrimSpace(body) + "\n\n" + line, nil
+	}
+	// Historical GitHub-triggered tasks retain their prior closing behavior.
+	if c.Kind == "github" && d.TriggerGitHubIssue != "" {
+		return appendClosingIssue(body, c.Repository, d.TriggerGitHubIssue), nil
+	}
+	return body, nil
 }
 
 func appendClosingIssue(body, repository, issue string) string {

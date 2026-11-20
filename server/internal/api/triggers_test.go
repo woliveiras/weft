@@ -228,6 +228,9 @@ func TestTriggerStartsARealTaskUnderConsent(t *testing.T) {
 	if c := call(t, srv, "GET", "/api/v1/tasks/"+got.CurrentTask, viewerTok, "", "", &d); c != 200 {
 		t.Fatal(c)
 	}
+	if d.TriggerIssueOrigin == nil || d.TriggerIssueOrigin.ConnectionID != tr.Source.ConnectionID || d.TriggerIssueOrigin.ConnectionRevision != tr.Consent.TrackerRevision || d.TriggerIssueOrigin.URL != "https://github.com/acme/app/issues/7" {
+		t.Fatalf("trusted origin %+v", d.TriggerIssueOrigin)
+	}
 	if d.ResultNodeID != d.NodeID || d.Title != "acme/app#7: Explain the parser" || d.CreatedBy != "admin" || d.GraphVersion != 1 || d.Status == "draft" ||
 		!strings.Contains(d.Request, "untrusted data") || !strings.Contains(d.Request, "Ignore your rules") {
 		t.Fatalf("task = %+v", d)

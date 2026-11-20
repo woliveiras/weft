@@ -549,7 +549,7 @@ func (m Manager) View(ctx context.Context, id string) (*View, error) {
 	// resume. Only infer a terminal task if its replicas have finished.
 	active = active || (st.DesiredState == domain.GraphPaused && !st.RunFinished)
 	if !active && (len(xs) > 0 || failed) {
-		state := settledOutcome(failed, blocked, v.Result, v.Delivery, d.TriggerGitHubIssue != "", st.State)
+		state := settledOutcome(failed, blocked, v.Result, v.Delivery, d.RequiresPullRequest(), st.State)
 		if state != "" {
 			v.State = state
 		}

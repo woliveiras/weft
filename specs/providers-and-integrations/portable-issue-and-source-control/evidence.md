@@ -211,3 +211,26 @@ name assumptions through discovered, scoped workflow mappings.
   hexadecimal credentials in commit IDs; redaction before validation and decoded
   result/event regressions fixed it. Final review reported no residual blockers;
   `git diff --check` passed. No live routing, grants or deployment changed.
+
+## INT-009-05a — Trusted issue origins and provider pairing
+
+- Trigger-created tasks retain a separate trusted issue origin: product, API
+  instance/cloud scope, connection and consent revision, canonical key and link.
+  Editable request/PromptInput cannot replace it. Save/SavePrompt and storage
+  restart preserve this snapshot independently of the selected SCM connection.
+- PR bodies use closing syntax only for the public GitHub-to-public-GitHub pair;
+  other pairs receive an ordinary source issue reference. Historical GitHub tasks
+  preserve their prior behavior. Invalid stored origins refuse PR creation.
+- Jira tasks now require PR delivery just as GitHub issue tasks do: a successful
+  agent turn without the required PR is reported as blocked.
+- Units cover scoped identity and pair selection. fsstore restart/edit integration
+  and gateway + HTTP fixtures cover GitHub/Jira origins with all three SCM
+  adapters. A real app trigger launch/echo execution checks origin derivation
+  from consent, absence of implicit MCP reads/grants, and blocked delivery state.
+- SCM/taskconfig/app/taskrun/API tests passed (`/tmp/weft-origin-reviewed.log`);
+  added launch integrations passed (`/tmp/weft-origin-launch.log`). Vet for
+  SCM/taskconfig/taskrun/app and diff check passed. Subagent found permissive
+  Cloud prefix extraction; exact prefix validation plus pre-persistence rejection
+  tests fixed it. Final review found no residual blockers.
+- This does not complete AC-001: admission-key namespacing, Jira DC support and
+  operator configuration remain pending. No live task/connection/grant changed.
