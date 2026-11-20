@@ -23,6 +23,11 @@ it does not declare that the adapters or portable review tools already exist.
 
 ## Maintainer decisions and current boundary
 
+- 2026-11-20: Jira Data Center automatic writes require a technical account
+  whose remote write permissions are restricted to the selected project. The
+  maintainer explicitly chose this prerequisite instead of unrestricted PAT
+  writes. Connections without that reviewed confirmation remain read-only;
+  local preflight does not make a broad PAT project-restricted.
 - 2026-11-20: the maintainer authorized sequential implementation, subagent code
   review after each batch and one local commit per important change. No target
   Data Center version is selected; begin with contract/fixture coverage and retain

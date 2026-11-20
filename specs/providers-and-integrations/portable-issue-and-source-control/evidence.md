@@ -327,3 +327,23 @@ name assumptions through discovered, scoped workflow mappings.
   passed (`/tmp/weft-jira-yaml-reviewed-v1.log`), as did vet for those packages
   and `git diff --check`. Read-only subagent review found no blockers; the new
   kind and operational limits are documented in the API/declarative guides.
+
+## INT-009-06a — Read-only Jira DC transition discovery
+
+- Added issue-specific discovery through numeric issue IDs and
+  `expand=transitions.fields`. Site, project, issue type and current status IDs
+  accompany available transition/target IDs; names remain display text, including
+  `Review`, `In Review`, localized and duplicate labels. No name matching,
+  automatic transition, mapping editor or mutation is provided in this batch.
+- Known-empty fields differ from unavailable metadata. Required fields and a
+  bounded schema/operations/allowed-value subset are retained. This subset is
+  not a complete editor schema or authorization to write arbitrary fields.
+- Scope and issue identity are checked before discovery and re-read afterward;
+  changed status/type/update, foreign project, permission denial, missing/invalid
+  metadata and credential reflection fail without returning partial evidence.
+- Jira DC Docker unit and TLS HTTP integration tests passed
+  (`/tmp/weft-jira-transitions-v1.log`). Read-only subagent review found no
+  blockers and highlighted the partial-schema boundary, now documented.
+- Contract provenance: [Jira REST 2 transitions](https://docs.atlassian.com/software/jira/docs/api/REST/9.12.0/#api/2/issue-getTransitions).
+  This is fixture coverage, not version qualification. Optional mappings,
+  synchronization recovery and Cloud discovery adoption remain pending.
