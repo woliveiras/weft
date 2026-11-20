@@ -483,6 +483,17 @@ repositories. Jira status transitions and automatic closure of Jira
 issues on merge are outside this lifecycle.
 [Trigger API](api.md#issue-triggers)
 
+Planned provider portability is specified in
+[INT-009](../specs/providers-and-integrations/portable-issue-and-source-control/spec.md).
+It separates the issue connection from the Git destination, covers Jira and
+Bitbucket Cloud/Data Center as distinct adapters, and adds provider-neutral PR
+review. Optional Jira mappings use discovered scoped identifiers, not names
+such as `In Review` or board columns. The existing comment/label lifecycle stays
+effective without a mapping. Transition recovery and cross-provider issue links
+must preserve delivery evidence; unsupported provider pairings must not claim
+GitHub-style automatic issue closure. This is planned work, not currently
+available configuration. External webhooks remain deferred.
+
 ## Vocabulary and existing foundations
 
 | Term | Meaning | Current implementation |

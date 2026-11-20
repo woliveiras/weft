@@ -14,6 +14,46 @@ with your own hosts.
 | Atlassian Cloud through the official MCP server | Implemented; live qualification pending ([evidence](mcp.md#qualification-and-remaining-external-acceptance)) |
 | Bitbucket Data Center access with an HTTP access token | **Proposed, not implemented** |
 
+## Planned portable integrations
+
+The [INT-009 specification](../specs/providers-and-integrations/portable-issue-and-source-control/spec.md)
+records the next scope; this is not a setup procedure for available adapters.
+
+| Product/edition | Current boundary | Planned work |
+| --- | --- | --- |
+| Jira Cloud | Issue reference, polling/readiness, comments and labels have implementation paths; live qualification remains separate | Qualify the full flow and add optional discovered workflow mappings |
+| Jira Data Center | No implemented tracker adapter | Separate instance/authentication/API adapter and qualification |
+| Bitbucket Cloud | MCP profile evidence does not establish native SCM delivery/review | Native SCM adapter and portable PR review/merge capabilities |
+| Bitbucket Data Center | Proposed setup below; no registered native SCM adapter | Separate native SCM adapter, private-network/TLS setup and qualification |
+
+Issue origin and Git destination are independent: Jira can drive work delivered
+to GitHub or either Bitbucket edition; GitHub Issues can drive Bitbucket work.
+Tasks must preserve both reviewed identities and their separate connections.
+Existing GitHub behavior remains effective until a workflow explicitly adopts
+the planned tools/configuration.
+
+Tracker workflows are configurable. Names such as `Review`, `In Review` or a
+localized equivalent are display text, not required vocabulary. A board column
+may contain several statuses and is not a transition. The planned editor must
+discover actual statuses/available transitions and store explicitly selected,
+instance/workflow-scoped identifiers. Without a mapping, no automatic transition
+is attempted. Missing or unavailable transitions must expose a recoverable sync
+failure without erasing task/PR delivery; whether a transition can be mandatory
+is a recorded open decision, not an implicit blocking policy.
+
+The code-review pilot still uses GitHub MCP tools. Planned Weft review operations
+must read PRs/diffs/checks, post summaries/findings and guard merges through the
+selected SCM adapter. A clean review still publishes a summary; exact reviewed
+head protection and remote repository rules are required for automatic merge.
+The existing internal `scm.pull_request_opened` event can drive Weft-created PR
+reviews; external authenticated webhooks remain separate future work.
+
+Delivery proceeds through adapter contracts/fixtures, edition-specific adapters,
+independent configuration and portable review, optional Jira mappings, then
+authorized end-to-end rehearsals. Pilot order, supported Data Center versions,
+authentication modes, test resources and mandatory-transition policy remain
+open. Both editions remain in product scope regardless of pilot order.
+
 ## The model: configure once, enforce on every call
 
 - **You connect a service once.** Weft stores the credential encrypted and

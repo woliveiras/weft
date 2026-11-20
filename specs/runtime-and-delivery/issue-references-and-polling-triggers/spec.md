@@ -85,6 +85,12 @@ issues and other non-GitHub trackers on PR merge is excluded.
 - Jira status transitions at any stage of the trigger lifecycle are excluded.
 - Authenticated Jira/GitHub webhooks are deferred. Live real-account qualification is PROD-14.
 
+These describe the implemented lifecycle. Planned optional Jira workflow
+mappings and cross-provider closure handling are owned by
+[INT-009 AC-001/003/004](../../providers-and-integrations/portable-issue-and-source-control/spec.md).
+They are not enabled by documenting the extension; current comments/labels and
+the exclusion above remain effective until explicit adoption.
+
 ## Open decisions
 
 - The local-first fixtures cover claim and completion. The documented live issue-to-PR scenario needs authorized external resources.

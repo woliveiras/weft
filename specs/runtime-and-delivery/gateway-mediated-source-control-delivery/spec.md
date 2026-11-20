@@ -40,6 +40,10 @@ An adapter preserves repository identity and credentials across its supported Gi
 
 ## Open decisions
 
+- [INT-009](../../providers-and-integrations/portable-issue-and-source-control/spec.md)
+  records planned Bitbucket Cloud/Data Center coverage, independent issue/SCM
+  selection and provider-neutral review/guarded merge. These extend the delivery
+  boundary without changing RUN-005 ownership of push and PR creation criteria.
 - SCM-04 is complete for fixtures and local push. Real GitHub validation and Bitbucket Data Center, which requires an evaluation license and authorized image acquisition, remain pending.
 
 ## History

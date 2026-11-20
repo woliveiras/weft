@@ -40,6 +40,10 @@ Record whether a result covers metadata, public discovery, public tool read, aut
 
 ## Open decisions
 
+- [INT-009](../portable-issue-and-source-control/spec.md) owns the planned
+  cross-provider task/review contract and separate Jira/Bitbucket Cloud/Data
+  Center adapter scope. An MCP vendor label or discovery result does not qualify
+  native SCM delivery, Data Center support or portable automatic merge.
 - GitHub private/organization/SSO access, expiry, revocation and approved writes remain open. Atlassian DCR had an uncertain outcome; live DCR/CIMD, site/IP policy and separate Jira, Confluence and Bitbucket Cloud acceptance remain pending. GitLab qualification depends on the selected instance and advertised capabilities.
 - Complete Context7 query-docs/authenticated and private-library qualification, first-wave W&B checks, and typed-header/scope qualification for applicable vendors. Warehouse integration still needs a hard cost and data boundary; BigQuery stateless discovery and Snowflake documentation are limited evidence.
 

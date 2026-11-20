@@ -19,7 +19,7 @@ sequences. IDs and slugs remain stable after assignment.
 | --- | --- | --- |
 | `product-and-tasks` | `TASK-001`–`TASK-008` | Release contracts, console navigation, graph editing, Activity, prompt tasks, consent, admission, and registered projects |
 | `workspaces-and-environments` | `ENV-001`–`ENV-009` | Repository imports, workspace review, journal, human review, Docker isolation, capacity, definitions, build/reuse, and network policy |
-| `providers-and-integrations` | `INT-001`–`INT-008` | Built-in inference plugins, adapters, external plugins, budgets, MCP invocation, MCP OAuth, vendor profiles, and hosting |
+| `providers-and-integrations` | `INT-001`–`INT-009` | Built-in inference plugins, adapters, external plugins, budgets, MCP invocation, MCP OAuth, vendor profiles, hosting, and portable issue/SCM integrations |
 | `runtime-and-delivery` | `RUN-001`–`RUN-008` | Steering, delegation, native coding, evaluation, SCM, issue triggers, issue readiness, and context usage |
 | `installation-and-operations` | `OPS-001`–`OPS-003` | Compose, standalone and declarative installations |
 
@@ -87,6 +87,7 @@ The [historical source map](./historical-source-map.md) records the migration of
 ### Planned
 
 - [INT-008 — Managed MCP Hosting](./providers-and-integrations/managed-mcp-hosting/spec.md) — `planned`. Preserve the reviewed design for isolated, installation-managed MCP server generations.
+- [INT-009 — Portable Issue and Source Control Integrations](./providers-and-integrations/portable-issue-and-source-control/spec.md) — `planned`, pending specification review. Combine independent issue/Git providers, cover Jira and Bitbucket Cloud/Data Center separately, map custom tracker workflows and make PR review portable.
 
 ### Deferred
 
@@ -175,8 +176,9 @@ items can progress in parallel, subject to the dependencies below.
   Actual VS Code/user review, optional real native sandbox and additional
   operating systems remain open.
 - [Vendor qualification](./production-readiness/prod-14/spec.md) — Selected
-  MCP DCR/CIMD and vendor scopes, Vertex AI, Bedrock, GitHub/Jira and Bitbucket
-  Data Center require their own qualification and authorized resources.
+  MCP DCR/CIMD and vendor scopes, Vertex AI, Bedrock and GitHub require their own
+  qualification and authorized resources. Planned Jira/Bitbucket Cloud and Data
+  Center coverage is tracked separately by INT-009 and does not establish support.
 - [Workspace journal](./workspaces-and-environments/workspace-change-journal-and-attribution/spec.md) —
   Arbitrary execution attribution and unsupported runtime/PID boundaries remain open.
 - [Delegation](./runtime-and-delivery/dynamic-delegation-and-execution-trees/spec.md) —

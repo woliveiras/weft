@@ -38,6 +38,7 @@ Local-first and fixture coverage come first. Provider selection or fixture succe
 
 ## Capability criteria
 
+- [INT-009 AC-008](../../providers-and-integrations/portable-issue-and-source-control/spec.md#ac-008--independent-adapter-and-end-to-end-qualification): planned Jira/Bitbucket product/edition and cross-provider rehearsal evidence remains separate for each exercised combination.
 - [INT-002 AC-003](../../providers-and-integrations/model-provider-adapters-and-conformance/spec.md#ac-003--qualification-scope).
 - [INT-007 AC-003](../../providers-and-integrations/mcp-vendor-profiles-and-qualification/spec.md#ac-003--per-vendor-acceptance-boundary).
 - [RUN-005 AC-003](../../runtime-and-delivery/gateway-mediated-source-control-delivery/spec.md#ac-003--adapter-qualification).
