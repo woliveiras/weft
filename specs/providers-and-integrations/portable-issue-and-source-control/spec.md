@@ -8,7 +8,7 @@ risk: external writes and automatic merge
 risk_domains: [authorization, secrets, external access, persistence, concurrency]
 change_surfaces: [tracker adapters, SCM gateway, task configuration, event routing, console, installation YAML]
 navigation: [specs/README.md, specs/providers-and-integrations/portable-issue-and-source-control/matrix.md]
-documentation: [docs/atlassian-bitbucket-setup.md, docs/task-workflows.md]
+documentation: [docs/atlassian-bitbucket-setup.md, docs/task-workflows.md, docs/portable-provider-rehearsal.md]
 dependencies: [TASK-006, TASK-007, TASK-008, INT-005, INT-007, RUN-005, RUN-006, RUN-007, OPS-003]
 authority:
   granted: [specification, implementation, local fixture verification, subagent review, local commits]
@@ -18,8 +18,11 @@ authority:
 # Portable Issue and Source Control Integrations
 
 Allow an operator to combine an issue tracker and a Git service without making
-agents or workflows depend on GitHub. This document records the next capability;
-it does not declare that the adapters or portable review tools already exist.
+agents or workflows depend on GitHub. Edition-specific adapters, portable review
+operations/routes and optional Jira mappings now have local implementation and
+fixture coverage. This specification remains in progress: local evidence does
+not qualify real accounts, provider combinations or Data Center versions, and
+automatic portable merge remains unavailable.
 
 ## Maintainer decisions and current boundary
 
@@ -46,18 +49,29 @@ it does not declare that the adapters or portable review tools already exist.
 - 2026-11-20: accommodate custom tracker workflows. The maintainer previously
   encountered a board column named `Review` instead of `In Review`; this naming
   difference must not prevent Weft from working.
-- Jira Cloud issue references, polling/readiness, comments and labels already
-  have implementation paths. They require separate real-account qualification.
-  Jira Data Center remains pending. Bitbucket Cloud and Data Center delivery
-  now have local HTTP/Git fixture coverage (batches 01/02).
-- The SCM registry now registers GitHub and both Bitbucket editions. The console's
-  Bitbucket Data Center option is not evidence of adapter availability.
-  The code-review pilot uses GitHub-specific MCP tools.
+- Current local boundary: Jira Cloud and Data Center provide discovered mapping
+  definitions, optional runtime/PR lifecycle synchronization, recovery, API,
+  console and installation YAML. Cloud adoption uses a credential-free profile
+  pinned separately from its static first-party MCP connection; native DC uses
+  its own connection/PAT. Legacy unmapped Cloud behavior remains intact. Required
+  transition-field updates and confirmed-merge synchronization remain unavailable.
+- GitHub and both Bitbucket editions provide native delivery, immutable bounded
+  review evidence and durable review summaries. Internal PR facts can be routed
+  through explicit route API/YAML configuration to a pinned running event
+  workflow, with durable deduplication and read-only uncertain-outcome recovery.
+  A separate portable reviewer example is available; the existing GitHub MCP
+  pilot is not migrated or granted permissions automatically. A console option
+  or successful fixture is not real-account/version qualification.
+- Portable automatic merge is unavailable: no adapter has a qualified atomic
+  guarantee covering both reviewed source and destination revisions. Reported
+  checks do not establish required branch/review rules. Provider-specific
+  evidence limits remain explicit rather than being reported as successful tests.
 - RUN-005 owns bounded push, idempotent PR creation and adapter identity.
   RUN-006 owns existing polling, gateway write-back and GitHub closing references;
   RUN-007 owns readiness. This specification owns provider composition, optional
   tracker mappings and portable PR review. Existing behavior stays in force
-  until the planned capability is implemented and explicitly adopted.
+  unless an operator explicitly adopts the portable configuration; historical
+  executions, version pins and grants are not rewritten by these local batches.
 
 ## Behavior and invariants
 
@@ -194,10 +208,10 @@ its own commit. A completed batch does not qualify the remaining capability.
 | INT-009-01 | Bitbucket Cloud delivery adapter and HTTP boundary | Implemented with local HTTP/Git fixtures; reviewed |
 | INT-009-02 | Bitbucket Data Center delivery adapter | Implemented with local REST 1.0/Git fixtures; reviewed |
 | INT-009-03 | Edition-aware connection configuration and capabilities in console/YAML | Implemented with API, YAML and browser fixtures; reviewed |
-| INT-009-04 | Portable PR read/review/guarded merge operations and internal events | PR read/diff, summaries and portable delivery identity implemented; merge unavailable pending atomic destination guarantee; routing adoption pending |
+| INT-009-04 | Portable PR read/review/guarded merge operations and internal events | Bounded PR metadata/diff/files/reported checks, durable summaries and portable delivery identity implemented with local fixtures; provider coverage limits remain explicit; merge unavailable pending atomic head-and-destination guarantee |
 | INT-009-05 | Independent tracker/SCM identity and Jira Data Center tracker adapter | Trusted origins/cross-provider links and Jira Cloud scoped history implemented; native DC client, connection API/YAML, write gate and scoped operational triggers implemented; console configuration covered by browser/API fixtures |
-| INT-009-06 | Discovered Jira mappings and recoverable optional transitions | DC transition discovery/API/console and internal durable synchronization core implemented; mapping storage/API/console and DC trigger lifecycle/recovery API implemented; lifecycle console selection/recovery implemented; declarative DC mapping definitions implemented; Cloud adoption pending |
-| INT-009-07 | Integrated cross-provider regression and code-review adoption path | Pending |
+| INT-009-06 | Discovered Jira mappings and recoverable optional transitions | Shared durable mapping/sync core with separate DC and Cloud namespaces; Cloud profiles, edition-specific discovery/mapping API/UI/YAML and optional runtime/PR lifecycle/recovery implemented with local fixtures; account/workflow/version qualification remains pending |
+| INT-009-07 | Integrated cross-provider regression and code-review adoption path | Local cross-provider fixtures and separate pinned portable reviewer example implemented; review-route API/YAML, activation barriers, deduplication and recovery implemented; installed pilot migration and real-account/model/combination qualification remain separate |
 | INT-009-08 | Real-account/target-version qualification under approved resources | Pending external resources |
 
 ## Delivery sequence
@@ -227,18 +241,21 @@ its own commit. A completed batch does not qualify the remaining capability.
 
 ## Open decisions and assumptions
 
-- Initial pilot order, supported Data Center versions and exact authentication
-  modes; approved test instances/repositories/issues and corporate network/CA
-  requirements. No credentials are needed to finish this documentation phase.
+- Live pilot order, supported Data Center versions, qualification of documented
+  authentication modes, approved test instances/repositories/issues and corporate
+  network/CA requirements. Additional authentication flows remain separate work;
+  no real credentials are required for local fixture verification.
 - Whether transitions may be explicitly mandatory and, if so, which lifecycle
   actions may wait, with what operator recovery. Until decided, no mandatory
   transition behavior is authorized by this plan.
-- Exact API/YAML/tool field names, representation of per-issue-type workflow
-  mappings/required transition fields and retry bounds/retention. Criteria above
-  govern their design; proposed shapes must not masquerade as implemented APIs.
-- Supported review/check/merge capability subsets and safe atomic revision
-  protection per edition; unavailable guarantees disable automatic merge rather
-  than weakening its reviewed-revision requirement.
+- Mapping profiles for required transition-field updates and retention/recovery
+  extensions beyond the documented implementation. Current API/YAML/tool names,
+  explicit revision pins and retry boundaries are implemented and documented;
+  proposed extensions must not masquerade as available capabilities.
+- Qualification of documented review/check capability subsets and safe atomic
+  source-and-destination revision protection per edition. Required merge rules
+  and automatic portable merge remain unavailable; incomplete evidence cannot
+  weaken the reviewed-revision requirement.
 
 ## Reconciliation
 
@@ -247,7 +264,9 @@ its own commit. A completed batch does not qualify the remaining capability.
   [RUN-006 triggers](../../runtime-and-delivery/issue-references-and-polling-triggers/spec.md),
   [INT-007 vendor profiles](../mcp-vendor-profiles-and-qualification/spec.md) and
   [PROD-14 live qualification](../../production-readiness/prod-14/spec.md).
-- [Atlassian and Bitbucket setup](../../../docs/atlassian-bitbucket-setup.md).
+- [Atlassian and Bitbucket setup](../../../docs/atlassian-bitbucket-setup.md),
+  [portable provider rehearsal](../../../docs/portable-provider-rehearsal.md) and
+  [separate portable reviewer example](../../../examples/portable-code-review/README.md).
 - Implementation is authorized as of the maintainer decision above. Record
   batch-level tests/reviews in evidence; unexercised adapters and live
   qualification remain pending.

@@ -20,25 +20,27 @@ The [INT-009 specification](../specs/providers-and-integrations/portable-issue-a
 records the implementation batches and remaining qualification. The table
 distinguishes available building blocks from unfinished operational flows.
 
-| Product/edition | Current boundary | Planned work |
+| Product/edition | Current local boundary | Remaining qualification |
 | --- | --- | --- |
-| Jira Cloud | Issue reference, polling/readiness, comments and labels have implementation paths; live qualification remains separate | Qualify the full flow and add optional discovered workflow mappings |
-| Jira Data Center | Native REST 2 client, connection API/YAML, read-only transition discovery and scoped issue-trigger lifecycle and console configuration have local fixture coverage | Optional mappings, transition reconciliation and live qualification |
-| Bitbucket Cloud | Native delivery, console/YAML selection, immutable PR reads and durable summary comments have local fixture coverage | Event/workflow adoption and live qualification; automatic merge remains unavailable |
-| Bitbucket Data Center | Native REST 1.0 delivery, console/YAML selection, immutable PR reads and durable summary comments have local fixture coverage | Event/workflow adoption, corporate network/CA and target-version qualification; automatic merge remains unavailable |
+| Jira Cloud | Polling/readiness and comment/label lifecycle; explicit credential-free project profiles, discovery, mappings and optional runtime/PR synchronization with API/UI/YAML and local fixtures | Real-account/project permission and selected tracker/SCM combination qualification; additional authentication modes remain separate |
+| Jira Data Center | Native REST 2 client and project-restricted connection; discovery, mapping API/UI/YAML and optional lifecycle/recovery with local fixtures | Actual Data Center version, project/workflow/account permissions and selected combination qualification |
+| Bitbucket Cloud | Native delivery and console/YAML selection; immutable PR evidence, durable summaries and explicit review-route API/YAML with local fixtures | Live account/token and combination qualification; required merge rules and atomic source/destination merge protection remain unavailable |
+| Bitbucket Data Center | Native REST 1.0 delivery and console/YAML selection; immutable PR evidence, durable summaries and explicit review-route API/YAML with local fixtures | Target version, corporate network/CA, account and combination qualification; complete file inventory and automatic merge remain unavailable |
 
 Issue origin and Git destination are independent: Jira can drive work delivered
 to GitHub or either Bitbucket edition; GitHub Issues can drive Bitbucket work.
 Tasks must preserve both reviewed identities and their separate connections.
 Existing GitHub behavior remains effective until a workflow explicitly adopts
-the planned tools/configuration.
+the portable tools/configuration. No installed pilot is migrated by these local
+implementation batches.
 
 Tracker workflows are configurable. Names such as `Review`, `In Review` or a
 localized equivalent are display text, not required vocabulary. A board column
-may contain several statuses and is not a transition. The planned editor must
-discover actual statuses/available transitions and store explicitly selected,
-instance/workflow-scoped identifiers. Without a mapping, no automatic transition
-is attempted. Missing or unavailable transitions must expose a recoverable sync
+may contain several statuses and is not a transition. The edition-specific
+inspectors and mapping editors discover actual available transitions and store
+explicitly selected instance/project/issue-type/source-status identifiers. Each
+actual issue is validated again at dispatch; a sample is not a project-wide
+workflow guarantee. Without a mapping, no automatic transition is attempted. Missing or unavailable transitions must expose a recoverable sync
 failure without erasing task/PR delivery; whether a transition can be mandatory
 is a recorded open decision, not an implicit blocking policy.
 
@@ -48,18 +50,24 @@ revision reads and durable summary comments for all three native SCM adapters.
 does not atomically guard the approved destination against PR retargeting. A safe
 provider guarantee must be qualified before automatic merge can be enabled.
 
-The code-review pilot still uses GitHub MCP tools. Planned Weft review operations
-must read PRs/diffs/checks, post summaries/findings and guard merges through the
-selected SCM adapter. A clean review still publishes a summary; exact reviewed
-head protection and remote repository rules are required for automatic merge.
-The existing internal `scm.pull_request_opened` event can drive Weft-created PR
-reviews; external authenticated webhooks remain separate future work.
+The existing code-review pilot is not migrated automatically. A
+[separate portable reviewer example](../examples/portable-code-review/README.md)
+pins an agent/workflow version, reviews strict security, scalability, performance,
+accessibility and architecture criteria, and publishes an explicit summary even
+when no findings are present. Its internet research uses explicit HTTP grants.
+Bounded [provider evidence](portable-review-evidence.md) distinguishes reported
+checks from unavailable required merge rules. The review-route API/YAML connects
+new internal `scm.pull_request_opened` facts to an already running event workflow
+under reviewed scope; it never starts the workflow or grants tools. External
+authenticated webhooks remain separate future work.
 
-Delivery proceeds through adapter contracts/fixtures, edition-specific adapters,
-independent configuration and portable review, optional Jira mappings, then
-authorized end-to-end rehearsals. Pilot order, supported Data Center versions,
-authentication modes, test resources and mandatory-transition policy remain
-open. Both editions remain in product scope regardless of pilot order.
+Local delivery now includes adapters, independent configuration, portable
+review routes/example and optional Jira mappings. Follow the
+[portable provider rehearsal](portable-provider-rehearsal.md) for separately
+authorized real-account/target-version qualification and evidence. Fixture
+coverage does not qualify a live model or provider combination. Pilot resources,
+supported Data Center versions, additional authentication modes and mandatory
+transition policy remain open. Both editions remain in product scope.
 
 ## Native Jira Data Center write prerequisite
 
@@ -80,8 +88,8 @@ connection in Connections → Issue trackers, then explicitly select it in a tri
 Changing the site, project or PAT clears the account restriction confirmation in
 the form. Saving a new connection revision requires reviewing trigger consent
 again. Identity checks confirm the authenticated account, not project-only
-permissions. Optional status transitions and live/version qualification remain
-pending.
+permissions. Optional status transitions are implemented through explicitly
+pinned mappings; live/version qualification remains pending.
 
 A native trigger source uses the explicit snapshot below. Its site and numeric
 project must exactly match the selected enabled, confirmed native connection;
@@ -122,6 +130,38 @@ required fields and unavailable metadata. Equal display names are not collapsed.
 Discovery is read-only and does not save mappings or change the Jira issue.
 Reload after a connection revision conflict. Available transitions are specific
 to the actual issue, state and technical account, not to a board column.
+
+## Jira Cloud optional workflow profiles
+
+Existing Jira Cloud triggers without profiles/mappings retain their comment/label
+behavior. Optional transitions require an explicitly reviewed Cloud workflow
+profile referencing an existing first-party static REST-compatible MCP connection
+and its exact revision. Configure the profile in **Connections → Jira Cloud
+workflow profiles**; it stores no credential. OAuth MCP credentials, custom
+endpoints and incompatible connection policies cannot be reused implicitly for
+these REST calls.
+
+The profile's `siteUrl` is the exact gateway identity
+`https://api.atlassian.com/ex/jira/<cloudId>`, not a tenant browser URL or a Data
+Center endpoint. It also binds the numeric project and records the administrator's
+`projectRestricted` confirmation. Automatic transitions require a technical account
+whose remote write permissions are restricted to that project. The confirmation
+does not change Jira permissions or make local preflight an atomic project fence.
+Read-only discovery does not require that write confirmation.
+
+Inspect a real sample issue, save a Cloud mapping, then explicitly adopt the saved
+profile and mapping revisions in a trigger. The MCP connection revision, profile
+revision and mapping revision are distinct. Trigger source fields
+`profileId`/`profileRevision` must match the selected profile, together with its
+MCP `connectionId`, `cloudId`, gateway `siteUrl` and `projectId`. Cloud opt-in
+selection uses numeric project scope and stable category keys, preserving the
+legacy unmapped search path. Equal local mapping names in Cloud and Data Center
+remain separate authority.
+
+See [Cloud API contracts](api.md#jira-cloud-workflow-profiles) and
+[declarative Cloud configuration](declarative-configuration.md#jira-cloud-workflow-configuration).
+Save dependencies before adopting their revisions; dry-run does not discover
+transitions or execute writes. Saving a mapping does not attach it to a trigger.
 
 ## The model: configure once, enforce on every call
 
@@ -192,9 +232,10 @@ stays pending and the error explains what was refused.
 
 ### Try it without company approval
 
-Create a free Atlassian Cloud site, enable API-token access there, and connect it
-as above. This qualifies the whole flow on a site you control before asking for
-company access.
+Use an operator-controlled Atlassian Cloud test site, review its API-token
+policy, and connect it as above. A configured connection alone does not qualify
+the issue-to-PR/review/synchronization flow. Exercise the selected operations and
+record the observed results using the [rehearsal guide](portable-provider-rehearsal.md).
 
 ## Bitbucket Cloud delivery (local adapter)
 
@@ -217,7 +258,10 @@ reconciled by lookup and is never blindly replayed by the adapter.
 
 HTTPS and normal certificate verification are required for remote API addresses;
 HTTP is accepted only for loopback contract fixtures. No real-account result is
-claimed. The console exposes this adapter with its edition-specific credential guidance. Review/merge operations remain a separate batch.
+claimed. The console exposes this adapter with its edition-specific credential
+guidance. Portable review evidence and summary operations have local fixture
+coverage; automatic merge remains unavailable pending its independent atomic
+source-and-destination concurrency guarantee.
 Upstream contracts: [repository and workspace permissions](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-repositories/),
 [pull requests](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/).
 
@@ -236,10 +280,10 @@ pagination, forks, denied/malformed responses and conflict reconciliation. No
 installed version or real account is qualified. The
 [REST contract reference](https://docs.atlassian.com/bitbucket-server/rest/7.15.3/bitbucket-rest.html)
 is fixture provenance, not a supported-version or production recommendation.
-Custom CA configuration remains separate work; the adapter
-uses the server's normal verified TLS trust and never disables verification.
+A per-connection custom CA field is not implemented. The adapter uses the
+server's normal verified TLS trust and never disables verification.
 
-### Proposed steps
+### Connection steps
 
 1. Open **Connections → Source control → Bitbucket Data Center**.
 2. Enter the base URL, for example `https://bitbucket.example.com`.
@@ -248,8 +292,9 @@ uses the server's normal verified TLS trust and never disables verification.
    - *Read* to clone and fetch;
    - *Write* to push task branches and open pull requests.
    Personal tokens work too, but they carry everything the person can do.
-4. Custom CA entry is planned. Until available, the Weft server must already
-   trust the internal certificate authority; certificate verification stays on.
+4. There is no per-connection custom CA field. The Weft server's API and Git
+   processes must already trust the reviewed internal certificate authority;
+   certificate verification stays on.
 5. Select **Test connection**. Weft checks read/write access to the configured repository
    and reads its default branch. This does not push or open a pull request.
 
@@ -266,14 +311,18 @@ uses the server's normal verified TLS trust and never disables verification.
 ### Network
 
 Bitbucket Data Center usually sits on a private network. A local Weft reaches
-it only when the machine does (for example through a VPN). Sandboxes stay without
-network access: Git operations run in Weft's own Git process, not inside the
-agent's sandbox.
+it only when the machine does (for example through a VPN). Git operations run
+in Weft's own Git process and do not require granting network access to the agent
+sandbox. Sandbox network access remains governed by the reviewed installation
+and workflow policy.
 
 ### Try it without company access
 
-Run Bitbucket Data Center locally with an evaluation licence in a container,
-create a test repository and a repository access token, and connect it as above.
+Use an operator-approved disposable Bitbucket Data Center test instance. Record
+its actual version and reviewed account/token contract, create an approved test
+repository, and exercise the selected operations. Follow the
+[rehearsal guide](portable-provider-rehearsal.md); this does not establish a
+supported version range or qualify another company instance.
 
 ## Troubleshooting
 
@@ -283,7 +332,7 @@ create a test repository and a repository access token, and connect it as above.
 | Atlassian API token rejected | API-token access is not enabled for the organization, or the email and token do not belong together. |
 | Discovery works but a call is denied | The agent has no grant for that exact operation, or the scope was not requested. |
 | A Jira or Confluence call fails with a site error | The operation needs a `cloudId` and the site is outside the configured read boundary. |
-| Bitbucket test connection fails with a certificate error (proposed) | The server uses an internal CA; add it to the connection. |
+| Bitbucket test connection fails with a certificate error | Review the Weft server's TLS trust for the private CA and the certificate chain. Git operations also need their normal verified trust configuration. Per-connection custom CA entry is not implemented; never disable verification. |
 
 ### Portable automatic merge availability
 
@@ -310,10 +359,20 @@ be resolved explicitly before automatic review. Nothing grants tools or changes
 a saved workflow automatically. Repeated summary publication reconciles the
 same connection/repository/PR/revision receipt without another comment POST.
 
+Configure routes through the [review-route API](api.md#portable-internal-pull-request-review-routes)
+or [PullRequestReviewRoute YAML](declarative-configuration.md#portable-pull-request-review-routes).
+Activation creates a durable sequence boundary; earlier events are excluded.
+Published route receipts mean engine acceptance, possibly held for approval,
+not a completed review or confirmed summary. Unknown dispatches are never
+automatically repeated. The paginated receipt API supports read-only operator
+reconciliation and admin retry only for a known pre-dispatch failure. Follow the
+[portable example](../examples/portable-code-review/README.md) for separate
+adoption and explicitly retire an old bridge before routing the same scope.
 
-### Optional native Jira DC lifecycle mappings
+### Optional Jira lifecycle mappings and recovery
 
-Use the connection's **Inspect transitions** page with an actual sample issue,
+For Data Center use the native connection; for Cloud use its reviewed profile.
+Use its **Inspect transitions** page with an actual sample issue,
 then create a **Workflow mapping** for its numeric issue type/source status,
 transition and destination. Names such as Review or In Review are presentation;
 no board column or alias is guessed. The current profile accepts transitions
