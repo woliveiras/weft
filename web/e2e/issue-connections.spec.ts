@@ -118,3 +118,18 @@ test('reviews and saves native workflow mappings through real verified-TLS disco
  await expect(page.getByText('browser-review-step · Revision 2',{exact:true})).toBeVisible();
  await expect(page.getByRole('form',{name:'Workflow mapping configuration'}).getByLabel('Mapping name',{exact:true})).toBeDisabled();
 });
+
+test('reconciles a retained uncertain transition through browser, API, storage and verified TLS reads only',async({page})=>{
+ await page.goto('/#/connections');await page.evaluate(()=>localStorage.setItem('weftToken','e2e-admin-token'));await page.reload();
+ const connection=page.getByRole('region',{name:'Issue trackers',exact:true}).getByRole('row',{name:/jira-mapping-fixture/});
+ await connection.getByRole('link',{name:'Workflow mappings'}).click();
+ const history=page.getByRole('region',{name:'Tracker synchronization',exact:true});
+ const row=history.getByRole('row',{name:/APP-8/});await expect(row).toContainText('unknown');
+ await row.getByText('Review recovery',{exact:true}).click();
+ await expect(row.getByRole('button',{name:'Retry preflight'})).toHaveCount(0);
+ await row.getByRole('button',{name:'Reconcile by reading',exact:true}).click();
+ await expect(row).toContainText('target observed');
+ await expect(history.getByRole('status')).toContainText('retained synchronization evidence was updated');
+ await page.setViewportSize({width:390,height:844});expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+ await page.reload();await expect(page.getByRole('region',{name:'Synchronization table'}).getByRole('row',{name:/APP-8/})).toContainText('target observed');
+});

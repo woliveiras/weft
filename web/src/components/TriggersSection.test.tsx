@@ -18,7 +18,7 @@ afterEach(cleanup);
 
 it('selects a native DC connection, snapshots its site/project and keeps SCM delivery independent', async () => {
   const native={name:'jira-dc',kind:'jira-dc',siteUrl:'https://jira.example/context',projectId:'10001',enabled:true,credentialConfigured:true,projectRestricted:true,revision:3};
-  const backend=fakeApi({
+  const backend=fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[{name:'review-step',connection:native.name,connectionRevision:3,siteUrl:native.siteUrl,projectId:'10001',enabled:true,revision:2,issueTypeId:'10002',fromStatusId:'10',targetStatusId:'20'}],
     'GET /api/v1/triggers':()=>[],
     'GET /api/v1/trigger-policy':()=>({inputBytes:16384,outputTokens:512,seconds:10,moneyMicros:10000,currency:'USD'}),
     'GET /api/v1/scm/connections':()=>[{name:'bitbucket',kind:'bitbucket-dc',repository:'TEAM/app',tokenConfigured:true}],
@@ -41,9 +41,11 @@ it('selects a native DC connection, snapshots its site/project and keeps SCM del
   expect(within(form).getByLabelText('Reviewed project ID')).toHaveProperty('value','10001');
   expect(within(form).queryByLabelText('MCP connection')).toBeNull();
   await user.selectOptions(within(form).getByLabelText('Source control hand-off'),'bitbucket');
+  await waitFor(()=>expect(within(form).getByLabelText('When a pull request is delivered')).not.toHaveProperty('disabled',true));
+  await user.selectOptions(within(form).getByLabelText('When a pull request is delivered'),'review-step@2');
   await user.click(within(form).getByRole('button',{name:'Save trigger'}));
   await waitFor(()=>expect(backend.find('POST','/api/v1/triggers')).toHaveLength(1));
-  expect(backend.find('POST','/api/v1/triggers')[0].body).toMatchObject({source:{kind:'jira-dc',connectionId:'jira-dc',siteUrl:native.siteUrl,projectId:'10001'},scmConnection:'bitbucket'});
+  expect(backend.find('POST','/api/v1/triggers')[0].body).toMatchObject({source:{kind:'jira-dc',connectionId:'jira-dc',siteUrl:native.siteUrl,projectId:'10001'},scmConnection:'bitbucket',lifecycleMappings:{prDelivered:{name:'review-step',revision:2}}});
   const body=backend.find('POST','/api/v1/triggers')[0].body as {source:Record<string,unknown>};
   expect(body.source).not.toHaveProperty('repository');
   expect(body.source).not.toHaveProperty('cloudId');
@@ -51,8 +53,8 @@ it('selects a native DC connection, snapshots its site/project and keeps SCM del
 
 it('blocks saving on native connection load failure and permits scoped recovery without assuming the saved scope', async () => {
   let fail=true;
-  const nativeTrigger={...paused,currentTask:undefined,source:{kind:'jira-dc',connectionId:'native',siteUrl:'https://old.example',projectId:'10001'}};
-  const backend=fakeApi({
+  const nativeTrigger={...paused,currentTask:undefined,lifecycleMappings:{prDelivered:{name:'old-review',revision:2}},source:{kind:'jira-dc',connectionId:'native',siteUrl:'https://old.example',projectId:'10001'}};
+  const backend=fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[],
     'GET /api/v1/triggers':()=>[nativeTrigger],
     'GET /api/v1/scm/connections':()=>[],
     'GET /api/v1/trigger-policy':()=>({}),
@@ -71,6 +73,7 @@ it('blocks saving on native connection load failure and permits scoped recovery 
   await userEvent.click(adopt);
   expect(within(form).getByLabelText('Reviewed site')).toHaveProperty('value','https://new.example');
   expect(within(form).getByLabelText('Reviewed project ID')).toHaveProperty('value','10002');
+  expect(await within(form).findByLabelText('When a pull request is delivered')).toHaveProperty('value','');
   expect(within(form).getByRole('button',{name:'Save trigger'})).toHaveProperty('disabled',false);
   expect(backend.calls.every(c=>c.method==='GET')).toBe(true);
 });
@@ -78,7 +81,7 @@ it('blocks saving on native connection load failure and permits scoped recovery 
 describe('TriggersSection', () => {
   it('shows a paused trigger with its reason, work and notes, and resumes it', async () => {
     let list = [paused];
-    const api = fakeApi({
+    const api = fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[],
       'GET /api/v1/triggers': () => list,
       'GET /api/v1/scm/connections': () => [],
       'POST /api/v1/triggers/trg_1/resume': () => { list = [{ ...paused, state: 'active', pausedReason: undefined }]; return list[0]; },
@@ -101,7 +104,7 @@ describe('TriggersSection', () => {
 
   it('creates a trigger with the consent summary and reports validation', async () => {
     let fail = true;
-    const api = fakeApi({
+    const api = fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[],
       'GET /api/v1/triggers': () => [],
       'GET /api/v1/scm/connections': () => [{ name: 'gh', kind: 'github', repository: 'acme/app', tokenConfigured: true }],
       'POST /api/v1/triggers': (c) => (fail ? apiError(422, 'invalid trigger: label: use 1-50 letters', 'invalid') : { ...(c.body as object), id: 'trg_2', state: 'active', consent: { actor: 'admin', workflowVersion: 3, authorizationMode: 'ask', recordedAt: '' } }),
@@ -137,7 +140,7 @@ describe('TriggersSection', () => {
         ...paused, holds: [{ generation: 'gen-1', key: 'APP-7', reason: 'incomplete', message: 'Waiting', round: 1, snapshotEdits: 2, publication }],
       }];
       const path = '/api/v1/triggers/trg_1/resolve-hold';
-      const api = fakeApi({
+      const api = fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[],
         'GET /api/v1/triggers': () => list,
         'GET /api/v1/scm/connections': () => [],
         [`POST ${path}`]: () => { list = [paused]; return paused; },
@@ -166,7 +169,7 @@ describe('TriggersSection', () => {
       holds: [{ generation: 'gen-1', key: 'APP-7', reason: 'incomplete', message: 'Waiting', round: 1, accessError }],
     }];
     const path = '/api/v1/triggers/trg_1/resume';
-    const api = fakeApi({
+    const api = fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[],
       'GET /api/v1/triggers': () => list,
       'GET /api/v1/scm/connections': () => [],
       [`POST ${path}`]: () => { list = [active]; return active; },
@@ -181,7 +184,7 @@ describe('TriggersSection', () => {
   });
 
   it('shows each access error on its own hold', async () => {
-    fakeApi({
+    fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[],
       'GET /api/v1/triggers': () => [{
         ...paused, holds: [
           { generation: 'gen-1', key: 'APP-7', reason: 'incomplete', round: 1, accessError: 'The project rejected the connection.' },
@@ -203,7 +206,7 @@ describe('TriggersSection', () => {
     const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-12T10:45:00Z'));
     try {
       const deadline = '2026-11-12T11:00:00Z';
-      fakeApi({
+      fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[],
         'GET /api/v1/triggers': () => [{
           ...paused, holds: [{
             generation: 'gen-1', key: 'APP-7', reason: 'claim_recheck_unavailable', round: 1,
@@ -233,7 +236,7 @@ describe('TriggersSection', () => {
       vi.setSystemTime(new Date('2026-11-12T10:45:00Z'));
       const first = '2026-11-12T10:45:01Z';
       const second = '2026-11-12T10:45:02Z';
-      const api = fakeApi({
+      const api = fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[],
         'GET /api/v1/triggers': () => [{
           ...paused, holds: [
             { generation: 'gen-1', key: 'APP-7', reason: 'tracker_unavailable', round: 1, retryAccessAt: first },
@@ -261,7 +264,7 @@ describe('TriggersSection', () => {
   });
 
   it('keeps viewers read-only', async () => {
-    fakeApi({ 'GET /api/v1/triggers': () => [paused], 'GET /api/v1/scm/connections': () => [] });
+    fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[], 'GET /api/v1/triggers': () => [paused], 'GET /api/v1/scm/connections': () => [] });
     render(<TriggersSection graph={graph} role="viewer" />);
     const card = await screen.findByRole('article', { name: 'Trigger Ready' });
     expect(within(card).queryByRole('button')).toBeNull();
@@ -271,14 +274,14 @@ describe('TriggersSection', () => {
 
 it('shows the retained task launch cause on a paused trigger',async()=>{
  const cause='Task environment build failed. The container image build command failed.';
- fakeApi({'GET /api/v1/triggers':()=>[{...paused,currentTask:undefined,pausedReason:cause}],'GET /api/v1/scm/connections':()=>[]});
+ fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[],'GET /api/v1/triggers':()=>[{...paused,currentTask:undefined,pausedReason:cause}],'GET /api/v1/scm/connections':()=>[]});
  render(<TriggersSection graph={graph} role="viewer"/>);
  expect((await screen.findByRole('status')).textContent).toBe(cause);
  expect(screen.queryByRole('button',{name:'Resume and record consent'})).toBeNull();
 });
 
 it('shows the blocked delivery summary and links the original task',async()=>{
- fakeApi({
+ fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[],
   'GET /api/v1/triggers':()=>[{...paused,currentTask:undefined,currentIssue:undefined,lastFailedTask:'tsk_blocked',pausedReason:'Review delivery for acme/app#7. Task: https://weft.example/#/tasks/tsk_blocked Agent summary: Dependency registry unavailable.'}],
   'GET /api/v1/scm/connections':()=>[],
  });
@@ -291,7 +294,7 @@ it('shows the blocked delivery summary and links the original task',async()=>{
 
 it('keeps edits and cancellation disabled until a pending trigger save finishes', async () => {
   let finish!: (value: unknown)=>void;
-  const backend=fakeApi({
+  const backend=fakeApi({'GET /api/v1/lifecycle-syncs':()=>({items:[],next:''}),'GET /api/v1/issue-workflow-mappings':()=>[],
     'GET /api/v1/triggers':()=>[paused],
     'GET /api/v1/scm/connections':()=>[],
     'PUT /api/v1/triggers/trg_1':()=>new Promise(resolve=>{finish=resolve;}),

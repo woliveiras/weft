@@ -1,3 +1,4 @@
+import {IssueLifecycleSyncs} from './IssueLifecycleSyncs';
 import {useEffect,useState} from 'react';
 import {api, ApiError, errorMessage} from '../api/client';
 import type {IssueConnection, IssueTransition, IssueTransitionDiscovery, IssueWorkflowMapping, IssueWorkflowMappingInput} from '../api/types';
@@ -16,7 +17,7 @@ export function IssueWorkflowMappingsPage({name,route,role}:{name:string;route:{
  <ErrorBox error={connection.error}/>{connection.loading&&<p role="status">Loading issue connection…</p>}
  {connection.error&&<Btn onClick={()=>void connection.reload()}>Retry loading connection</Btn>}
  {connection.data&&!connection.loading&&!connection.error&&<><p>{name} · {connection.data.siteUrl} · Project ID {connection.data.projectId} · Revision {connection.data.revision}</p>
- {route.create||route.name?<MappingEditor key={route.name??'new'} connection={connection.data} mappingName={route.name} role={role}/>:<MappingList connection={connection.data} role={role}/>}</>}
+ {route.create||route.name?<MappingEditor key={route.name??'new'} connection={connection.data} mappingName={route.name} role={role}/>:<><MappingList connection={connection.data} role={role}/><IssueLifecycleSyncs key={connection.data.name} connection={connection.data.name} role={role}/></>}</>}
  </section>;
 }
 function MappingList({connection,role}:{connection:IssueConnection;role?:string}){

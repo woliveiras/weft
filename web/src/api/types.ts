@@ -350,6 +350,7 @@ export interface Execution {
   traceId?: string;
   instance?: string;
   startedAt: string;
+  runtimeStartedAt?: string;
   completedAt?: string;
 }
 
@@ -536,7 +537,22 @@ export interface TriggerReadinessLimits {
   maxHolds: number;
 }
 
+export interface LifecycleMappingPin {name:string; revision:number}
+export interface TriggerLifecycleMappings {workStarted?:LifecycleMappingPin; prDelivered?:LifecycleMappingPin}
+export interface LifecycleSync {
+ id:string;triggerId:string;taskId:string;stage:'work_started'|'pr_delivered';evidence:string;
+ issueId:string;issueTypeId:string;issueKey:string;source:TriggerSource;connectionRevision:number;
+ mapping:LifecycleMappingPin;consentScope:string;actor:string;
+ state:'queued'|'failed'|'unknown'|'already_target'|'target_observed'|'superseded';
+ error?:string;createdAt:string;updatedAt:string;revision:number;
+}
+export interface LifecycleSyncEvidence {
+ sync:LifecycleSync;
+ transition?:{state:string;observedStatusId?:string;intent:{operationId:string;connection:string;connectionRevision:number;mappingName?:string;mappingRevision?:number;issueKey:string;issueId:string;issueTypeId:string;fromStatusId:string;transitionId:string;targetStatusId:string}};
+}
+export interface LifecycleSyncPage {items:LifecycleSync[];next:string}
 export interface TriggerInput {
+ lifecycleMappings?:TriggerLifecycleMappings;
   readinessDisabled?: boolean;
   name: string;
   workflow: string;

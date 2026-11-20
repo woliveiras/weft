@@ -686,3 +686,36 @@ name assumptions through discovered, scoped workflow mappings.
   review routing/adoption, Jira Cloud transition adoption and real-account/version
   qualification remain pending. No installation, credential, live issue or PR was
   changed, and no deployment was performed.
+
+
+## INT-009-06j — Lifecycle selection and historical recovery console
+
+- Native trigger configuration offers optional explicit work-start/PR-delivery
+  mapping revision selectors. Only enabled definitions matching the reviewed
+  connection revision/site/project are eligible. Connection or scope changes
+  clear selections; admitted tasks keep their pins locked. Loading/catalogue
+  failures remain visible and do not silently replace the saved choice.
+- Connection mapping details now include bounded synchronization history with
+  page-local search/status filters. Recovery exposes the source issue and exact
+  historical transition/source/target IDs. GET detail returns {sync, transition?}
+  from the retained adapter record; current mapping edits cannot rewrite this
+  evidence. Scope divergence conflicts, storage failure propagates, and missing
+  pre-dispatch intent remains explicitly absent rather than inferred.
+- Viewer inspection, operator read-only reconciliation and admin preflight retry
+  retain role/CAS fences. Unknown writes have no retry action. A preflight failure
+  before an adapter record exists still supports explicit admin recovery. Stale
+  revisions require refresh; dependency failures disable action until reviewed.
+- Docker make test-web passed TypeScript plus 108 files/584 tests
+  (/tmp/weft-lifecycle-console-v7.log). The first complete run encountered an
+  unchanged 100-item cleanup test timeout during concurrent browser execution;
+  the rerun passed without changing its timeout or checks. Three Chromium
+  journeys passed (/tmp/weft-lifecycle-console-e2e-v3.log), including a real
+  browser→API→FS store→verified TLS Jira fixture reconciliation and mobile-width
+  overflow check. Fixtures reject all vendor mutations. API unit/integration
+  tests cover historical mapping changes, missing intent, scope corruption and
+  storage failure; full API suite and vet passed before the final site/project
+  guards, then targeted lifecycle tests passed again with those guards.
+- Independent read-only review found no remaining blockers. No live connection,
+  credential, policy, issue or PR changed; nothing was deployed. Declarative
+  mapping definitions, portable review routing/adoption, Jira Cloud transition
+  adoption and real-account/version qualification remain pending.

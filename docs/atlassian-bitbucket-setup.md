@@ -321,7 +321,7 @@ without required field updates. Missing field metadata and required fields,
 even those reporting defaults, need manual handling.
 
 Pin the desired mapping name/revision to workStarted or prDelivered in the
-trigger's lifecycleMappings configuration. Saving a mapping does not attach it
+trigger's **Optional tracker transitions** fields (or lifecycleMappings configuration). Saving a mapping does not attach it
 to a trigger. Each actual issue is checked again before dispatch. No mapping
 means no transition, preserving existing comment/label behavior. Automatic
 confirmed-merge synchronization is unavailable while portable merge is disabled.
@@ -335,3 +335,11 @@ Changed mapping/connection revisions require review; they never authorize a
 blind re-send. A person can finish handling the issue manually when its workflow
 no longer matches the pinned definition. Live version/workflow qualification and
 the project-restricted technical account remain operator prerequisites.
+
+From the connection's **Workflow mappings** page, **Tracker synchronization**
+shows separate task/stage outcomes. Expand **Review recovery** to inspect the
+source issue and retained source/target status IDs before acting. Operators can
+reconcile uncertain outcomes by reading; admins can retry confirmed preflight
+failures under the original authority. No intent means the destination is not
+inferred from today's mapping. Page controls bound history; search/status filters
+apply only to the current page. A revision conflict requires refresh and review.

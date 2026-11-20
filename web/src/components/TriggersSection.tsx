@@ -1,3 +1,4 @@
+import { LifecycleMappingPicker } from './LifecycleMappingPicker';
 import { HelpField } from './FieldHelp';
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
@@ -72,7 +73,7 @@ export function TriggersSection({ graph, role, onTriggers }: {
   const set = (patch: Partial<TriggerInput>) => setDraft((d) => ({ ...(d ?? emptyInput(graph)), ...patch }));
   const setSource = (patch: Partial<TriggerInput['source']>) => setDraft((d) => {
     const cur = d ?? emptyInput(graph);
-    return { ...cur, source: { ...cur.source, ...patch } };
+    return { ...cur, lifecycleMappings: (patch.connectionId!==undefined&&patch.connectionId!==cur.source.connectionId)||(patch.siteUrl!==undefined&&patch.siteUrl!==cur.source.siteUrl)||(patch.projectId!==undefined&&patch.projectId!==cur.source.projectId)?undefined:cur.lifecycleMappings, source: { ...cur.source, ...patch } };
   });
   const save = async () => {
     if (!draft || saving) return;
@@ -99,7 +100,7 @@ export function TriggersSection({ graph, role, onTriggers }: {
       name: t.name, workflow: t.workflow, nodeId: t.nodeId, resultNodeId: t.resultNodeId, source: t.source,
       label: t.label, owner: t.owner, intervalMinutes: t.intervalMinutes, scmConnection: t.scmConnection,
       authorizationMode: t.authorizationMode, executionMode: t.executionMode, projectId: t.projectId,
-      readinessDisabled: t.readinessDisabled,
+      readinessDisabled: t.readinessDisabled, lifecycleMappings: t.lifecycleMappings,
     });
   };
   const act = async (t: Trigger, action: 'pause' | 'resume' | 'delete') => {
@@ -217,7 +218,7 @@ export function TriggersSection({ graph, role, onTriggers }: {
       {draft && (
         <div className="card form" role="form" aria-label={editing ? 'Edit issue trigger' : 'Add issue trigger'}>
           <label>Name<input value={draft.name} onChange={(e) => set({ name: e.target.value })} /></label>
-          <HelpField label="Tracker" help="GitHub and Jira Cloud use MCP connections. Jira Data Center uses its separate project-scoped REST connection. Source control delivery is selected independently."><select value={draft.source.kind} onChange={e => set({source: {kind: e.target.value as TriggerSource['kind'], connectionId: '', ...(e.target.value === 'github' ? {repository: ''} : {})}})}><option value="github">GitHub</option><option value="jira">Jira Cloud</option><option value="jira-dc">Jira Data Center</option></select></HelpField>
+          <HelpField label="Tracker" help="GitHub and Jira Cloud use MCP connections. Jira Data Center uses its separate project-scoped REST connection. Source control delivery is selected independently."><select value={draft.source.kind} onChange={e => set({lifecycleMappings: undefined, source: {kind: e.target.value as TriggerSource['kind'], connectionId: '', ...(e.target.value === 'github' ? {repository: ''} : {})}})}><option value="github">GitHub</option><option value="jira">Jira Cloud</option><option value="jira-dc">Jira Data Center</option></select></HelpField>
           {nativeSelected ? <>
             <HelpField label="Issue tracker connection" help="Select an enabled native connection whose account has been reviewed as remotely restricted to its project. The exact site, numeric project and connection revision are included in trigger consent."><select disabled={native.loading} value={draft.source.connectionId} onChange={e => {
               const c = native.data?.find(row => row.name === e.target.value);
@@ -235,6 +236,7 @@ export function TriggersSection({ graph, role, onTriggers }: {
             {draft.source.kind === 'github' ? <HelpField label="Repository" help="The GitHub repository to poll, written as owner/repository. Use a repository the selected connection can read."><input value={draft.source.repository ?? ''} onChange={e => setSource({repository: e.target.value})} placeholder="owner/name"/></HelpField> : <HelpField label="Jira cloud ID" help="Identifies the Jira Cloud site to search. Use the cloud ID associated with the selected Atlassian MCP connection."><input value={draft.source.cloudId ?? ''} onChange={e => setSource({cloudId: e.target.value})}/></HelpField>}
           </>}
           <HelpField label={"Extra query"} help={"Narrows the tracker search using GitHub search syntax or JQL for Jira. Test the filter in your tracker before enabling the trigger."}><input value={draft.source.query ?? ''} onChange={(e) => setSource({ query: e.target.value })} placeholder={draft.source.kind === 'github' ? 'milestone:v1' : 'project = APP'} /></HelpField>
+          {nativeSelected&&selectedNative&&nativeScopeMatches&&<LifecycleMappingPicker connection={selectedNative} value={draft.lifecycleMappings} disabled={!!list.data?.find(t=>t.id===editing)?.currentTask} onChange={lifecycleMappings=>set({lifecycleMappings})}/>}
           <HelpField label={'Assess issue readiness before work'} help="Checks whether an eligible issue describes enough work to begin. Add the missing requirements to the tracker issue before retrying."><input type="checkbox" checked={!draft.readinessDisabled} onChange={(e) => set({ readinessDisabled: !e.target.checked })} /></HelpField>
           <HelpField label={"Label"} help={"Only issues with this tracker label are considered. Use a dedicated label to control which issues can start workflow tasks."}><input value={draft.label} onChange={(e) => set({ label: e.target.value })} /></HelpField>
           <HelpField label={"Owner (tracker login or account id)"} help={"Limits eligible issues by assignee and identifies whose clarification replies can contribute. Jira Data Center uses a login and preserves the assignee; Jira Cloud expects an account ID."}><input value={draft.owner ?? ''} onChange={(e) => set({ owner: e.target.value })} /></HelpField>

@@ -9,12 +9,22 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/storage"
+	"github.com/woliveiras/weft/server/internal/trigger"
 )
 
 func (s *Server) lifecycleSyncs(w http.ResponseWriter, r *http.Request) error {
 	rows, next, err := s.triggers().LifecycleSyncPage(r.Context(), r.URL.Query().Get("after"), 100)
 	if err != nil {
 		return err
+	}
+	if connection := r.URL.Query().Get("connection"); connection != "" {
+		filtered := []trigger.LifecycleSync{}
+		for _, v := range rows {
+			if v.Source.ConnectionID == connection {
+				filtered = append(filtered, v)
+			}
+		}
+		rows = filtered
 	}
 	writeJSON(w, 200, map[string]any{"items": rows, "next": next})
 	return nil
@@ -24,7 +34,21 @@ func (s *Server) getLifecycleSync(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return err
 	}
-	writeJSON(w, 200, v)
+	out := struct {
+		Sync       trigger.LifecycleSync `json:"sync"`
+		Transition *jiradc.SyncRecord    `json:"transition,omitempty"`
+	}{Sync: v}
+	core, err := (jiradc.TransitionSync{Connections: s.IssueConnections}).Get(r.Context(), "lifecycle:"+v.ID)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return err
+	}
+	if err == nil {
+		if core.SiteURL != v.Source.SiteURL || core.ProjectID != v.Source.ProjectID || core.Intent.Connection != v.Source.ConnectionID || core.Intent.ConnectionRevision != v.ConnectionRevision || core.Intent.IssueID != v.IssueID || core.Intent.IssueTypeID != v.IssueTypeID || core.Intent.IssueKey != v.IssueKey || core.Intent.MappingName != v.Mapping.Name || core.Intent.MappingRevision != v.Mapping.Revision {
+			return storage.ErrConflict
+		}
+		out.Transition = &core
+	}
+	writeJSON(w, 200, out)
 	return nil
 }
 func (s *Server) reconcileLifecycleSync(w http.ResponseWriter, r *http.Request) error {

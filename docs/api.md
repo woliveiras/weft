@@ -1006,8 +1006,8 @@ into a prerequisite for PR delivery. A confirmed-merge stage is unavailable.
 
 | Route | Minimum role | Contract |
 | --- | --- | --- |
-| `GET /api/v1/lifecycle-syncs?after=<sync-id>` | viewer | `{items, next}`; at most 100 records, key cursor, no global history ceiling. Follow `next` for later pages; this is not chronological pagination. |
-| `GET /api/v1/lifecycle-syncs/{id}` | viewer | Retained task/stage, evidence, numeric issue identity, source, mapping revision and independent synchronization outcome. |
+| `GET /api/v1/lifecycle-syncs?after=<sync-id>&connection=<name>` | viewer | `{items, next}`; at most 100 records, key cursor, no global history ceiling. Follow `next` for later pages; this is not chronological pagination. Optional connection filtering applies within each scanned page; an empty page can still have `next`. |
+| `GET /api/v1/lifecycle-syncs/{id}` | viewer | `{sync, transition?}` retains task/stage, evidence, numeric issue identity, source, mapping revision and independent outcome. Optional transition is the exact historical adapter intent, including source/target status and transition IDs; missing intent is omitted, storage failures propagate and scope discrepancies conflict. Current mapping edits never replace historical intent. |
 | `POST /api/v1/lifecycle-syncs/{id}/reconcile` | operator | Positive `If-Match` plus exactly `{"confirm":true}`. Read the retained transition intent; never POST a transition. Unknown outcomes remain visibly unknown. |
 | `POST /api/v1/lifecycle-syncs/{id}/retry` | admin | Same revision/confirmation contract. Queue only a known pre-dispatch failure under its original unchanged consent and mapping. Unknown/pending writes are ineligible. |
 

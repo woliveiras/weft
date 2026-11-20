@@ -4,14 +4,19 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/app"
 	"github.com/woliveiras/weft/server/internal/jiradc"
+	"github.com/woliveiras/weft/server/internal/trigger"
 )
 
 // This verified-TLS fake belongs exclusively to the disposable browser backend.
@@ -28,6 +33,8 @@ func nativeJiraFixture() *httptest.Server {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
+		case "/jira/rest/api/2/issue/APP-8":
+			fmt.Fprint(w, `{"id":"10008","key":"APP-8","fields":{"summary":"Retained recovery sample","updated":"2026-11-20T12:00:00.000+0000","issuelinks":[],"project":{"id":"10001"},"issuetype":{"id":"10002"},"status":{"id":"20","name":"Review","statusCategory":{"key":"indeterminate"}}}}`)
 		case "/jira/rest/api/2/issue/APP-7":
 			fmt.Fprint(w, `{"id":"10007","key":"APP-7","fields":{"summary":"Browser mapping sample","updated":"2026-11-20T12:00:00.000+0000","issuelinks":[],"project":{"id":"10001"},"issuetype":{"id":"10002"},"status":{"id":"10","name":"Ready","statusCategory":{"key":"new"}}}}`)
 		case "/jira/rest/api/2/issue/10007/transitions":
@@ -61,5 +68,34 @@ func installNativeJiraFixture(ctx context.Context, a *app.App) (func(), error) {
 		cleanup()
 		return nil, err
 	}
+	if err := seedLifecycleRecovery(ctx, a, remote.URL+"/jira"); err != nil {
+		cleanup()
+		return nil, err
+	}
 	return cleanup, nil
+}
+
+// Retained uncertainty models a prior interrupted dispatch. The fake can only
+// answer GET, so browser reconciliation cannot accidentally repeat a transition.
+func seedLifecycleRecovery(ctx context.Context, a *app.App, site string) error {
+	raw, _ := json.Marshal([]string{"trg_fixture", "tsk_fixture", "pr_delivered"})
+	sum := sha256.Sum256(raw)
+	id := hex.EncodeToString(sum[:])
+	now := time.Now().UTC()
+	v := trigger.LifecycleSync{ID: id, TriggerID: "trg_fixture", TaskID: "tsk_fixture", Stage: "pr_delivered", Evidence: "evt-fixture-pr", IssueID: "10008", IssueTypeID: "10002", IssueKey: "APP-8", Source: trigger.SourceConfig{Kind: "jira-dc", ConnectionID: "jira-mapping-fixture", SiteURL: site, ProjectID: "10001"}, ConnectionRevision: 1, Mapping: trigger.MappingPin{Name: "retained-review", Revision: 1}, ConsentScope: "fixture-reviewed-scope", Actor: "e2e-fixture", State: "unknown", Error: "The prior dispatch response was lost. Reconcile by reading.", CreatedAt: now, UpdatedAt: now}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	if _, err = a.Store.PutSetting(ctx, trigger.LifecycleSyncPrefix+id, data, 0, "e2e-fixture"); err != nil {
+		return err
+	}
+	core := jiradc.SyncRecord{Intent: jiradc.TransitionIntent{OperationID: "lifecycle:" + id, MappingName: v.Mapping.Name, MappingRevision: 1, Connection: v.Source.ConnectionID, ConnectionRevision: 1, IssueKey: v.IssueKey, IssueID: v.IssueID, IssueTypeID: v.IssueTypeID, FromStatusID: "10", TransitionID: "31", TargetStatusID: "20"}, SiteURL: site, ProjectID: "10001", State: "unknown", Error: "Dispatch response unavailable", CreatedAt: now, UpdatedAt: now}
+	data, err = json.Marshal(core)
+	if err != nil {
+		return err
+	}
+	sum = sha256.Sum256([]byte(core.Intent.OperationID))
+	_, err = a.Store.PutSetting(ctx, jiradc.SyncPrefix+hex.EncodeToString(sum[:]), data, 0, "e2e-fixture")
+	return err
 }
