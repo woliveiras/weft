@@ -135,6 +135,28 @@ advisory — a model that writes the call as text fails it). Errors are returned
 `[redacted]`. Tests are audited as `provider.tested` events; changes as
 `provider.changed`.
 
+## Native issue connections
+
+Native Jira Data Center connections have their own credential store, independent
+of MCP and source control. These endpoints prepare configuration only; trigger,
+console and installation-YAML adoption remain pending. No agent permission is
+created by saving or testing a connection.
+
+| Method and path | Role | Purpose |
+|---|---|---|
+| `GET /api/v1/issue-connections` | viewer | Credential-free connection records. |
+| `GET /api/v1/issue-connections/{name}` | viewer | Current record and revision ETag. |
+| `POST /api/v1/issue-connections` | admin | Create `{name, kind: "jira-dc", siteUrl, projectId, enabled, token}`. HTTPS site context paths are supported; `projectId` is the numeric Jira ID. |
+| `PUT /api/v1/issue-connections/{name}` | admin | Requires `If-Match: <revision>`. Omit `token` to retain it for the same site/project; changing scope requires a replacement native credential. |
+| `POST /api/v1/issue-connections/{name}/test` | operator | Requires `If-Match`; tests authenticated identity only, returning `{ok, identity?, scope?, error?}`. This does not qualify project permissions. |
+
+Stale or disabled connections cannot be tested. Secrets are encrypted with
+site/project-bound associated data and never returned; records expose only
+`credentialConfigured`. Malformed/unknown JSON fields are rejected. Changes
+record a credential-free `tracker.connection_change_requested` audit intent;
+the stored CAS revision is the authoritative mutation result. Live Data Center
+version and project permission qualification remain separate requirements.
+
 ## Source control connections
 
 Push and pull request tools act through server-held SCM connections; agents

@@ -30,6 +30,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/events"
 	"github.com/woliveiras/weft/server/internal/graph"
 	"github.com/woliveiras/weft/server/internal/hitl"
+	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/llm"
 	_ "github.com/woliveiras/weft/server/internal/llm/providers"
 	"github.com/woliveiras/weft/server/internal/llmconfig"
@@ -68,6 +69,7 @@ type App struct {
 	MCP               *mcpconfig.Manager
 	TrackerAPI        *mcpconfig.TrackerAPI
 	SCM               scm.Manager
+	IssueConnections  jiradc.Connections
 	Triggers          *trigger.Runner
 	Tools             *tools.Registry
 	Gateway           *tools.Gateway
@@ -153,6 +155,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 	a.MCP = mcpconfig.New(a.Store, box, a.Bus)
 	a.SCM = scm.Manager{Store: a.Store, Box: box, Bus: a.Bus}
+	a.IssueConnections = jiradc.Connections{Store: a.Store, Box: box}
 	a.MCP.AllowLocalProcesses = cfg.NativeProfile
 	a.Tools = tools.Builtin(tools.BuiltinConfig{AllowPrivateNetworks: cfg.Tools.AllowPrivateNetworks})
 	a.Tools.MustRegister(scm.Tools(a.SCM)...)
@@ -312,7 +315,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 	a.API = api.New(api.Deps{
 		RepositoryImports: a.RepositoryImports, TriggerManager: &a.Triggers.Triggers,
-		Reviews: a.Reviews, PreviewGateway: a.PreviewGateway, MCP: a.MCP, SCM: a.SCM, Gateway: a.Gateway,
+		Reviews: a.Reviews, PreviewGateway: a.PreviewGateway, MCP: a.MCP, SCM: a.SCM, IssueConnections: a.IssueConnections, Gateway: a.Gateway,
 		Config: cfg, Engine: a.Engine, Store: a.Store, Broker: a.Broker, Bus: a.Bus, Approvals: a.Approvals,
 		Models: a.Models, Providers: a.Providers, Tools: a.Tools, Workspaces: ws, Auth: auth, Log: log,
 		Environments: a.Environments, Proposals: a.Proposals, Metrics: journalMetrics,

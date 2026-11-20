@@ -268,3 +268,23 @@ name assumptions through discovered, scoped workflow mappings.
 - References: [REST 2 resource shapes](https://docs.atlassian.com/software/jira/docs/api/REST/9.12.0/)
   and [Data Center authentication](https://developer.atlassian.com/server/jira/platform/rest/v10000/).
   These references describe fixture provenance, not supported production versions.
+
+## INT-009-05b — Native Jira connection storage and API
+
+- Native Jira Data Center connections store their own sealed PAT and numeric
+  project/site scope, independent of MCP and SCM credentials. Associated data
+  binds ciphertext to that scope; changing scope requires a replacement token.
+- Viewer read, admin create/update and operator identity-test routes enforce
+  revisions, reject unknown/trailing JSON and hide credential values. Disabled
+  and stale tests fail before credential decryption or remote dispatch.
+- Unit and real fsstore/API integration coverage includes invalid inputs,
+  role denial, CAS conflicts, audit/storage failures, safe views and ciphertext
+  audience mismatch. No live connection, credential or policy was changed.
+- This batch is configuration infrastructure. Console, YAML and operational
+  trigger adoption remain pending; an identity test does not establish project
+  permissions or production-version support.
+- Docker `./scripts/go.sh test ./internal/jiradc ./internal/api ./internal/app ./internal/domain -count=1`
+  passed; the added TLS/API checks passed separately with `-run TestNative`.
+  Vet for Jira DC/API/app and diff checks passed. Subagent review requested the
+  positive revision fence and additional role/ETag/TLS cases; implemented and
+  verified. Final read-only review found no residual blockers.

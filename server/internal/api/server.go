@@ -35,6 +35,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/events"
 	"github.com/woliveiras/weft/server/internal/graph"
 	"github.com/woliveiras/weft/server/internal/hitl"
+	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/llmconfig"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
@@ -59,6 +60,7 @@ type Deps struct {
 	RepositoryImports *repositoryimport.Manager
 	MCP               *mcpconfig.Manager
 	SCM               scm.Manager
+	IssueConnections  jiradc.Connections
 	Reviews           *review.Manager
 	PreviewGateway    *review.Gateway
 	// Gateway runs server-side tool calls (issue triggers) under the same
@@ -244,6 +246,11 @@ func (s *Server) routes() {
 		{"POST /api/v1/triggers/{trigger}/pause", A, s.pauseTrigger},
 		{"POST /api/v1/triggers/{trigger}/resume", A, s.resumeTrigger},
 		{"POST /api/v1/triggers/{trigger}/retry-failed", A, s.retryFailedTrigger},
+		{"GET /api/v1/issue-connections", R, s.issueConnections},
+		{"GET /api/v1/issue-connections/{name}", R, s.getIssueConnection},
+		{"POST /api/v1/issue-connections", A, s.createIssueConnection},
+		{"PUT /api/v1/issue-connections/{name}", A, s.updateIssueConnection},
+		{"POST /api/v1/issue-connections/{name}/test", O, s.testIssueConnection},
 		{"GET /api/v1/scm/kinds", R, s.scmKinds},
 		{"GET /api/v1/scm/connections", R, s.scmConnections},
 		{"POST /api/v1/scm/connections", A, s.createSCMConnection},
@@ -341,7 +348,7 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid", err.Error(), map[string]any{"valid": false, "errors": pve.Errors})
 	case errors.Is(err, mcpconfig.ErrOAuth):
 		writeErr(w, http.StatusBadGateway, "oauth", err.Error(), nil)
-	case errors.Is(err, mcpconfig.ErrInvalid):
+	case errors.Is(err, mcpconfig.ErrInvalid), errors.Is(err, jiradc.ErrInvalid):
 		writeErr(w, http.StatusUnprocessableEntity, "invalid", err.Error(), nil)
 	case errors.Is(err, secrets.ErrNoKey):
 		writeErr(w, http.StatusConflict, "secret_key_missing", err.Error(), nil)
