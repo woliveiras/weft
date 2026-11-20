@@ -21,8 +21,36 @@ graph URLs and editor drafts retain their behavior.
 The workflow catalogue uses the Workflows heading and New workflow action. Existing graph URLs and API names remain unchanged.
 
 Administration has independent hash routes for `health`, `network`, `resources`,
-`retention` and `tools`. Opening a section loads only that section's resources.
-Health checks do not test model inference; use Models for explicit provider tests.
+`retention`, `tools` and `delegation`. Opening a section loads only that section's
+resources. Health checks show loading, last completion time and next steps when a
+service is unavailable; they do not test model inference. Use Models for explicit
+provider tests.
+
+Policy forms show unsaved changes and require a current/proposed review before
+confirmation. A failed save retains edits and requires a new review; revision
+conflicts remain enforced by the existing APIs. Navigation and reload ask before
+discarding unsaved policy/profile input. Drafts remain in browser memory and are
+not recovered after a confirmed reload.
+
+- **Network policies** separates build/setup and agent access. The impact table
+  combines host/name, admission and environment-type filters. Preview shows added
+  and removed hosts. Existing work retains its network until explicitly stopped.
+- **Shared images & caches** loads a read-only preview on entry for admins. Its
+  table filters images, caches and retained usage. Selection remains visible
+  across pages/filters, is capped at 100 and requires explicit cleanup review;
+  the server rechecks eligibility. Deferred cleanup reservations are separate.
+- **Blocked access history** configures only blocked-access retention, per
+  environment. Lower limits can permanently discard records; increasing limits
+  cannot restore discarded records.
+- **Tool catalog** keeps descriptions and required capabilities visible, with
+  combined filters and 20-row pages. Listing never grants a tool to an agent.
+- **Delegation** groups execution, token and size limits. Profiles use a bounded
+  searchable table and dedicated pages at
+  `#/administration/delegation/profiles/new` and
+  `#/administration/delegation/profiles/<id>/edit`. Reload saved profile refreshes
+  the revision/comparison baseline while retaining local edits. Profiles inherit
+  the parent's model and can only select its existing grants; an explicit
+  delegation grant and existing approvals still apply.
 
 Existing `#/integrations`, `#/integrations/connect?...` and
 `#/integrations/oauth?...` links still open the MCP destination. Existing OAuth

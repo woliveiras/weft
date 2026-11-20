@@ -11,7 +11,7 @@ afterEach(cleanup);
 
 async function selectAndReview() {
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: 'Refresh preview' }));
+  await screen.findByRole('button', { name: 'Refresh preview' });
   await user.click(await screen.findByRole('checkbox', { name: 'Select shared_a' }));
   await user.click(screen.getByRole('button', { name: 'Review cleanup (1)' }));
   return user;
@@ -82,7 +82,7 @@ describe('shared resource cleanup API integration', () => {
     fakeApi({ [path]: () => ({ dryRun: true, generations: ++calls === 1 ? [] : [{ ...unused, error: 'inspect failed' }] }) });
     render(<SharedEnvironmentsSection canManage />);
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Refresh preview' }));
+    await screen.findByRole('button', { name: 'Refresh preview' });
     expect(await screen.findByText('No registered shared resources found.')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Refresh preview' }));
     expect((await screen.findByRole('checkbox')) as HTMLInputElement).toHaveProperty('disabled', true);
@@ -92,13 +92,17 @@ describe('shared resource cleanup API integration', () => {
     fakeApi({ [path]: () => ({ dryRun: true, generations: Array.from({ length: 101 }, (_, index) => ({ ...unused, id: `shared_${index}` })) }) });
     render(<SharedEnvironmentsSection canManage />);
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Refresh preview' }));
-    const boxes = await screen.findAllByRole('checkbox');
-    for (const box of boxes.slice(0, 100)) await user.click(box);
-    expect(boxes[100]).toHaveProperty('disabled', true);
-    await user.click(boxes[0]);
-    expect(boxes[100]).toHaveProperty('disabled', false);
-    await user.click(boxes[100]);
+    await screen.findByRole('button', { name: 'Refresh preview' });
+    for(let page=0;page<5;page++) {
+      for(const box of screen.getAllByRole('checkbox'))await user.click(box);
+      await user.click(screen.getByRole('button',{name:'Next'}));
+    }
+    const final=screen.getByRole('checkbox');expect(final).toHaveProperty('disabled',true);
+    await user.click(screen.getByRole('button',{name:'Previous'}));
+    await user.click(screen.getAllByRole('checkbox')[0]);
+    await user.click(screen.getByRole('button',{name:'Next'}));
+    expect(screen.getByRole('checkbox')).toHaveProperty('disabled',false);
+    await user.click(screen.getByRole('checkbox'));
     expect(screen.getByRole('button', { name: 'Review cleanup (100)' })).toBeTruthy();
   });
 
@@ -123,7 +127,7 @@ it('shows interrupted deletion and lets an admin release a reservation with an a
     : undefined });
   render(<SharedEnvironmentsSection canManage />);
   const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: 'Refresh preview' }));
+  await screen.findByRole('button', { name: 'Refresh preview' });
   expect(await screen.findByText(/Requested by admin-one/)).toBeTruthy();
   expect(screen.getByText(graph.reason)).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Finish deletion of factory' })).toBeTruthy();
@@ -143,8 +147,7 @@ it('identifies a corrupt reservation and keeps the audited release available', a
     deferredGraphs: [{ graph: 'broken', invalid: true, graphExists: false, daemonMatches: false, possibleResources: ['Volumes labeled weft.graph=broken'] }],
   }) });
   render(<SharedEnvironmentsSection canManage />);
-  const user = userEvent.setup();
-  await user.click(screen.getByRole('button', { name: 'Refresh preview' }));
+  await screen.findByRole('button', { name: 'Refresh preview' });
   expect(await screen.findByText(/The cleanup record is invalid/)).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Clean up broken' })).toHaveProperty('disabled', true);
   expect(screen.getByRole('button', { name: 'Abandon cleanup for broken' })).toHaveProperty('disabled', false);

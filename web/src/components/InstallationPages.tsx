@@ -1,3 +1,5 @@
+import {useCallback,useRef} from 'react';
+import {AdminDraftContext,type AdminDraftState} from './AdministrationUI';
 import { DelegationSection } from './DelegationSection';
 import type { Info } from '../api/types';
 import { ConnectionsList } from './ConnectionsList';
@@ -15,7 +17,7 @@ export const administrationSections = ['health', 'network', 'resources', 'retent
 export type AdministrationSection = typeof administrationSections[number];
 const titles: Record<AdministrationSection, string> = {
   health: 'System health', network: 'Network policies', resources: 'Shared images & caches',
-  retention: 'History retention', tools: 'Tool catalog', delegation: 'Delegation',
+  retention: 'Blocked access history', tools: 'Tool catalog', delegation: 'Delegation',
 };
 
 export function ConnectionsPage({ info, connectionID, connectionTab = 'overview', create, sourceControlCreate, history, connectQuery, oauthQuery }: { info?: Info; connectionID?: string; connectionTab?: ConnectionTab; create?: boolean; sourceControlCreate?: boolean; history?: boolean; connectQuery?: string; oauthQuery?: string }) {
@@ -33,19 +35,21 @@ export function ConnectionsPage({ info, connectionID, connectionTab = 'overview'
 
 export { ModelsPage } from './ModelsPage';
 
-export function AdministrationPage({ info, infoError, section }: { info?: Info; infoError?: string; section: AdministrationSection }) {
+export function AdministrationPage({ info, infoError, section, profileEditor, onProfileNavigate, onDraftState }: { info?: Info; infoError?: string; section: AdministrationSection; profileEditor?:{id?:string;create?:boolean};onProfileNavigate?:(editor?:{id?:string;create?:boolean})=>void;onDraftState?:(state:AdminDraftState)=>void }) {
+  const drafts=useRef<Record<string,AdminDraftState>>({});
+  const report=useCallback((id:string,state:AdminDraftState)=>{drafts.current[id]=state;onDraftState?.({dirty:Object.values(drafts.current).some(value=>value.dirty),busy:Object.values(drafts.current).some(value=>value.busy)});},[onDraftState]);
   const canManage = info?.identity?.role === 'admin';
   return <div className="page administration-page"><header className="page-head"><div><h1>Administration</h1>
     <p className="muted">Installation-wide services and policies. Changes may affect multiple graphs.</p></div></header>
     <nav className="section-navigation" aria-label="Administration sections">{administrationSections.map(item =>
       <a key={item} href={`#/administration/${item}`} aria-current={section === item ? 'page' : undefined}>{titles[item]}</a>)}</nav>
-    <div key={section} className="administration-content">
+    <AdminDraftContext.Provider value={report}><div key={section} className="administration-content">
       {section === 'health' && <IntegrationsView info={info} infoError={infoError} />}
       {section === 'network' && <NetworkPolicySection canManage={canManage} />}
       {section === 'resources' && <SharedEnvironmentsSection canManage={canManage} />}
       {section === 'retention' && <HistoryRetentionSection canManage={canManage} />}
       {section === 'tools' && <ToolCatalog />}
-      {section === 'delegation' && <DelegationSection canManage={canManage} />}
-    </div>
+      {section === 'delegation' && <DelegationSection canManage={canManage} profileEditor={profileEditor} onProfileNavigate={onProfileNavigate} />}
+    </div></AdminDraftContext.Provider>
   </div>;
 }

@@ -45,7 +45,7 @@ describe('installation pages through the real API client', () => {
     expect(await screen.findByText(/never on the host/)).toBeTruthy();
     expect(fixture.calls.some(c => c.path.includes('network-policy'))).toBe(false);
     view.rerender(<AdministrationPage info={info('viewer')} section="tools" />);
-    expect(await screen.findByText('shell.exec')).toBeTruthy();
+    expect(await screen.findByRole('table')).toHaveProperty('textContent',expect.stringContaining('shell.exec'));
     expect(screen.queryByRole('button', { name: 'Check services' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Tool catalog' }).getAttribute('aria-current')).toBe('page');
   });

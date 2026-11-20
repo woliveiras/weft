@@ -1,60 +1,21 @@
-import { HelpField } from './FieldHelp';
-import { useRef, useState } from 'react';
-import { api, errorMessage } from '../api/client';
-import type { HistoryRetentionPolicy, HistoryRetentionView } from '../api/types';
-import { useAsync } from '../hooks/useData';
-import { Btn, ErrorBox } from './common';
-
-export function HistoryRetentionSection({ canManage }: { canManage: boolean }) {
-  return <section className="integration-section" aria-label="Blocked history retention">
-    <h2>Blocked access history retention</h2>
-    <RetentionControls key={String(canManage)} canManage={canManage} />
-  </section>;
-}
-function RetentionControls({ canManage }: { canManage: boolean }) {
-  const current = useAsync(api.historyRetention, []);
-  const [draft, setDraft] = useState<HistoryRetentionPolicy>();
-  const [review, setReview] = useState<HistoryRetentionView>();
-  const [busy, setBusy] = useState(false);
-  const locked = useRef(false);
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-  const policy = draft ?? current.data?.policy;
-  const disabled = !canManage || busy || current.loading || !!current.error || !!review;
-  const valid = policy && Number.isInteger(policy.days) && policy.days >= 1 && policy.days <= 90 && Number.isInteger(policy.maxEvents) && policy.maxEvents >= 1 && policy.maxEvents <= 10000;
-  async function save() {
-    if (!canManage || !review || locked.current) return;
-    locked.current = true; setBusy(true); setError(undefined); setNotice(undefined);
-    try {
-      await api.saveHistoryRetention(review.policy, review.revision);
-      setDraft(undefined);
-      setNotice('Retention saved. New limits apply on subsequent history reads and collection cycles.');
-    } catch (e) {
-      setError(`Save could not be confirmed: ${errorMessage(e)}. Reload and review the current limits before retrying.`);
-      setDraft(undefined);
-    } finally {
-      setReview(undefined); await current.reload(); locked.current = false; setBusy(false);
-    }
-  }
-  return <>
-    <p>Installation-wide limits apply separately to every environment. Defaults: 7 days and 1,000 blocks.</p>
-    <Btn disabled={busy || current.loading || !!review} onClick={() => { setDraft(undefined); setError(undefined); setNotice(undefined); void current.reload(); }}>Reload retention limits</Btn>
-    <ErrorBox error={current.error ?? error} />
-    {notice && <p role="status">{notice}</p>}
-    {current.loading && <p>Loading retention limits…</p>}
-    {!canManage && <p>Administrator access is required to change retention.</p>}
-    {!current.error && current.data && policy && <>
-      <p>Revision {current.data.revision}{current.data.updatedBy ? ` · Updated by ${current.data.updatedBy}` : ''}</p>
-      <HelpField label={"Retention days (1\u201390)"} help={"Controls how many days of workspace journal history are retained before eligible older records are removed."}><input type="number" min={1} max={90} step={1} disabled={disabled} value={policy.days || ''} onChange={event => { setNotice(undefined); setDraft({ ...policy, days: Number(event.target.value) }); }} /></HelpField>
-      <HelpField label={"Maximum blocks per environment (1\u201310,000)"} help={"Limits how many workspace journal blocks are kept per environment, independently of the age limit."}><input type="number" min={1} max={10000} step={1} disabled={disabled} value={policy.maxEvents || ''} onChange={event => { setNotice(undefined); setDraft({ ...policy, maxEvents: Number(event.target.value) }); }} /></HelpField>
-      {canManage && <Btn disabled={disabled || !valid} onClick={() => { if (!current.data) return; setError(undefined); setNotice(undefined); setReview({ ...current.data, policy: { ...policy } }); }}>Review retention changes</Btn>}
-    </>}
-    {review && <section className="integration-card" aria-label="Confirm history retention">
-      <h3>Review retention changes</h3>
-      <p>Keep up to {review.policy.maxEvents} blocks per environment for {review.policy.days} days.</p>
-      <p>Reducing limits permanently discards older or excess history on subsequent reads and collection cycles, including histories of deleted environments. Increasing limits does not restore discarded history. In-flight collection may finish using previous limits; the next cycle applies the new limits.</p>
-      <Btn disabled={busy} onClick={() => void save()}>Confirm retention changes</Btn>
-      <Btn disabled={busy} onClick={() => setReview(undefined)}>Cancel retention changes</Btn>
-    </section>}
-  </>;
+import {HelpField} from './FieldHelp';
+import {useRef,useState} from 'react';
+import {api,errorMessage} from '../api/client';
+import type {HistoryRetentionPolicy,HistoryRetentionView} from '../api/types';
+import {useAsync} from '../hooks/useData';
+import {Badge,Btn,ErrorBox} from './common';
+import {AdminChanges,AdminReview,AdminHeader,discardAdminDraft,useAdminDraft} from './AdministrationUI';
+export function HistoryRetentionSection({canManage}:{canManage:boolean}) {return <section className="integration-section admin-section" aria-label="Blocked history retention"><RetentionControls key={String(canManage)} canManage={canManage}/></section>;}
+function RetentionControls({canManage}:{canManage:boolean}) {
+ const current=useAsync(api.historyRetention,[]);const [draft,setDraft]=useState<HistoryRetentionPolicy>();const [review,setReview]=useState<HistoryRetentionView>();const [busy,setBusy]=useState(false);const locked=useRef(false);const reviewButton=useRef<HTMLButtonElement>(null);const [error,setError]=useState<string>();const [notice,setNotice]=useState<string>();
+ const policy=draft??current.data?.policy;const dirty=!!draft&&JSON.stringify(draft)!==JSON.stringify(current.data?.policy);useAdminDraft('retention',dirty,busy);
+ const disabled=!canManage||busy||current.loading||!!current.error||!!review;
+ const valid=policy&&Number.isInteger(policy.days)&&policy.days>=1&&policy.days<=90&&Number.isInteger(policy.maxEvents)&&policy.maxEvents>=1&&policy.maxEvents<=10000;
+ async function save(){if(!canManage||!review||locked.current)return;locked.current=true;setBusy(true);setError(undefined);setNotice(undefined);try{await api.saveHistoryRetention(review.policy,review.revision);setDraft(undefined);setNotice('Retention saved. New limits apply on subsequent history reads and collection cycles.');}catch(e){setError(`Save could not be confirmed: ${errorMessage(e)}. Reload and review the current limits before retrying.`);}finally{setReview(undefined);await current.reload();locked.current=false;setBusy(false);}}
+ return <><AdminHeader title="Blocked access history" description="Control how long blocked access records are kept per environment. These limits do not configure all Weft history.">{dirty&&<Badge tone="warn">Unsaved changes</Badge>}<Btn disabled={busy||current.loading||!!review} onClick={()=>{if(!discardAdminDraft(dirty))return;setDraft(undefined);setError(undefined);setNotice(undefined);void current.reload();}}>Reload retention limits</Btn>{canManage&&policy&&!current.error&&<button className="btn btn-primary" ref={reviewButton} disabled={disabled||!valid} onClick={()=>{if(!current.data)return;setError(undefined);setNotice(undefined);setReview({...current.data,policy:{...policy}});}}>Review retention changes</button>}</AdminHeader>
+ <ErrorBox error={[error,current.error].filter(Boolean).join(' ')||undefined}/>{notice&&<p role="status">{notice}</p>}{current.loading&&<p role="status">Loading retention limits…</p>}{!canManage&&<p>Administrator access is required to change retention.</p>}
+ {!current.error&&current.data&&policy&&<><section className="card admin-card"><h3>Current limits</h3><dl className="admin-facts"><div><dt>Retention</dt><dd>{current.data.policy.days} days</dd></div><div><dt>Maximum per environment</dt><dd>{current.data.policy.maxEvents.toLocaleString()} blocks</dd></div><div><dt>Revision</dt><dd>{current.data.revision}{current.data.updatedBy?` · ${current.data.updatedBy}`:''}</dd></div></dl><p className="muted small">Defaults are 7 days and 1,000 blocks. Each environment has its own history limit.</p></section>
+ <section className="card admin-card"><h3>Retention settings</h3><div className="admin-two-columns"><HelpField label="Retention days (1–90)" help="Days of blocked access history retained before eligible older records are removed."><input type="number" min={1} max={90} step={1} disabled={disabled} value={policy.days||''} onChange={e=>{setNotice(undefined);setDraft({...policy,days:Number(e.target.value)});}}/></HelpField><HelpField label="Maximum blocks per environment (1–10,000)" help="Maximum blocked access records kept per environment, independently of their age."><input type="number" min={1} max={10000} step={1} disabled={disabled} value={policy.maxEvents||''} onChange={e=>{setNotice(undefined);setDraft({...policy,maxEvents:Number(e.target.value)});}}/></HelpField></div></section></>}
+ {review&&current.data&&<AdminReview returnFocus={reviewButton} label="Confirm history retention"><h3>Review retention changes</h3><AdminChanges changes={[{label:'Retention days',before:current.data.policy.days,after:review.policy.days},{label:'Maximum blocks per environment',before:current.data.policy.maxEvents,after:review.policy.maxEvents}]}/>{(review.policy.days<current.data.policy.days||review.policy.maxEvents<current.data.policy.maxEvents)&&<Badge tone="warn">History limits are being reduced</Badge>}<p>Keep up to {review.policy.maxEvents} blocks per environment for {review.policy.days} days.</p><p>Reducing limits permanently discards older or excess history on subsequent reads and collection cycles, including histories of deleted environments. Increasing limits does not restore discarded history. In-flight collection may finish using previous limits; the next cycle applies the new limits.</p><div className="btn-row"><Btn disabled={busy} onClick={()=>{setReview(undefined);}}>Cancel retention changes</Btn><Btn disabled={busy} tone="primary" onClick={()=>void save()}>{busy?'Saving…':'Confirm retention changes'}</Btn></div></AdminReview>}
+ </>;
 }

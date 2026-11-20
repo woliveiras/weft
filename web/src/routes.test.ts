@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { parseRoute, routeHash } from './App';
 
 describe('installation destination routes', () => {
+  it('round-trips dedicated delegation profile destinations', () => {
+    expect(parseRoute('#/administration/delegation/profiles/%invalid/edit')).toEqual({view:'administration',section:'delegation'});
+    for (const hash of ['#/administration/delegation/profiles/new', '#/administration/delegation/profiles/reviewer/edit']) {
+      expect(routeHash(parseRoute(hash))).toBe(hash);
+    }
+  });
   it('round-trips project creation and import destinations', () => {
     for (const hash of ['#/projects', '#/projects/new', '#/projects/import']) {
       expect(routeHash(parseRoute(hash))).toBe(hash);

@@ -8,7 +8,7 @@ import { TasksPage } from './components/TasksPage';
 import { PrimaryNavigation } from './components/PrimaryNavigation';
 import { runSection, type RunSection } from './components/runPresentation';
 import { agentSection, type AgentSection } from './components/agentSettingsModel';
-import { Activity, useCallback, useEffect, useState } from 'react';
+import { Activity, useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage, getToken, MOCK, onUnauthorized, setToken } from './api/client';
 import type { GraphSummary } from './api/types';
 import { ApprovalsView } from './components/ApprovalsView';
@@ -43,7 +43,7 @@ type Route =
   | { view: 'approvals' }
   | { view: 'connections'; connectionID?: string; connectionTab?: ConnectionTab; create?: boolean; sourceControlCreate?: boolean; history?: boolean; connectQuery?: string; oauthQuery?: string }
   | ({ view: 'models' } & ModelsRoute)
-  | { view: 'administration'; section: AdministrationSection }
+  | { view: 'administration'; section: AdministrationSection; profileId?:string; profileCreate?:boolean }
   | { view: 'skills'; skills?: SkillsRoute }
   | { view: 'graph'; id: string; tab: GraphTab; settingsSection?: SettingsSection; selectionKey?: string; agentId?: string; agentSection?: AgentSection; executionId?: string; runSection?: RunSection; correlationId?: string; connectionOrigin?: string };
 
@@ -62,6 +62,7 @@ export function parseRoute(hash: string): Route {
   if (parts[0] === 'approvals') return { view: 'approvals' };
   if (parts[0] === 'skills') return { view: 'skills', skills:parseSkillsRoute(parts,qs) };
   if (parts[0] === 'models') return { view: 'models', ...parseModelsRoute(parts) };
+  if(parts[0]==='administration'&&parts[1]==='delegation'&&parts[2]==='profiles')return {view:'administration',section:'delegation',...(parts[3]==='new'?{profileCreate:true}:/^[a-z0-9][a-z0-9-]{0,62}$/.test(parts[3]??'')?{profileId:parts[3]}:{})};
   if (parts[0] === 'administration') return { view: 'administration', section: administrationSections.includes(parts[1] as AdministrationSection) ? parts[1] as AdministrationSection : 'health' };
   if (parts[0] === 'connections' && parts[1] === 'c') return { view: 'connections', connectionID: parts[2] ?? '', connectionTab: connectionTabs.includes(parts[3] as ConnectionTab) ? parts[3] as ConnectionTab : 'overview' };
   if (parts[0] === 'connections' && parts[1] === 'source-control' && parts[2] === 'new') return { view: 'connections', sourceControlCreate: true };
@@ -107,6 +108,7 @@ export function routeHash(r: Route): string {
     return '#/connections';
   }
   if (r.view === 'models') return modelsHash(r);
+  if(r.view==='administration'&&(r.profileCreate||r.profileId))return r.profileCreate?'#/administration/delegation/profiles/new':`#/administration/delegation/profiles/${encodeURIComponent(r.profileId!)}/edit`;
   if (r.view === 'administration') return `#/administration/${r.section}`;
   if (r.view === 'graph') {
     const path = r.tab === 'settings' ? settingsPath(r.id, r.settingsSection) : `#/g/${encodeURIComponent(r.id)}/${r.tab}${r.tab === 'runs' ? (r.executionId ? `?execution=${encodeURIComponent(r.executionId)}&section=${r.runSection ?? 'result'}` : '') : r.tab === 'agent' ? `?agent=${encodeURIComponent(r.agentId ?? '')}&section=${r.agentSection ?? 'general'}` : r.tab === 'canvas' && r.selectionKey ? `?sel=${encodeURIComponent(r.selectionKey)}` : r.correlationId ? `?c=${encodeURIComponent(r.correlationId)}` : ''}`;
@@ -139,10 +141,16 @@ export function App() {
 
 function Shell() {
   const [route, setRoute] = useState<Route>(() => parseRoute(location.hash));
+  const administrationDraft=useRef({dirty:false,busy:false});
+  const onAdministrationDraft=useCallback((value:{dirty:boolean;busy:boolean})=>{administrationDraft.current=value;},[]);
   useEffect(() => {
     const f = () => {
       const previous = route;
       const next = parseRoute(location.hash);
+      if(previous.view==='administration'&&routeHash(next)!==routeHash(previous)) {
+        if(administrationDraft.current.busy||(administrationDraft.current.dirty&&!window.confirm('Discard unsaved administration changes?'))){history.replaceState(null,'',routeHash(previous));return;}
+        administrationDraft.current={dirty:false,busy:false};
+      }
       if (next.view === 'graph' && previous.view === 'graph' && next.id === previous.id && !next.connectionOrigin && previous.connectionOrigin) {
         next.connectionOrigin = previous.connectionOrigin;
         history.replaceState(null, '', routeHash(next));
@@ -249,7 +257,7 @@ function Shell() {
           {route.view === 'approvals' && <ApprovalsView role={info.data?.identity?.role} onChanged={() => void approvals.reload()} />}
           {route.view === 'connections' && <ConnectionsPage info={info.data} connectionID={route.connectionID} connectionTab={route.connectionTab} create={route.create} sourceControlCreate={route.sourceControlCreate} history={route.history} connectQuery={route.connectQuery} oauthQuery={route.oauthQuery} />}
           {route.view === 'models' && <ModelsPage info={info.data} modelSection={route.modelSection} providerEditor={route.providerEditor} />}
-          {route.view === 'administration' && <AdministrationPage info={info.data} infoError={info.error} section={route.section} />}
+          {route.view === 'administration' && <AdministrationPage info={info.data} infoError={info.error} section={route.section} profileEditor={route.profileCreate?{create:true}:route.profileId?{id:route.profileId}:undefined} onProfileNavigate={editor=>go({view:'administration',section:'delegation',...(editor?.create?{profileCreate:true}:editor?.id?{profileId:editor.id}:{})})} onDraftState={onAdministrationDraft} />}
           {Object.entries(visibleSessions).map(([id, session]) => {
             const active = route.view === 'graph' && route.id === id;
             const workspaceRoute = active ? route : session.route;

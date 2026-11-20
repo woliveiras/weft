@@ -40,6 +40,9 @@ it('rejects invalid limits and handles conflicts without silent retry', async ()
  await userEvent.click(screen.getByRole('button', { name: 'Confirm retention changes' }));
  expect(await screen.findByText(/Save could not be confirmed/)).toBeTruthy();
  expect(screen.queryByRole('button', { name: 'Confirm retention changes' })).toBeNull();
+ expect((screen.getByLabelText('Retention days (1–90)') as HTMLInputElement).value).toBe('3');
+ await userEvent.click(screen.getByRole('button', { name: 'Review retention changes' }));
+ expect(screen.getByRole('region', {name:'Confirm history retention'}).textContent).toContain('History limits are being reduced');
 });
 it('handles failed reads and clears a pending confirmation after role changes', async () => {
  let fail = true;

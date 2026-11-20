@@ -1,96 +1,44 @@
-import { FieldHelp, HelpField } from './FieldHelp';
-import { useRef, useState } from 'react';
-import { api, errorMessage } from '../api/client';
-import type { EnvironmentNetworkMode, InstallationNetwork, NetworkPolicyView } from '../api/types';
-import { useAsync } from '../hooks/useData';
-import { Btn, ErrorBox } from './common';
-
-const modes: EnvironmentNetworkMode[] = ['none', 'bridge', 'egress'];
-
-export function NetworkPolicySection({ canManage }: { canManage: boolean }) {
-  return <section className="integration-section" aria-label="Installation network policy">
-    <h2>Network policies</h2>
-    <p className="muted">Manage the networks and public hosts environments may request. Bridge allows unrestricted internet; egress allows only approved HTTP/HTTPS hosts.</p>
-    <NetworkPolicyControls key={String(canManage)} canManage={canManage} />
-  </section>;
+import {HelpField} from './FieldHelp';
+import {useRef,useState} from 'react';
+import {api,errorMessage} from '../api/client';
+import type {EnvironmentNetworkMode,InstallationNetwork,NetworkPolicyView} from '../api/types';
+import {useAsync} from '../hooks/useData';
+import {Badge,Btn,ErrorBox} from './common';
+import {AdminChanges,AdminReview,AdminHeader,AdminPages,adminPage,discardAdminDraft,useAdminDraft} from './AdministrationUI';
+import {changedHosts,filterNetworkUsage} from './administrationData';
+const modes:EnvironmentNetworkMode[]=['none','egress','bridge'];
+const modeHelp={none:'No network access.',egress:'Only approved public HTTP/HTTPS hosts.',bridge:'Unrestricted internet access.'};
+export function NetworkPolicySection({canManage}:{canManage:boolean}) {
+ return <section className="integration-section admin-section" aria-label="Installation network policy"><NetworkPolicyControls key={String(canManage)} canManage={canManage}/></section>;
 }
-
-function Usage({ view }: { view: NetworkPolicyView }) {
-  return <ul>{view.usage?.map(item => <li key={item.graph}>
-    <strong>{item.graph}</strong> ({item.state}): {item.blocked ? `Blocked for new admission: ${item.reason}` : 'Permitted by this policy'}
-    {item.hosts.length > 0 && <span> · Requested hosts: {item.hosts.join(', ')}</span>}
-  </li>)}</ul>;
+function Usage({view}:{view:NetworkPolicyView}) {
+ const [query,setQuery]=useState('');const [status,setStatus]=useState('all');const [kind,setKind]=useState('all');const [page,setPage]=useState(0);
+ const rows=filterNetworkUsage(view.usage??[],query,status,kind);
+ return <section className="card admin-card" aria-label="Network policy impact"><h3>Environment host usage and admission status</h3><p className="muted small">Admission is checked for new work. Execution copies are listed separately from configured workflows. Blocked admissions appear first.</p>
+ <div className="admin-filters"><label>Search network usage<input type="search" value={query} placeholder="Workflow, host or reason" onChange={e=>{setQuery(e.target.value);setPage(0);}}/></label><label>Admission status<select value={status} onChange={e=>{setStatus(e.target.value);setPage(0);}}><option value="all">All admissions</option><option value="blocked">Blocked</option><option value="permitted">Permitted</option></select></label><label>Environment type<select value={kind} onChange={e=>{setKind(e.target.value);setPage(0);}}><option value="all">All environments</option><option value="workflow">Workflows</option><option value="execution">Execution copies</option></select></label></div>
+ <p className="muted small">{rows.length} of {view.usage?.length??0} environments</p>
+ {rows.length?<div className="admin-table-scroll" tabIndex={0} role="region" aria-label="Network usage"><table className="table"><thead><tr><th>Environment</th><th>State</th><th>Admission</th><th>Requested hosts</th></tr></thead><tbody>{adminPage(rows,page).map(item=><tr key={item.graph}><td><strong>{item.graph}</strong><span className="admin-subtext">{item.graph.startsWith('task-run-')?'Execution copy':'Workflow'}</span></td><td>{item.state}</td><td><Badge tone={item.blocked?'bad':'ok'}>{item.blocked?'Blocked':'Permitted by this policy'}</Badge>{item.reason&&<span className="admin-subtext">Blocked for new admission: {item.reason}</span>}</td><td>{item.hosts.join(', ')||'None requested'}</td></tr>)}</tbody></table></div>:<p className="empty">{view.usage?.length?'No environments match these filters.':'No environment usage reported.'}</p>}<AdminPages page={page} total={rows.length} onPage={setPage}/></section>;
 }
-
-function NetworkPolicyControls({ canManage }: { canManage: boolean }) {
-  const current = useAsync(api.networkPolicy, []);
-  const [draft, setDraft] = useState<InstallationNetwork>();
-  const [confirmation, setConfirmation] = useState<NetworkPolicyView>();
-  const [error, setError] = useState<string>();
-  const [notice, setNotice] = useState<string>();
-  const [busy, setBusy] = useState(false);
-  const locked = useRef(false);
-  const network = draft ?? current.data?.network;
-  const disabled = !canManage || busy || !!confirmation || current.loading || !!current.error;
-
-  async function review() {
-    if (!network || !current.data || locked.current) return;
-    locked.current = true; setBusy(true); setError(undefined); setNotice(undefined);
-    try { setConfirmation(await api.previewNetworkPolicy({ ...network, egressHosts: (network.egressHosts ?? []).map(host => host.trim()).filter(Boolean) }, current.data.revision)); }
-    catch (e) { setError(`Preview failed: ${errorMessage(e)}. Reload the current policy before trying again.`); }
-    finally { locked.current = false; setBusy(false); }
-  }
-  async function save() {
-    if (!confirmation || locked.current) return;
-    locked.current = true; setBusy(true); setError(undefined);
-    try {
-      await api.saveNetworkPolicy(confirmation.network, confirmation.revision);
-      setDraft(undefined);
-      setNotice('Network policy saved. Stop existing tasks and builds explicitly if their access must be revoked.');
-      await current.reload();
-    } catch (e) {
-      setError(`Save could not be confirmed: ${errorMessage(e)}. Reload and review the latest policy before retrying.`);
-      await current.reload();
-    } finally { setConfirmation(undefined); locked.current = false; setBusy(false); }
-  }
-  function toggle(field: 'setupNetworks' | 'runNetworks', mode: EnvironmentNetworkMode) {
-    if (!network) return;
-    setDraft({ ...network, [field]: network[field].includes(mode) ? network[field].filter(value => value !== mode) : [...network[field], mode] });
-  }
-  return <>
-    <Btn disabled={busy || !!confirmation || current.loading} onClick={() => { setDraft(undefined); setNotice(undefined); setError(undefined); void current.reload(); }}>Reload network policy</Btn>
-    <ErrorBox error={current.error ?? error} />
-    {notice && <p role="status">{notice}</p>}
-    {current.loading && <p>Loading network policy…</p>}
-    {current.data && network && <>
-      <p className="muted small">Source: {current.data.source === 'server' ? 'server configuration' : 'saved installation policy'} · Revision {current.data.revision}{current.data.updatedBy ? ` · Updated by ${current.data.updatedBy}` : ''}</p>
-      {!canManage && <p>Administrator access is required to change this policy.</p>}
-      <div className="integration-grid">
-        {(['setupNetworks', 'runNetworks'] as const).map(field => <fieldset key={field} disabled={disabled}>
-          <legend>{field === 'setupNetworks' ? 'Build and setup networks' : 'Agent networks'}</legend>
-          <FieldHelp label={field === 'setupNetworks' ? 'Build and setup networks' : 'Agent networks'}>
-            Choose the network modes workflows may request for this phase. None blocks network access, egress limits public destinations to approved hosts, and bridge permits broader public access. Review the installation policy before allowing additional modes.
-          </FieldHelp>
-          {modes.map(mode => <label key={mode}><input type="checkbox" checked={network[field].includes(mode)} onChange={() => toggle(field, mode)} />{mode}</label>)}
-        </fieldset>)}
-      </div>
-      <HelpField label={"Installation allowed hosts (one exact DNS name per line)"} help={"The installation-wide list of DNS names allowed for restricted outbound access. Put one exact hostname per line. Workflow settings remain subject to this boundary."}>
-        <textarea disabled={disabled} rows={5} value={(network.egressHosts ?? []).join('\n')} onChange={event => setDraft({ ...network, egressHosts: event.target.value.split('\n') })} />
-      </HelpField>
-      <p className="muted small">Exact lowercase public DNS names only; no wildcards, URLs, IPs or ports. Empty lists deny all egress destinations. Environment lists remain separate and must fit this ceiling.</p>
-      <h3>Environment host usage and admission status</h3>
-      <Usage view={current.data} />
-      <p>Saved changes apply to new builds, approvals and sandbox admissions across controllers. Existing running work keeps its current network until stopped. Suspended environments are checked when tasks resume.</p>
-      {canManage && <Btn disabled={disabled || network.setupNetworks.length === 0 || network.runNetworks.length === 0} onClick={() => void review()}>Review network policy</Btn>}
-    </>}
-    {confirmation && <section className="integration-card" aria-label="Confirm network policy">
-      <h3>Review installation network changes</h3>
-      <p>Build/setup: {confirmation.network.setupNetworks.join(', ')} · Agents: {confirmation.network.runNetworks.join(', ')}</p>
-      <p>Allowed hosts: {confirmation.network.egressHosts?.join(', ') || 'none'}</p>
-      <Usage view={confirmation} />
-      <p>Allowing bridge grants unrestricted internet. Adding hosts expands permitted destinations. Removing access does not stop already running tasks or builds.</p>
-      <Btn disabled={busy} onClick={() => void save()}>Confirm network policy</Btn>
-      <Btn disabled={busy} onClick={() => setConfirmation(undefined)}>Cancel network changes</Btn>
-    </section>}
-  </>;
+function NetworkPolicyControls({canManage}:{canManage:boolean}) {
+ const current=useAsync(api.networkPolicy,[]);const [draft,setDraft]=useState<InstallationNetwork>();const [confirmation,setConfirmation]=useState<NetworkPolicyView>();
+ const [error,setError]=useState<string>();const [notice,setNotice]=useState<string>();const [busy,setBusy]=useState(false);const locked=useRef(false);const reviewButton=useRef<HTMLButtonElement>(null);
+ const network=draft??current.data?.network;const dirty=!!draft&&JSON.stringify(draft)!==JSON.stringify(current.data?.network);
+ useAdminDraft('network',dirty,busy);
+ const disabled=!canManage||busy||!!confirmation||current.loading||!!current.error;
+ async function review(){if(!network||!current.data||locked.current)return;locked.current=true;setBusy(true);setError(undefined);setNotice(undefined);try{setConfirmation(await api.previewNetworkPolicy({...network,egressHosts:(network.egressHosts??[]).map(host=>host.trim()).filter(Boolean)},current.data.revision));}catch(e){setError(`Preview failed: ${errorMessage(e)}. Reload the current policy before trying again.`);}finally{locked.current=false;setBusy(false);}}
+ async function save(){if(!confirmation||locked.current)return;locked.current=true;setBusy(true);setError(undefined);try{await api.saveNetworkPolicy(confirmation.network,confirmation.revision);setDraft(undefined);setNotice('Network policy saved. Stop existing tasks and builds explicitly if their access must be revoked.');await current.reload();}catch(e){setError(`Save could not be confirmed: ${errorMessage(e)}. Reload and review the latest policy before retrying.`);await current.reload();}finally{setConfirmation(undefined);locked.current=false;setBusy(false);}}
+ function toggle(field:'setupNetworks'|'runNetworks',mode:EnvironmentNetworkMode){if(network)setDraft({...network,[field]:network[field].includes(mode)?network[field].filter(value=>value!==mode):[...network[field],mode]});}
+ const hostDelta=changedHosts(current.data?.network.egressHosts??[],confirmation?.network.egressHosts??[]);
+ return <>
+ <AdminHeader title="Network policies" description="Set the installation boundary for networks and public destinations workflows may request.">{dirty&&<Badge tone="warn">Unsaved changes</Badge>}
+ <Btn disabled={busy||!!confirmation||current.loading} onClick={()=>{if(!discardAdminDraft(dirty))return;setDraft(undefined);setNotice(undefined);setError(undefined);void current.reload();}}>Reload network policy</Btn>
+ {canManage&&network&&<button ref={reviewButton} className="btn btn-primary" disabled={disabled||network.setupNetworks.length===0||network.runNetworks.length===0} onClick={()=>void review()}>{busy?'Reviewing…':'Review network policy'}</button>}</AdminHeader>
+ <ErrorBox error={[error,current.error].filter(Boolean).join(' ')||undefined}/>{notice&&<p role="status">{notice}</p>}{current.loading&&<p role="status">Loading network policy…</p>}
+ {current.data&&network&&<><p className="muted small">Source: {current.data.source==='server'?'server configuration':'saved installation policy'} · Revision {current.data.revision}{current.data.updatedBy?` · Updated by ${current.data.updatedBy}`:''}</p>{!canManage&&<p>Administrator access is required to change this policy.</p>}
+ <div className="admin-two-columns">{(['setupNetworks','runNetworks'] as const).map(field=><fieldset className="card admin-card" disabled={disabled} key={field}><legend>{field==='setupNetworks'?'Build and setup networks':'Agent networks'}</legend>{modes.map(mode=><label className="admin-choice" key={mode}><input type="checkbox" checked={network[field].includes(mode)} onChange={()=>toggle(field,mode)}/><span><strong>{mode}</strong><span className="admin-subtext">{modeHelp[mode]}</span></span></label>)}</fieldset>)}</div>
+ <section className="card admin-card"><HelpField label="Installation allowed hosts (one exact DNS name per line)" help="The installation-wide ceiling for restricted outbound access. Workflows must also select their hosts within this list."><textarea disabled={disabled} rows={5} value={(network.egressHosts??[]).join('\n')} onChange={e=>setDraft({...network,egressHosts:e.target.value.split('\n')})}/></HelpField><p className="muted small">Exact lowercase public DNS names only; no wildcards, URLs, IPs or ports. Empty lists deny all egress destinations. Environment lists remain separate and must fit this ceiling.</p></section>
+ <p className="admin-impact">Saved changes apply to new builds, approvals and sandbox admissions across controllers. Existing running work keeps its current network until stopped. Suspended environments are checked when tasks resume.</p>
+ {!confirmation&&<Usage view={current.data}/>}</>}
+ {confirmation&&current.data&&<AdminReview returnFocus={reviewButton} label="Confirm network policy"><h3>Review installation network changes</h3><AdminChanges changes={[{label:'Build and setup networks',before:current.data.network.setupNetworks.join(', '),after:confirmation.network.setupNetworks.join(', ')},{label:'Agent networks',before:current.data.network.runNetworks.join(', '),after:confirmation.network.runNetworks.join(', ')},{label:'Allowed hosts',before:current.data.network.egressHosts?.join(', ')||'None',after:confirmation.network.egressHosts?.join(', ')||'None'}]}/><p>Added hosts: {hostDelta.added.join(', ')||'None'} · Removed hosts: {hostDelta.removed.join(', ')||'None'}</p><p>Allowing bridge grants unrestricted internet. Adding hosts expands permitted destinations. Removing access does not stop already running tasks or builds.</p><Usage view={confirmation}/><div className="btn-row"><Btn disabled={busy} onClick={()=>{setConfirmation(undefined);}}>Cancel network changes</Btn><Btn tone="primary" disabled={busy} onClick={()=>void save()}>{busy?'Saving…':'Confirm network policy'}</Btn></div></AdminReview>}
+ </>;
 }

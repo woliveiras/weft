@@ -40,7 +40,9 @@ it('creates a reviewed profile and handles a stale revision without retry',async
  await userEvent.click(screen.getByRole('button',{name:'Confirm delegation profile'}));
  expect(await screen.findByText(/Save could not be confirmed: revision conflict/)).toBeTruthy();
  expect(backend.calls.filter(c=>c.method==='POST')).toHaveLength(1);
- expect(screen.queryByLabelText('Profile ID')).toBeNull();
+ expect((screen.getByLabelText('Profile ID') as HTMLInputElement).value).toBe('review');
+ expect((screen.getByLabelText('Profile instructions') as HTMLTextAreaElement).value).toBe('Review the provided design');
+ expect(screen.queryByRole('region',{name:'Confirm delegation profile'})).toBeNull();
 });
 it('keeps failed reads unavailable and rejects invalid policy limits',async()=>{
  let fail=true;
@@ -73,4 +75,23 @@ it('reviews inherited capability names while preserving the agent-grant boundary
  await userEvent.click(screen.getByRole('button',{name:'Confirm delegation profile'}));
  expect(await screen.findByText('Delegation profile saved. No agent permissions were changed.')).toBeTruthy();
  expect(backend.calls.filter(c=>c.method==='POST')).toHaveLength(1);
+});
+it('keeps profile edits across a stale revision and explicitly refreshes its comparison baseline',async()=>{
+ let saved={revision:1,profile:{...profiles[0].profile}};
+ const backend=fakeApi({'GET /api/v1/delegation-policy':()=>current,'GET /api/v1/delegation-profiles':()=>[saved],'PUT /api/v1/delegation-profiles/analysis':call=>{
+  if(call.headers['If-Match']!==`"${saved.revision}"`)return apiError(409,'revision conflict','conflict');
+  saved={revision:saved.revision+1,profile:call.body as typeof saved.profile};return saved;
+ }});
+ render(<DelegationSection canManage/>);await screen.findByText('Analysis');
+ await userEvent.click(screen.getByRole('button',{name:'Edit Analysis'}));
+ const name=screen.getByLabelText('Profile name');await userEvent.clear(name);await userEvent.type(name,'Local edits');
+ saved={...saved,revision:2,profile:{...saved.profile,name:'Concurrent edit'}};
+ await userEvent.click(screen.getByRole('button',{name:'Review delegation profile'}));await userEvent.click(screen.getByRole('button',{name:'Confirm delegation profile'}));
+ expect(await screen.findByText(/Save could not be confirmed/)).toBeTruthy();expect((name as HTMLInputElement).value).toBe('Local edits');
+ await userEvent.click(screen.getByRole('button',{name:'Reload saved profile'}));await screen.findByRole('heading',{name:'Edit Concurrent edit'});
+ expect((screen.getByLabelText('Profile name') as HTMLInputElement).value).toBe('Local edits');
+ await userEvent.click(screen.getByRole('button',{name:'Review delegation profile'}));
+ expect(screen.getByRole('region',{name:'Changes to review'}).textContent).toContain('Concurrent edit');
+ await userEvent.click(screen.getByRole('button',{name:'Confirm delegation profile'}));await screen.findByText(/Delegation profile saved/);
+ expect(backend.find('PUT','/api/v1/delegation-profiles/analysis')).toHaveLength(2);expect(saved.profile.name).toBe('Local edits');
 });

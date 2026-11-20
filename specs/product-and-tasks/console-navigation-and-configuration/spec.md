@@ -71,6 +71,8 @@ Common forms and controls remain usable at narrow widths and in the supported th
 
 - 2026-11-19. Maintainer refinement to Skills & instructions: a newest-updated-first catalogue with combined search/status/origin filters and 20-row pages replaces the combined form. Full-page details separate content, workflow usage and revision history. Draft content persists across detail tabs, Save creates a revision and deletion confirms history retention. Association settings expand agents on demand; inspection distinguishes saved configuration from immutable execution snapshots. Explicit loading/error/retry and read-only built-ins/viewers preserve instruction/grant contracts.
 
+- 2026-11-20. Maintainer Administration refinement: health checks expose refresh state and completion time; network policies group modes and show current/proposed changes with bounded admission-impact tables; shared-resource previews load on entry and preserve explicit cleanup confirmations; blocked-access retention names its precise scope and reductions; tool/profile catalogues use search, filters and 20-row pages. Delegation profiles use dedicated editor routes; grouped limits and review summaries retain inheritance, grants and CAS. Dirty state warns before navigation/reload, failed writes retain drafts and require a new review. No installation policy, default, security boundary or stored-data format changes as part of the UI rollout.
+
 ## Reconciliation
 
 - [interface-navigation.md](../../../docs/interface-navigation.md), [getting-started.md](../../../docs/getting-started.md), [brand/brand-guidelines.md](../../../docs/brand/brand-guidelines.md).

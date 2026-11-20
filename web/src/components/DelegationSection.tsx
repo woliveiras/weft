@@ -1,98 +1,64 @@
-import { HelpField } from './FieldHelp';
-import { useRef, useState } from 'react';
-import { api, errorMessage } from '../api/client';
-import { delegationLimits, validDelegationPolicy, validDelegationProfile, type DelegationPolicy, type DelegationProfile, type DelegationProfileView } from '../api/delegation';
-import { useAsync } from '../hooks/useData';
-import { Btn, ErrorBox } from './common';
-
-const delegationLimitHelp: Record<typeof delegationLimits[number][0], string> = {
-  maxDepth: 'Limits how many levels of agents can delegate in one chain. Use 1 to allow a direct child without further delegation.',
-  maxChildrenPerExecution: 'Caps the total number of child requests one execution can make.',
-  maxConcurrentChildren: 'Limits how many child executions can be in progress at once.',
-  maxDurationSeconds: 'Maximum time for a child request, including the time it waits for human approval.',
-  maxTreeTokens: 'The total token allowance across a delegation tree. Weft reserves estimated usage before a child calls a model, so this is an execution limit.',
-  maxOutputTokens: 'Maximum number of output tokens per child request. An individual delegation profile may impose a lower limit.',
-  maxObjectiveBytes: 'Maximum size of the objective the parent sends, measured in bytes. Large inputs can exceed this limit even when they contain few words.',
-  maxResultBytes: 'Maximum result size the child can return, measured in bytes. Ask for a concise result when a task needs more supporting detail.',
+import {HelpField} from './FieldHelp';
+import {useRef,useState} from 'react';
+import {api,errorMessage} from '../api/client';
+import {delegationLimits,validDelegationPolicy,validDelegationProfile,type DelegationPolicy,type DelegationProfile,type DelegationProfileView} from '../api/delegation';
+import {useAsync} from '../hooks/useData';
+import {Badge,Btn,ErrorBox} from './common';
+import {AdminChanges,AdminReview,AdminHeader,AdminPages,adminPage,discardAdminDraft,useAdminDraft} from './AdministrationUI';
+export type DelegationEditor={id?:string;create?:boolean};
+const delegationLimitHelp:Record<typeof delegationLimits[number][0],string>={
+ maxDepth:'Levels of delegation in a chain. At depth 1 a parent can request a child, but that child cannot delegate again.',
+ maxChildrenPerExecution:'Total child requests one parent execution can make, including requests that do not run concurrently.',
+ maxConcurrentChildren:'Maximum child executions in progress at once.',
+ maxDurationSeconds:'Time allowed for a child request, including its wait for human approval, in seconds.',
+ maxTreeTokens:'Token allowance for the delegation tree. Input and output are reserved before each model call; this is not a guaranteed billing cap.',
+ maxOutputTokens:'Maximum output tokens per child request. A profile can impose a lower limit.',
+ maxObjectiveBytes:'Maximum objective sent by the parent, in UTF-8 bytes. A character can occupy more than one byte.',
+ maxResultBytes:'Maximum result returned to the parent, in bytes. Prefer concise results with references for supporting evidence.',
 };
-
-export function DelegationSection({canManage}: {canManage:boolean}) {
- return <section className="integration-section" aria-label="Delegation settings"><h2>Delegation</h2>
-  <p>Native children use the parent model and only profile-selected parent capabilities. Empty profiles have no tools or workspace; further delegation requires an inherited grant and available depth. Agents still need an explicit delegation.request grant.</p>
-  {!canManage && <p>Administrator access is required to change delegation settings.</p>}
-  <PolicyControls key={'policy-'+canManage} canManage={canManage}/>
-  <ProfileControls key={'profiles-'+canManage} canManage={canManage}/>
+export function DelegationSection({canManage,profileEditor,onProfileNavigate}:{canManage:boolean;profileEditor?:DelegationEditor;onProfileNavigate?:(editor?:DelegationEditor)=>void}) {
+ const [localEditor,setLocalEditor]=useState<DelegationEditor>();const editor=onProfileNavigate?profileEditor:localEditor;
+ const navigate=(next?:DelegationEditor)=>onProfileNavigate?onProfileNavigate(next):setLocalEditor(next);
+ return <section className="integration-section admin-section" aria-label="Delegation settings">
+ {!editor&&<><AdminHeader title="Delegation" description="Configure delegated analysis and the profiles agents may request."/><p className="admin-impact">Children use the parent's model. A profile selects only capabilities already granted to the parent; it cannot grant new access. Agents still need an explicit delegation.request grant.</p>{!canManage&&<p>Administrator access is required to change delegation settings.</p>}<PolicyControls key={'policy-'+canManage} canManage={canManage}/></>}
+ <ProfileControls key={'profiles-'+canManage} canManage={canManage} editor={editor} navigate={navigate}/>
  </section>;
 }
-function PolicyControls({canManage}: {canManage:boolean}) {
- const current=useAsync(api.delegationPolicy,[]);
- const [draft,setDraft]=useState<DelegationPolicy>();
- const [review,setReview]=useState(false),[busy,setBusy]=useState(false);
- const lock=useRef(false);
- const [error,setError]=useState<string>(),[notice,setNotice]=useState<string>();
- const policy=draft??current.data?.policy;
+function PolicyControls({canManage}:{canManage:boolean}) {
+ const current=useAsync(api.delegationPolicy,[]);const [draft,setDraft]=useState<DelegationPolicy>();const [review,setReview]=useState(false);const [busy,setBusy]=useState(false);const lock=useRef(false);const reviewButton=useRef<HTMLButtonElement>(null);const [error,setError]=useState<string>();const [notice,setNotice]=useState<string>();
+ const policy=draft??current.data?.policy;const dirty=!!draft&&JSON.stringify(draft)!==JSON.stringify(current.data?.policy);useAdminDraft('delegation-policy',dirty,busy);
  const disabled=!canManage||busy||current.loading||!!current.error||review;
- async function save(){
-  if(!canManage||!policy||!current.data||!review||lock.current)return;
-  lock.current=true;setBusy(true);setError(undefined);setNotice(undefined);
-  try{await api.saveDelegationPolicy(policy,current.data.revision);setNotice('Delegation policy saved. New requests use these settings.');}
-  catch(e){setError(`Save could not be confirmed: ${errorMessage(e)}. Reload and review before retrying.`);}
-  finally{setDraft(undefined);setReview(false);await current.reload();lock.current=false;setBusy(false);}
- }
- return <section className="integration-card" aria-label="Delegation policy"><h3>Approval and limits</h3>
-  <Btn disabled={busy||review||current.loading} onClick={()=>{setDraft(undefined);setError(undefined);setNotice(undefined);void current.reload();}}>Reload delegation policy</Btn>
-  <ErrorBox error={current.error??error}/>{notice&&<p role="status">{notice}</p>}
-  {current.loading&&<p>Loading policy…</p>}
-  {policy&&current.data&&!current.error&&<>
-   <p>Revision {current.data.revision} · Maximum depth {policy.maxDepth}</p>
-   <HelpField label="Enable delegation" help="Allows agents to request delegated analysis within installation and profile limits. The parent still needs the delegation tool grant.">
-          <input type="checkbox" checked={policy.enabled} disabled={disabled} onChange={e=>setDraft({...policy,enabled:e.target.checked})}/>
-        </HelpField>
-   <HelpField label={"Approval mode"} help={"Choose whether each delegation needs human approval. Automatic still requires the delegation tool grant and applies profile and installation limits."}><select value={policy.approvalMode} disabled={disabled} onChange={e=>setDraft({...policy,approvalMode:e.target.value as DelegationPolicy['approvalMode']})}><option value="required">Approval required</option><option value="automatic">Automatic within limits</option></select></HelpField>
-   {delegationLimits.map(([key,label,max])=><HelpField key={key} label={label} help={delegationLimitHelp[key]}><input type="number" min={1} max={max} step={1} disabled={disabled} value={policy[key]} onChange={e=>setDraft({...policy,[key]:Number(e.target.value)})}/></HelpField>)}
-   <p>Tree budgets reserve estimated input plus output before each call. Reported usage is counted once; unknown usage after dispatch retains an estimated charge. Parent token limits also apply. This is not a guaranteed billing cap. Running children retain their snapshot; changed settings invalidate waiting requests before inference.</p>
-   {canManage&&<Btn disabled={disabled||!validDelegationPolicy(policy)} onClick={()=>{setNotice(undefined);setReview(true);}}>Review delegation policy</Btn>}
-   {review&&<section aria-label="Confirm delegation policy"><h4>Review policy changes</h4>
-    <p>{policy.enabled ? policy.approvalMode==='automatic'?'New child requests can run without individual delegation approval. Explicit tool grants and any tool-level approvals still apply.':'Every child request requires approval.':'New child requests will be blocked.'}</p>
-    <dl>{delegationLimits.map(([key,label])=><div key={key}><dt>{label}</dt><dd>{policy[key]}</dd></div>)}</dl>
-    <Btn disabled={busy} onClick={()=>void save()}>Confirm delegation policy</Btn><Btn disabled={busy} onClick={()=>setReview(false)}>Cancel policy changes</Btn>
-   </section>}
-  </>}
+ async function save(){if(!canManage||!policy||!current.data||!review||lock.current)return;lock.current=true;setBusy(true);setError(undefined);setNotice(undefined);try{await api.saveDelegationPolicy(policy,current.data.revision);setDraft(undefined);setNotice('Delegation policy saved. New requests use these settings.');}catch(e){setError(`Save could not be confirmed: ${errorMessage(e)}. Reload and review before retrying.`);}finally{setReview(false);await current.reload();lock.current=false;setBusy(false);}}
+ const groups=[{name:'Execution and concurrency',keys:delegationLimits.slice(0,4)},{name:'Token allowances',keys:delegationLimits.slice(4,6)},{name:'Input and result size',keys:delegationLimits.slice(6)}];
+ return <section className="card admin-card" aria-label="Delegation policy"><div className="section-head"><div><h3>Policy &amp; limits</h3>{current.data&&<p className="muted small">Revision {current.data.revision}{current.data.updatedBy?` · ${current.data.updatedBy}`:''}</p>}</div><div className="btn-row">{dirty&&<Badge tone="warn">Unsaved changes</Badge>}<Btn disabled={busy||review||current.loading} onClick={()=>{if(!discardAdminDraft(dirty))return;setDraft(undefined);setError(undefined);setNotice(undefined);void current.reload();}}>Reload delegation policy</Btn>{canManage&&policy&&!current.error&&<button ref={reviewButton} className="btn btn-primary" disabled={disabled||!validDelegationPolicy(policy)} onClick={()=>{setNotice(undefined);setReview(true);}}>Review delegation policy</button>}</div></div>
+ <ErrorBox error={[error,current.error].filter(Boolean).join(' ')||undefined}/>{notice&&<p role="status">{notice}</p>}{current.loading&&<p role="status">Loading policy…</p>}
+ {policy&&current.data&&!current.error&&<><div className="admin-two-columns"><HelpField label="Enable delegation" help="Allows delegated analysis within installation and profile limits. Enabling it does not grant the delegation tool to any agent."><input type="checkbox" checked={policy.enabled} disabled={disabled} onChange={e=>setDraft({...policy,enabled:e.target.checked})}/></HelpField><HelpField label="Approval mode" help="Choose whether each delegation needs human approval. Automatic still requires explicit grants and any tool-level approvals."><select value={policy.approvalMode} disabled={disabled} onChange={e=>setDraft({...policy,approvalMode:e.target.value as DelegationPolicy['approvalMode']})}><option value="required">Approval required</option><option value="automatic">Automatic within limits</option></select></HelpField></div>
+ <div className="admin-limit-groups">{groups.map(group=><fieldset className="admin-limit-group" key={group.name}><legend>{group.name}</legend><div className="admin-two-columns">{group.keys.map(([key,label,max])=><HelpField key={key} label={label} help={delegationLimitHelp[key]}><input type="number" min={1} max={max} step={1} disabled={disabled} value={policy[key]} onChange={e=>setDraft({...policy,[key]:Number(e.target.value)})}/></HelpField>)}</div></fieldset>)}</div>
+ <p className="muted small">Tree budgets reserve estimated input plus output before each call. Reported usage is counted once; unknown usage after dispatch retains an estimated charge. Parent token limits also apply. This is not a guaranteed billing cap. Running children retain their snapshot; changed settings invalidate waiting requests before inference.</p>
+ {review&&<AdminReview returnFocus={reviewButton} label="Confirm delegation policy"><h4>Review policy changes</h4><p>{policy.enabled?policy.approvalMode==='automatic'?'New child requests can run without individual delegation approval. Explicit tool grants and any tool-level approvals still apply.':'Every child request requires approval.':'New child requests will be blocked.'}</p><AdminChanges changes={[{label:'Delegation enabled',before:current.data.policy.enabled?'Yes':'No',after:policy.enabled?'Yes':'No'},{label:'Approval mode',before:current.data.policy.approvalMode,after:policy.approvalMode},...delegationLimits.map(([key,label])=>({label,before:current.data!.policy[key],after:policy[key]}))]}/><div className="btn-row"><Btn disabled={busy} onClick={()=>{setReview(false);}}>Cancel policy changes</Btn><Btn tone="primary" disabled={busy} onClick={()=>void save()}>{busy?'Saving…':'Confirm delegation policy'}</Btn></div></AdminReview>}
+ </>}
  </section>;
 }
 const emptyProfile:DelegationProfile={id:'',name:'',instructions:'',enabled:true,maxOutputTokens:1024};
-function ProfileControls({canManage}: {canManage:boolean}) {
- const current=useAsync(api.delegationProfiles,[]);
- const [edit,setEdit]=useState<{profile:DelegationProfile;revision?:number}>();
- const [review,setReview]=useState(false),[busy,setBusy]=useState(false);
- const lock=useRef(false);
- const [error,setError]=useState<string>(),[notice,setNotice]=useState<string>();
- const disabled=!canManage||busy||current.loading||!!current.error||review;
- function open(v?:DelegationProfileView){setEdit(v?{profile:{...v.profile},revision:v.revision}:{profile:{...emptyProfile}});setReview(false);setError(undefined);setNotice(undefined);}
- async function save(){
-  if(!canManage||!edit||!review||lock.current)return;
-  lock.current=true;setBusy(true);setError(undefined);
-  try{await api.saveDelegationProfile(edit.profile,edit.revision);setNotice('Delegation profile saved. No agent permissions were changed.');}
-  catch(e){setError(`Save could not be confirmed: ${errorMessage(e)}. Reload and review before retrying.`);}
-  finally{setEdit(undefined);setReview(false);await current.reload();lock.current=false;setBusy(false);}
- }
- return <section className="integration-card" aria-label="Delegation profiles"><h3>Analysis profiles</h3>
-  <p>Profiles customize guidance, output allowances and a subset of explicit parent capabilities. They cannot choose another model or grant new access. Each child retains the parent constraints and tool approvals. Disable a profile to block new requests without deleting execution history.</p>
-  <Btn disabled={busy||review||current.loading} onClick={()=>{setEdit(undefined);setError(undefined);void current.reload();}}>Reload delegation profiles</Btn>
-  <ErrorBox error={current.error??error}/>{notice&&<p role="status">{notice}</p>}
-  {!current.error&&current.data?.map(v=><article key={v.profile.id}><h4>{v.profile.name}</h4><p>{v.profile.id} · Revision {v.revision} · {v.profile.enabled?'Enabled':'Disabled'}</p>{canManage&&<Btn disabled={disabled} onClick={()=>open(v)}>Edit {v.profile.name}</Btn>}</article>)}
-  {canManage&&<Btn disabled={disabled} onClick={()=>open()}>New delegation profile</Btn>}
-  {edit&&<section aria-label="Profile editor">
-   <HelpField label={"Profile ID"} help={"The stable profile identifier an agent requests when delegating work. It cannot be edited after creation."}><input value={edit.profile.id} disabled={disabled||edit.revision!==undefined} onChange={e=>setEdit({...edit,profile:{...edit.profile,id:e.target.value}})}/></HelpField>
-   <HelpField label={"Profile name"} help={"The display name of this delegation profile. Use a name that describes the kind of work the child should handle."}><input value={edit.profile.name} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,name:e.target.value}})}/></HelpField>
-   <HelpField label={"Profile instructions"} help={"Instructions provided to the delegated analysis agent. State its responsibilities and the result it should return to its parent."}><textarea value={edit.profile.instructions} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,instructions:e.target.value}})}/></HelpField>
-   <HelpField label={"Inherited capabilities (one per line)"} help={"The subset of capabilities the child may inherit from the parent. A capability must also be granted to the parent and allowed by installation policy."}><textarea value={(edit.profile.tools??[]).join('\n')} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,tools:e.target.value ? e.target.value.split('\n').map(name=>name.trim()) : []}})}/></HelpField>
-   <p>Optional; empty means no tools. Use exact parent grant names, including exact MCP tool names. Wildcards and environment/review control tools are unsupported. Further delegation requires delegation.request and an increased depth limit. Missing parent grants reject the request.</p>
-   <HelpField label={"Profile output token allowance"} help={"Caps the delegated child\u2019s output in tokens. Choose enough for the expected result within the installation allowance."}><input type="number" min={1} max={4096} value={edit.profile.maxOutputTokens} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,maxOutputTokens:Number(e.target.value)}})}/></HelpField>
-   <label><input type="checkbox" checked={edit.profile.enabled} disabled={disabled} onChange={e=>setEdit({...edit,profile:{...edit.profile,enabled:e.target.checked}})}/>Profile enabled</label>
-   <Btn disabled={disabled||!validDelegationProfile(edit.profile)} onClick={()=>setReview(true)}>Review delegation profile</Btn>
-   <Btn disabled={busy} onClick={()=>{setEdit(undefined);setReview(false);}}>Cancel profile changes</Btn>
-   {review&&<section aria-label="Confirm delegation profile"><h4>Review profile changes</h4><p>{edit.profile.name} ({edit.profile.id}) · {edit.profile.enabled?'Enabled':'Disabled'} · Output allowance {edit.profile.maxOutputTokens}</p><p>{edit.profile.instructions}</p><p>Inherited capabilities: {(edit.profile.tools??[]).join(", ") || "None"}</p><Btn disabled={busy} onClick={()=>void save()}>Confirm delegation profile</Btn></section>}
-  </section>}
+const profileHash=(editor?:DelegationEditor)=>editor?.create?'#/administration/delegation/profiles/new':editor?.id?`#/administration/delegation/profiles/${encodeURIComponent(editor.id)}/edit`:'#/administration/delegation';
+function ProfileControls({canManage,editor,navigate}:{canManage:boolean;editor?:DelegationEditor;navigate:(editor?:DelegationEditor)=>void}) {
+ const current=useAsync(api.delegationProfiles,[]);const [query,setQuery]=useState('');const [status,setStatus]=useState('all');const [page,setPage]=useState(0);const [notice,setNotice]=useState<string>();
+ const rows=(current.data??[]).filter(item=>`${item.profile.id} ${item.profile.name} ${item.profile.instructions}`.toLowerCase().includes(query.trim().toLowerCase())&&(status==='all'||item.profile.enabled===(status==='enabled'))).sort((a,b)=>a.profile.name.localeCompare(b.profile.name)||a.profile.id.localeCompare(b.profile.id));
+ const selected=current.data?.find(item=>item.profile.id===editor?.id);
+ const back=()=>navigate();
+ if(editor)return <><a href={profileHash()} onClick={e=>{e.preventDefault();back();}}>Back to delegation</a>{current.loading&&!current.data&&<p role="status">Loading delegation profiles…</p>}<ErrorBox error={current.error}/>{current.error&&<Btn onClick={()=>void current.reload()}>Reload delegation profiles</Btn>}{current.data&&(editor.create||selected)?<ProfileEditor key={editor.id??'new'} source={selected} canManage={canManage&&!current.loading&&!current.error} navigate={navigate} onReload={current.reload} onSaved={saved=>{current.setData(values=>[...(values??[]).filter(value=>value.profile.id!==saved.profile.id),saved]);setNotice('Delegation profile saved. No agent permissions were changed.');navigate();}}/>:!current.loading&&!current.error&&<p>Delegation profile not found.</p>}</>;
+ return <section className="card admin-card" aria-label="Delegation profiles"><div className="section-head"><div><h3>Analysis profiles</h3><p className="muted small">Reusable guidance and a subset of parent capabilities. Empty profiles have no tools or workspace.</p></div><div className="btn-row"><Btn disabled={current.loading} onClick={()=>void current.reload()}>Reload delegation profiles</Btn>{canManage&&<Btn tone="primary" disabled={current.loading||!!current.error} onClick={()=>{setNotice(undefined);navigate({create:true});}}>New delegation profile</Btn>}</div></div><ErrorBox error={current.error}/>{notice&&<p role="status">{notice}</p>}{current.loading&&!current.data&&<p role="status">Loading profiles…</p>}
+ <div className="admin-filters"><label>Search profiles<input type="search" value={query} onChange={e=>{setQuery(e.target.value);setPage(0);}}/></label><label>Profile status<select value={status} onChange={e=>{setStatus(e.target.value);setPage(0);}}><option value="all">All statuses</option><option value="enabled">Enabled</option><option value="disabled">Disabled</option></select></label></div>
+ {current.data&&<><p className="muted small">{rows.length} of {current.data.length} profiles · Name A–Z</p>{rows.length?<div className="admin-table-scroll" tabIndex={0} role="region" aria-label="Analysis profiles"><table className="table"><thead><tr><th>Profile</th><th>Status</th><th>Revision</th><th>Output allowance</th><th>Inherited capabilities</th><th>Details</th></tr></thead><tbody>{adminPage(rows,page).map(item=><tr key={item.profile.id}><td><strong>{item.profile.name}</strong><span className="admin-subtext">{item.profile.id}</span></td><td><Badge tone={item.profile.enabled?'ok':undefined}>{item.profile.enabled?'Enabled':'Disabled'}</Badge></td><td>{item.revision}</td><td>{item.profile.maxOutputTokens.toLocaleString()} tokens</td><td>{item.profile.tools?.join(', ')||'None'}</td><td><Btn disabled={current.loading||!!current.error} onClick={()=>{setNotice(undefined);navigate({id:item.profile.id});}}>{canManage?'Edit':'View'} {item.profile.name}</Btn></td></tr>)}</tbody></table></div>:<p className="empty">{current.data.length?'No profiles match these filters.':'No delegation profiles configured.'}</p>}<AdminPages page={page} total={rows.length} onPage={setPage}/></>}
  </section>;
+}
+function ProfileEditor({source,canManage,navigate,onReload,onSaved}:{source?:DelegationProfileView;canManage:boolean;navigate:(editor?:DelegationEditor)=>void;onReload:()=>Promise<void>;onSaved:(value:DelegationProfileView)=>void}) {
+ const [form,setForm]=useState<DelegationProfile>(source?{...source.profile}:{...emptyProfile});const [review,setReview]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState<string>();const lock=useRef(false);const reviewButton=useRef<HTMLButtonElement>(null);
+ const dirty=JSON.stringify(form)!==JSON.stringify(source?.profile??emptyProfile);const release=useAdminDraft('delegation-profile',dirty,busy);const disabled=!canManage||busy||review;
+ async function save(){if(!canManage||!review||lock.current)return;lock.current=true;setBusy(true);setError(undefined);try{const result=await api.saveDelegationProfile(form,source?.revision);release();onSaved(result);}catch(e){setError(`Save could not be confirmed: ${errorMessage(e)}. Reload and review before retrying.`);setReview(false);}finally{lock.current=false;setBusy(false);}}
+ function cancel(){if(!discardAdminDraft(dirty))return;release();navigate();}
+ const previous=source?.profile??emptyProfile;
+ return <div className="admin-profile-editor"><AdminHeader title={source?`Edit ${source.profile.name}`:'New delegation profile'} description="Profiles inherit the parent's model and constrain its existing capabilities. Saving does not change any agent grants.">{dirty&&<Badge tone="warn">Unsaved changes</Badge>}{source&&<Btn disabled={busy||review} onClick={()=>{setReview(false);void onReload();}}>Reload saved profile</Btn>}{canManage&&<button className="btn btn-primary" ref={reviewButton} disabled={disabled||!validDelegationProfile(form)} onClick={()=>{setError(undefined);setReview(true);}}>Review delegation profile</button>}</AdminHeader>{!canManage&&<p>Administrator access is required to edit this profile.</p>}<ErrorBox error={error}/>{source&&<p className="muted small">Saved revision {source.revision}. Reload saved profile updates the comparison below and keeps your edits.</p>}<form className="card admin-card form" aria-label="Profile editor" onSubmit={e=>e.preventDefault()}><fieldset disabled={disabled}><div className="admin-two-columns"><HelpField label="Profile ID" help="Stable identifier requested by the parent agent. It cannot change after creation."><input value={form.id} disabled={disabled||!!source} onChange={e=>setForm({...form,id:e.target.value})}/></HelpField><HelpField label="Profile name" help="Display name describing the analysis this profile performs."><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></HelpField></div><HelpField label="Profile instructions" help="Responsibilities and the result the delegated child should return. Guidance cannot grant access."><textarea rows={8} value={form.instructions} onChange={e=>setForm({...form,instructions:e.target.value})}/></HelpField><HelpField label="Inherited capabilities (one per line)" help="Exact names of capabilities the child may inherit. Each must already be granted to its parent and allowed by policy."><textarea rows={5} value={(form.tools??[]).join('\n')} onChange={e=>setForm({...form,tools:e.target.value?e.target.value.split('\n').map(value=>value.trim()):[]})}/></HelpField><p>Optional; empty means no tools. Use exact parent grant names, including exact MCP tool names. Wildcards and environment/review control tools are unsupported. Further delegation requires delegation.request and an increased depth limit. Missing parent grants reject the request.</p><div className="admin-two-columns"><HelpField label="Profile output token allowance" help="Caps the child output within the installation allowance. Range: 1–4096 tokens."><input type="number" min={1} max={4096} value={form.maxOutputTokens} onChange={e=>setForm({...form,maxOutputTokens:Number(e.target.value)})}/></HelpField><label className="admin-choice"><input type="checkbox" checked={form.enabled} onChange={e=>setForm({...form,enabled:e.target.checked})}/>Profile enabled</label></div></fieldset></form><div><Btn disabled={busy} onClick={cancel}>Cancel profile changes</Btn></div>
+ {review&&<AdminReview returnFocus={reviewButton} label="Confirm delegation profile"><h3>Review profile changes</h3><AdminChanges changes={[{label:'Profile name',before:previous.name||'New profile',after:form.name},{label:'Output tokens',before:previous.maxOutputTokens,after:form.maxOutputTokens},{label:'Enabled',before:previous.enabled?'Yes':'No',after:form.enabled?'Yes':'No'},{label:'Instructions',before:previous.instructions||'None',after:form.instructions},{label:'Inherited capabilities',before:previous.tools?.join(', ')||'None',after:form.tools?.join(', ')||'None'}]}/><p>Inherited capabilities: {form.tools?.join(', ')||'None'}</p><div className="btn-row"><Btn disabled={busy} onClick={()=>{setReview(false);}}>Back to editing</Btn><Btn tone="primary" disabled={busy} onClick={()=>void save()}>{busy?'Saving…':'Confirm delegation profile'}</Btn></div></AdminReview>}
+ </div>;
 }

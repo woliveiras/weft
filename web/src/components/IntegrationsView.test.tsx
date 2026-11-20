@@ -1,7 +1,8 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ReadyChecks } from '../api/types';
-import { fakeApi } from '../test/fakeApi';
+import { apiError, fakeApi } from '../test/fakeApi';
 import { IntegrationsView } from './IntegrationsView';
 
 afterEach(cleanup);
@@ -19,6 +20,26 @@ function renderWith(ready: ReadyChecks) {
 }
 
 describe('IntegrationsView sandbox runtime', () => {
+  it('marks previous results as refreshing, then exposes failed readiness and retry', async () => {
+    let finish: (value: Response) => void = () => {};
+    let first = true;
+    fakeApi({
+      'GET /healthz': () => ({status:'ok'}),
+      'GET /readyz': () => {
+        if (first) { first=false; return {storage:'ok',queue:'ok',sandbox:'ok'}; }
+        return new Promise<Response>(resolve => { finish=resolve; });
+      },
+    });
+    render(<IntegrationsView/>);
+    await screen.findByText('4 of 4 services connected');
+    await userEvent.click(screen.getByRole('button',{name:'Check services'}));
+    expect(screen.queryAllByText('Connected')).toHaveLength(0);
+    expect(screen.getByText(/Previous results are being refreshed/)).toBeTruthy();
+    await act(async()=>finish(apiError(500,'readiness unavailable','internal')));
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent',expect.stringContaining('Previous readiness results are unavailable'));
+    expect(within(screen.getByRole('article',{name:'Storage'})).getByText('Could not check')).toBeTruthy();
+    expect((screen.getByRole('button',{name:'Check services'}) as HTMLButtonElement).disabled).toBe(false);
+  });
   it('reports a reachable dedicated daemon', async () => {
     const card = await renderWith({ storage: 'ok', queue: 'ok', sandbox: 'ok' });
     expect(await within(card).findByText(/never on the host/)).toBeTruthy();

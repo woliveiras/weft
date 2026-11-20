@@ -227,3 +227,45 @@ These results were recorded at the time of the run. The documentation migration 
   again, including a new full-width metadata assertion. No live skill or workflow
   mutation was submitted. Build log: `/tmp/weft-skills-compose-final.log`.
   Screenshots: `/tmp/weft-skills-overview.png`, `/tmp/weft-skills-editor.png`.
+
+## Administration refinement — 2026-11-20
+
+- The maintainer-approved refinement covers all six Administration destinations:
+  service status and last check time; grouped network settings with admission
+  impact; automatic read-only resource preview; precisely scoped blocked-access
+  retention; described tool catalogue; and grouped delegation limits with
+  dedicated profile pages. Filtered tables show at most 20 rows. Dirty forms
+  warn before navigation/reload; failed writes retain drafts and require another
+  exact current/proposed review. Review panels receive keyboard focus and return
+  it after cancellation.
+- `make test-web` passed TypeScript and all 547 tests in 102 files. New pure unit
+  tests cover filters, resource states, host differences and pagination; component
+  tests cover API-client collaboration, focus, stale health results, failure
+  recovery, viewer restrictions, CAS baseline refresh and the 100-selection cap.
+  Log: `/tmp/weft-administration-web-final.log`. After the final header/layout
+  and malformed-route refinement, TypeScript and 21 resource/route tests passed:
+  `/tmp/weft-administration-layout-focused.log`.
+- Docker Chromium passed 17 scenarios against the disposable real backend:
+  `e2e/administration.spec.ts`, `delegation-settings.spec.ts`, `delegation.spec.ts`,
+  `visual-consolidation.spec.ts` and `work-navigation.spec.ts`. This includes
+  reviewed network persistence, invalid host rejection, cancel/dirty navigation,
+  retention write failure and explicit retry, real profile revision conflict and
+  baseline recovery, unchanged inherited grants, viewer denial, recursive tree
+  limits, keyboard focus and a 580px viewport. The resource browser fixture only
+  replaces the read-only preview boundary because that backend has no daemon;
+  it verifies zero cleanup mutations, cross-page selection and protected rows.
+  Existing component cleanup result/failure/recheck coverage is retained.
+  Log: `/tmp/weft-administration-browser-final.log`.
+- The standard `docker compose up -d --build --no-deps weftd` build passed and the
+  local service became healthy; `/healthz` returned `ok`. Read-only browser
+  inspection covered all six tabs and the existing Analysis profile editor.
+  Live network, retention and delegation policies were not submitted or changed;
+  shared resource inspection performed only the dry-run preview. No cleanup was
+  confirmed. Screenshots: `/tmp/weft-administration-tools.jpg` and
+  `/tmp/weft-administration-health.jpg`.
+- No backend/API/storage contract, authorization, telemetry or default policy
+  changed. Existing audited mutations and CAS checks remain in use. Go/Python
+  tests and Go lint were not rerun for this console-only change; the standard
+  image build compiled the Go binaries. No cross-browser or assistive-technology
+  conformance is claimed. Drafts are memory-only and are not recovered after a
+  confirmed reload.
