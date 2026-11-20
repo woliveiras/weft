@@ -237,6 +237,10 @@ type Execution struct {
 	Instance    string          `json:"instance,omitempty"`
 	StartedAt   time.Time       `json:"startedAt"`
 	CompletedAt *time.Time      `json:"completedAt,omitempty"`
+
+	// RuntimeStartedAt is persisted after turn gates and context preparation,
+	// immediately before invoking the runtime.
+	RuntimeStartedAt *time.Time `json:"runtimeStartedAt,omitempty"`
 }
 
 type Usage struct {

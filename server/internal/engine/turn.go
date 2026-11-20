@@ -283,6 +283,24 @@ func (r *replica) turn(loopCtx context.Context, n *domain.Node, dels []queue.Del
 		in.Callback = &runtime.Callback{URL: strings.TrimRight(e.opt.CallbackURL, "/") + "/internal/v1/executions/" + x.ID, Token: token}
 	}
 
+	runtimeStartedAt := time.Now().UTC()
+	x.RuntimeStartedAt = &runtimeStartedAt
+	if err := e.store.PutExecution(turnCtx, x); err != nil {
+		// A failed admission write must not leave a runtime-start marker in
+		// the terminal record or consume requests without invoking the runtime.
+		x.RuntimeStartedAt = nil
+		if stopRequested() {
+			return turnOutcome{}
+		}
+		nackAll(dels, e.opt.RetryBackoff)
+		for _, op := range ops {
+			copy := *op
+			copy.Consumed = nil
+			err = errors.Join(err, e.store.PutOperatorMessage(context.WithoutCancel(turnCtx), &copy))
+		}
+		finish(domain.ExecFailed, "runtime admission unavailable: "+err.Error())
+		return turnOutcome{err: err}
+	}
 	res, err := rt.Turn(turnCtx, in, env)
 	if guidance != nil {
 		auditCtx, cancel := context.WithTimeout(context.WithoutCancel(turnCtx), 2*time.Second)

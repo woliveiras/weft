@@ -608,3 +608,22 @@ name assumptions through discovered, scoped workflow mappings.
   destination, response loss followed by disable, and disable after journal
   reservation. Final read-only subagent review found no blockers. Trigger
   lifecycle adoption remains pending; no live configuration changed.
+
+
+## INT-009-06g — Durable runtime admission evidence
+
+- Added optional Execution.runtimeStartedAt, persisted after turn approval,
+  sandbox resume and instruction preparation, immediately before runtime.Turn.
+  Failure to persist prevents the runtime call and restores operator requests
+  and queue inputs through the existing failure path. Legacy execution JSON
+  omits the field. StartedAt/execution.started retain their prior meanings.
+- This marker proves durable admission at the runtime boundary, not a model
+  call or remote effect: a crash between persistence and invocation is possible.
+  It prevents task admission, pending human approval and environment preparation
+  from being mistaken for the work-started lifecycle milestone.
+- Docker full domain/engine suites and vet passed
+  (`/tmp/weft-runtime-start-tests.log`, `/tmp/weft-runtime-start-vet.log`).
+  Unit and integration fixtures cover legacy encoding, pending/rejected/approved
+  gates, context failure, fast completion and storage failure before runtime.
+  Independent read-only subagent review found no blockers. No live execution or
+  installation setting was changed. Lifecycle consumption is a subsequent lot.

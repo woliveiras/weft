@@ -3552,6 +3552,10 @@ components:
         traceId: {type: string}
         instance: {type: string}
         startedAt: {type: string, format: date-time}
+        runtimeStartedAt:
+          type: string
+          format: date-time
+          description: Durable runtime admission after human gates and preparation; not proof of a model call or remote effect.
         completedAt: {type: string, format: date-time}
     Approval:
       type: object

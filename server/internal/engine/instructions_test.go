@@ -126,6 +126,10 @@ func TestInstructionFailuresDoNotCallRuntimeOrConsumeOperatorTask(t *testing.T) 
 				xs, _ := store.ListExecutions(r.ctx, storage.ExecutionFilter{GraphID: g.Metadata.ID})
 				return len(xs) > 0 && xs[0].Status == domain.ExecFailed
 			})
+			xs, err := store.ListExecutions(r.ctx, storage.ExecutionFilter{GraphID: g.Metadata.ID})
+			if err != nil || len(xs) == 0 || xs[0].RuntimeStartedAt != nil {
+				t.Fatalf("context preparation marked a runtime start: %+v, %v", xs, err)
+			}
 			select {
 			case <-capture.inputs:
 				t.Fatal("runtime called with invalid context")
