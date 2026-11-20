@@ -96,14 +96,14 @@ func (m Connections) Put(ctx context.Context, in ConnectionInput, expected int64
 	invalid := func(message string) (Connection, error) {
 		return Connection{}, fmt.Errorf("%w: %s", ErrInvalid, message)
 	}
-	if !connectionName.MatchString(in.Name) || in.Kind != "jira-dc" || expected < 0 {
-		return invalid("select jira-dc and a valid connection name/revision")
+	if expected < 0 {
+		return invalid("select a valid connection revision")
 	}
-	validation, err := New(in.SiteURL, in.ProjectID, "validation")
+	var err error
+	in, err = normalizeInput(in)
 	if err != nil {
-		return invalid(err.Error())
+		return Connection{}, err
 	}
-	in.SiteURL = validation.site
 	old, err := m.load(ctx, in.Name)
 	if errors.Is(err, storage.ErrNotFound) {
 		if expected != 0 {

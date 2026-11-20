@@ -143,3 +143,42 @@ func TestNativeConnectionStorageFailuresRetainState(t *testing.T) {
 		})
 	}
 }
+
+func TestNativeConnectionPreviewHasNoEffectsAndChecksCredentialAudience(t *testing.T) {
+	m, st := connectionManager(t)
+	token := "preview-fixture-token"
+	in := ConnectionInput{Name: "jira-preview", Kind: "jira-dc", SiteURL: "https://jira.example/context/", ProjectID: "10001", Enabled: true, Token: &token}
+	normalized, err := m.Preview(t.Context(), in)
+	if err != nil || normalized.SiteURL != "https://jira.example/context" {
+		t.Fatal(normalized.Name, err)
+	}
+	rows, err := st.ListSettings(t.Context(), ConnectionPrefix)
+	if err != nil || len(rows) != 0 {
+		t.Fatal("preview changed settings", err)
+	}
+	evs, err := st.ListEvents(t.Context(), storage.EventFilter{})
+	if err != nil || len(evs) != 0 {
+		t.Fatal("preview audited a mutation", err)
+	}
+	if _, err = m.Put(t.Context(), in, 0, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	for value, want := range map[string]bool{token: true, "different": false} {
+		match, err := m.CredentialMatches(t.Context(), in.Name, value)
+		if err != nil || match != want {
+			t.Fatal("credential comparison", match, err)
+		}
+	}
+	in.Token = nil
+	if _, err = m.Preview(t.Context(), in); err != nil {
+		t.Fatal("same scope preserve", err)
+	}
+	in.ProjectID = "10002"
+	if _, err = m.Preview(t.Context(), in); !errors.Is(err, ErrInvalid) {
+		t.Fatal("cross-project preserve", err)
+	}
+	in.Token = &token
+	if _, err = m.Preview(t.Context(), in); err != nil {
+		t.Fatal("explicit replacement rejected", err)
+	}
+}

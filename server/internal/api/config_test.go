@@ -289,6 +289,7 @@ func TestDeclarativeAllKindsImportAndRoundTrip(t *testing.T) {
 		yamlObject("InferencePlugin", "gemini", "  enabled: true"),
 		yamlObject("ModelProvider", "gemini", "  type: gemini\n  defaultModel: fixture\n  secretRef: {env: WEFT_SECRET_ALL_KINDS}"),
 		yamlObject("SCMConnection", "weft-github", "  kind: github\n  repository: acme/app\n  apiUrl: "+scmServer.URL+"\n  requirePullRequestApproval: true\n  secretRef: {env: WEFT_SECRET_ALL_KINDS}"),
+		yamlObject("IssueConnection", "native-jira", "  kind: jira-dc\n  siteUrl: https://jira.fixture.invalid/context\n  projectId: '10001'\n  enabled: true\n  secretRef: {env: WEFT_SECRET_ALL_KINDS}"),
 		yamlObject("Project", "fixture-project", "  url: https://repository.fixture.example/source.git\n  ref: HEAD"),
 		yamlObject("Graph", "import-workflow", "  defaults: {runtime: {kind: echo}}\n  nodes: [{id: worker}]"),
 		yamlObject("IssueTrigger", "import-issues", "  workflow: import-workflow\n  nodeId: worker\n  source: {kind: github, connectionId: gh, repository: acme/app}\n  projectId: fixture-project\n  scmConnection: weft-github\n  authorizationMode: full\n  intervalMinutes: 5"),

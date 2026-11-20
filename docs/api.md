@@ -138,8 +138,8 @@ advisory — a model that writes the call as text fails it). Errors are returned
 ## Native issue connections
 
 Native Jira Data Center connections have their own credential store, independent
-of MCP and source control. These endpoints prepare configuration only; trigger,
-console and installation-YAML adoption remain pending. No agent permission is
+of MCP and source control. These endpoints and declarative `IssueConnection` documents prepare configuration
+only; trigger and console adoption remain pending. No agent permission is
 created by saving or testing a connection.
 
 | Method and path | Role | Purpose |

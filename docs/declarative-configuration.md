@@ -61,6 +61,7 @@ All documents use `apiVersion: weft.io/v1`, `kind`, `metadata.name`, optional
 | `Budget` | Name `scope/id`, e.g. `installation/*`; `scope`, `id`, `limitMicros`, `warningPercent`, `interruptPercent`. Project scopes use registered project IDs. Unmentioned budgets are preserved. |
 | `NetworkPolicy` | Name `installation`; `setupNetworks`, `runNetworks`, `egressHosts`. Existing installation restrictions remain in force. |
 | `MCPConnection` | Connection ID as name; connection input including display `name`, `service`, `endpoint`, `enabled`, quota, transport, template, argument policy and OAuth configuration. Use references for credentials. |
+| `IssueConnection` | Native tracker connection name; `kind: jira-dc`, HTTPS `siteUrl`, numeric `projectId`, `enabled` and `secretRef`. Configuration only: apply makes no provider call and does not grant agent access or enable a trigger. |
 | `SCMConnection` | Connection name; `kind`, `repository`, `apiUrl`, `gitUrl`, `branchPrefix`, `requirePullRequestApproval`, `secretRef`. |
 | `Project` | An alias or exported registered project ID; `url`, optional `ref` (default `HEAD`), `checks`, `executionMode`. Existing local registrations export `path` and `displayName`. |
 | `Graph` | Existing graph metadata and spec, including manual environments. `metadata.id` remains the graph identity; absent IDs derive from the display name. |

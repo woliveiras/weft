@@ -10,6 +10,7 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/installation"
+	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/llmconfig"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
 	"github.com/woliveiras/weft/server/internal/projectconfig"
@@ -175,6 +176,23 @@ func (s *Server) configSnapshot(ctx context.Context) (map[string]configObject, e
 			o = newConfigObject("SCMConnection", v.Name, spec, v.UpdatedAt)
 			o.Secrets["credential"] = v.TokenConfigured
 			o.NativeTime = v.UpdatedAt
+			if err = add(o); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if s.IssueConnections.Store != nil {
+		vs, err := s.IssueConnections.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, v := range vs {
+			spec := publicFields(v, jiradc.ConnectionInput{})
+			delete(spec, "name")
+			delete(spec, "token")
+			o := newConfigObject("IssueConnection", v.Name, spec, v.Revision)
+			o.NativeRevision = v.Revision
+			o.Secrets["credential"] = v.CredentialConfigured
 			if err = add(o); err != nil {
 				return nil, err
 			}

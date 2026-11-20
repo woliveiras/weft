@@ -307,3 +307,23 @@ name assumptions through discovered, scoped workflow mappings.
 - Docker `./scripts/go.sh test ./internal/trigger ./internal/api ./internal/taskconfig -count=1`
   passed after the compatibility fix (`/tmp/weft-jira-scope-final-v3.log`), as did
   the isolated exhausted-legacy regression and trigger vet. Diff check passed.
+
+## INT-009-05d — Declarative native issue connections
+
+- `IssueConnection` supports native Jira Data Center site/project configuration
+  and secret references. Dry-run validates the same inputs as the API without
+  network calls, events, settings or credential sealing. Apply uses the native
+  CAS revision and makes no identity/permission test or tracker write.
+- Export contains credential-free public fields and `secretRef: {preserve: true}`.
+  Unchanged referenced values are compared without resealing; missing secrets,
+  stale baselines and site/project changes with preserved credentials fail.
+- Unit checks cover effect-free normalization and credential comparison; API
+  integration exercises real plan/apply/export/fsstore, no-op reapply, stale
+  revisions, scoped replacement and credential-free events. The existing all-kind
+  round trip includes the new document; parser units cover its kind registration.
+- No operational Jira DC trigger, agent grant or live setup is implied. The
+  new kind is additive; existing declarative objects retain their contracts.
+- Docker `./scripts/go.sh test ./internal/jiradc ./internal/installation ./internal/api -count=1`
+  passed (`/tmp/weft-jira-yaml-reviewed-v1.log`), as did vet for those packages
+  and `git diff --check`. Read-only subagent review found no blockers; the new
+  kind and operational limits are documented in the API/declarative guides.

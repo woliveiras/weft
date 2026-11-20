@@ -14,6 +14,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/environmentpolicy"
 	"github.com/woliveiras/weft/server/internal/installation"
+	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/llmconfig"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
 	"github.com/woliveiras/weft/server/internal/projectconfig"
@@ -409,6 +410,9 @@ func (s *Server) applyConfigObject(ctx context.Context, p configPrepared, old co
 			return "unavailable: " + err.Error(), nil
 		}
 		return "ready", nil
+	case "IssueConnection":
+		_, err := s.IssueConnections.Put(ctx, p.Input.(jiradc.ConnectionInput), old.NativeRevision, actor)
+		return "saved; project permission qualification pending", err
 	case "Project":
 		return s.applyConfigProject(ctx, p, old, actor)
 	case "Graph":

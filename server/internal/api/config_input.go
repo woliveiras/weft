@@ -12,6 +12,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/environmentpolicy"
 	"github.com/woliveiras/weft/server/internal/graph"
 	"github.com/woliveiras/weft/server/internal/installation"
+	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/llmconfig"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
@@ -43,7 +44,7 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 	spec := p.Doc.Spec
 	for _, field := range []string{"secretRef", "oauthClientSecretRef", "processEnvironmentRefs", "credentialUsernameRef"} {
 		if _, ok := spec[field]; ok {
-			supported := d.Kind == "MCPConnection" || (field == "secretRef" && (d.Kind == "ModelProvider" || d.Kind == "SCMConnection" || d.Kind == "Project"))
+			supported := d.Kind == "MCPConnection" || (field == "secretRef" && (d.Kind == "ModelProvider" || d.Kind == "SCMConnection" || d.Kind == "IssueConnection" || d.Kind == "Project"))
 			if !supported {
 				return p, fmt.Errorf("spec.%s: not supported by this kind", field)
 			}
@@ -98,7 +99,7 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 		delete(spec, "processEnvironmentRefs")
 	}
 	if len(values) > 0 || len(envUpdates) > 0 {
-		if d.Kind != "ModelProvider" && d.Kind != "MCPConnection" && d.Kind != "SCMConnection" && d.Kind != "Project" {
+		if d.Kind != "ModelProvider" && d.Kind != "MCPConnection" && d.Kind != "SCMConnection" && d.Kind != "IssueConnection" && d.Kind != "Project" {
 			return p, fmt.Errorf("spec.secretRef: unsupported for kind")
 		}
 	}
@@ -266,6 +267,23 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 		normalized.Token = nil
 		p.Doc.Spec = installation.Map(normalized)
 		delete(p.Doc.Spec, "name")
+	case "IssueConnection":
+		var in jiradc.ConnectionInput
+		spec["name"] = d.Name()
+		if err := decode(&in); err != nil {
+			return p, err
+		}
+		if credential != "" {
+			in.Token = &credential
+		}
+		normalized, err := s.IssueConnections.Preview(ctx, in)
+		if err != nil {
+			return p, err
+		}
+		p.Input = normalized
+		normalized.Token = nil
+		p.Doc.Spec = installation.Map(normalized)
+		delete(p.Doc.Spec, "name")
 	case "Project":
 		var in configProject
 		if err := decode(&in); err != nil {
@@ -393,6 +411,8 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 				same, err = s.Providers.CredentialMatches(ctx, d.Name(), value)
 			case "SCMConnection":
 				same, err = s.SCM.CredentialMatches(ctx, d.Name(), value)
+			case "IssueConnection":
+				same, err = s.IssueConnections.CredentialMatches(ctx, d.Name(), value)
 			case "MCPConnection":
 				same, err = s.MCP.CredentialMatches(ctx, d.Name(), slot, value)
 			}
