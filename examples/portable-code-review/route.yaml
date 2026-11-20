@@ -1,0 +1,17 @@
+# Replace all identity/version values with the reviewed saved resources.
+# Keep disabled while reviewing the plan. Enabling requires record-consent.
+apiVersion: weft.io/v1
+kind: PullRequestReviewRoute
+metadata:
+  name: portable-code-review
+spec:
+  connection: team-scm
+  connectionRevision: '2026-11-20T12:00:00Z'
+  provider: bitbucket-dc
+  instance: https://bitbucket.example.com/context
+  repository: TEAM/app
+  graphId: code-review-portable
+  graphVersion: 1
+  channelId: requests
+  nodeId: reviewer
+  enabled: false

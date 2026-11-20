@@ -15,10 +15,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/installation"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
 	"github.com/woliveiras/weft/server/internal/mcpconfig/mcptest"
+	"github.com/woliveiras/weft/server/internal/reviewroute"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
@@ -295,6 +297,7 @@ func TestDeclarativeAllKindsImportAndRoundTrip(t *testing.T) {
 		configMappingYAML("review-step", "native-jira", 1),
 		yamlObject("Project", "fixture-project", "  url: https://repository.fixture.example/source.git\n  ref: HEAD"),
 		yamlObject("Graph", "import-workflow", "  defaults: {runtime: {kind: echo}}\n  nodes: [{id: worker}]"),
+		yamlObject("Graph", "review-workflow", "  defaults: {runtime: {kind: echo}}\n  nodes: [{id: reviewer, loop: {mode: event}, tools: [{name: scm.pull_request.read, repositories: [weft-github]}, {name: scm.pull_request.review, repositories: [weft-github]}]}]\n  channels: [{id: requests, to: [reviewer]}]"),
 		yamlObject("IssueTrigger", "import-issues", "  workflow: import-workflow\n  nodeId: worker\n  source: {kind: github, connectionId: gh, repository: acme/app}\n  projectId: fixture-project\n  scmConnection: weft-github\n  authorizationMode: full\n  intervalMinutes: 5"),
 		yamlObject("Budget", "installation/*", "  scope: installation\n  id: '*'\n  limitMicros: 10000000"),
 	}
@@ -314,6 +317,16 @@ func TestDeclarativeAllKindsImportAndRoundTrip(t *testing.T) {
 		if o.Action != "unchanged" {
 			t.Fatalf("not idempotent: %+v", o)
 		}
+	}
+	// Route adoption deliberately follows saved source/destination revisions;
+	// the planner must not calculate and approve pins within the first bundle.
+	c, err := a.SCM.Get(t.Context(), "weft-github")
+	if err != nil {
+		t.Fatal(err)
+	}
+	route := reviewroute.Input{Name: "all-kinds-review", Connection: c.Name, ConnectionRevision: c.UpdatedAt.UTC().Format(time.RFC3339Nano), Provider: c.Kind, Instance: scmServer.URL, Repository: c.Repository, GraphID: "review-workflow", GraphVersion: 1, ChannelID: "requests", NodeID: "reviewer", Enabled: true}
+	if adopted := configApplyRequest(t, srv, installation.Request{Files: []string{reviewRouteYAML(t, route)}, RecordConsent: true}); !adopted.OK {
+		t.Fatal(adopted)
 	}
 	exported := exportConfig(t, srv)
 	parsed, err := installation.Parse([]string{exported})

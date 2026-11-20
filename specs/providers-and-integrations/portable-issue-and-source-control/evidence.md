@@ -780,3 +780,50 @@ name assumptions through discovered, scoped workflow mappings.
   and legacy injection compatibility. Independent review found no blockers.
 - This is a dispatch primitive only. Route configuration/controller/adoption
   wiring remains a separate lot; the live pilot was not changed or deployed.
+
+## INT-009-07b — Durable internal review routing and recovery
+
+- Added installation routes pinned to SCM identity/revision and an exact saved
+  graph, event ingress and agent. Activation uses a durable event sequence, not
+  timestamps. Existing backlog is not replayed. Duplicate routes/events reserve
+  one scoped head/base receipt. Bounded cursors persist across restart.
+- Dispatch requires existing named repository-scoped read/summary grants and the
+  exact loaded running version/run. It never starts a workflow, expands grants
+  or changes the pilot. Failed pre-dispatch and uncertain dispatch remain
+  separate. Unknown delivery is reconciled only through exact retained internal
+  message evidence; absent history remains unknown. Admin retry is limited to
+  known pre-dispatch failures with unchanged authority. Recovery uses CAS,
+  audit events and a shared lease; cleanup failures propagate.
+- Unit and FS/SQLite/broker integration cover three provider editions, activation
+  failures, concurrent reservations, changed scope/run/version, bounded pages,
+  restart, lost responses, stale revisions, forged/public message evidence,
+  storage/audit/lease errors and recovery roles. Targeted API/app tests passed
+  (/tmp/weft-review-route-wiring-v7.log), reviewroute tests and vet passed.
+- A separate adoption example pins a reusable portable reviewer without merge.
+  The real API→SQLite→queue→native runtime→SCM→verified TLS provider fixture test
+  publishes one summary for duplicate events using deterministic model responses.
+  It validates collaboration, not a live model's review quality. Independent
+  review found a weak publication oracle in the initial fixture; the corrected
+  positive case requires tool success, published SCM receipt and summary event.
+  The missing-comment case requires a failed execution, pending receipt and no
+  confirmation event. Both passed (/tmp/weft-portable-example-v8.log). Live adoption
+  still requires operator resources and an explicit reviewed activation.
+
+## INT-009-07c — Declarative review route adoption
+
+- Added PullRequestReviewRoute parser/validation, dependencies, local dry-run,
+  CAS apply and export. Enabled changes require recorded consent. SCM/graph
+  dependencies must already be saved; changing them and adopting the route in
+  the same bundle is refused. Native numeric CAS and opaque YAML revisions remain
+  distinct. No-op/export and exact disable preserve authority without discovery.
+- Unit and real API/SQLite fixtures passed, followed by the full API suite
+  (44.843 seconds), installation suite and vet. The first broad API run hit an
+  existing monthly-budget lease conflict; its isolated rerun and the complete
+  suite passed unchanged. No checks or timeouts were weakened.
+- No YAML was applied to the running installation, no existing bridge was
+  migrated, and no real external review, issue transition or merge was triggered.
+
+- Checkpoint after these route lots: Docker `./scripts/go.sh test ./...` passed
+  (/tmp/weft-portability-go-final-current.log), including full API/engine suites.
+  Independent route/recovery/API/YAML review found no remaining blockers after
+  the example-oracle correction. Cloud backend work is a separate later lot.

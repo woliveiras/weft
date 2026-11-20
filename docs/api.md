@@ -1027,3 +1027,41 @@ prevents its delivery synchronization from overtaking it. Task/PR delivery itsel
 continues independently. Errors remain in the journal with operator recovery.
 Retry of a start after delivery synchronization has run is refused. Seeing the
 target status proves observation, not that Weft caused a transition.
+
+### Portable internal pull request review routes
+
+These installation routes consume only persisted Weft `scm.pull_request_opened`
+facts with complete immutable identity. They do not register an external webhook.
+Input pins `name`, `connection`, its exact RFC3339Nano `connectionRevision`
+(SCM `updatedAt`), `provider`, `instance`, `repository`, `graphId`, positive
+`graphVersion`, `channelId`, `nodeId` and `enabled`. The saved destination must
+already have explicit read/summary grants scoped to that connection and an
+exclusive enabled event consumer. No tool grant, model, connection or graph is
+created as a side effect.
+
+| Route | Minimum role | Contract |
+| --- | --- | --- |
+| `GET /api/v1/review-routes?after=<name>` | viewer | `{items,next}`; at most 100 key-ordered records per page. |
+| `GET /api/v1/review-routes/{name}` | viewer | Saved route and ETag revision. |
+| `POST /api/v1/review-routes/preview` | admin | `{route:input}`; local validation only, no writes or vendor calls. |
+| `POST /api/v1/review-routes` | admin | `{route:input,confirm:true}`; create with CAS zero. |
+| `PUT /api/v1/review-routes/{name}` | admin | Same body plus positive `If-Match`; name must match the URL. |
+| `GET /api/v1/review-route-receipts?after=<id>` | viewer | `{items,next}`; at most 100 key-ordered receipts per page, including failed/unknown outcomes. |
+| `GET /api/v1/review-route-receipts/{id}` | viewer | Historical source identity, route snapshot, destination run, message ID and independent outcome. |
+| `POST /api/v1/review-route-receipts/{id}/reconcile` | operator | Positive `If-Match` plus exactly `{"confirm":true}`; confirms only exact retained engine-authored message evidence, without publishing again. Missing/expired evidence stays unknown. |
+| `POST /api/v1/review-route-receipts/{id}/retry` | admin | Same revision/confirmation; requeues only known failures before dispatch, with unchanged route/SCM pins and a running compatible destination. |
+
+Effective activation or editing records an event-sequence barrier: older events
+are not replayed. An unchanged save retains its barrier; exact disabling works
+without reachable dependencies. Duplicate events and routes reserve one receipt
+per connection/revision, provider/instance, repository, PR and head/base revision.
+The controller checks both durable graph state and the actual loaded run/version;
+it never starts or resumes a graph. In-flight dispatch already accepted before
+disabling is not retroactively cancelled.
+
+`published` means engine dispatch acceptance, possibly held for channel approval,
+not review completion. Track the execution and
+`scm.review_summary_published` fact for the summary. A lost response or interrupted
+dispatch is `unknown` and cannot be blindly retried. These routes grant no merge
+capability. See the [separate adoption example](../examples/portable-code-review/README.md)
+and [review evidence limits](./portable-review-evidence.md).

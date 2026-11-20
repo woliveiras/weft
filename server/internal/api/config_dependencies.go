@@ -10,6 +10,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/installation"
 	"github.com/woliveiras/weft/server/internal/jiradc"
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
+	"github.com/woliveiras/weft/server/internal/reviewroute"
 	"github.com/woliveiras/weft/server/internal/trigger"
 )
 
@@ -53,6 +54,8 @@ func (s *Server) validateConfigDependencies(ctx context.Context, ds []installati
 			err = fmt.Errorf("spec.default: at most one explicit default provider")
 		}
 		switch v := p.Input.(type) {
+		case reviewroute.Input:
+			err = validateReviewRouteDependencies(v, current[p.Doc.Key()], ps, plan)
 		case jiradc.MappingInput:
 			err = validateMappingDependency(v, current[p.Doc.Key()], ps, current, plan)
 		case *domain.Graph:
@@ -116,6 +119,28 @@ func (s *Server) validateConfigDependencies(ctx context.Context, ds []installati
 			plan.OK = false
 		}
 	}
+}
+
+func validateReviewRouteDependencies(in reviewroute.Input, old configObject, ps []configPrepared, plan *installation.Plan) error {
+	if old.Doc.Kind != "" && !in.Enabled {
+		var previous reviewroute.Input
+		if err := installation.Decode(old.Doc.Spec, &previous, "spec"); err != nil {
+			return err
+		}
+		previous.Name, previous.Enabled = in.Name, false
+		if in == previous {
+			return nil // Exact disabling never requires source/destination availability.
+		}
+	}
+	for i, p := range ps {
+		if p.Doc.Key() != "SCMConnection/"+in.Connection && p.Doc.Key() != "Graph/"+in.GraphID {
+			continue
+		}
+		if plan.Objects[i].Action != "unchanged" {
+			return fmt.Errorf("spec: apply SCM connection and workflow changes first, then review their saved explicit revisions before configuring the pull request review route")
+		}
+	}
+	return nil
 }
 
 // A mapping pins the numeric connection revision explicitly. Never rewrite that

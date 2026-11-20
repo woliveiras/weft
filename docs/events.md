@@ -72,6 +72,8 @@ be stored before proceeding.
 | `provider.changed` | provider settings: create, update, delete, default (no graph id) | `{action, provider, revision}` (actor = caller) — never credentials |
 | `scm.branch_pushed` | `git.push` succeeded (task graph, node, execution) | `{connection, repository, branch}` |
 | `scm.pull_request_opened` | `scm.pull_request.create` opened or found the branch's pull request | `{connection, connectionRevision, provider, instance, repository, number, url, head, base, headSha, baseSha, created, reviewRevisionAvailable}` |
+| `scm.review_route_recovery_requested` | Explicit revision-scoped read reconciliation or pre-dispatch retry request; receipt CAS determines the outcome | `{receipt, action, expectedRevision, confirmed}` |
+| `scm.review_route_change_requested` | Administrative route save requests an activation barrier; route CAS determines whether it took effect | `{route, expectedRevision, enabled}`; no credential or PR content |
 | `scm.review_summary_published` | A revision-scoped review summary was confirmed on the provider and stored | `{connection, provider, repository, number, headSha, baseSha, verdict, url}` |
 | `tracker.connection_change_requested` | A native tracker connection write was reviewed; record CAS determines success | `{connection, provider, expectedRevision, projectRestricted}` |
 | `tracker.transition_sync_requested` | An internal Jira DC lifecycle transition intent passed local review; journal CAS precedes any remote POST, and the stored sync record determines outcome | `{connection, operation, state}`; no issue body, field values or credential |

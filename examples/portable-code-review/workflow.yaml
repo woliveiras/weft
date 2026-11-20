@@ -1,0 +1,24 @@
+# Publish the reviewed agent.json first, then select its actual saved version.
+# This separate example never changes the existing code-review pilot.
+apiVersion: weft.io/v1
+kind: Graph
+metadata:
+  id: code-review-portable
+  name: Portable code review
+  description: Review exact SCM revision pairs and publish a summary; merge stays with the operator.
+spec:
+  nodes:
+    - id: reviewer
+      agent:
+        id: portable-pr-reviewer
+        version: 1
+        parameters:
+          connection: team-scm
+          baseBranch: main
+      loop: {mode: event}
+      limits: {turnTimeout: 10m, maxToolCalls: 20, maxTokens: 200000}
+      workspace: {readOnly: true}
+  channels:
+    - id: requests
+      to: [reviewer]
+      types: [review.requested]

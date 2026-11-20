@@ -18,6 +18,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
 	"github.com/woliveiras/weft/server/internal/projectconfig"
 	"github.com/woliveiras/weft/server/internal/repositoryimport"
+	"github.com/woliveiras/weft/server/internal/reviewroute"
 	"github.com/woliveiras/weft/server/internal/scm"
 	"github.com/woliveiras/weft/server/internal/trigger"
 )
@@ -385,6 +386,35 @@ func (s *Server) prepareConfig(ctx context.Context, d installation.Document, old
 		delete(p.Doc.Metadata, "createdAt")
 		delete(p.Doc.Metadata, "updatedAt")
 		delete(p.Doc.Metadata, "version")
+	case "PullRequestReviewRoute":
+		var in reviewroute.Input
+		spec["name"] = d.Name()
+		if err := decode(&in); err != nil {
+			return p, err
+		}
+		var previous reviewroute.Input
+		if old.Doc.Kind != "" {
+			if err := installation.Decode(old.Doc.Spec, &previous, "spec"); err != nil {
+				return p, err
+			}
+			previous.Name = d.Name()
+		}
+		disabled := previous
+		disabled.Enabled = false
+		if old.Doc.Kind == "" || (in != previous && in != disabled) {
+			manager, err := s.reviewRouteManager()
+			if err != nil {
+				return p, err
+			}
+			normalized, err := manager.Preview(ctx, in)
+			if err != nil {
+				return p, fmt.Errorf("spec: review saved SCM and workflow revisions first: %w", err)
+			}
+			in = normalized.Input
+		}
+		p.Input = in
+		p.Doc.Spec = installation.Map(in)
+		delete(p.Doc.Spec, "name")
 	case "IssueTrigger":
 		var in trigger.Input
 		if _, ok := spec["name"]; !ok {

@@ -23,6 +23,12 @@ it does not declare that the adapters or portable review tools already exist.
 
 ## Maintainer decisions and current boundary
 
+- 2026-11-20: the maintainer also requires a technical account with write
+  permissions restricted to the selected project for automatic Jira Cloud
+  transitions. This extends the Data Center prerequisite; a local project
+  preflight is not an atomic remote project fence. Existing unmapped Cloud
+  comments/labels retain their current contract.
+
 - 2026-11-20: Jira Data Center automatic writes require a technical account
   whose remote write permissions are restricted to the selected project. The
   maintainer explicitly chose this prerequisite instead of unrestricted PAT

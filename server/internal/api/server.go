@@ -43,6 +43,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/queue"
 	"github.com/woliveiras/weft/server/internal/repositoryimport"
 	"github.com/woliveiras/weft/server/internal/review"
+	"github.com/woliveiras/weft/server/internal/reviewroute"
 	"github.com/woliveiras/weft/server/internal/scm"
 	"github.com/woliveiras/weft/server/internal/secrets"
 	"github.com/woliveiras/weft/server/internal/storage"
@@ -56,6 +57,7 @@ import (
 var Version = "dev"
 
 type Deps struct {
+	ReviewRoutes      *reviewroute.Manager
 	TriggerManager    *trigger.Manager
 	RepositoryImports *repositoryimport.Manager
 	MCP               *mcpconfig.Manager
@@ -236,6 +238,15 @@ func (s *Server) routes() {
 		{"PUT /api/v1/provider-plugins/{id}", A, s.updateProviderPlugin},
 		{"GET /api/v1/provider-settings", R, s.providerSettings},
 		{"GET /api/v1/trigger-policy", R, s.triggerPolicy},
+		{"GET /api/v1/review-routes", R, s.listReviewRoutes},
+		{"GET /api/v1/review-routes/{name}", R, s.getReviewRoute},
+		{"POST /api/v1/review-routes/preview", A, s.previewReviewRoute},
+		{"POST /api/v1/review-routes", A, s.saveReviewRoute},
+		{"PUT /api/v1/review-routes/{name}", A, s.saveReviewRoute},
+		{"GET /api/v1/review-route-receipts", R, s.listReviewRouteReceipts},
+		{"GET /api/v1/review-route-receipts/{id}", R, s.getReviewRouteReceipt},
+		{"POST /api/v1/review-route-receipts/{id}/reconcile", O, s.reconcileReviewRouteReceipt},
+		{"POST /api/v1/review-route-receipts/{id}/retry", A, s.retryReviewRouteReceipt},
 		{"GET /api/v1/triggers", R, s.listTriggers},
 		{"POST /api/v1/triggers", A, s.createTrigger},
 		{"GET /api/v1/triggers/{trigger}", R, s.getTrigger},
@@ -361,6 +372,8 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErr(w, http.StatusUnprocessableEntity, "invalid", err.Error(), nil)
 	case errors.Is(err, secrets.ErrNoKey):
 		writeErr(w, http.StatusConflict, "secret_key_missing", err.Error(), nil)
+	case errors.Is(err, reviewroute.ErrUnavailable):
+		writeErr(w, 503, "review_route_unavailable", "Review routing is unavailable on this controller", nil)
 	case errors.Is(err, engine.ErrNotFound), errors.Is(err, storage.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not_found", err.Error(), nil)
 	case errors.As(err, &budgetResume):
@@ -369,7 +382,7 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		writeErr(w, http.StatusConflict, "budget_admission_blocked", err.Error()+" in Models → Costs.", map[string]string{"scope": budgetReached.Scope, "id": budgetReached.ID})
 	case errors.Is(err, cost.ErrInvalidLedger), errors.Is(err, engine.ErrConflict), errors.Is(err, hitl.ErrNotPending), errors.Is(err, storage.ErrConflict):
 		writeErr(w, http.StatusConflict, "conflict", err.Error(), nil)
-	case errors.Is(err, engine.ErrInvalid), errors.Is(err, errBadRequest):
+	case errors.Is(err, engine.ErrInvalid), errors.Is(err, errBadRequest), reviewRouteError(err):
 		writeErr(w, http.StatusBadRequest, "invalid", err.Error(), nil)
 	case errors.Is(err, tools.ErrDenied), errors.Is(err, tools.ErrRejected):
 		writeErr(w, http.StatusForbidden, "forbidden", err.Error(), nil)

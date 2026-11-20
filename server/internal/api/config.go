@@ -19,6 +19,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
 	"github.com/woliveiras/weft/server/internal/projectconfig"
 	"github.com/woliveiras/weft/server/internal/repositoryimport"
+	"github.com/woliveiras/weft/server/internal/reviewroute"
 	"github.com/woliveiras/weft/server/internal/scm"
 	"github.com/woliveiras/weft/server/internal/secrets"
 	"github.com/woliveiras/weft/server/internal/trigger"
@@ -171,6 +172,18 @@ func (s *Server) buildConfigPlan(ctx context.Context, in installation.Request, d
 			}
 			if d.Kind == "IssueWorkflowMapping" && item.Action != "unchanged" {
 				item.Warning = "Apply may revalidate the reviewed sample with read-only Jira discovery, unless exactly disabling the saved definition; no transition is executed"
+			}
+			if d.Kind == "PullRequestReviewRoute" && item.Action != "unchanged" {
+				route := p.Input.(reviewroute.Input)
+				item.Consent = fmt.Sprintf("Route new pull requests from SCM connection %s at revision %s to workflow %s version %d, channel %s, agent %s. Routing never starts or resumes the workflow or grants tools.", route.Connection, route.ConnectionRevision, route.GraphID, route.GraphVersion, route.ChannelID, route.NodeID)
+				if route.Enabled {
+					item.Warning = "Effective apply records a new activation boundary; earlier pull requests are not replayed"
+					if !in.RecordConsent {
+						item.Action = "error"
+						item.Error = "recordConsent (--record-consent) is required to activate or change an enabled pull request review route"
+						plan.OK = false
+					}
+				}
 			}
 			if d.Kind == "Project" && item.Action == "create" {
 				item.Warning = "Confirm repository download into a managed directory"
@@ -418,6 +431,17 @@ func (s *Server) applyConfigObject(ctx context.Context, p configPrepared, old co
 		return "saved; project permission qualification pending", err
 	case "IssueWorkflowMapping":
 		_, err := (jiradc.WorkflowMappings{Connections: s.IssueConnections}).Put(ctx, p.Input.(jiradc.MappingInput), old.NativeRevision, actor)
+		return "", err
+	case "PullRequestReviewRoute":
+		in := p.Input.(reviewroute.Input)
+		if in.Enabled && !recordConsent {
+			return "", fmt.Errorf("recordConsent is required to activate an enabled pull request review route")
+		}
+		manager, err := s.reviewRouteManager()
+		if err != nil {
+			return "", err
+		}
+		_, err = manager.Put(ctx, in, old.NativeRevision, actor)
 		return "", err
 	case "Project":
 		return s.applyConfigProject(ctx, p, old, actor)

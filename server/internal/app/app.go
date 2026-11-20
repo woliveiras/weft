@@ -40,6 +40,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/queue/brokers"
 	"github.com/woliveiras/weft/server/internal/repositoryimport"
 	"github.com/woliveiras/weft/server/internal/review"
+	"github.com/woliveiras/weft/server/internal/reviewroute"
 	"github.com/woliveiras/weft/server/internal/runtime"
 	"github.com/woliveiras/weft/server/internal/runtime/echo"
 	"github.com/woliveiras/weft/server/internal/runtime/external"
@@ -57,6 +58,7 @@ import (
 
 // App is a running control plane.
 type App struct {
+	ReviewRoutes      *reviewroute.Manager
 	RepositoryImports *repositoryimport.Manager
 	Config            *config.Config
 	Log               *slog.Logger
@@ -313,7 +315,9 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.ReviewRoutes = a.newReviewRoutes()
 	a.API = api.New(api.Deps{
+		ReviewRoutes:      a.ReviewRoutes,
 		RepositoryImports: a.RepositoryImports, TriggerManager: &a.Triggers.Triggers,
 		Reviews: a.Reviews, PreviewGateway: a.PreviewGateway, MCP: a.MCP, SCM: a.SCM, IssueConnections: a.IssueConnections, Gateway: a.Gateway,
 		Config: cfg, Engine: a.Engine, Store: a.Store, Broker: a.Broker, Bus: a.Bus, Approvals: a.Approvals,
@@ -705,6 +709,10 @@ func (a *App) Run(ctx context.Context) error {
 	defer func() { stopHistory(); <-historyDone }()
 	go a.refreshProviders(ctx)
 	go a.Triggers.Run(ctx)
+	routeCtx, stopRoutes := context.WithCancel(ctx)
+	routeDone := make(chan struct{})
+	go func() { defer close(routeDone); a.runReviewRoutes(routeCtx) }()
+	defer func() { stopRoutes(); <-routeDone }()
 	go a.Proposals.Run(ctx)
 	reviewCtx, stopReviews := context.WithCancel(ctx)
 	reviewDone := make(chan struct{})

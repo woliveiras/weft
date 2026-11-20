@@ -213,6 +213,32 @@ func (s *Server) configSnapshot(ctx context.Context) (map[string]configObject, e
 			}
 		}
 	}
+	if s.ReviewRoutes != nil {
+		cursor := ""
+		for {
+			routes, next, err := s.ReviewRoutes.ListPage(ctx, cursor, 100)
+			if err != nil {
+				return nil, err
+			}
+			for _, route := range routes {
+				spec := installation.Map(route.Input)
+				delete(spec, "name")
+				o := newConfigObject("PullRequestReviewRoute", route.Name, spec, route.Revision)
+				o.NativeRevision = route.Revision
+				o.Status = "disabled"
+				if route.Enabled {
+					o.Status = "enabled"
+				}
+				if err := add(o); err != nil {
+					return nil, err
+				}
+			}
+			if next == "" {
+				break
+			}
+			cursor = next
+		}
+	}
 	ps, err := (projectconfig.Manager{Store: s.Store}).List(ctx)
 	if err != nil {
 		return nil, err

@@ -66,6 +66,7 @@ All documents use `apiVersion: weft.io/v1`, `kind`, `metadata.name`, optional
 | `SCMConnection` | Connection name; `kind`, `repository`, `apiUrl`, `gitUrl`, `branchPrefix`, `requirePullRequestApproval`, `secretRef`. |
 | `Project` | An alias or exported registered project ID; `url`, optional `ref` (default `HEAD`), `checks`, `executionMode`. Existing local registrations export `path` and `displayName`. |
 | `Graph` | Existing graph metadata and spec, including manual environments. `metadata.id` remains the graph identity; absent IDs derive from the display name. |
+| `PullRequestReviewRoute` | Explicit saved SCM connection name and RFC3339Nano `connectionRevision`, provider/API instance/repository, and saved `graphId`, positive `graphVersion`, `channelId`, `nodeId`, `enabled`. Activation requires recorded administrator consent and never starts the workflow or grants tools. |
 | `IssueTrigger` | Exported trigger ID, or an unambiguous display name for a hand-authored document; existing trigger input including optional display `name`, with mandatory `authorizationMode`. `projectId` can reference a Project alias in the same request. |
 
 Money uses integer micro-units: USD 2 is `2000000`, USD 10 is `10000000`.
@@ -116,6 +117,59 @@ review trigger consent. A changed definition requires explicit trigger adoption;
 YAML does not infer or rewrite lifecycle pins. Existing task history and grants
 remain intact. Automatic confirmed-merge synchronization remains unavailable
 until its independent delivery event and concurrency guarantees are qualified.
+
+## Portable pull request review routes
+
+`PullRequestReviewRoute` routes new internal `scm.pull_request_opened` facts to
+an explicitly selected review workflow. Save the SCM connection and workflow
+first, inspect their saved revisions, then review a separate route apply. A
+bundle that creates or changes either referenced dependency cannot activate or
+modify the route. Unchanged dependencies may be included. The planner never
+calculates or substitutes a connection or workflow revision.
+
+```yaml
+apiVersion: weft.io/v1
+kind: PullRequestReviewRoute
+metadata:
+  name: portable-review
+spec:
+  connection: team-scm
+  connectionRevision: '2026-11-20T12:00:00Z'
+  provider: github
+  instance: https://api.github.com
+  repository: example/project
+  graphId: code-review-portable
+  graphVersion: 1
+  channelId: requests
+  nodeId: reviewer
+  enabled: true
+```
+
+These values are illustrative. `connectionRevision` is the SCM connection's
+exact `updatedAt` timestamp, while `graphVersion` is the existing immutable
+workflow version. Neither is the route's opaque YAML `metadata.revision` or its
+numeric API revision. Provider, API instance and repository must match the same
+stored SCM connection. The selected workflow must already have its portable
+read/review grants and an exclusive event-agent ingress. No route grants tools
+or starts/resumes a stopped or paused workflow.
+
+Plan/preview performs only local reads: no activation marker, queue publication
+or SCM request. An effective enabled create/update requires `--record-consent`
+in addition to the normal reviewed apply confirmation; object-specific force
+does not replace consent. Apply delegates to the route manager, which records
+a fresh activation boundary and CAS-guards the definition. Earlier events are
+not replayed. Failed persistence leaves any change-request audit marker
+inoperative. Uncertain review dispatches are retained and never automatically
+sent again.
+
+Export contains only the reviewed route input and an opaque baseline. An
+unchanged export/apply performs no validation, save or activation, including
+when source/destination configuration is no longer available. Disabling exactly
+the saved definition remains local and does not require new activation consent;
+changing its pins at the same time requires normal validation. Re-enabling or
+changing an enabled route requires a new reviewed activation. Routing, publishing
+a review summary and merging remain separate outcomes; this capability does not
+enable automatic merge or change the existing GitHub MCP pilot.
 
 ## Revisions and console edits
 

@@ -84,3 +84,13 @@ func TestWorkflowMappingKindOrdersAfterConnectionBeforeTrigger(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewRouteKindOrdersAfterSavedSCMAndGraph(t *testing.T) {
+	docs := []Document{New("PullRequestReviewRoute", "review", map[string]any{}), New("Graph", "review", map[string]any{}), New("SCMConnection", "team", map[string]any{})}
+	Sort(docs)
+	for i, kind := range []string{"SCMConnection", "Graph", "PullRequestReviewRoute"} {
+		if docs[i].Kind != kind {
+			t.Fatal(docs)
+		}
+	}
+}
