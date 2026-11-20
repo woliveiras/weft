@@ -283,6 +283,26 @@ func (r *replica) turn(loopCtx context.Context, n *domain.Node, dels []queue.Del
 		in.Callback = &runtime.Callback{URL: strings.TrimRight(e.opt.CallbackURL, "/") + "/internal/v1/executions/" + x.ID, Token: token}
 	}
 
+	// Approval/context preparation may outlive a workflow edit or a stop. A
+	// review queued for one snapshot must not enter a different runtime run.
+	for _, message := range inputs {
+		if err := e.reviewMessageFence(turnCtx, gr, n.ID, message); err != nil {
+			for i, delivery := range dels {
+				if !r.rejectReviewDelivery(turnCtx, from[i], delivery) {
+					if nackErr := delivery.Nack(turnCtx, e.opt.RetryBackoff); nackErr != nil {
+						err = errors.Join(err, nackErr)
+					}
+				}
+			}
+			for _, op := range ops {
+				copy := *op
+				copy.Consumed = nil
+				err = errors.Join(err, e.store.PutOperatorMessage(context.WithoutCancel(turnCtx), &copy))
+			}
+			finish(domain.ExecCancelled, "review destination admission failed: "+err.Error())
+			return turnOutcome{err: err}
+		}
+	}
 	runtimeStartedAt := time.Now().UTC()
 	x.RuntimeStartedAt = &runtimeStartedAt
 	if err := e.store.PutExecution(turnCtx, x); err != nil {

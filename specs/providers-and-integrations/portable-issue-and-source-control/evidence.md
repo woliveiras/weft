@@ -761,3 +761,22 @@ name assumptions through discovered, scoped workflow mappings.
   concurrent connection changes, sample change/denial, partial apply recovery
   and same-bundle consent protection. Independent code review and targeted
   reruns found no blockers. No YAML was applied to the running installation.
+
+
+## INT-009-07a — Running-version review admission in the engine
+
+- Added an internal DispatchReview boundary requiring the exact graph version,
+  run, exclusive event consumer and stable message. A lifecycle lease checks
+  both durable control state and the actually loaded runtime. The public Inject
+  contract is unchanged. This method never starts/resumes graphs or adds grants.
+- Engine-authored review inputs carry a reserved marker and version/run fence.
+  Fetch and pre-runtime checks reject stale inputs after queueing or approval
+  waits; paused/control/storage failures defer visibly. Public injection/runtime
+  output cannot forge the marker and normal child output does not inherit it.
+- Docker unit and SQLite/memory broker integration tests passed, followed by
+  the full engine suite (39.290 seconds) and vet. Coverage includes channel and
+  BeforeTurn gates, paused/stopped destinations, changed queued run/version,
+  durable-new/loaded-old versions, approval-time pause, storage/broker failures
+  and legacy injection compatibility. Independent review found no blockers.
+- This is a dispatch primitive only. Route configuration/controller/adoption
+  wiring remains a separate lot; the live pilot was not changed or deployed.

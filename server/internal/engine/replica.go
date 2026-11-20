@@ -609,6 +609,9 @@ func (r *replica) fetch(ctx context.Context, max int, wait time.Duration) ([]que
 			continue
 		}
 		for _, d := range ds {
+			if r.rejectReviewDelivery(ctx, s, d) {
+				continue
+			}
 			if r.duplicate(ctx, s, d) {
 				continue
 			}
