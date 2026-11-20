@@ -387,3 +387,98 @@ func TestTransitionSyncDoesNotRepeatAWriteAfterAHumanMovesTheIssueBack(t *testin
 		t.Fatal(r, err, f.posts.Load())
 	}
 }
+
+func TestTransitionIntentRequiresPairedMappingPin(t *testing.T) {
+	for _, edit := range []func(*TransitionIntent){func(v *TransitionIntent) { v.MappingName = "review-step" }, func(v *TransitionIntent) { v.MappingRevision = 1 }, func(v *TransitionIntent) { v.MappingName = "../bad"; v.MappingRevision = 1 }, func(v *TransitionIntent) { v.MappingName = "review-step"; v.MappingRevision = -1 }} {
+		v := intent()
+		edit(&v)
+		if !errors.Is(v.validate(), ErrInvalid) {
+			t.Fatal(v)
+		}
+	}
+	v := intent()
+	v.MappingName = "review-step"
+	v.MappingRevision = 1
+	if err := v.validate(); err != nil {
+		t.Fatal(err)
+	}
+}
+func TestPinnedTransitionRejectsChangedDefinitionAndReconcilesWithoutRepost(t *testing.T) {
+	f := transitionFixture(t)
+	m := WorkflowMappings{Connections: f.syncer.Connections}
+	mapping, err := m.Put(t.Context(), mappingInput(), 0, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := intent()
+	v.MappingName = mapping.Name
+	v.MappingRevision = mapping.Revision
+	// A valid pin cannot be used to substitute different transition IDs.
+	changed := v
+	changed.TargetStatusID = "21"
+	if _, err = f.syncer.Apply(t.Context(), changed, "system:test"); !errors.Is(err, storage.ErrConflict) {
+		t.Fatal(err)
+	}
+	f.mode.Store(1) // Vendor changed status but its response was lost.
+	r, err := f.syncer.Apply(t.Context(), v, "system:test")
+	if err == nil || r.State != "unknown" || f.posts.Load() != 1 {
+		t.Fatal(r, err)
+	}
+	disabled := mapping.MappingInput
+	disabled.Enabled = false
+	if _, err = m.Put(t.Context(), disabled, mapping.Revision, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	// Disabling authorizes no new writes, but must not prevent reading old evidence.
+	r, err = f.syncer.Apply(t.Context(), v, "system:test")
+	if err != nil || r.State != "target_observed" || f.posts.Load() != 1 {
+		t.Fatal(r, err)
+	}
+	v.OperationID = "task-8:pr-delivered"
+	if _, err = f.syncer.Apply(t.Context(), v, "system:test"); !errors.Is(err, storage.ErrConflict) {
+		t.Fatal("disabled mapping dispatched", err)
+	}
+	if f.posts.Load() != 1 {
+		t.Fatal("disabled mapping wrote")
+	}
+}
+func TestPinnedTransitionRechecksMappingAfterReservation(t *testing.T) {
+	f := transitionFixture(t)
+	m := WorkflowMappings{Connections: f.syncer.Connections}
+	mapping, err := m.Put(t.Context(), mappingInput(), 0, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := intent()
+	v.MappingName = mapping.Name
+	v.MappingRevision = mapping.Revision
+	// Run the competing edit at the durable journal boundary, after preflight.
+	f.syncer.Connections.Store = &mappingReservationStore{Store: f.syncer.Connections.Store, afterReserve: func() {
+		disabled := mapping.MappingInput
+		disabled.Enabled = false
+		if _, err := m.Put(t.Context(), disabled, 1, "admin"); err != nil {
+			t.Error(err)
+		}
+	}}
+	r, err := f.syncer.Apply(t.Context(), v, "system:test")
+	if !errors.Is(err, storage.ErrConflict) || r.State != "failed" || f.posts.Load() != 0 {
+		t.Fatal(r, err)
+	}
+	saved, err := f.syncer.Get(t.Context(), v.OperationID)
+	if err != nil || saved.State != "failed" {
+		t.Fatal(saved, err)
+	}
+}
+
+type mappingReservationStore struct {
+	storage.Store
+	afterReserve func()
+}
+
+func (s *mappingReservationStore) PutSettingIf(ctx context.Context, key string, value []byte, expected int64, actor string, guards []storage.SettingRevision) (int64, error) {
+	rev, err := s.Store.PutSettingIf(ctx, key, value, expected, actor, guards)
+	if err == nil && strings.HasPrefix(key, SyncPrefix) && expected == 0 {
+		s.afterReserve()
+	}
+	return rev, err
+}

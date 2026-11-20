@@ -26,6 +26,8 @@ var ErrSyncUnconfirmed = errors.New("Jira transition outcome is unconfirmed; rec
 // attempt. Names and board columns deliberately do not identify transitions.
 type TransitionIntent struct {
 	OperationID        string `json:"operationId"`
+	MappingName        string `json:"mappingName,omitempty"`
+	MappingRevision    int64  `json:"mappingRevision,omitempty"`
 	Connection         string `json:"connection"`
 	ConnectionRevision int64  `json:"connectionRevision"`
 	IssueKey           string `json:"issueKey"`
@@ -37,6 +39,9 @@ type TransitionIntent struct {
 }
 
 func (v TransitionIntent) validate() error {
+	if (v.MappingName == "" && v.MappingRevision != 0) || (v.MappingName != "" && (!connectionName.MatchString(v.MappingName) || v.MappingRevision < 1)) {
+		return fmt.Errorf("%w: mapping name and positive revision must be reviewed together", ErrInvalid)
+	}
 	if !operationID.MatchString(v.OperationID) || !connectionName.MatchString(v.Connection) || v.ConnectionRevision < 1 || ValidateIssueKey(v.IssueKey) != nil {
 		return fmt.Errorf("%w: invalid transition operation or connection", ErrInvalid)
 	}
@@ -185,7 +190,13 @@ func (m TransitionSync) store(ctx context.Context, v SyncRecord, actor string, e
 	if err != nil {
 		return SyncRecord{}, err
 	}
-	revision, err := m.Connections.Store.PutSettingIf(ctx, syncKey(v.Intent.OperationID), raw, expected, actor, []storage.SettingRevision{{Key: ConnectionPrefix + v.Intent.Connection, Revision: v.Intent.ConnectionRevision}})
+	guards := []storage.SettingRevision{{Key: ConnectionPrefix + v.Intent.Connection, Revision: v.Intent.ConnectionRevision}}
+	// Only reservation authorizes dispatch. Historical reconciliation remains a
+	// read even after the mapping is disabled or edited.
+	if expected == 0 && v.Intent.MappingName != "" {
+		guards = append(guards, storage.SettingRevision{Key: MappingPrefix + v.Intent.MappingName, Revision: v.Intent.MappingRevision})
+	}
+	revision, err := m.Connections.Store.PutSettingIf(ctx, syncKey(v.Intent.OperationID), raw, expected, actor, guards)
 	if err != nil {
 		return SyncRecord{}, err
 	}
@@ -226,9 +237,19 @@ func (m TransitionSync) Apply(ctx context.Context, v TransitionIntent, actor str
 	if !fresh {
 		return old, errors.New("transition preflight failed; review the retained synchronization before recovery")
 	}
+	if err := m.checkMapping(ctx, v, connection); err != nil {
+		return SyncRecord{}, err
+	}
 	client, err := m.Connections.OpenForWrite(ctx, v.Connection, v.ConnectionRevision)
 	if err != nil {
 		return SyncRecord{}, err
+	}
+	connectionCheck := client.writeCheck
+	client.writeCheck = func(ctx context.Context) error {
+		if err := connectionCheck(ctx); err != nil {
+			return err
+		}
+		return m.checkMapping(ctx, v, connection)
 	}
 	record := SyncRecord{Intent: v, SiteURL: connection.SiteURL, ProjectID: connection.ProjectID, State: "pending", CreatedAt: time.Now().UTC()}
 	p, preflightErr := client.prepareTransition(ctx, v)
@@ -295,4 +316,20 @@ func (m TransitionSync) reconcile(ctx context.Context, record SyncRecord, actor 
 		return saved, ErrSyncUnconfirmed
 	}
 	return saved, nil
+}
+
+// checkMapping binds dispatch to the reviewed definition, not its display name.
+// Unmapped internal intents remain supported for the low-level conformance tests.
+func (m TransitionSync) checkMapping(ctx context.Context, v TransitionIntent, c Connection) error {
+	if v.MappingName == "" {
+		return nil
+	}
+	mapping, err := (WorkflowMappings{Connections: m.Connections}).Get(ctx, v.MappingName)
+	if err != nil {
+		return err
+	}
+	if !mapping.Enabled || mapping.Revision != v.MappingRevision || mapping.Connection != v.Connection || mapping.ConnectionRevision != v.ConnectionRevision || mapping.SiteURL != c.SiteURL || mapping.ProjectID != c.ProjectID || mapping.IssueTypeID != v.IssueTypeID || mapping.FromStatusID != v.FromStatusID || mapping.TransitionID != v.TransitionID || mapping.TargetStatusID != v.TargetStatusID {
+		return fmt.Errorf("%w: workflow mapping changed; review its pinned definition", storage.ErrConflict)
+	}
+	return nil
 }

@@ -593,3 +593,18 @@ name assumptions through discovered, scoped workflow mappings.
 - Final read-only subagent review found no blockers. Lifecycle pins/adoption,
   operator recovery, declarative mapping configuration and Cloud adoption remain
   incomplete; no live connection, consent or workflow was changed.
+
+
+## INT-009-06f — Bind synchronization dispatch to mapping revisions
+
+- Internal transition intents optionally pin a mapping name and positive revision
+  together. Dispatch checks exact connection/site/project/type/source/transition/
+  destination IDs, enabled state and revision. Reservation atomically guards the
+  mapping revision, and the write check reloads it before dispatch.
+- Historical pending/unknown operations can still reconcile by GET after their
+  mapping is disabled. This does not authorize a new operation or another POST.
+- Docker `./scripts/go.sh test ./internal/jiradc -count=1` passed
+  (`/tmp/weft-pinned-mapping-v2.log`), covering malformed pins, substituted
+  destination, response loss followed by disable, and disable after journal
+  reservation. Final read-only subagent review found no blockers. Trigger
+  lifecycle adoption remains pending; no live configuration changed.
