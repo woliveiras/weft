@@ -144,14 +144,16 @@ type ghPull struct {
 	State   string `json:"state"`
 	Head    struct {
 		Ref string `json:"ref"`
+		SHA string `json:"sha"`
 	} `json:"head"`
 	Base struct {
 		Ref string `json:"ref"`
+		SHA string `json:"sha"`
 	} `json:"base"`
 }
 
 func (p ghPull) pr(created bool) *PullRequest {
-	return &PullRequest{Number: p.Number, URL: p.HTMLURL, Head: p.Head.Ref, Base: p.Base.Ref, State: p.State, Created: created}
+	return &PullRequest{HeadSHA: p.Head.SHA, BaseSHA: p.Base.SHA, Number: p.Number, URL: p.HTMLURL, Head: p.Head.Ref, Base: p.Base.Ref, State: p.State, Created: created}
 }
 
 func (g *github) owner() string {

@@ -226,3 +226,17 @@ The merge tool returns an explicit error without calling the provider. Use the
 provider's separately authorized review/merge process until atomic head and
 destination protection is qualified. This does not change existing workflow
 versions, MCP grants or the GitHub pilot.
+
+### Routing a delivered PR to portable review
+
+The `scm.pull_request_opened` event includes provider, API instance, connection
+name and revision, repository, PR number/URL and head/base commit IDs. Route only
+events with `reviewRevisionAvailable: true` to revision-bound review. This flag
+indicates identity completeness, not passing checks or PR eligibility.
+Pass `connectionRevision` to `scm.pull_request.read` and
+`scm.pull_request.review`; refuse events whose connection has been reconfigured.
+The read result also includes the revision for subsequent summary publication.
+Legacy delivery events/records remain readable; missing revision identity must
+be resolved explicitly before automatic review. Nothing grants tools or changes
+a saved workflow automatically. Repeated summary publication reconciles the
+same connection/repository/PR/revision receipt without another comment POST.

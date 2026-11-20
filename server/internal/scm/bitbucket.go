@@ -249,7 +249,7 @@ type bbCloudPull struct {
 }
 
 func (p bbCloudPull) pr(created bool) *PullRequest {
-	return &PullRequest{Number: p.ID, URL: p.Links.HTML.Href, State: strings.ToLower(p.State), Head: p.Source.Branch.Name, Base: p.Destination.Branch.Name, Created: created}
+	return &PullRequest{HeadSHA: p.Source.Commit.Hash, BaseSHA: p.Destination.Commit.Hash, Number: p.ID, URL: p.Links.HTML.Href, State: strings.ToLower(p.State), Head: p.Source.Branch.Name, Base: p.Destination.Branch.Name, Created: created}
 }
 func (b *bitbucketCloud) FindPullRequest(ctx context.Context, head, base string) (*PullRequest, error) {
 	q := url.Values{"state": {"OPEN"}, "q": {`source.branch.name=` + strconv.Quote(head) + ` AND destination.branch.name=` + strconv.Quote(base)}, "pagelen": {"100"}}

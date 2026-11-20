@@ -47,6 +47,8 @@ type Identity struct {
 
 // PullRequest is a provider pull request.
 type PullRequest struct {
+	HeadSHA string `json:"headSha,omitempty"`
+	BaseSHA string `json:"baseSha,omitempty"`
 	Number  int    `json:"number"`
 	URL     string `json:"url"`
 	Head    string `json:"head"`

@@ -154,7 +154,7 @@ func (p dcPull) pr(created bool) (*PullRequest, error) {
 	if p.ID <= 0 || len(p.Links.Self) == 0 || !validPullRequestURL(p.Links.Self[0].Href) {
 		return nil, errors.New("SCM pull request has no identity")
 	}
-	return &PullRequest{Number: p.ID, URL: p.Links.Self[0].Href, Head: strings.TrimPrefix(p.From.ID, "refs/heads/"), Base: strings.TrimPrefix(p.To.ID, "refs/heads/"), State: strings.ToLower(p.State), Created: created}, nil
+	return &PullRequest{HeadSHA: p.From.LatestCommit, BaseSHA: p.To.LatestCommit, Number: p.ID, URL: p.Links.Self[0].Href, Head: strings.TrimPrefix(p.From.ID, "refs/heads/"), Base: strings.TrimPrefix(p.To.ID, "refs/heads/"), State: strings.ToLower(p.State), Created: created}, nil
 }
 func (b *bitbucketDC) FindPullRequest(ctx context.Context, head, base string) (*PullRequest, error) {
 	start := 0

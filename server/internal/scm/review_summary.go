@@ -35,12 +35,13 @@ type ReviewReceipt struct {
 	CreatedAt  time.Time `json:"createdAt"`
 }
 type summaryArgs struct {
-	Connection string `json:"connection"`
-	Number     int    `json:"number"`
-	HeadSHA    string `json:"headSha"`
-	BaseSHA    string `json:"baseSha"`
-	Verdict    string `json:"verdict"`
-	Summary    string `json:"summary"`
+	ConnectionRevision string `json:"connectionRevision,omitempty"`
+	Connection         string `json:"connection"`
+	Number             int    `json:"number"`
+	HeadSHA            string `json:"headSha"`
+	BaseSHA            string `json:"baseSha"`
+	Verdict            string `json:"verdict"`
+	Summary            string `json:"summary"`
 }
 
 func (a summaryArgs) validate() error {
@@ -79,7 +80,7 @@ func (reviewSummaryTool) Description() string {
 	return "Publish a review summary for the exact PR head/base reviewed, including an explicit verdict and findings or a no-findings explanation. One summary per connection revision and PR revision pair. Retries reconcile an uncertain publication by lookup without reposting. This is a review summary comment, not a provider approval or a merge."
 }
 func (reviewSummaryTool) Schema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"connection":{"type":"string"},"number":{"type":"integer","minimum":1},"headSha":{"type":"string"},"baseSha":{"type":"string"},"verdict":{"type":"string","enum":["approved","changes_requested"]},"summary":{"type":"string","minLength":1,"maxLength":15872}},"required":["connection","number","headSha","baseSha","verdict","summary"],"additionalProperties":false}`)
+	return json.RawMessage(`{"type":"object","properties":{"connection":{"type":"string"},"connectionRevision":{"type":"string","description":"Connection revision from the delivery event or read result; refuses reconfigured connections"},"number":{"type":"integer","minimum":1},"headSha":{"type":"string"},"baseSha":{"type":"string"},"verdict":{"type":"string","enum":["approved","changes_requested"]},"summary":{"type":"string","minLength":1,"maxLength":15872}},"required":["connection","number","headSha","baseSha","verdict","summary"],"additionalProperties":false}`)
 }
 func (t reviewSummaryTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.Result, error) {
 	var a summaryArgs
@@ -96,6 +97,9 @@ func (t reviewSummaryTool) Invoke(ctx context.Context, inv *tools.Invocation) (*
 	c, err := t.m.Get(ctx, a.Connection)
 	if err != nil {
 		return fail(err)
+	}
+	if a.ConnectionRevision != "" && a.ConnectionRevision != c.UpdatedAt.UTC().Format(time.RFC3339Nano) {
+		return fail(errors.New("SCM connection changed since the reviewed snapshot"))
 	}
 	p, token, err := t.m.Open(c)
 	if err != nil {

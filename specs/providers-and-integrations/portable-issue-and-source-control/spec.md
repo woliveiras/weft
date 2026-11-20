@@ -183,7 +183,7 @@ its own commit. A completed batch does not qualify the remaining capability.
 | INT-009-01 | Bitbucket Cloud delivery adapter and HTTP boundary | Implemented with local HTTP/Git fixtures; reviewed |
 | INT-009-02 | Bitbucket Data Center delivery adapter | Implemented with local REST 1.0/Git fixtures; reviewed |
 | INT-009-03 | Edition-aware connection configuration and capabilities in console/YAML | Implemented with API, YAML and browser fixtures; reviewed |
-| INT-009-04 | Portable PR read/review/guarded merge operations and internal events | PR read/diff and summaries implemented; merge unavailable pending atomic destination guarantee; events pending |
+| INT-009-04 | Portable PR read/review/guarded merge operations and internal events | PR read/diff, summaries and portable delivery identity implemented; merge unavailable pending atomic destination guarantee; routing adoption pending |
 | INT-009-05 | Independent tracker/SCM identity and Jira Data Center tracker adapter | Pending |
 | INT-009-06 | Discovered Jira mappings and recoverable optional transitions | Pending |
 | INT-009-07 | Integrated cross-provider regression and code-review adoption path | Pending |

@@ -188,3 +188,26 @@ name assumptions through discovered, scoped workflow mappings.
   checks capability metadata; integration invokes the real gateway/store for all
   three editions and retries, asserting zero remote calls and wildcard refusal.
   Final subagent review found no blockers; `git diff --check` passed.
+
+## INT-009-04d — Portable delivery identity
+
+- Existing PR-opened events retain delivery fields and now include `provider`,
+  `instance`, `connectionRevision`, `headSha`, `baseSha` and
+  `reviewRevisionAvailable`. Commit IDs come from create/lookup responses; no
+  extra network call can turn a delivered PR into a failed delivery.
+- Legacy/incomplete responses still record delivery but cannot supply an
+  automatic review revision. Availability means complete revision identity, not
+  an eligible/approved PR: review tools still read and validate state and draft.
+- Portable read returns the connection revision. Read and summary accept the
+  optional `connectionRevision` from the event/snapshot, rejecting reconfigured
+  connections before opening credentials or calling a provider. Existing callers
+  remain compatible; adopting event routing must carry this fence explicitly.
+- Unit tests cover response conversion, edition instance and incomplete identity.
+  HTTP/fsstore/gateway integration covers all three adapters, matching revisions,
+  actual connection updates, stale identity, legacy missing hashes and reflected
+  credentials that themselves look like valid commit IDs.
+- SCM/API/taskrun/trigger/tools Docker tests passed
+  (`/tmp/weft-portable-event-reviewed.log`). Subagent review found reflected
+  hexadecimal credentials in commit IDs; redaction before validation and decoded
+  result/event regressions fixed it. Final review reported no residual blockers;
+  `git diff --check` passed. No live routing, grants or deployment changed.

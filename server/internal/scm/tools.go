@@ -160,7 +160,7 @@ func (t pullRequestTool) Invoke(ctx context.Context, inv *tools.Invocation) (*to
 		return &tools.Result{Content: "could not look for an existing pull request: " + redact(err, token), IsError: true}, nil
 	} else if pr != nil {
 		pr.Created = false
-		return t.result(ctx, inv, c, pr), nil
+		return t.result(ctx, inv, c, pr, token), nil
 	}
 	if c.ApprovalRequired() {
 		if err := approve(ctx, inv, c, head, base, args.Title); err != nil {
@@ -184,7 +184,7 @@ func (t pullRequestTool) Invoke(ctx context.Context, inv *tools.Invocation) (*to
 	if err != nil {
 		return &tools.Result{Content: "the pull request could not be opened: " + redact(err, token), IsError: true}, nil
 	}
-	return t.result(ctx, inv, c, pr), nil
+	return t.result(ctx, inv, c, pr, token), nil
 }
 
 func appendClosingIssue(body, repository, issue string) string {
@@ -200,15 +200,42 @@ func appendClosingIssue(body, repository, issue string) string {
 	return strings.TrimSpace(body) + "\n\n" + line
 }
 
-func (t pullRequestTool) result(ctx context.Context, inv *tools.Invocation, c Connection, pr *PullRequest) *tools.Result {
-	t.m.event(ctx, inv.Principal, domain.EvPullRequestOpened, map[string]any{"connection": c.Name, "repository": c.Repository,
-		"number": pr.Number, "url": pr.URL, "head": pr.Head, "base": pr.Base, "created": pr.Created})
-	data, _ := json.Marshal(pr)
+func (t pullRequestTool) result(ctx context.Context, inv *tools.Invocation, c Connection, pr *PullRequest, token string) *tools.Result {
+	// Retain delivery even when a legacy provider omitted full commit IDs. Such
+	// events explicitly cannot be used as an automatic review request.
+	safe := *pr
+	safe.URL = redactReviewURL(pr.URL, token)
+	safe.Head = redactToken(pr.Head, token)
+	safe.Base = redactToken(pr.Base, token)
+	safe.HeadSHA = redactToken(pr.HeadSHA, token)
+	safe.BaseSHA = redactToken(pr.BaseSHA, token)
+	if !commitID.MatchString(safe.HeadSHA) {
+		safe.HeadSHA = ""
+	}
+	if !commitID.MatchString(safe.BaseSHA) {
+		safe.BaseSHA = ""
+	}
+	t.m.event(ctx, inv.Principal, domain.EvPullRequestOpened, deliveryEvent(c, safe, token))
+	data, _ := json.Marshal(safe)
 	verb := "Opened"
 	if !pr.Created {
 		verb = "An open pull request already exists:"
 	}
-	return &tools.Result{Content: fmt.Sprintf("%s pull request #%d %s (%s into %s).", verb, pr.Number, pr.URL, pr.Head, pr.Base), Data: data}
+	return &tools.Result{Content: fmt.Sprintf("%s pull request #%d %s (%s into %s).", verb, safe.Number, safe.URL, safe.Head, safe.Base), Data: data}
+}
+
+func deliveryEvent(c Connection, pr PullRequest, token string) map[string]any {
+	instance := strings.TrimRight(c.APIURL, "/")
+	if instance == "" {
+		switch c.Kind {
+		case "github":
+			instance = "https://api.github.com"
+		case "bitbucket-cloud":
+			instance = "https://api.bitbucket.org/2.0"
+		}
+	}
+	ready := instance != "" && !c.UpdatedAt.IsZero() && pr.Number > 0 && validPullRequestURL(pr.URL) && validBranch(pr.Head) && validBranch(pr.Base) && pr.State == "open" && commitID.MatchString(pr.HeadSHA) && commitID.MatchString(pr.BaseSHA)
+	return map[string]any{"connection": c.Name, "connectionRevision": c.UpdatedAt.UTC().Format(time.RFC3339Nano), "provider": c.Kind, "instance": redactReviewURL(instance, token), "repository": c.Repository, "number": pr.Number, "url": pr.URL, "head": pr.Head, "base": pr.Base, "headSha": pr.HeadSHA, "baseSha": pr.BaseSHA, "created": pr.Created, "reviewRevisionAvailable": ready}
 }
 
 // approve asks a person before a pull request is opened, whatever the task
