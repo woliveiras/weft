@@ -104,6 +104,8 @@ type Connection struct {
 	Name       string `json:"name"`
 	Kind       string `json:"kind"`
 	Repository string `json:"repository"`
+	AuthType   string `json:"authType,omitempty"`
+	Username   string `json:"username,omitempty"`
 	// APIURL is the REST base; GitURL the HTTPS (or file) remote. Both
 	// default per kind; neither may contain credentials.
 	APIURL       string `json:"apiUrl,omitempty"`
@@ -143,6 +145,8 @@ type Input struct {
 	Name                       string  `json:"name"`
 	Kind                       string  `json:"kind"`
 	Repository                 string  `json:"repository"`
+	AuthType                   string  `json:"authType,omitempty"`
+	Username                   string  `json:"username,omitempty"`
 	APIURL                     string  `json:"apiUrl,omitempty"`
 	GitURL                     string  `json:"gitUrl,omitempty"`
 	BranchPrefix               string  `json:"branchPrefix,omitempty"`
@@ -260,6 +264,17 @@ func (m Manager) validate(in *Input, d document, update bool) *ValidationError {
 	ve := &ValidationError{}
 	add := func(path, f string, a ...any) { ve.Errors = append(ve.Errors, Issue{path, fmt.Sprintf(f, a...)}) }
 	in.Name, in.Kind, in.Repository = strings.TrimSpace(in.Name), strings.TrimSpace(in.Kind), strings.Trim(strings.TrimSpace(in.Repository), "/")
+	in.AuthType, in.Username = strings.TrimSpace(in.AuthType), strings.TrimSpace(in.Username)
+	for _, issue := range validateAuth(in.Kind, in.AuthType, in.Username) {
+		add(issue.Path, "%s", issue.Message)
+	}
+	if update && in.Token == nil {
+		for _, old := range d.Connections {
+			if old.Name == in.Name && credentialScopeChanged(old, *in) {
+				add("token", "supply a replacement token when changing authentication or an API-token connection's account or destination")
+			}
+		}
+	}
 	if !update {
 		if !nameRe.MatchString(in.Name) {
 			add("name", "use 1-63 lowercase letters, digits, '.', '_' or '-'")
@@ -306,6 +321,9 @@ func (m Manager) validate(in *Input, d document, update bool) *ValidationError {
 	if in.Token != nil && (strings.TrimSpace(*in.Token) == "" || len(*in.Token) > 4096 || strings.ContainsAny(*in.Token, "\r\n")) {
 		add("token", "enter a single-line token, or omit the field to keep the stored one")
 	}
+	if in.Token != nil && in.AuthType == AuthAPIToken && !validAPIToken(*in.Token) {
+		add("token", "enter an API token without control characters")
+	}
 	if len(ve.Errors) > 0 {
 		return ve
 	}
@@ -333,6 +351,7 @@ func (m Manager) mutate(ctx context.Context, actor string, fn func(d *document) 
 
 func (m Manager) apply(c *Connection, in Input, actor string, now time.Time) error {
 	c.Kind, c.Repository, c.APIURL, c.GitURL, c.BranchPrefix = in.Kind, in.Repository, in.APIURL, in.GitURL, in.BranchPrefix
+	c.AuthType, c.Username = in.AuthType, in.Username
 	c.RequirePullRequestApproval, c.UpdatedAt, c.UpdatedBy = in.RequirePullRequestApproval, now, actor
 	if in.Token == nil {
 		return nil
@@ -422,6 +441,9 @@ func (m Manager) audit(ctx context.Context, action, name, actor string) {
 
 // Open builds the provider for a connection, decrypting its token in memory.
 func (m Manager) Open(c Connection) (Provider, string, error) {
+	if issues := validateAuth(c.Kind, c.AuthType, c.Username); len(issues) != 0 {
+		return nil, "", &ValidationError{Errors: issues}
+	}
 	f, ok := factory(c.Kind)
 	if !ok {
 		return nil, "", fmt.Errorf("scm: unsupported kind %q", c.Kind)
@@ -492,7 +514,10 @@ func Push(ctx context.Context, c Connection, p Provider, token, workdir, branch,
 	cmd.Env = append(gitEnv(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=", "SSH_ASKPASS=",
 		"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraHeader", "GIT_CONFIG_VALUE_0=Authorization: "+p.GitAuthHeader())
 	out, err := cmd.CombinedOutput()
-	text := secrets.Redact(strings.TrimSpace(string(out)), token, p.GitAuthHeader())
+	text := redactAuthMaterial(strings.TrimSpace(string(out)), token, p.GitAuthHeader())
+	if c.AuthType == AuthAPIToken {
+		text = redactAuthMaterial(text, token, BasicAuth(c.Username, token))
+	}
 	if err != nil {
 		return "", fmt.Errorf("%w: %s", ErrPush, text)
 	}

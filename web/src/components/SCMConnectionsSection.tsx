@@ -6,9 +6,8 @@ import type { SCMConnection } from '../api/types';
 import { useAsync } from '../hooks/useData';
 import { Badge, Btn, Empty, ErrorBox } from './common';
 import { ConnectionFilters, emptyConnectionFilters } from './ConnectionFilters';
+import { changeSCMAuthType, changeSCMKind, emptySCMDraft, scmConnectionInput, type SCMDraft } from './scmConnectionDraft';
 
-type Draft = { name: string; kind: string; repository: string; apiUrl: string; gitUrl: string; branchPrefix: string; approval: boolean; token: string };
-const empty: Draft = { name: '', kind: 'github', repository: '', apiUrl: '', gitUrl: '', branchPrefix: '', approval: true, token: '' };
 export const scmCreateLink = '#/connections/source-control/new';
 type ConnectionTest = { state: 'testing' | 'connected' | 'limited' | 'failed'; message?: string };
 const testStatuses: Record<ConnectionTest['state'] | 'untested', { label: string; tone?: string }> = {
@@ -124,11 +123,12 @@ export function SCMConnectionsSection({ role }: { role?: string }) {
 
 export function SCMConnectionCreate({ role }: { role?: string }) {
   const kinds = useAsync(api.scmKinds, []);
-  const [draft, setDraft] = useState<Draft>(empty);
+  const [draft, setDraft] = useState<SCMDraft>(emptySCMDraft);
   const kind = kinds.data?.find(item => item.id === draft.kind);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
-  const set = (patch: Partial<Draft>) => setDraft(current => ({ ...current, ...patch }));
+  const set = (patch: Partial<SCMDraft>) => setDraft(current => ({ ...current, ...patch }));
+  const apiToken = draft.kind === 'bitbucket-cloud' && draft.authType === 'api-token';
 
   const save = async () => {
     if (saving || role !== 'admin' || !kind) return;
@@ -136,11 +136,7 @@ export function SCMConnectionCreate({ role }: { role?: string }) {
     setSaving(true);
     setError(undefined);
     try {
-      await api.createSCMConnection({
-        name: draft.name.trim(), kind: draft.kind, repository: draft.repository.trim(), apiUrl: draft.apiUrl.trim() || undefined,
-        gitUrl: draft.gitUrl.trim() || undefined, branchPrefix: draft.branchPrefix.trim() || undefined,
-        requirePullRequestApproval: draft.approval ? undefined : false, token: draft.token,
-      });
+      await api.createSCMConnection(scmConnectionInput(draft));
       if (location.hash === saveRoute) location.hash = '#/connections';
     } catch (e) {
       setError(errorMessage(e));
@@ -159,13 +155,33 @@ export function SCMConnectionCreate({ role }: { role?: string }) {
       {kinds.error && <div><ErrorBox error={`Could not load source control services: ${kinds.error}`} /><Btn onClick={() => void kinds.reload()}>Retry loading services</Btn></div>}
       {!kinds.loading && !kinds.error && !kinds.data?.length && <Empty>No source control adapter is available.</Empty>}
       <HelpField label={"Name"} help={"A stable connection name for workflow and task hand-offs. Use a name that makes the intended repository easy to identify."}><input value={draft.name} onChange={(e) => set({ name: e.target.value })} placeholder="team-repository" /></HelpField>
-      <HelpField label={"Kind"} help={"The source-control service Weft calls to open pull requests. It determines the default API and Git addresses."}><select disabled={kinds.loading || !kinds.data?.length} value={draft.kind} onChange={(e) => set({ kind: e.target.value, apiUrl: '', gitUrl: '', token: '' })}>{kinds.data?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></HelpField>
+      <HelpField label={"Kind"} help={"The source-control service Weft calls to open pull requests. It determines the default API and Git addresses."}><select disabled={kinds.loading || !kinds.data?.length} value={draft.kind} onChange={(e) => setDraft(current => changeSCMKind(current, e.target.value))}>{kinds.data?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></HelpField>
       <HelpField label={"Repository"} help={"The single repository this connection is allowed to use. Use the repository format shown for the selected service."}><input value={draft.repository} onChange={(e) => set({ repository: e.target.value })} placeholder={kind?.repositoryHint ?? 'Repository identifier'} /></HelpField>
       <HelpField label={"Branch prefix"} help={"Only branches under this prefix can be pushed through this connection. For example, weft/ separates task branches from release branches."}><input value={draft.branchPrefix} onChange={(e) => set({ branchPrefix: e.target.value })} placeholder="weft/" /></HelpField>
       <HelpField label={"API URL"} help={"The source-control API address used to open pull requests. Set it for a self-hosted service or leave it empty to use the default for the selected kind."}><input value={draft.apiUrl} onChange={(e) => set({ apiUrl: e.target.value })} placeholder={kind?.apiUrlHint ?? 'Service API URL'} required={kind?.apiUrlRequired} inputMode="url" /></HelpField>
       <HelpField label={"Git URL"} help={"The Git address used to push a task branch. Set it when the repository uses a different Git host or address."}><input value={draft.gitUrl} onChange={(e) => set({ gitUrl: e.target.value })} placeholder="Default for the kind" inputMode="url" /></HelpField>
-      <p className="muted connection-token" role="note">{kind?.credentialHelp}</p>
-      <HelpField className="connection-token" label={"Token"} help={"A credential for the configured repository. Give it only the permissions needed for task branches and pull requests."}><input type="password" autoComplete="off" value={draft.token} onChange={(e) => set({ token: e.target.value })} /></HelpField>
+      {draft.kind === 'bitbucket-cloud' && <>
+        <HelpField label="Authentication" help="Choose how Weft authenticates API calls and Git pushes. Use an API token created for Bitbucket with your Atlassian account email, or supply an existing user OAuth access token. Changing this choice clears the entered credential; Weft does not try another method if authentication fails.">
+          <select value={draft.authType} onChange={e => setDraft(current => changeSCMAuthType(current, e.target.value as SCMDraft['authType']))}>
+            <option value="api-token">API token</option>
+            <option value="bearer">OAuth access token</option>
+          </select>
+        </HelpField>
+        {apiToken && <HelpField label="Atlassian account email" help="Enter the email of the Atlassian account that owns the Bitbucket API token. Use your account email, not your Bitbucket username or workspace name. Weft sends it with the token when authenticating Bitbucket API requests.">
+          <input type="email" autoComplete="username" required value={draft.username} onChange={e => set({ username: e.target.value })} />
+        </HelpField>}
+      </>}
+      {apiToken ? <details className="connection-token">
+        <summary>Create a Bitbucket API token</summary>
+        <ol>
+          <li>Open <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener noreferrer">Atlassian account API tokens</a> and choose <strong>Create API token with scopes</strong>.</li>
+          <li>Give it a name and expiry date, then select <strong>Bitbucket</strong> as the app.</li>
+          <li>For connection checks, branch delivery and PR review, select <code>read:repository:bitbucket</code>, <code>write:repository:bitbucket</code>, <code>read:pullrequest:bitbucket</code> and <code>write:pullrequest:bitbucket</code>.</li>
+          <li>Create the token and paste it into the API token field below. Weft stores it encrypted; do not put it in an issue or agent prompt.</li>
+        </ol>
+        <p className="small muted">The account must already have access to this repository. Scopes do not grant repository access. <a href="https://support.atlassian.com/bitbucket-cloud/docs/create-an-api-token/" target="_blank" rel="noopener noreferrer">Atlassian setup guide</a></p>
+      </details> : <p className="muted connection-token" role="note">{draft.kind === 'bitbucket-cloud' ? 'Use an existing user OAuth access token with account, repository and pull request access. Weft does not obtain or renew OAuth tokens for this connection. An expired token must be replaced.' : kind?.credentialHelp}</p>}
+      <HelpField className="connection-token" label={apiToken ? 'API token' : 'Token'} help={apiToken ? 'Paste the scoped Bitbucket API token belonging to the account email above. This is not your Atlassian password or a Jira API token. The token stays on the Weft server and is never returned after saving.' : "A credential for the configured repository. Give it only the permissions needed for task branches and pull requests."}><input type="password" autoComplete="off" required={apiToken} value={draft.token} onChange={(e) => set({ token: e.target.value })} /></HelpField>
       <HelpField className="checkbox" label={"Opening a pull request needs a person's approval"} help="Holds a pull request action until a person approves it. The repo, branch, and connection scope are still checked when the action runs."><input type="checkbox" checked={draft.approval} onChange={(e) => set({ approval: e.target.checked })} /></HelpField>
       <div className="btn-row">
         <Btn type="submit" tone="primary" disabled={saving || !kind}>{saving ? 'Saving…' : 'Save connection'}</Btn>

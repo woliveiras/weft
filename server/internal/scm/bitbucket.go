@@ -20,10 +20,11 @@ const adapterBodyLimit = 2 << 20
 // providerHTTP confines pagination and credentials to the reviewed API origin.
 // Redirects are refused even on the same host: a redirect is not an API result.
 type providerHTTP struct {
-	base    *url.URL
-	token   string
-	client  *http.Client
-	headers http.Header
+	base          *url.URL
+	token         string
+	authorization string
+	client        *http.Client
+	headers       http.Header
 }
 
 func newProviderHTTP(raw, token string) (*providerHTTP, error) {
@@ -67,7 +68,11 @@ func (h *providerHTTP) doMedia(ctx context.Context, method, path string, in, out
 			req.Header.Add(key, value)
 		}
 	}
-	req.Header.Set("Authorization", "Bearer "+h.token)
+	authorization := h.authorization
+	if authorization == "" {
+		authorization = "Bearer " + h.token
+	}
+	req.Header.Set("Authorization", authorization)
 	req.Header.Set("Accept", accept)
 	for key, values := range h.headers {
 		for _, value := range values {
@@ -95,11 +100,38 @@ func (h *providerHTTP) doMedia(ctx context.Context, method, path string, in, out
 	if len(raw) > adapterBodyLimit {
 		return errors.New("SCM response exceeded the size limit")
 	}
+	redact := func(value string) string {
+		if h.authorization == "" {
+			return value
+		}
+		value = redactAuthMaterial(value, h.token, h.authorization)
+		// Git uses a separate documented username with the same API token.
+		return redactAuthMaterial(value, "", BasicAuth("x-bitbucket-api-token-auth", h.token))
+	}
 	if text, ok := out.(*string); ok {
-		*text = string(raw)
+		*text = redact(string(raw))
 		return nil
 	}
 	if out != nil {
+		if h.authorization != "" {
+			// Normalize JSON strings before redacting: equivalent Unicode or slash
+			// escapes must not restore credential bytes after the security boundary.
+			var decoded any
+			decoder := json.NewDecoder(bytes.NewReader(raw))
+			decoder.UseNumber()
+			if err := decoder.Decode(&decoded); err != nil {
+				return errors.New("SCM API returned an invalid JSON response")
+			}
+			var extra any
+			if err := decoder.Decode(&extra); err != io.EOF {
+				return errors.New("SCM API returned an invalid JSON response")
+			}
+			decoded = redactJSONStrings(decoded, redact)
+			raw, err = json.Marshal(decoded)
+			if err != nil {
+				return errors.New("SCM API returned an invalid JSON response")
+			}
+		}
 		if err = json.Unmarshal(raw, out); err != nil {
 			return errors.New("SCM API returned an invalid JSON response")
 		}
@@ -141,6 +173,12 @@ func (e *providerHTTPError) Error() string {
 
 func init() {
 	RegisterKind("bitbucket-cloud", func(c Connection, token string) (Provider, error) {
+		if issues := validateAuth(c.Kind, c.AuthType, c.Username); len(issues) != 0 {
+			return nil, &ValidationError{Errors: issues}
+		}
+		if c.AuthType == AuthAPIToken && !validAPIToken(token) {
+			return nil, &ValidationError{Errors: []Issue{{"token", "enter an API token without control characters"}}}
+		}
 		base := c.APIURL
 		if base == "" {
 			base = "https://api.bitbucket.org/2.0"
@@ -148,6 +186,9 @@ func init() {
 		h, err := newProviderHTTP(base, token)
 		if err != nil {
 			return nil, err
+		}
+		if c.AuthType == AuthAPIToken {
+			h.authorization = BasicAuth(c.Username, token)
 		}
 		return &bitbucketCloud{c: c, http: h}, nil
 	})
@@ -164,8 +205,13 @@ func (b *bitbucketCloud) RemoteURL() string {
 	}
 	return "https://bitbucket.org/" + b.c.Repository + ".git"
 }
-func (b *bitbucketCloud) GitAuthHeader() string { return BasicAuth("x-token-auth", b.http.token) }
-func (b *bitbucketCloud) path() string          { return "/repositories/" + b.c.Repository }
+func (b *bitbucketCloud) GitAuthHeader() string {
+	if b.c.AuthType == AuthAPIToken {
+		return BasicAuth("x-bitbucket-api-token-auth", b.http.token)
+	}
+	return BasicAuth("x-token-auth", b.http.token)
+}
+func (b *bitbucketCloud) path() string { return "/repositories/" + b.c.Repository }
 func (b *bitbucketCloud) Identity(ctx context.Context) (Identity, error) {
 	var repo struct {
 		FullName   string `json:"full_name"`
@@ -285,6 +331,9 @@ func (b *bitbucketCloud) FindPullRequest(ctx context.Context, head, base string)
 	return nil, errors.New("SCM pull request search exceeded the page limit; creation refused")
 }
 func (b *bitbucketCloud) CreatePullRequest(ctx context.Context, in PullRequestInput) (*PullRequest, error) {
+	if containsCredentialMaterial(b.c, b.http.token, in.Title+"\n"+in.Body) {
+		return nil, errors.New("pull request contains protected credential material")
+	}
 	var p bbCloudPull
 	ref := func(branch string) any {
 		return map[string]any{"branch": map[string]string{"name": branch}, "repository": map[string]string{"full_name": b.c.Repository}}
@@ -306,6 +355,9 @@ func (b *bitbucketCloud) CreatePullRequest(ctx context.Context, in PullRequestIn
 func (b *bitbucketCloud) Comment(ctx context.Context, number int, body string) error {
 	if number <= 0 || strings.TrimSpace(body) == "" || len(body) > MaxBody {
 		return errors.New("invalid pull request comment")
+	}
+	if containsCredentialMaterial(b.c, b.http.token, body) {
+		return errors.New("pull request comment contains protected credential material")
 	}
 	return b.http.do(ctx, "POST", fmt.Sprintf("%s/pullrequests/%d/comments", b.path(), number), map[string]any{"content": map[string]string{"raw": body}}, nil)
 }

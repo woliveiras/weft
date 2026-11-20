@@ -191,6 +191,41 @@ Choose one credential type:
 
 ### Steps
 
+The Atlassian plugin in a chat and a connection saved in Weft are independent.
+Logging into the plugin does not install a credential in the local Weft server.
+For a personal Cloud rehearsal using an API token:
+
+1. Open [Atlassian Administration](https://admin.atlassian.com), select the
+   organization containing your test Jira site, then open **Rovo → Rovo MCP server
+   → Authentication**. Enable API-token authentication for that organization if
+   you want this authentication method. This is an operator administration step;
+   Weft does not change Atlassian authentication settings.
+2. Open [your account's API tokens](https://id.atlassian.com/manage-profile/security/api-tokens),
+   choose **Create API token with scopes**, name it for Weft and set an expiry.
+   Select the Rovo MCP app and Jira read/search/write scopes:
+   `read:jira:agent-interface`, `search:jira:agent-interface` and
+   `write:jira:agent-interface`. Do not add delete/manage scopes for this rehearsal.
+3. In Weft **Connections → MCP connections → Add connection**, enter a stable
+   ID/name, select **Atlassian**, and use `https://mcp.atlassian.com/v2/mcp`.
+   Leave browser OAuth off for this token path. Select **Atlassian personal API
+   token (Basic)**, enter **API token owner email** and **Personal API token**,
+   and save. Weft constructs the authentication header; no manual base64 or
+   terminal command is needed.
+4. Test the connection and discover its tools. An MCP test does not prove the
+   issue trigger's separate, typed Jira REST operations are authorized. Those
+   operations require a static credential with the Jira REST scopes they use;
+   the agent-interface scopes alone must not be assumed to grant REST access.
+   Verify both boundaries before activating a trigger. If the token issuance
+   policy cannot provide a credential compatible with both, stop adoption and
+   qualify a separately implemented REST authentication path rather than copying
+   an OAuth token or claiming trigger compatibility.
+
+See [Atlassian API-token authentication](https://developer.atlassian.com/cloud/rovo-mcp/guides/configuring-authentication-via-api-token/)
+for scope/administration requirements. Token values are entered only in Weft's
+credential fields, never in chat, issue descriptions or repository files.
+
+For the other supported connection choices:
+
 1. Open **Connections**, select **New connection** and choose the Atlassian
    service (or its template, when offered).
 2. Under **Credential type**, choose the option:
@@ -241,12 +276,64 @@ record the observed results using the [rehearsal guide](portable-provider-rehear
 
 The SCM API/YAML kind is `bitbucket-cloud`, with repository `workspace/slug`.
 The default REST base is `https://api.bitbucket.org/2.0`; the default Git remote
-is `https://bitbucket.org/workspace/slug.git`. The initial credential contract is
-an existing user OAuth Bearer access token with account/repository read access
-for identity/permission checks and the appropriate repository/PR write scopes
-for delivery. Token acquisition/refresh, email-plus-API-token Basic authentication
-and repository/workspace access-token qualification are not supplied by this
-adapter. Tokens are still entered through the reviewed secret mechanisms.
+is `https://bitbucket.org/workspace/slug.git`. New Cloud connections can use an
+Atlassian email and scoped API token (`authType: api-token`, `username: <email>`).
+REST uses Basic authentication with the email; Git HTTPS uses the documented
+static username `x-bitbucket-api-token-auth`. Both credentials stay server-held.
+Omitting `authType`, or selecting `bearer`, preserves existing Bearer behavior.
+There is no automatic fallback between authentication modes or automatic OAuth
+token acquisition/refresh. Repository/workspace access tokens remain separately
+unqualified.
+
+### Create and enter a scoped API token
+
+1. Open [Atlassian account API tokens](https://id.atlassian.com/manage-profile/security/api-tokens),
+   select **Create API token with scopes**, name it for Weft, and choose an expiry.
+2. Select **Bitbucket** and grant `read:repository:bitbucket`,
+   `write:repository:bitbucket`, `read:pullrequest:bitbucket` and
+   `write:pullrequest:bitbucket`. These cover the repository/permission checks,
+   Git push and PR read/create/comment operations used by this rehearsal. Scopes
+   do not give the account permissions it lacks, and write scopes do not imply
+   read scopes. No repository administration or deletion scope is needed.
+3. In Weft, open **Connections → Source control → Add connection**, select
+   **Bitbucket Cloud**, and enter `workspace/repository-slug`.
+4. Select **API token**, enter the token owner's Atlassian email and paste the
+   token into the password field. Keep **Opening a pull request needs a person's
+   approval** selected, then save and use **Test connection**.
+5. A new repository also needs an initial commit and a default branch before
+   it can be used for a task. A successful connection check is read-only; the
+   rehearsal separately verifies actual Git push and PR/comment permissions.
+
+Never put the token in a repository URL, prompt, issue, command line or chat.
+Re-enter a replacement token when changing API-token mode/account/repository/API
+or Git destination. Unchanged settings can retain the encrypted token; legacy
+Bearer-to-Bearer destination-update behavior is retained. Installation YAML uses
+the same `authType`/`username` fields and a `secretRef`, never a literal token.
+See [Atlassian token creation](https://support.atlassian.com/bitbucket-cloud/docs/create-an-api-token/),
+[REST and Git authentication](https://support.atlassian.com/bitbucket-cloud/docs/using-api-tokens/)
+and [repository permission scopes](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-repositories/#api-user-workspaces-workspace-permissions-repositories-get).
+
+Equivalent declarative input (review its dry-run before applying):
+
+```yaml
+apiVersion: weft.io/v1
+kind: SCMConnection
+metadata:
+  name: team-bitbucket-cloud
+spec:
+  kind: bitbucket-cloud
+  repository: workspace/repository-slug
+  authType: api-token
+  username: operator@example.com
+  branchPrefix: weft/
+  requirePullRequestApproval: true
+  secretRef: {env: WEFT_SECRET_BITBUCKET_CLOUD}
+```
+
+The environment reference is an operator-supplied secret source, not a request to
+write a token into `.env`. An unchanged existing connection can instead use
+`secretRef: {preserve: true}`. That cannot authorize reuse after changing the
+API-token credential scope; supply a reviewed replacement secret for that change.
 
 Connection testing reads the configured repository and the caller's effective
 workspace-scoped repository permission. It does not attempt a write. PR lookup

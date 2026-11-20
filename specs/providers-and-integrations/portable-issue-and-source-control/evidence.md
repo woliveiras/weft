@@ -1020,3 +1020,80 @@ name assumptions through discovered, scoped workflow mappings.
   `/tmp/weft-portability-browser-prompts-final.log` and
   `/tmp/weft-portability-web-final.log`. No real credentials, installed
   configuration, remote account or running pilot was changed or deployed.
+
+
+## INT-009-09 — Explicit Bitbucket Cloud API-token setup
+
+- 2026-11-20: the maintainer requested removing the manual OAuth-token setup
+  prerequisite, creating rehearsal issues through the connected Atlassian plugin,
+  and updating the local stack. AC-009 and its matrix were recorded before the
+  implementation review. Independent specification review found no blocking
+  ambiguity; authority metadata now records these narrow live-action exceptions.
+- Primary Atlassian contracts reviewed: Bitbucket REST accepts Basic auth with
+  account email/API token; Git accepts the static
+  `x-bitbucket-api-token-auth` username. The caller-scoped repository permission
+  endpoint is documented under the repository API group and requires
+  `read:repository:bitbucket`. The guide lists explicit read/write repository and
+  PR scopes; no administration/deletion scope is required for these operations.
+- At 16:02:35Z and 16:02:36Z, the connected Atlassian plugin created SCRUM-5
+  (bounded Go greeting delivery) and SCRUM-6 (intentionally unresolved multiline
+  behavior/readiness hold) in the maintainer's personal Cloud project SCRUM,
+  `https://woliveiras.atlassian.net`. Both target the test repository
+  `woliveiras-home-made-software/weft-rehearsal`. They have rehearsal/scenario
+  labels only, without the trigger selection label. Creation proves plugin
+  access, not authentication by the local Weft installation or task execution.
+- Independent frontend test review found no blocking findings. Focused Docker
+  checks passed 14 tests plus TypeScript. Root `make test-web` passed all 110
+  files / 601 tests plus TypeScript. Browser/API and backend verification,
+  final code review and authorized local deployment are recorded below when
+  completed; no real credential or external delivery result is claimed here.
+
+- Backend unit/integration coverage includes encrypted manager persistence/reload,
+  legacy Bearer compatibility, account/auth/destination replacement fences,
+  bounded token input, administrator writes/operator checks, and declarative
+  apply/export/no-op/preserve/replacement. Actual local HTTP and Git smart-HTTP
+  fixtures exercise push, idempotent PR lookup/create, immutable reads and durable
+  review summaries. Denied, rate-limited, failed, redirected and cancelled requests
+  are covered without sending credentials to real providers.
+- Independent implementation review found a P1: reusable Basic payloads encoded
+  in provider URLs or alternate JSON string escapes could survive the initial
+  literal-byte redaction. Decoding JSON strings before typed responses and matching
+  percent-decoded bytes closes those observed cases. Regressions cover mixed-case
+  escapes, encoded unreserved characters, adjacent invalid escapes, actual Git
+  pre-receive rejection output, delivery/review outputs, persisted receipts and
+  events. Independent focused SCM/API reruns passed after the fix; final review
+  found no remaining blocking findings. No fail-first/TDD claim is made; initial
+  targeted failures corrected two mistakes in new fixtures.
+- Docker Node 22 Chromium passed all six connection/SCM journeys. The prior edition
+  regression now explicitly selects Bearer; its original persistence and scope
+  assertions remain intact. The new journey exercises the API-token default,
+  saved API state without returned secrets, OAuth mode clearing, and desktop/mobile
+  overflow checks. Empty-form screenshots were visually inspected at 1280x720
+  and 390x844. Browser tests contact a disposable local backend, not Atlassian.
+- `make lint` and `make build` passed after the encoded-credential fix. All Python
+  checks passed via `make test-python` (16 SDK, 14 agents, 10 scripts). Browser runner
+  setup first exposed missing Corepack in its older Node 26 base; a temporary
+  test-only image added the cached Node 22 toolchain and enabled only pnpm. The
+  application deployment still uses the repository's default Dockerfile.
+- Final `./scripts/go.sh test ./...` passed after the security correction.
+  Logs: `/tmp/weft-cloud-api-token-go-final.log`,
+  `/tmp/weft-cloud-api-token-web.log`,
+  `/tmp/weft-cloud-api-token-browser-final.log`,
+  `/tmp/weft-cloud-api-token-lint-final.log`,
+  `/tmp/weft-cloud-api-token-build.log` and
+  `/tmp/weft-cloud-api-token-python.log`. A previous browser run passed the new
+  API-token scenario but failed the old edition test's implicit Token selector;
+  its explicit Bearer selection fixed that stale expectation without relaxing
+  its assertions. The final six-case run passed without retries.
+- Authorized local update completed at 16:19Z using exactly
+  `docker compose up -d --build --no-deps weftd` and the standard Dockerfile,
+  without overrides or binary copies. Compose reports `weftd running healthy`;
+  `/healthz` returns `status: ok`. The administrative SCM kind catalogue exposes
+  all three adapters and API-token guidance. The served console asset
+  `/assets/index-DeXfKd0J.js` contains the new API-token form and account-email
+  field. Volumes, saved connections and secrets were not edited or removed.
+- Operator actions still pending: initialize the test repository's main branch,
+  enter/test each reviewed credential in Weft, qualify Jira MCP and typed REST
+  access, adopt/review workflows and trigger scope, then explicitly start the
+  selected rehearsal. No trigger, remote branch/PR/review/merge or automatic
+  tracker transition was executed by this setup change.

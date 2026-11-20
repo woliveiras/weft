@@ -109,6 +109,7 @@ test('configures each Bitbucket edition through the real SCM API without contact
  for (const kind of ['bitbucket-cloud', 'bitbucket-dc']) {
   await page.goto('/#/connections/source-control/new');
   await page.getByLabel('Kind', {exact:true}).selectOption(kind);
+  if (kind === 'bitbucket-cloud') await page.getByLabel('Authentication', {exact:true}).selectOption('bearer');
   await page.getByLabel('Name', {exact:true}).fill(kind);
   await page.getByLabel('Repository', {exact:true}).fill('ACME/app');
   if (kind === 'bitbucket-dc') await page.getByLabel('API URL', {exact:true}).fill('https://bitbucket.fixture.invalid/context');

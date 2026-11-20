@@ -613,6 +613,8 @@ export interface SCMConnection {
   apiUrl?: string;
   gitUrl?: string;
   branchPrefix?: string;
+  authType?: 'bearer' | 'api-token';
+  username?: string;
   requirePullRequestApproval?: boolean;
   tokenConfigured: boolean;
   updatedAt?: string;
@@ -626,6 +628,8 @@ export interface SCMConnectionInput {
   apiUrl?: string;
   gitUrl?: string;
   branchPrefix?: string;
+  authType?: 'bearer' | 'api-token';
+  username?: string;
   requirePullRequestApproval?: boolean;
   token?: string;
 }

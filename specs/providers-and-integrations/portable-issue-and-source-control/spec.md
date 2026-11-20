@@ -11,8 +11,8 @@ navigation: [specs/README.md, specs/providers-and-integrations/portable-issue-an
 documentation: [docs/atlassian-bitbucket-setup.md, docs/task-workflows.md, docs/portable-provider-rehearsal.md]
 dependencies: [TASK-006, TASK-007, TASK-008, INT-005, INT-007, RUN-005, RUN-006, RUN-007, OPS-003]
 authority:
-  granted: [specification, implementation, local fixture verification, subagent review, local commits]
-  withheld: [live connection changes, secret changes, live writes, merge, push, deployment, production qualification]
+  granted: [specification, implementation, local fixture verification, subagent review, local commits, personal SCRUM rehearsal issue creation, local Compose weftd update]
+  withheld: [live connection changes, secret changes, other live writes, merge, push, other deployment, production qualification]
 ---
 
 # Portable Issue and Source Control Integrations
@@ -25,6 +25,15 @@ not qualify real accounts, provider combinations or Data Center versions, and
 automatic portable merge remains unavailable.
 
 ## Maintainer decisions and current boundary
+
+- 2026-11-20: for the personal Jira Cloud/Bitbucket Cloud rehearsal, the
+  maintainer requires usable Bitbucket authentication rather than a manually
+  acquired OAuth-only prerequisite. Add explicit email-plus-scoped-API-token
+  authentication alongside existing Bearer connections, expose it in console
+  and installation YAML, and keep credentials server-held. The maintainer also
+  authorized creating rehearsal issues in the personal SCRUM project and updating
+  the local Compose weftd service. This does not authorize credential extraction,
+  automatic permission changes, a remote push, or running the rehearsal trigger.
 
 - 2026-11-20: the maintainer also requires a technical account with write
   permissions restricted to the selected project for automatic Jira Cloud
@@ -197,6 +206,32 @@ An end-to-end rehearsal covers issue readiness, claim, isolated work/tests,
 PR delivery, review summary, guarded merge and configured tracker write-back.
 Evidence identifies which editions/combinations were actually exercised.
 
+### AC-009 — Usable Bitbucket Cloud API-token authentication
+
+An operator can explicitly select `authType: api-token` and supply an Atlassian
+account `username` (email) plus a scoped API token for Bitbucket Cloud. REST uses
+Basic authentication with that email and token; Git HTTPS uses the documented
+API-token username `x-bitbucket-api-token-auth` and the same token. Omitted
+`authType` retains existing Bearer behavior. The console offers both modes and
+installation YAML preserves the explicit choice without embedding secret values.
+Other provider kinds reject API-token mode and irrelevant usernames. Invalid or
+missing emails, unsupported modes, header-injection input and missing credentials
+fail before any remote call. Changing an existing credential's mode or username
+requires explicitly supplying a replacement token. API-token credentials also
+require replacement when changing provider, repository or remote destination;
+ordinary unchanged updates may preserve the encrypted token. Existing Bearer-to-
+Bearer destination update semantics remain compatible with AC-007. No connection is
+silently migrated and no authentication fallback is attempted after failure.
+
+Tokens and derived Basic credentials must not appear in API views, errors,
+events, diffs, process arguments, persisted plaintext or agent outputs. Both
+REST and Git use the selected mode and retain existing redirect, repository,
+branch, approval and TLS boundaries. Read-only connection checks report denied,
+expired or insufficiently scoped credentials without claiming successful writes.
+Unit and integration checks cover encrypted save/reload, API/YAML/console paths,
+Git and PR delivery/review, compatibility and dependency failures; real-account
+authentication remains separately qualified by the live rehearsal.
+
 ## Implementation batches
 
 These are local delivery units, not remotely created issue records. Keep them
@@ -212,7 +247,8 @@ its own commit. A completed batch does not qualify the remaining capability.
 | INT-009-05 | Independent tracker/SCM identity and Jira Data Center tracker adapter | Trusted origins/cross-provider links and Jira Cloud scoped history implemented; native DC client, connection API/YAML, write gate and scoped operational triggers implemented; console configuration covered by browser/API fixtures |
 | INT-009-06 | Discovered Jira mappings and recoverable optional transitions | Shared durable mapping/sync core with separate DC and Cloud namespaces; Cloud profiles, edition-specific discovery/mapping API/UI/YAML and optional runtime/PR lifecycle/recovery implemented with local fixtures; account/workflow/version qualification remains pending |
 | INT-009-07 | Integrated cross-provider regression and code-review adoption path | Local cross-provider fixtures and separate pinned portable reviewer example implemented; review-route API/YAML, activation barriers, deduplication and recovery implemented; installed pilot migration and real-account/model/combination qualification remain separate |
-| INT-009-08 | Real-account/target-version qualification under approved resources | Pending external resources |
+| INT-009-08 | Real-account/target-version qualification under approved resources | Personal Cloud site/workspace/repository and rehearsal issues available; credentials and live execution pending |
+| INT-009-09 | Explicit Bitbucket Cloud email/API-token setup | API, encrypted manager, Git/REST, YAML and console implemented; independent review and local fixtures passed; real credential qualification pending |
 
 ## Delivery sequence
 

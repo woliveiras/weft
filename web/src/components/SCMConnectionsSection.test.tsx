@@ -153,11 +153,74 @@ it('separates edition settings and credentials and submits the chosen Cloud cont
   expect(screen.getByRole('note').textContent).toContain('Bearer');
   await userEvent.selectOptions(screen.getByLabelText('Kind'), 'bitbucket-cloud');
   expect((screen.getByLabelText('API URL') as HTMLInputElement).required).toBe(false);
+  expect((screen.getByLabelText('Authentication') as HTMLSelectElement).value).toBe('api-token');
   await userEvent.type(screen.getByLabelText('Name'), 'bb');
   await userEvent.type(screen.getByLabelText('Repository'), 'team/app');
-  await userEvent.type(screen.getByLabelText('Token'), 'cloud-fixture-token');
+  await userEvent.type(screen.getByLabelText('Atlassian account email'), 'owner@example.com');
+  await userEvent.type(screen.getByLabelText('API token'), 'cloud-fixture-token');
   await userEvent.click(screen.getByRole('button', { name: 'Save connection' }));
-  expect(backend.find('POST', '/api/v1/scm/connections')[0].body).toEqual({ name: 'bb', kind: 'bitbucket-cloud', repository: 'team/app', token: 'cloud-fixture-token' });
+  expect(backend.find('POST', '/api/v1/scm/connections')[0].body).toEqual({ name: 'bb', kind: 'bitbucket-cloud', repository: 'team/app', authType: 'api-token', username: 'owner@example.com', token: 'cloud-fixture-token' });
+});
+
+it('clears account and credential on authentication switches and sends OAuth explicitly without an email', async () => {
+  const backend = fakeApi({
+    'GET /api/v1/scm/kinds': () => kinds,
+    'POST /api/v1/scm/connections': () => json({ name: 'bb' }, 201),
+  });
+  render(<SCMConnectionCreate role="admin" />);
+  await screen.findByRole('option', { name: 'Bitbucket Cloud' });
+  await userEvent.selectOptions(screen.getByLabelText('Kind'), 'bitbucket-cloud');
+  await userEvent.type(screen.getByLabelText('Atlassian account email'), 'old@example.com');
+  await userEvent.type(screen.getByLabelText('API token'), 'api-fixture');
+  await userEvent.selectOptions(screen.getByLabelText('Authentication'), 'bearer');
+  expect(screen.queryByLabelText('Atlassian account email')).toBeNull();
+  expect((screen.getByLabelText('Token') as HTMLInputElement).value).toBe('');
+  expect(screen.getByRole('note').textContent).toContain('does not obtain or renew');
+  await userEvent.type(screen.getByLabelText('Token'), 'oauth-fixture');
+  await userEvent.selectOptions(screen.getByLabelText('Authentication'), 'api-token');
+  expect((screen.getByLabelText('Atlassian account email') as HTMLInputElement).value).toBe('');
+  expect((screen.getByLabelText('API token') as HTMLInputElement).value).toBe('');
+  await userEvent.selectOptions(screen.getByLabelText('Authentication'), 'bearer');
+  await userEvent.type(screen.getByLabelText('Name'), 'bb');
+  await userEvent.type(screen.getByLabelText('Repository'), 'team/app');
+  await userEvent.type(screen.getByLabelText('Token'), 'oauth-fixture');
+  await userEvent.click(screen.getByRole('button', { name: 'Save connection' }));
+  expect(backend.find('POST', '/api/v1/scm/connections')[0].body).toEqual({ name: 'bb', kind: 'bitbucket-cloud', repository: 'team/app', authType: 'bearer', token: 'oauth-fixture' });
+});
+
+it('validates the API-token email, explains token creation and preserves the draft after a failed save', async () => {
+  let fail = true;
+  const backend = fakeApi({
+    'GET /api/v1/scm/kinds': () => kinds,
+    'POST /api/v1/scm/connections': () => fail ? apiError(503, 'Connection storage unavailable', 'unavailable') : json({ name: 'bb' }, 201),
+  });
+  render(<SCMConnectionCreate role="admin" />);
+  await screen.findByRole('option', { name: 'Bitbucket Cloud' });
+  await userEvent.selectOptions(screen.getByLabelText('Kind'), 'bitbucket-cloud');
+  await userEvent.click(screen.getByText('Create a Bitbucket API token'));
+  expect(screen.getByRole('link', { name: 'Atlassian account API tokens' }).getAttribute('href')).toBe('https://id.atlassian.com/manage-profile/security/api-tokens');
+  expect(screen.getByText('read:repository:bitbucket')).toBeTruthy();
+  await userEvent.type(screen.getByLabelText('Name'), 'bb');
+  await userEvent.type(screen.getByLabelText('Repository'), 'team/app');
+  await userEvent.type(screen.getByLabelText('API token'), 'synthetic-private-token');
+  await userEvent.click(screen.getByRole('button', { name: 'Save connection' }));
+  expect(backend.find('POST', '/api/v1/scm/connections')).toHaveLength(0);
+  const email = screen.getByLabelText('Atlassian account email') as HTMLInputElement;
+  await userEvent.type(email, 'not-an-email');
+  await userEvent.click(screen.getByRole('button', { name: 'Save connection' }));
+  expect(backend.find('POST', '/api/v1/scm/connections')).toHaveLength(0);
+  await userEvent.clear(email);
+  await userEvent.type(email, 'owner@example.com');
+  await userEvent.click(screen.getByRole('button', { name: 'Save connection' }));
+  expect((await screen.findByRole('alert')).textContent).toContain('Connection storage unavailable');
+  expect(email.value).toBe('owner@example.com');
+  expect((screen.getByLabelText('API token') as HTMLInputElement).value).toBe('synthetic-private-token');
+  expect(screen.getByRole('button', { name: 'Save connection' }).getAttribute('disabled')).toBeNull();
+  expect(document.body.textContent).not.toContain('synthetic-private-token');
+  fail = false;
+  await userEvent.click(screen.getByRole('button', { name: 'Save connection' }));
+  await waitFor(() => expect(location.hash).toBe('#/connections'));
+  expect(backend.find('POST', '/api/v1/scm/connections')).toHaveLength(2);
 });
 
 it('blocks submission while service discovery fails and offers a retry', async () => {

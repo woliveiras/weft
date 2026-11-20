@@ -21,6 +21,11 @@ explicitly reviewed CA configuration; do not bypass TLS to make a test pass.
    repository, branch prefix and PR approval policy. The account must have the
    intended branch/PR/comment permissions. A successful identity check does not
    prove every write permission or branch rule.
+   For Bitbucket Cloud, new connections can select the explicit API-token mode
+   with the owner's Atlassian email and a scoped token. Follow the
+   [console/token steps](atlassian-bitbucket-setup.md#create-and-enter-a-scoped-api-token).
+   Existing Bearer connections are not migrated. Initialize the repository's
+   default branch with a commit before importing/registering it for a task.
 2. For Jira Data Center, configure its native issue connection with exact site
    URL, numeric project and project-restricted technical account. For Jira Cloud,
    configure a supported first-party static REST-compatible connection, then a

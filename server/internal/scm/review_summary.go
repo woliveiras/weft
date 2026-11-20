@@ -105,7 +105,7 @@ func (t reviewSummaryTool) Invoke(ctx context.Context, inv *tools.Invocation) (*
 	if err != nil {
 		return fail(err)
 	}
-	if strings.Contains(a.Summary, token) {
+	if containsCredentialMaterial(c, token, a.Summary) {
 		return fail(errors.New("review summary contains protected credential material"))
 	}
 	reader, ok := p.(reviewReader)
