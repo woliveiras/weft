@@ -76,9 +76,10 @@ const (
 	EvProviderChanged EventType = "provider.changed"
 	EvProviderTested  EventType = "provider.tested"
 	// Source control through the gateway.
-	EvSCMChanged        EventType = "scm.connection_changed"
-	EvBranchPushed      EventType = "scm.branch_pushed"
-	EvPullRequestOpened EventType = "scm.pull_request_opened"
+	EvSCMChanged             EventType = "scm.connection_changed"
+	EvBranchPushed           EventType = "scm.branch_pushed"
+	EvPullRequestOpened      EventType = "scm.pull_request_opened"
+	EvReviewSummaryPublished EventType = "scm.review_summary_published"
 	// Issue triggers.
 	EvTriggerHoldResolved EventType = "trigger.hold_resolved"
 	EvTriggerChanged      EventType = "trigger.changed"

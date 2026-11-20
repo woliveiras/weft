@@ -77,7 +77,7 @@
         "repository.import_transition", "review.access_revoked", "review.cancelled", "review.continuation_queued",
         "review.decided", "review.expired", "review.requested", "review.restarted",
         "review.session", "review.session_failed", "review.session_stopped", "sandbox.capacity",
-        "sandbox.lifecycle", "scm.branch_pushed", "scm.connection_changed", "scm.pull_request_opened",
+        "sandbox.lifecycle", "scm.branch_pushed", "scm.connection_changed", "scm.pull_request_opened", "scm.review_summary_published",
         "task.authorization_preference_requested", "task.authorization_requested", "task.draft_save_requested", "task.prompt_resolution",
         "task.transition_requested", "task.workspace_cleanup_completed", "task.workspace_cleanup_requested", "tool.completed",
         "tool.denied", "tool.invoked", "trigger.changed", "trigger.failed_retry_requested", "trigger.hold_resolved",

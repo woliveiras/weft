@@ -169,7 +169,7 @@ func (t reviewSummaryTool) Invoke(ctx context.Context, inv *tools.Invocation) (*
 		if _, err = t.m.Store.PutSetting(ctx, key, raw, revision, inv.Principal.Actor); err != nil {
 			return fail(errors.New("comment exists but its publication record could not be confirmed; retry the same review"))
 		}
-		t.m.event(ctx, inv.Principal, domain.EventType("scm.review_summary_published"), map[string]any{"connection": c.Name, "provider": c.Kind, "repository": c.Repository, "number": a.Number, "headSha": a.HeadSHA, "baseSha": a.BaseSHA, "verdict": a.Verdict, "url": snapshot.URL})
+		t.m.event(ctx, inv.Principal, domain.EvReviewSummaryPublished, map[string]any{"connection": c.Name, "provider": c.Kind, "repository": c.Repository, "number": a.Number, "headSha": a.HeadSHA, "baseSha": a.BaseSHA, "verdict": a.Verdict, "url": snapshot.URL})
 	}
 	data, err := json.Marshal(map[string]any{"connection": receipt.Connection, "number": receipt.Number, "headSha": receipt.HeadSHA, "baseSha": receipt.BaseSHA, "verdict": receipt.Verdict, "status": receipt.Status, "url": receipt.URL})
 	if err != nil {

@@ -234,3 +234,12 @@ name assumptions through discovered, scoped workflow mappings.
   tests fixed it. Final review found no residual blockers.
 - This does not complete AC-001: admission-key namespacing, Jira DC support and
   operator configuration remain pending. No live task/connection/grant changed.
+
+## Event contract regression correction
+
+- Full Go verification caught the summary event missing from the public event
+  enum/catalogue. Added `EvReviewSummaryPublished`, the schema enum and catalogue
+  entry; documented the expanded PR-delivery payload without changing emission.
+- Domain event/schema consistency and SCM unit/HTTP integration tests passed
+  (`/tmp/weft-event-catalog.log`). Subagent review found no blockers; diff check
+  passed. Full-suite rerun follows the correction.
