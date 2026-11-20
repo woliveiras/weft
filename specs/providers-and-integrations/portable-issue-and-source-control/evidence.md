@@ -513,3 +513,35 @@ name assumptions through discovered, scoped workflow mappings.
 - Read-only subagent review found no blockers. Mappings, transition mutations,
   durable sync recovery and Jira Cloud adoption are not implemented by this
   read-only batch. No real account or installation configuration was changed.
+
+## INT-009-06c — Internal durable DC transition synchronization core
+
+- Added an internal reviewed-ID transition intent and separate CAS journal. An
+  operation ID cannot be rebound to a new connection, revision, issue, type or
+  transition. Journal reservation with an atomic connection-revision guard
+  precedes POST; a second worker cannot dispatch another fresh reservation.
+- Preparation discovers the actual issue transition and destination, validates
+  source status/type and valid update metadata, and rereads after reservation.
+  Already-at-target is a recorded no-op. Same-status actions, missing metadata
+  and required fields (including fields with reported defaults) are unsupported
+  by this initial no-field-update subset and retain a visible preflight error.
+- POST contains only the numeric transition ID and addresses the numeric issue.
+  Once dispatch is crossed, failures remain uncertain. Replays reconcile by GET
+  only; seeing the intended target records `target_observed`, without attributing
+  the change to Weft. A different current status never authorizes reposting—even
+  if a person moved the issue back after the first request. Completed records
+  describe historical evidence, not a guarantee of the issue's current status.
+- Verified real TLS + filesystem storage fixtures for success/no-op, malformed
+  intent, unavailable/changed transitions, required/missing metadata, invalid
+  timestamps, changed issue/type, revocation after reservation, lost response,
+  actual store close/reopen, storage failures and competing fresh reservations.
+  Docker `./scripts/go.sh test ./internal/jiradc ./internal/domain -count=1`
+  passed (`/tmp/weft-jira-transition-sync-v4.log`). Schema/event catalogue updated;
+  final read-only subagent review found no residual blockers.
+- Contract source: [Jira REST 2 transition discovery and mutation](https://docs.atlassian.com/software/jira/docs/api/REST/9.12.0/#api/2/issue-doTransition).
+  REST does not provide a status CAS here: local preflight is not an atomic
+  guarantee against a human edit between the final read and POST. Live version
+  qualification remains separate.
+- This core is not yet wired into tasks or exposed as an API/agent tool. Mapping
+  configuration, lifecycle consent snapshots, operator recovery and Jira Cloud
+  adoption remain incomplete. No live transition, grant or policy was changed.

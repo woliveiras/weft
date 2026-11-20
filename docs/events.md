@@ -74,6 +74,7 @@ be stored before proceeding.
 | `scm.pull_request_opened` | `scm.pull_request.create` opened or found the branch's pull request | `{connection, connectionRevision, provider, instance, repository, number, url, head, base, headSha, baseSha, created, reviewRevisionAvailable}` |
 | `scm.review_summary_published` | A revision-scoped review summary was confirmed on the provider and stored | `{connection, provider, repository, number, headSha, baseSha, verdict, url}` |
 | `tracker.connection_change_requested` | A native tracker connection write was reviewed; record CAS determines success | `{connection, provider, expectedRevision, projectRestricted}` |
+| `tracker.transition_sync_requested` | An internal Jira DC lifecycle transition intent passed local review; journal CAS precedes any remote POST, and the stored sync record determines outcome | `{connection, operation, state}`; no issue body, field values or credential |
 | `trigger.note` | something a person should know about a trigger's task (missing Jira transition, failed comment) | `{trigger, task, message}` (graph id = the task run) |
 | `trigger.run` | one trigger run (no graph id) | `{trigger, outcome, error?}` |
 | `trigger.changed` | trigger created, updated, paused, resumed or deleted (no graph id) | `{trigger, action, state, workflow}` (actor = caller or `system:trigger`) |
