@@ -249,7 +249,7 @@ func (b *bitbucketCloud) FindPullRequest(ctx context.Context, head, base string)
 		}
 		for _, p := range result.Values {
 			if p.State == "OPEN" && p.Source.Branch.Name == head && p.Destination.Branch.Name == base && strings.EqualFold(p.Source.Repository.FullName, b.c.Repository) && strings.EqualFold(p.Destination.Repository.FullName, b.c.Repository) {
-				if p.ID <= 0 || p.Links.HTML.Href == "" {
+				if p.ID <= 0 || !validPullRequestURL(p.Links.HTML.Href) {
 					return nil, errors.New("SCM pull request has no identity")
 				}
 				return p.pr(false), nil
@@ -280,7 +280,7 @@ func (b *bitbucketCloud) CreatePullRequest(ctx context.Context, in PullRequestIn
 		}
 		return nil, err
 	}
-	if p.State != "OPEN" || p.ID <= 0 || p.Links.HTML.Href == "" || p.Source.Branch.Name != in.Head || p.Destination.Branch.Name != in.Base || !strings.EqualFold(p.Source.Repository.FullName, b.c.Repository) || !strings.EqualFold(p.Destination.Repository.FullName, b.c.Repository) {
+	if p.State != "OPEN" || p.ID <= 0 || !validPullRequestURL(p.Links.HTML.Href) || p.Source.Branch.Name != in.Head || p.Destination.Branch.Name != in.Base || !strings.EqualFold(p.Source.Repository.FullName, b.c.Repository) || !strings.EqualFold(p.Destination.Repository.FullName, b.c.Repository) {
 		return nil, errors.New("SCM returned an invalid or mismatched pull request")
 	}
 	return p.pr(true), nil
@@ -311,4 +311,10 @@ func bitbucketGitURL(raw string) string {
 		return ""
 	}
 	return "use HTTPS for Git (HTTP is limited to loopback and file URLs to local fixtures)"
+}
+
+// Links are displayed in the console; never accept executable/credential URLs.
+func validPullRequestURL(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.Host != "" && u.User == nil && u.Fragment == "" && (u.Scheme == "https" || (u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1")))
 }

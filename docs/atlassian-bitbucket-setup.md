@@ -12,7 +12,7 @@ with your own hosts.
 | Part | Status |
 |---|---|
 | Atlassian Cloud through the official MCP server | Implemented; live qualification pending ([evidence](mcp.md#qualification-and-remaining-external-acceptance)) |
-| Bitbucket Data Center access with an HTTP access token | **Proposed, not implemented** |
+| Bitbucket Data Center access with an HTTP access token | Native REST/Git adapter implemented with local fixtures; live/version qualification pending |
 
 ## Planned portable integrations
 
@@ -24,7 +24,7 @@ records the next scope; this is not a setup procedure for available adapters.
 | Jira Cloud | Issue reference, polling/readiness, comments and labels have implementation paths; live qualification remains separate | Qualify the full flow and add optional discovered workflow mappings |
 | Jira Data Center | No implemented tracker adapter | Separate instance/authentication/API adapter and qualification |
 | Bitbucket Cloud | Native delivery adapter has local HTTP/Git fixture coverage; console selection and portable review remain pending | Live qualification and portable PR review/merge capabilities |
-| Bitbucket Data Center | Proposed setup below; no registered native SCM adapter | Separate native SCM adapter, private-network/TLS setup and qualification |
+| Bitbucket Data Center | Native REST 1.0 delivery adapter has local HTTP/Git fixture coverage | Console configuration, private-network/TLS and target-version qualification |
 
 Issue origin and Git destination are independent: Jira can drive work delivered
 to GitHub or either Bitbucket edition; GitHub Issues can drive Bitbucket work.
@@ -152,12 +152,23 @@ claimed. Console availability and review/merge operations are separate batches.
 Upstream contracts: [repository and workspace permissions](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-repositories/),
 [pull requests](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/).
 
-## Bitbucket Data Center (proposed)
+## Bitbucket Data Center delivery (local adapter)
 
-Bitbucket Data Center has no official remote MCP server, and its credentials are
-not interchangeable with Atlassian Cloud ones. The proposed setup is a dedicated
-SCM connection, used by the planned `git.push` and `scm.pull_request.create`
-gateway tools through an `SCMProvider` adapter.
+The native `bitbucket-dc` SCM adapter uses REST 1.0 and an HTTP access token
+sent as Bearer for API and Git calls. Enter the site base URL (including its
+context path if any), not `/rest/api/1.0`. Repository format is `PROJECT/slug`;
+personal projects (`~user/slug`) are not yet supported. The default Git URL is
+`<site>/scm/<project>/slug.git`; an explicitly reviewed Git URL can override it.
+Permission checks search the exact repository identity under `REPO_READ` and
+`REPO_WRITE`; branch restrictions remain enforced by the remote on push.
+
+Local fixtures cover the documented REST 1.0 shapes, context paths, nonsequential
+pagination, forks, denied/malformed responses and conflict reconciliation. No
+installed version or real account is qualified. The
+[REST contract reference](https://docs.atlassian.com/bitbucket-server/rest/7.15.3/bitbucket-rest.html)
+is fixture provenance, not a supported-version or production recommendation.
+Custom CA configuration and console selection are separate work; the adapter
+uses the server's normal verified TLS trust and never disables verification.
 
 ### Proposed steps
 
@@ -168,8 +179,8 @@ gateway tools through an `SCMProvider` adapter.
    - *Read* to clone and fetch;
    - *Write* to push task branches and open pull requests.
    Personal tokens work too, but they carry everything the person can do.
-4. Optionally provide a custom CA certificate when the server uses an internal
-   certificate authority.
+4. Custom CA entry is planned. Until available, the Weft server must already
+   trust the internal certificate authority; certificate verification stays on.
 5. Select **Test connection**. Weft reads the token's identity and lists the
    repositories it can see.
 

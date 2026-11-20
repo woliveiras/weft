@@ -74,3 +74,30 @@ name assumptions through discovered, scoped workflow mappings.
 - No UI changes, live connection changes or deployment in this batch. Existing
   gateway events/audit and approvals remain in use; no remote response bodies or
   tokens are used as error text. Data Center and portable review remain pending.
+
+
+## INT-009-02 — Bitbucket Data Center delivery
+
+- Implemented native `bitbucket-dc` REST 1.0 delivery with site context paths,
+  authenticated repository permission checks, default branch, bounded cursor
+  pagination, scoped PR lookup/create/comment and existing Git push boundaries.
+  HTTP access tokens use Bearer headers; API/Git TLS is verified. Shared PR URL
+  validation rejects executable, credential-bearing or insecure remote links.
+- Fail-first: Docker SCM tests failed with unsupported `bitbucket-dc` before the
+  adapter was registered (`/tmp/weft-bitbucket-dc-failfirst.log`). Unit checks
+  cover cursor validation, Git/auth defaults and unsafe links. Integration uses
+  actual HTTP, encrypted fsstore and temporary bare Git; cases include read-only
+  and foreign-repository permission lists, page cursor 3, invalid pages, forks,
+  401/403/404/429/5xx, conflict reconciliation and closed PR rejection.
+- `./scripts/go.sh test ./internal/scm ./internal/api ./internal/installation -count=1`
+  passed (`/tmp/weft-bitbucket-dc-final.log`). After review fixes, SCM tests passed
+  again (`/tmp/weft-bitbucket-dc-scm-final.log`); SCM vet and diff check passed.
+- Subagent `review_bitbucket_cloud` reviewed this batch separately and found that
+  documented PR refs can omit numeric repository IDs. Matching now uses scoped
+  project/slug for PR refs while identity/permission checks still require IDs.
+  Added the requested negative/read-only permission and DC pagination/conflict
+  regressions. Final read-only review found no remaining blocking code defect;
+  reviewer ran no additional tests.
+- Target-version/live qualification, personal DC projects and custom CA entry
+  remain unsupported/unqualified as documented. No live connection or deployment
+  changed. Existing gateway observability/approval contracts are retained.

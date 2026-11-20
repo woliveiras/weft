@@ -37,9 +37,9 @@ it does not declare that the adapters or portable review tools already exist.
   difference must not prevent Weft from working.
 - Jira Cloud issue references, polling/readiness, comments and labels already
   have implementation paths. They require separate real-account qualification.
-  Jira Data Center and the Bitbucket Data Center SCM adapter remain pending.
-  Bitbucket Cloud delivery now has local HTTP/Git fixture coverage (batch 01).
-- The SCM registry now registers GitHub and Bitbucket Cloud. The console's
+  Jira Data Center remains pending. Bitbucket Cloud and Data Center delivery
+  now have local HTTP/Git fixture coverage (batches 01/02).
+- The SCM registry now registers GitHub and both Bitbucket editions. The console's
   Bitbucket Data Center option is not evidence of adapter availability.
   The code-review pilot uses GitHub-specific MCP tools.
 - RUN-005 owns bounded push, idempotent PR creation and adapter identity.
@@ -181,7 +181,7 @@ its own commit. A completed batch does not qualify the remaining capability.
 | Batch | Scope | Status |
 | --- | --- | --- |
 | INT-009-01 | Bitbucket Cloud delivery adapter and HTTP boundary | Implemented with local HTTP/Git fixtures; reviewed |
-| INT-009-02 | Bitbucket Data Center delivery adapter | Pending |
+| INT-009-02 | Bitbucket Data Center delivery adapter | Implemented with local REST 1.0/Git fixtures; reviewed |
 | INT-009-03 | Edition-aware connection configuration and capabilities in console/YAML | Pending |
 | INT-009-04 | Portable PR read/review/guarded merge operations and internal events | Pending |
 | INT-009-05 | Independent tracker/SCM identity and Jira Data Center tracker adapter | Pending |
