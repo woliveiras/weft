@@ -228,8 +228,10 @@ all headings, buttons and menu items ("New task", not "New Task").
 Layout:
 
 - App shell: left sidebar (240 px, collapsible to 64 px showing the mark),
-  top bar with page title and primary action, content max-width 1280 px for
-  forms and lists; graph editor and logs use full width.
+  top bar with page title and primary action. Main destinations use the available
+  width with shared 32 px inline padding (16 px at narrow widths). Limit long
+  explanatory text within that layout for readability; do not center entire
+  forms or lists. The graph editor and logs retain their workspace layout.
 - Density: default row height 40 px, compact 32 px for tables, logs and
   message history.
 - Breakpoints: 640 / 960 / 1280 / 1600 px.

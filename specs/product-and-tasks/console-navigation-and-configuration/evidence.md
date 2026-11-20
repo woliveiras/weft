@@ -269,3 +269,30 @@ These results were recorded at the time of the run. The documentation migration 
   image build compiled the Go binaries. No cross-browser or assistive-technology
   conformance is claimed. Drafts are memory-only and are not recovered after a
   confirmed reload.
+
+## Shared page width refinement — 2026-11-20
+
+- All ten top-level destinations use the available main-content width with
+  consistent 32px desktop and 16px narrow-screen side padding. The shared rule
+  replaces the former centered-width limit and page-specific exceptions.
+  Explanatory text retains its local reading limits; fill workspaces such as
+  the workflow canvas retain their existing layout.
+- `make test-web` passed TypeScript and all 549 tests in 103 files, including
+  CSS unit coverage for top-level, nested and fill pages.
+  Log: `/tmp/weft-page-layout-web.log`.
+- Docker Chromium passed all 10 scenarios in `e2e/page-layout.spec.ts`,
+  `e2e/visual-consolidation.spec.ts` and `e2e/work-navigation.spec.ts`, using the
+  disposable real backend. Checks cover all ten destinations at 2560, 1440 and
+  390px, collapsed navigation, shared content edges, horizontal overflow and
+  a failed graphs response. Log: `/tmp/weft-page-layout-browser.log`.
+- The fresh-backend visual suite passed all 12 light/dark comparisons without
+  updating snapshots or tolerances. Log: `/tmp/weft-page-layout-visual.log`.
+- `docker compose up -d --build --no-deps weftd` passed; `/healthz` returned `ok`.
+  Live read-only browser inspection confirmed Activity and Workflows occupy the
+  available width with 32px side padding at 2560px. No live configuration or
+  workflow mutation was submitted. Screenshots:
+  `/tmp/weft-page-layout-activity-wide.jpg` and
+  `/tmp/weft-page-layout-workflows-wide.jpg`.
+- `git diff --check` passed. Go/Python suites and Go lint were not rerun for
+  this CSS-only refinement; the standard image build compiled the Go binaries.
+  Chromium verification does not establish cross-browser conformance.

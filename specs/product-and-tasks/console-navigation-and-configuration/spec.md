@@ -73,6 +73,8 @@ Common forms and controls remain usable at narrow widths and in the supported th
 
 - 2026-11-20. Maintainer Administration refinement: health checks expose refresh state and completion time; network policies group modes and show current/proposed changes with bounded admission-impact tables; shared-resource previews load on entry and preserve explicit cleanup confirmations; blocked-access retention names its precise scope and reductions; tool/profile catalogues use search, filters and 20-row pages. Delegation profiles use dedicated editor routes; grouped limits and review summaries retain inheritance, grants and CAS. Dirty state warns before navigation/reload, failed writes retain drafts and require a new review. No installation policy, default, security boundary or stored-data format changes as part of the UI rollout.
 
+- 2026-11-20. Maintainer responsive-layout refinement: all main destinations use the available width and shared inline padding (32 px desktop, 16 px narrow), including loading, empty and error states. Reading-width limits remain local to explanatory text. Canvas/log workspace layouts remain intact.
+
 ## Reconciliation
 
 - [interface-navigation.md](../../../docs/interface-navigation.md), [getting-started.md](../../../docs/getting-started.md), [brand/brand-guidelines.md](../../../docs/brand/brand-guidelines.md).

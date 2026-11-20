@@ -20,6 +20,11 @@ On narrow screens navigation wraps and scrolls within a bounded area. Existing
 graph URLs and editor drafts retain their behavior.
 The workflow catalogue uses the Workflows heading and New workflow action. Existing graph URLs and API names remain unchanged.
 
+Main destinations share the available width and the same content edges: 32 px
+inline padding on desktop and 16 px on narrow viewports. Text can keep its own
+reading-width limit without constraining the page, tables or card grid. Canvas
+and log workspaces retain their existing layout.
+
 Administration has independent hash routes for `health`, `network`, `resources`,
 `retention`, `tools` and `delegation`. Opening a section loads only that section's
 resources. Health checks show loading, last completion time and next steps when a

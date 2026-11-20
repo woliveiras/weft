@@ -31,7 +31,6 @@
   /* shell */
   --topbar-height: 56px;
   --sidebar-width: 232px;
-  --content-max: 1280px;
 
   font-feature-settings: 'cv11', 'ss01';
   -webkit-font-smoothing: antialiased;
@@ -441,15 +440,14 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 }
 .primary-navigation .nav-item .count { margin-left: auto; }
 
-/* Keep the scroll viewport full width and center narrower content with padding. */
+/* Top-level destinations share the available width and the same content edges. */
 main > .page { scrollbar-width: thin; }
 main > .page:not(.fill) {
   --page-inline-padding: var(--space-8);
   width: 100%;
-  padding-inline: max(var(--page-inline-padding), calc((100% - var(--content-max)) / 2 + var(--page-inline-padding)));
-}
-main > .page:is(.task-request-page, .installation-page, .administration-page) {
-  padding-inline: var(--page-inline-padding, var(--space-8));
+  max-width: none;
+  margin-inline: 0;
+  padding-inline: var(--page-inline-padding);
 }
 .projects-page > .page-head { align-items: center; }
 .projects-page a.btn { text-decoration: none; }
