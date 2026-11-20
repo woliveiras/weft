@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/woliveiras/weft/server/internal/jiradc"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -12,6 +13,8 @@ import (
 // Instance identifies the API/site, including Jira Cloud's scoped cloud ID.
 // It never carries credentials and does not grant tracker or SCM access.
 type IssueOrigin struct {
+	IssueID            string `json:"issueId,omitempty"`
+	IssueTypeID        string `json:"issueTypeId,omitempty"`
 	Kind               string `json:"kind"`
 	ConnectionID       string `json:"connectionId"`
 	ConnectionRevision int64  `json:"connectionRevision"`
@@ -21,6 +24,8 @@ type IssueOrigin struct {
 	URL                string `json:"url,omitempty"`
 }
 
+var nativeIssueNumber = regexp.MustCompile(`^[1-9][0-9]{0,19}$`)
+
 func (o IssueOrigin) Validate() error {
 	invalid := fmt.Errorf("%w: invalid trusted issue origin", ErrInvalid)
 	if !sourceConnection.MatchString(o.ConnectionID) || o.ConnectionRevision < 1 {
@@ -28,6 +33,9 @@ func (o IssueOrigin) Validate() error {
 	}
 	switch o.Kind {
 	case "jira-dc":
+		if (o.IssueID != "" || o.IssueTypeID != "") && (!nativeIssueNumber.MatchString(o.IssueID) || !nativeIssueNumber.MatchString(o.IssueTypeID)) {
+			return invalid
+		}
 		if jiradc.ValidateScope(o.Instance, o.ProjectID) != nil || strings.HasSuffix(o.Instance, "/") || !jiraIssue.MatchString(o.Key) {
 			return invalid
 		}

@@ -69,6 +69,7 @@ func Due(t *Trigger, now time.Time) bool {
 
 // Tick runs every due trigger once.
 func (r *Runner) Tick(ctx context.Context) {
+	defer r.drainLifecycleSyncs(ctx)
 	list, err := r.Triggers.List(ctx, "")
 	if err != nil {
 		r.log().Error("triggers could not be listed", "err", err)
@@ -466,7 +467,8 @@ func (r *Runner) claimAndStart(ctx context.Context, t *Trigger, call Invoker, i 
 	if _, err := r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
 		finishClaim(current, key, i.Key, taskID)
 		current.CurrentTask = taskID
-		current.CurrentIssue = &Issue{Source: i.Source, Key: i.Key, URL: i.URL}
+		current.CurrentIssue = &Issue{ID: i.ID, IssueTypeID: i.IssueTypeID, Source: i.Source, Key: i.Key, URL: i.URL}
+		current.CurrentMappings = t.LifecycleMappings
 		current.CurrentSource = t.Source
 		return nil
 	}); err != nil {
@@ -517,16 +519,19 @@ type Tasks interface {
 
 // TaskStatus is what a trigger needs to know about its task.
 type TaskStatus struct {
-	LaunchFailure  bool
-	State          string
-	Reason         string
-	PullRequestURL string
+	WorkExecutionID string
+	DeliveryEventID string
+	LaunchFailure   bool
+	State           string
+	Reason          string
+	PullRequestURL  string
 }
 
 // followTask writes the outcome of the trigger's running task back to its
 // issue once the task ends: on success a comment with the pull request,
-// the weft:review label and Jira In Review when available; on failure or
-// stop a comment with the reason, the weft:failed label, and the trigger
+// the configured delivery label; on failure or stop a comment with the
+// reason and the attention label. Optional status synchronization is retained
+// separately and does not redefine task delivery. The trigger
 // pauses so a person can look before more issues are taken.
 func (r *Runner) followTask(ctx context.Context, t *Trigger) (string, error) {
 	if r.Tasks == nil || t.CurrentIssue == nil {
@@ -539,6 +544,14 @@ func (r *Runner) followTask(ctx context.Context, t *Trigger) (string, error) {
 	st, err := r.Tasks.Status(ctx, t.CurrentTask)
 	if err != nil {
 		return "", errors.New("trigger task status is unavailable")
+	}
+	if err := r.queueLifecycle(ctx, t, "work_started", st.WorkExecutionID); err != nil {
+		return "sync_journal_unavailable", err
+	}
+	if st.PullRequestURL != "" {
+		if err := r.queueLifecycle(ctx, t, "pr_delivered", st.DeliveryEventID); err != nil {
+			return "sync_journal_unavailable", err
+		}
 	}
 	if st.State == "running" {
 		return "busy", nil
@@ -569,6 +582,7 @@ func (r *Runner) followTask(ctx context.Context, t *Trigger) (string, error) {
 	writeErr := errors.Join(relabel(ctx, call, i.Key, []string{LabelInProgress}, add, ""), comment(ctx, call, i.Key, message))
 	_, err = r.Triggers.Update(ctx, t.ID, "system:trigger", func(current *Trigger) error {
 		current.CurrentTask, current.CurrentIssue, current.CurrentSource = "", nil, SourceConfig{}
+		current.CurrentMappings = LifecycleMappings{}
 		if add == LabelFailed || writeErr != nil {
 			current.State = Paused
 			current.LastFailedTask = t.CurrentTask

@@ -22,6 +22,8 @@ import (
 
 // Issue is a tracker issue normalized across sources.
 type Issue struct {
+	ID             string   `json:"id,omitempty"`
+	IssueTypeID    string   `json:"issueTypeId,omitempty"`
 	Source         string   `json:"source"` // github | jira | jira-dc
 	Key            string   `json:"key"`    // owner/repo#12 or PROJ-12
 	Title          string   `json:"title"`

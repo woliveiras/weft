@@ -66,7 +66,7 @@ func TestNativeTriggerAPIStartsRealTaskWithTrustedDataCenterOrigin(t *testing.T)
 		t.Fatal(code)
 	}
 	origin := d.TriggerIssueOrigin
-	if origin == nil || origin.Kind != "jira-dc" || origin.ConnectionID != "native" || origin.ConnectionRevision != tr.Consent.TrackerRevision || origin.Instance != remote.URL+"/jira" || origin.ProjectID != "10001" || origin.Key != "APP-7" || origin.URL != remote.URL+"/jira/browse/APP-7" {
+	if origin == nil || origin.Kind != "jira-dc" || origin.ConnectionID != "native" || origin.ConnectionRevision != tr.Consent.TrackerRevision || origin.Instance != remote.URL+"/jira" || origin.ProjectID != "10001" || origin.IssueID != "10007" || origin.IssueTypeID != "10002" || origin.Key != "APP-7" || origin.URL != remote.URL+"/jira/browse/APP-7" {
 		t.Fatal("origin was not derived from reviewed scope", origin)
 	}
 	if d.Source != nil || d.TriggerGitHubIssue != "" || !d.RequiresPullRequest() || d.Status == "draft" || d.Title != "APP-7: Explain parser" || !strings.Contains(d.Request, "untrusted data") || writes != 2 {

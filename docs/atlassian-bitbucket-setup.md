@@ -309,3 +309,29 @@ Legacy delivery events/records remain readable; missing revision identity must
 be resolved explicitly before automatic review. Nothing grants tools or changes
 a saved workflow automatically. Repeated summary publication reconciles the
 same connection/repository/PR/revision receipt without another comment POST.
+
+
+### Optional native Jira DC lifecycle mappings
+
+Use the connection's **Inspect transitions** page with an actual sample issue,
+then create a **Workflow mapping** for its numeric issue type/source status,
+transition and destination. Names such as Review or In Review are presentation;
+no board column or alias is guessed. The current profile accepts transitions
+without required field updates. Missing field metadata and required fields,
+even those reporting defaults, need manual handling.
+
+Pin the desired mapping name/revision to workStarted or prDelivered in the
+trigger's lifecycleMappings configuration. Saving a mapping does not attach it
+to a trigger. Each actual issue is checked again before dispatch. No mapping
+means no transition, preserving existing comment/label behavior. Automatic
+confirmed-merge synchronization is unavailable while portable merge is disabled.
+
+Runtime admission after approval/preparation and the persisted PR-opened event
+are separate milestones. Optional synchronization has its own durable history;
+failed Jira writes do not erase task/PR success. Reconcile unknown results by
+reading before considering any further action. Explicit retry is supported only
+for a known failure before dispatch, with the original reviewed scope unchanged.
+Changed mapping/connection revisions require review; they never authorize a
+blind re-send. A person can finish handling the issue manually when its workflow
+no longer matches the pinned definition. Live version/workflow qualification and
+the project-restricted technical account remain operator prerequisites.

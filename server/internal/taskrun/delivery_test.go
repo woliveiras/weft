@@ -93,10 +93,11 @@ func TestDeliveryReportsPushPullRequestAndFailures(t *testing.T) {
 	bus.Publish(ctx, domain.NewEvent(domain.EvToolCompleted, gid, map[string]any{"tool": "filesystem.read", "outcome": "error"}))
 	bus.Publish(ctx, domain.NewEvent(domain.EvBranchPushed, gid, map[string]any{"branch": "weft/task-abc", "repository": "acme/app"}))
 	bus.Publish(ctx, domain.NewEvent(domain.EvToolDenied, gid, map[string]any{"tool": "scm.pull_request.create", "outcome": "rejected", "error": "not approved"}))
-	bus.Publish(ctx, domain.NewEvent(domain.EvPullRequestOpened, gid, map[string]any{"url": "https://github.example/pr/7", "number": 7}))
+	opened := domain.NewEvent(domain.EvPullRequestOpened, gid, map[string]any{"url": "https://github.example/pr/7", "number": 7})
+	bus.Publish(ctx, opened)
 	d := &taskconfig.Draft{ID: "tsk_abc", ExecutionGraphID: gid, Input: taskconfig.Input{SCMConnection: "gh"}}
 	got, err := (Manager{Store: st}).delivery(ctx, d)
-	if err != nil || got.Branch != "weft/task-abc" || got.Repository != "acme/app" || got.PullRequestNumber != 7 || got.PullRequestURL != "https://github.example/pr/7" {
+	if err != nil || got.EventID != opened.ID || got.Branch != "weft/task-abc" || got.Repository != "acme/app" || got.PullRequestNumber != 7 || got.PullRequestURL != "https://github.example/pr/7" {
 		t.Fatalf("delivery = %+v %v", got, err)
 	}
 	if len(got.Failures) != 2 || got.Failures[0] != "git.push error" || got.Failures[1] != "scm.pull_request.create rejected: not approved" {

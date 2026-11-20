@@ -18,12 +18,13 @@ import (
 )
 
 const (
-	trackerGet      = "tracker.issue"
-	trackerComments = "tracker.comments"
-	trackerRequeue  = "tracker.requeue"
-	trackerLabels   = "tracker.labels"
-	trackerComment  = "tracker.comment"
-	trackerIdentity = "tracker.comment_identity"
+	trackerGet        = "tracker.issue"
+	trackerComments   = "tracker.comments"
+	trackerRequeue    = "tracker.requeue"
+	trackerLabels     = "tracker.labels"
+	trackerComment    = "tracker.comment"
+	trackerIdentity   = "tracker.comment_identity"
+	trackerTransition = "tracker.transition"
 )
 
 var trackerKey = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}-[1-9][0-9]{0,9}$`)
@@ -34,6 +35,7 @@ type TrackerCall func(ctx context.Context, connection, kind string, revision int
 type trackerScopeKey struct{}
 
 type trackerArgs struct {
+	SyncID        string    `json:"syncId,omitempty"`
 	VerifyMissing bool      `json:"verifyMissing,omitempty"`
 	UndoOwner     string    `json:"undoOwner,omitempty"`
 	Key           string    `json:"key"`
@@ -121,7 +123,7 @@ func TrackerTools(call TrackerCall, native ...jiradc.Connections) []tools.Tool {
 		connections = &native[0]
 	}
 	var out []tools.Tool
-	for _, name := range []string{trackerGet, trackerComments, trackerRequeue, trackerLabels, trackerComment, trackerIdentity, trackerSearch} {
+	for _, name := range []string{trackerGet, trackerComments, trackerRequeue, trackerLabels, trackerComment, trackerIdentity, trackerSearch, trackerTransition} {
 		out = append(out, trackerTool{name: name, call: call, native: connections})
 	}
 	return out

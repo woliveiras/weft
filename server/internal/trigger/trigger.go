@@ -69,6 +69,8 @@ type Skip struct {
 
 // Trigger starts a workflow's tasks from labelled issues.
 type Trigger struct {
+	LifecycleMappings LifecycleMappings            `json:"lifecycleMappings,omitzero"`
+	CurrentMappings   LifecycleMappings            `json:"currentMappings,omitzero"`
 	LastFailedTask    string                       `json:"lastFailedTask,omitempty"`
 	FailedRetries     map[string]FailedRetry       `json:"failedRetries,omitempty"`
 	ReadinessDisabled bool                         `json:"readinessDisabled"`
@@ -117,7 +119,8 @@ type Trigger struct {
 
 // Input creates or updates a trigger.
 type Input struct {
-	ReadinessDisabled bool `json:"readinessDisabled"`
+	LifecycleMappings LifecycleMappings `json:"lifecycleMappings,omitzero"`
+	ReadinessDisabled bool              `json:"readinessDisabled"`
 
 	Name            string        `json:"name"`
 	Workflow        string        `json:"workflow"`
@@ -163,6 +166,9 @@ func validate(in *Input) error {
 		in.ResultNodeID = in.NodeID
 	}
 	fe := &FieldError{}
+	if err := in.LifecycleMappings.validate(in.Source); err != nil {
+		fe.add("lifecycleMappings", "%s", err)
+	}
 	in.Name, in.Label, in.Owner = strings.TrimSpace(in.Name), strings.TrimSpace(in.Label), strings.TrimSpace(in.Owner)
 	if in.Name == "" || len(in.Name) > 100 {
 		fe.add("name", "1-100 characters")
@@ -309,6 +315,9 @@ func (m Manager) authorizationProblem(mode taskauth.Mode, g *domain.Graph) strin
 
 // consent records what the actor agrees to now.
 func (m Manager) consent(ctx context.Context, in Input, actor string) (Consent, error) {
+	return m.consentWithMappings(ctx, in, actor, true)
+}
+func (m Manager) consentWithMappings(ctx context.Context, in Input, actor string, reviewMappings bool) (Consent, error) {
 	g, err := m.Store.GetGraph(ctx, in.Workflow, 0)
 	if errors.Is(err, storage.ErrNotFound) {
 		fe := &FieldError{}
@@ -318,11 +327,19 @@ func (m Manager) consent(ctx context.Context, in Input, actor string) (Consent, 
 	if err != nil {
 		return Consent{}, err
 	}
-	return m.PreviewGraphConsent(ctx, in, g, actor)
+	return m.previewGraphConsent(ctx, in, g, actor, reviewMappings)
 }
 
 // PreviewGraphConsent checks the same scope as a consent write without saving it.
 func (m Manager) PreviewGraphConsent(ctx context.Context, in Input, g *domain.Graph, actor string) (Consent, error) {
+	return m.previewGraphConsent(ctx, in, g, actor, true)
+}
+func (m Manager) previewGraphConsent(ctx context.Context, in Input, g *domain.Graph, actor string, reviewMappings bool) (Consent, error) {
+	if reviewMappings {
+		if err := m.reviewLifecycleMappings(ctx, in); err != nil {
+			return Consent{}, err
+		}
+	}
 	fe := &FieldError{}
 	if g.Node(in.NodeID) == nil {
 		fe.add("nodeId", "the entry agent is not in the workflow")
@@ -370,6 +387,7 @@ func (m Manager) Create(ctx context.Context, in Input, actor string) (*Trigger, 
 }
 
 func apply(t *Trigger, in Input) {
+	t.LifecycleMappings = in.LifecycleMappings
 	t.ReadinessDisabled = in.ReadinessDisabled
 	t.Name, t.Workflow, t.NodeID, t.ResultNodeID, t.Source, t.Label, t.Owner = in.Name, in.Workflow, in.NodeID, in.ResultNodeID, in.Source, in.Label, in.Owner
 	t.IntervalMinutes, t.SCMConnection, t.ProjectID, t.ExecutionMode, t.Authorization = in.IntervalMinutes, in.SCMConnection, in.ProjectID, in.ExecutionMode, in.Authorization
@@ -382,6 +400,9 @@ func (m Manager) Edit(ctx context.Context, id string, in Input, actor string) (*
 		return nil, err
 	}
 	t, err := m.Update(ctx, id, actor, func(t *Trigger) error {
+		if t.CurrentTask != "" && t.LifecycleMappings != in.LifecycleMappings {
+			return fmt.Errorf("%w: let the current task finish before changing lifecycle mappings", storage.ErrConflict)
+		}
 		reviewed, err := m.consent(ctx, in, actor)
 		if err != nil {
 			return err
@@ -436,7 +457,10 @@ func (m Manager) Resume(ctx context.Context, id, actor string) (*Trigger, error)
 			t.Claiming, t.ClaimAdmission = "", ""
 		}
 		in := triggerInput(t)
-		c, err := m.consent(ctx, in, actor)
+		// Optional mapping availability cannot strand a previously admitted task.
+		// All workflow, connection and authorization checks still run; the adapter
+		// independently rejects stale/disabled pins before any transition write.
+		c, err := m.consentWithMappings(ctx, in, actor, t.CurrentTask == "")
 		if err != nil {
 			return err
 		}
@@ -507,7 +531,7 @@ func (m Manager) audit(ctx context.Context, t *Trigger, action, actor string) {
 }
 
 func triggerInput(t *Trigger) Input {
-	return Input{Name: t.Name, Workflow: t.Workflow, NodeID: t.NodeID, ResultNodeID: t.ResultNodeID,
+	return Input{LifecycleMappings: t.LifecycleMappings, Name: t.Name, Workflow: t.Workflow, NodeID: t.NodeID, ResultNodeID: t.ResultNodeID,
 		Source: t.Source, Label: t.Label, Owner: t.Owner, IntervalMinutes: t.IntervalMinutes, SCMConnection: t.SCMConnection,
 		ProjectID: t.ProjectID, ExecutionMode: t.ExecutionMode, Authorization: t.Authorization, ReadinessDisabled: t.ReadinessDisabled}
 }
@@ -520,6 +544,9 @@ func (m Manager) reviewedScope(ctx context.Context, in Input, g *domain.Graph) (
 	c := Consent{WorkflowVersion: g.Metadata.Version, ProjectID: in.ProjectID, ExecutionMode: in.ExecutionMode,
 		Authorization: in.Authorization, PolicyVersion: taskauth.PolicyVersion}
 	c.Operations = append(source.Tools(), trackerGet, trackerLabels, trackerComment)
+	if !in.LifecycleMappings.empty() {
+		c.Operations = append(c.Operations, trackerTransition)
+	}
 	if in.Source.Kind == "jira-dc" {
 		fe := &FieldError{}
 		if m.NativeConnections == nil {

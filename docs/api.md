@@ -988,3 +988,35 @@ remote failures return 502 with no partial result. Discovery is independent of
 the project-restricted write attestation because it performs no remote mutation.
 `fields: null` means unavailable metadata; `{}` means known-empty requirements.
 Names are display text; transition and destination IDs remain separate.
+
+
+### Optional Jira lifecycle synchronization
+
+Native Jira DC trigger input optionally accepts:
+
+```json
+{"lifecycleMappings":{"workStarted":{"name":"start-work","revision":1},"prDelivered":{"name":"send-to-review","revision":2}}}
+```
+
+Each pin must refer to an enabled definition for the exact reviewed connection,
+revision, site and project. Empty pins preserve comments and labels. Editing
+pins while a task is admitted is rejected by console/API and declarative apply.
+Mapping edits do not retarget an admitted task or turn optional synchronization
+into a prerequisite for PR delivery. A confirmed-merge stage is unavailable.
+
+| Route | Minimum role | Contract |
+| --- | --- | --- |
+| `GET /api/v1/lifecycle-syncs?after=<sync-id>` | viewer | `{items, next}`; at most 100 records, key cursor, no global history ceiling. Follow `next` for later pages; this is not chronological pagination. |
+| `GET /api/v1/lifecycle-syncs/{id}` | viewer | Retained task/stage, evidence, numeric issue identity, source, mapping revision and independent synchronization outcome. |
+| `POST /api/v1/lifecycle-syncs/{id}/reconcile` | operator | Positive `If-Match` plus exactly `{"confirm":true}`. Read the retained transition intent; never POST a transition. Unknown outcomes remain visibly unknown. |
+| `POST /api/v1/lifecycle-syncs/{id}/retry` | admin | Same revision/confirmation contract. Queue only a known pre-dispatch failure under its original unchanged consent and mapping. Unknown/pending writes are ineligible. |
+
+The runtime milestone uses durable admission after gates/preparation, not task
+creation or an approval-waiting execution. PR delivery uses a persisted
+`scm.pull_request_opened` event, never a URL in agent text. Milestones are reserved
+independently before current-task state is cleared. A separate controller uses
+bounded storage pages and serializes stages per task; a pending/unknown start
+prevents its delivery synchronization from overtaking it. Task/PR delivery itself
+continues independently. Errors remain in the journal with operator recovery.
+Retry of a start after delivery synchronization has run is refused. Seeing the
+target status proves observation, not that Weft caused a transition.

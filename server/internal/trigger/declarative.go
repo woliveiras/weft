@@ -45,6 +45,9 @@ func (m Manager) ApplyConfigurationAt(ctx context.Context, id string, in Input, 
 		return nil, err
 	}
 	change := func(t *Trigger) error {
+		if t.CurrentTask != "" && t.LifecycleMappings != in.LifecycleMappings {
+			return fmt.Errorf("%w: let the current task finish before changing lifecycle mappings", storage.ErrConflict)
+		}
 		if expected != "" && ConfigurationRevision(t) != expected {
 			return storage.ErrConflict
 		}

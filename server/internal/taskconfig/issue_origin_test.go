@@ -32,7 +32,7 @@ func TestTrustedOriginSurvivesEditsAndStoreRestart(t *testing.T) {
 }
 
 func TestNativeTrustedOriginSurvivesEditsAndStoreRestart(t *testing.T) {
-	testTrustedOriginPersistence(t, IssueOrigin{Kind: "jira-dc", ConnectionID: "jira-team", ConnectionRevision: 7, Instance: "https://jira.example/context", ProjectID: "10001", Key: "APP-7", URL: "https://jira.example/context/browse/APP-7"})
+	testTrustedOriginPersistence(t, IssueOrigin{IssueID: "10007", IssueTypeID: "10002", Kind: "jira-dc", ConnectionID: "jira-team", ConnectionRevision: 7, Instance: "https://jira.example/context", ProjectID: "10001", Key: "APP-7", URL: "https://jira.example/context/browse/APP-7"})
 }
 
 func testTrustedOriginPersistence(t *testing.T, origin IssueOrigin) {
@@ -112,6 +112,20 @@ func TestNativeIssueOriginRejectsAmbiguousScopeAndLinks(t *testing.T) {
 		mutate(&bad)
 		if bad.Validate() == nil {
 			t.Fatal("invalid trusted origin", bad)
+		}
+	}
+}
+
+func TestNativeIssueOriginKeepsNumericIdentityPaired(t *testing.T) {
+	origin := IssueOrigin{Kind: "jira-dc", ConnectionID: "native", ConnectionRevision: 1, Instance: "https://jira.example", ProjectID: "10001", Key: "APP-7", IssueID: "10007", IssueTypeID: "10002"}
+	if err := origin.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, edit := range []func(*IssueOrigin){func(o *IssueOrigin) { o.IssueID = "APP-7" }, func(o *IssueOrigin) { o.IssueTypeID = "" }, func(o *IssueOrigin) { o.IssueID = "" }} {
+		bad := origin
+		edit(&bad)
+		if bad.Validate() == nil {
+			t.Fatal(bad)
 		}
 	}
 }

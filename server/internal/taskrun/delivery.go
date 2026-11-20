@@ -100,6 +100,7 @@ If any step fails (a rejected push, a missing permission, a refused approval), f
 
 // Delivery is what a task's SCM hand-off did, from the task's events.
 type Delivery struct {
+	EventID           string `json:"eventId,omitempty"`
 	Connection        string `json:"connection"`
 	Branch            string `json:"branch,omitempty"`
 	Repository        string `json:"repository,omitempty"`
@@ -130,6 +131,7 @@ func (m Manager) delivery(ctx context.Context, d *taskconfig.Draft) (*Delivery, 
 			out.Branch, out.Repository = data.Branch, data.Repository
 		case domain.EvPullRequestOpened:
 			out.PullRequestURL, out.PullRequestNumber = data.URL, data.Number
+			out.EventID = ev.ID
 		default:
 			if (data.Tool == "git.push" || data.Tool == "scm.pull_request.create") && data.Outcome != "ok" {
 				msg := data.Tool + " " + data.Outcome

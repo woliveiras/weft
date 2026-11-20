@@ -482,3 +482,32 @@ func (s *mappingReservationStore) PutSettingIf(ctx context.Context, key string, 
 	}
 	return rev, err
 }
+
+func TestTransitionSyncExplicitRetryOnlyForCASReviewedPreDispatchFailure(t *testing.T) {
+	f := transitionFixture(t)
+	f.mode.Store(7)
+	r, err := f.syncer.Apply(t.Context(), intent(), "system:test")
+	if err == nil || r.State != "failed" || f.posts.Load() != 0 {
+		t.Fatal(r, err)
+	}
+	f.mode.Store(0)
+	if _, err = f.syncer.RetryFailed(t.Context(), intent().OperationID, r.Revision+1, "admin"); !errors.Is(err, storage.ErrConflict) {
+		t.Fatal("stale retry", err)
+	}
+	r, err = f.syncer.RetryFailed(t.Context(), intent().OperationID, r.Revision, "admin")
+	if err != nil || r.State != "target_observed" || f.posts.Load() != 1 {
+		t.Fatal(r, err)
+	}
+	if _, err = f.syncer.RetryFailed(t.Context(), intent().OperationID, r.Revision, "admin"); !errors.Is(err, storage.ErrConflict) {
+		t.Fatal("completed operation retried", err)
+	}
+	f = transitionFixture(t)
+	f.mode.Store(2)
+	r, err = f.syncer.Apply(t.Context(), intent(), "system:test")
+	if err == nil || r.State != "unknown" {
+		t.Fatal(r, err)
+	}
+	if _, err = f.syncer.RetryFailed(t.Context(), intent().OperationID, r.Revision, "admin"); !errors.Is(err, storage.ErrConflict) || f.posts.Load() != 1 {
+		t.Fatal("uncertain POST retried", err)
+	}
+}

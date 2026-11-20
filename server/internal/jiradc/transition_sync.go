@@ -193,7 +193,7 @@ func (m TransitionSync) store(ctx context.Context, v SyncRecord, actor string, e
 	guards := []storage.SettingRevision{{Key: ConnectionPrefix + v.Intent.Connection, Revision: v.Intent.ConnectionRevision}}
 	// Only reservation authorizes dispatch. Historical reconciliation remains a
 	// read even after the mapping is disabled or edited.
-	if expected == 0 && v.Intent.MappingName != "" {
+	if v.State == "pending" && v.Intent.MappingName != "" {
 		guards = append(guards, storage.SettingRevision{Key: MappingPrefix + v.Intent.MappingName, Revision: v.Intent.MappingRevision})
 	}
 	revision, err := m.Connections.Store.PutSettingIf(ctx, syncKey(v.Intent.OperationID), raw, expected, actor, guards)
@@ -208,6 +208,22 @@ func (m TransitionSync) store(ctx context.Context, v SyncRecord, actor string, e
 // is reconciled with reads only; preflight failures remain retained until an
 // explicit recovery is reviewed. Storage errors never become remote success.
 func (m TransitionSync) Apply(ctx context.Context, v TransitionIntent, actor string) (SyncRecord, error) {
+	return m.apply(ctx, v, actor, 0)
+}
+
+// RetryFailed is an explicit CAS-reviewed recovery of a known pre-dispatch
+// failure. Unknown/pending operations can only be reconciled, never retried.
+func (m TransitionSync) RetryFailed(ctx context.Context, operation string, expected int64, actor string) (SyncRecord, error) {
+	old, err := m.Get(ctx, operation)
+	if err != nil {
+		return old, err
+	}
+	if expected < 1 || old.Revision != expected || old.State != "failed" {
+		return old, storage.ErrConflict
+	}
+	return m.apply(ctx, old.Intent, actor, expected)
+}
+func (m TransitionSync) apply(ctx context.Context, v TransitionIntent, actor string, retryRevision int64) (SyncRecord, error) {
 	if err := v.validate(); err != nil {
 		return SyncRecord{}, err
 	}
@@ -234,8 +250,11 @@ func (m TransitionSync) Apply(ctx context.Context, v TransitionIntent, actor str
 	}
 	// Failed preflight records remain read-only on replay as well. Configuration or
 	// operator recovery must be explicitly reviewed by the lifecycle layer.
-	if !fresh {
+	if !fresh && (retryRevision < 1 || old.Revision != retryRevision || old.State != "failed") {
 		return old, errors.New("transition preflight failed; review the retained synchronization before recovery")
+	}
+	if fresh && retryRevision != 0 {
+		return old, storage.ErrConflict
 	}
 	if err := m.checkMapping(ctx, v, connection); err != nil {
 		return SyncRecord{}, err
@@ -266,7 +285,12 @@ func (m TransitionSync) Apply(ctx context.Context, v TransitionIntent, actor str
 	if err = m.Connections.Store.AppendEvent(ctx, ev); err != nil {
 		return SyncRecord{}, err
 	}
-	record, err = m.store(ctx, record, actor, 0)
+	expected := int64(0)
+	if !fresh {
+		expected = old.Revision
+		record.CreatedAt = old.CreatedAt
+	}
+	record, err = m.store(ctx, record, actor, expected)
 	if err != nil {
 		return SyncRecord{}, err
 	}

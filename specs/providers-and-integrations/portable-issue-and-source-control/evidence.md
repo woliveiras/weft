@@ -643,3 +643,46 @@ name assumptions through discovered, scoped workflow mappings.
   DSN. Independent read-only subagent review found no blockers.
 - The lifecycle controller/API will consume bounded pages in the next lot, so
   growth of completed history does not impose a global stop at 1,000 records.
+
+
+## INT-009-06i — Optional native lifecycle queue and operator recovery API
+
+- Native trigger input/consent now accepts explicit mapping name/revision pins
+  for runtime admission and confirmed PR delivery. Empty fields preserve legacy
+  consent encoding. Console/API edit and declarative apply refuse pin replacement
+  during an admitted task. Definitions are reviewed when recording fresh consent;
+  later definition changes reject that synchronization without stranding PR
+  write-back. Resuming an already admitted task still validates workflow, source
+  and authorization while leaving optional mapping availability to dispatch.
+- Preserved the actual numeric issue/type identity from native lookup through
+  current task and trusted task origin. Work evidence comes from runtime admission
+  after gates; PR evidence comes from its persisted scoped PR-opened event. URLs
+  in summaries or generic tool output do not supply either milestone.
+- Before current-task cleanup, CAS records stable task/stage jobs independently.
+  A separate bounded-page controller invokes tracker.transition through the
+  private trigger gateway. Unique-holder task leases serialize both stages across
+  workers and explicit retry. Queued/unknown starts prevent overtaking; late start
+  retries after delivery are rejected. Failed/unknown tracker outcomes retain task,
+  PR and delivery labels. No task/PR is recreated by synchronization recovery.
+- Viewer reads and paginated history, operator read-only reconciliation and admin
+  explicit preflight retry use role guards, strict confirmation and positive
+  If-Match revisions. Unknown/pending adapter operations never accept retry POST.
+  A known pre-dispatch failure can retry only under unchanged reviewed authority;
+  its journal is CAS-reserved again before dispatch. Mapping/connection changes
+  never silently replace the original intent. Merge-confirmed mapping remains
+  unavailable; no task success or PR URL is treated as a merge.
+- Docker full suites passed for trigger, API, app, jiradc, taskconfig and taskrun
+  (`/tmp/weft-lifecycle-regression-v6.log`). Added unit, real TLS/fsstore/API and
+  app→taskrun→engine/storage fixtures for pins/legacy encoding, origin persistence,
+  actual milestone evidence, immediate terminal executions, optional denial,
+  response loss, journal failure retaining CurrentTask, recovery CAS/roles,
+  two controllers (including overlapping Tick with the same instance), ordering,
+  retry during/after blocked PR dispatch and declarative pin protection. Storage
+  pagination separately exercises more than 1,000 records. Event schema/catalog
+  and API/setup/tool guidance updated. Independent review found and prompted fixes
+  for cross-worker ordering, retry serialization and a global history ceiling;
+  final review of the admitted-task resume refinement is recorded with this lot.
+- Lifecycle selection/recovery console, declarative mapping definitions, native
+  review routing/adoption, Jira Cloud transition adoption and real-account/version
+  qualification remain pending. No installation, credential, live issue or PR was
+  changed, and no deployment was performed.

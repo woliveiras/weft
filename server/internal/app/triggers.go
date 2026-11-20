@@ -53,6 +53,7 @@ func (x triggerTasks) Start(ctx context.Context, t *trigger.Trigger, i trigger.I
 		origin.Instance = "https://api.atlassian.com/ex/jira/" + t.Source.CloudID
 	case "jira-dc":
 		origin.Instance, origin.ProjectID = t.Source.SiteURL, t.Source.ProjectID
+		origin.IssueID, origin.IssueTypeID = i.ID, i.IssueTypeID
 		origin.URL = origin.Instance + "/browse/" + i.Key
 	}
 	d, err := (taskconfig.Manager{Store: x.a.Store}).SaveTriggeredIssue(ctx, in, actor, origin)
@@ -181,6 +182,12 @@ func (x triggerTasks) Status(ctx context.Context, taskID string) (trigger.TaskSt
 		return trigger.TaskStatus{State: "running"}, nil
 	}
 	st := trigger.TaskStatus{State: v.State}
+	for _, execution := range v.Executions {
+		if execution.RuntimeStartedAt != nil {
+			st.WorkExecutionID = execution.ID
+			break
+		}
+	}
 	switch v.State {
 	case "succeeded", "failed", "cancelled", "interrupted", "blocked":
 	default:
@@ -197,6 +204,7 @@ func (x triggerTasks) Status(ctx context.Context, taskID string) (trigger.TaskSt
 	}
 	if v.Delivery != nil {
 		st.PullRequestURL = v.Delivery.PullRequestURL
+		st.DeliveryEventID = v.Delivery.EventID
 		if st.Reason == "" && len(v.Delivery.Failures) > 0 {
 			st.Reason = v.Delivery.Failures[len(v.Delivery.Failures)-1]
 		}

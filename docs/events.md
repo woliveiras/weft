@@ -75,6 +75,7 @@ be stored before proceeding.
 | `scm.review_summary_published` | A revision-scoped review summary was confirmed on the provider and stored | `{connection, provider, repository, number, headSha, baseSha, verdict, url}` |
 | `tracker.connection_change_requested` | A native tracker connection write was reviewed; record CAS determines success | `{connection, provider, expectedRevision, projectRestricted}` |
 | `tracker.transition_sync_requested` | An internal Jira DC lifecycle transition intent passed local review; journal CAS precedes any remote POST, and the stored sync record determines outcome | `{connection, operation, state}`; no issue body, field values or credential |
+| `tracker.lifecycle_sync_recovery_requested` | An administrator explicitly requested CAS-reviewed retry of a known pre-dispatch lifecycle failure; unknown dispatches cannot be reposted | `{sync, task, stage, expectedRevision}`; no issue body or credential |
 | `tracker.workflow_mapping_change_requested` | A scoped native Jira workflow mapping save was reviewed; mapping CAS determines success | `{mapping, connection, expectedRevision, enabled}` |
 | `trigger.note` | something a person should know about a trigger's task (missing Jira transition, failed comment) | `{trigger, task, message}` (graph id = the task run) |
 | `trigger.run` | one trigger run (no graph id) | `{trigger, outcome, error?}` |

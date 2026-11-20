@@ -22,17 +22,24 @@ import (
 )
 
 type nativeTrackerFixture struct {
-	site                  string
-	labels                []string
-	comments              []jiradc.Comment
-	requests, puts, posts int
-	status                int
-	foreign               bool
-	assignee              *jiradc.Actor
-	blocker               string
-	historyOverflow       bool
-	historyScans          int
-	now                   func() time.Time
+	transitionBlockID      string
+	transitionEntered      chan struct{}
+	transitionRelease      chan struct{}
+	transitionStatus       string
+	transitionPosts        int
+	transitionFailure      bool
+	transitionLostResponse bool
+	site                   string
+	labels                 []string
+	comments               []jiradc.Comment
+	requests, puts, posts  int
+	status                 int
+	foreign                bool
+	assignee               *jiradc.Actor
+	blocker                string
+	historyOverflow        bool
+	historyScans           int
+	now                    func() time.Time
 }
 
 func (f *nativeTrackerFixture) issue() jiradc.Issue {
@@ -44,6 +51,9 @@ func (f *nativeTrackerFixture) issue() jiradc.Issue {
 	}
 	i.Fields.Summary, i.Fields.Description = "Review the parser", "Only change parser; tests must pass."
 	i.Fields.Status.ID, i.Fields.Status.Name, i.Fields.Status.StatusCategory.Key = "10", "Review", "new"
+	if f.transitionStatus != "" {
+		i.Fields.Status.ID = f.transitionStatus
+	}
 	i.Fields.Labels, i.Fields.Assignee = slices.Clone(f.labels), f.assignee
 	i.Fields.IssueLinks = []jiradc.IssueLink{}
 	if f.blocker != "" {
@@ -80,6 +90,45 @@ func (f *nativeTrackerFixture) serve(t *testing.T, w http.ResponseWriter, r *htt
 		_ = json.NewEncoder(w).Encode(map[string]any{"startAt": 0, "maxResults": 50, "total": len(rows), "issues": rows})
 	case "/context/rest/api/2/issue/APP-7":
 		_ = json.NewEncoder(w).Encode(f.issue())
+	case "/context/rest/api/2/issue/10007/transitions":
+		if r.Method == "GET" {
+			if f.transitionFailure {
+				w.WriteHeader(403)
+				return
+			}
+			fmt.Fprint(w, `{"transitions":[{"id":"31","name":"Review","to":{"id":"20","name":"Review"},"fields":{}},{"id":"32","name":"Working","to":{"id":"15","name":"Working"},"fields":{}}]}`)
+			return
+		}
+		var payload struct {
+			Transition struct {
+				ID string `json:"id"`
+			} `json:"transition"`
+		}
+		if r.Method != "POST" || json.NewDecoder(r.Body).Decode(&payload) != nil {
+			t.Error("unexpected transition operation")
+			w.WriteHeader(400)
+			return
+		}
+		f.transitionPosts++
+		if f.transitionEntered != nil && (payload.Transition.ID == f.transitionBlockID || (f.transitionBlockID == "" && payload.Transition.ID == "32")) {
+			close(f.transitionEntered)
+			<-f.transitionRelease
+		}
+		switch payload.Transition.ID {
+		case "31":
+			f.transitionStatus = "20"
+		case "32":
+			f.transitionStatus = "15"
+		default:
+			t.Error("wrong transition")
+			w.WriteHeader(400)
+			return
+		}
+		if f.transitionLostResponse {
+			w.WriteHeader(503)
+			return
+		}
+		w.WriteHeader(204)
 	case "/context/rest/api/2/issue/10007":
 		if r.Method != "PUT" {
 			t.Error("unexpected issue operation")

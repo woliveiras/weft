@@ -160,6 +160,14 @@ the operation and target. Question and reply bodies are excluded. The
 readiness model receives no tools and its output is limited to rubric codes.
 [Issue-trigger consent and setup](task-workflows.md#issue-trigger-readiness-and-delivery)
 
+Native Jira DC triggers with explicitly reviewed lifecycle pins additionally
+receive `tracker.transition` in their private trigger principal. An ordinary
+agent grant cannot construct that private context. It addresses only a retained
+lifecycle job, validates original consent/scope/pin and uses a durable transition
+journal. Operator reconciliation is read-only; an administrator's explicit
+preflight retry queues work through the same gateway. Mapping configuration
+alone grants no transition access.
+
 ## Recipes
 
 | Role | Grants | Rationale |

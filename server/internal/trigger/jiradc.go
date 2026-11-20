@@ -48,7 +48,7 @@ func nativeIssue(c *jiradc.Client, i jiradc.Issue) (Issue, error) {
 	if jiraTime(i.Fields.Created).IsZero() || jiraTime(i.Fields.Updated).IsZero() {
 		return Issue{}, errors.New("Jira Data Center issue timestamps are unavailable")
 	}
-	out := Issue{Source: "jira-dc", Key: i.Key, Title: i.Fields.Summary, Body: i.Fields.Description,
+	out := Issue{ID: i.ID, IssueTypeID: i.Fields.IssueType.ID, Source: "jira-dc", Key: i.Key, Title: i.Fields.Summary, Body: i.Fields.Description,
 		URL: c.IssueURL(i), Created: i.Fields.Created, Updated: i.Fields.Updated, Labels: i.Fields.Labels,
 		Open: i.Fields.Status.StatusCategory.Key == "new", Blocked: containsLabel(i.Fields.Labels, "blocked")}
 	if i.Fields.Reporter != nil && i.Fields.Reporter.Active {
@@ -81,6 +81,11 @@ func containsLabel(labels []string, label string) bool {
 func (t trackerTool) invokeNative(ctx context.Context, scope *Trigger, a trackerArgs) (*tools.Result, error) {
 	if t.native == nil {
 		return nil, tools.ErrDenied
+	}
+	if t.name == trackerTransition {
+		v, err := (Manager{Store: t.native.Store, NativeConnections: t.native}).processLifecycleSync(ctx, scope, a.SyncID)
+		raw, marshalErr := json.Marshal(v)
+		return &tools.Result{Data: raw, IsError: err != nil, Content: v.Error}, errors.Join(err, marshalErr)
 	}
 	connection, err := t.native.Get(ctx, scope.Source.ConnectionID)
 	if err != nil {
