@@ -46,3 +46,12 @@ func TestTransitionDiscoveryInputRejectsArbitraryPayloads(t *testing.T) {
 		t.Fatal(key, err)
 	}
 }
+
+func TestWorkflowMappingBodyRejectsUnreviewedFieldsAndMultipleObjects(t *testing.T) {
+	for _, body := range []string{`{"name":"review","token":"fixture-secret"}`, `{"name":"review","fields":{"assignee":"human"}}`, `{"name":"review"} {}`, strings.Repeat(" ", 8193)} {
+		r := httptest.NewRequest("POST", "/", strings.NewReader(body))
+		if _, err := decodeWorkflowMapping(r); err == nil || strings.Contains(err.Error(), "fixture-secret") {
+			t.Fatal("invalid mapping decode", err)
+		}
+	}
+}

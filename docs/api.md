@@ -168,6 +168,30 @@ record a credential-free `tracker.connection_change_requested` audit intent;
 the stored CAS revision is the authoritative mutation result. Live Data Center
 version and project permission qualification remain separate requirements.
 
+### Jira Data Center workflow mappings
+
+Mappings are reviewed definitions; saving one does not attach it to a trigger or
+execute a transition. Each definition binds a native connection/revision,
+site/project, issue type, source status and transition/destination IDs. Sample
+issue ID/key/update metadata must match a fresh discovery at save time. Names
+are display text. The initial profile supports transitions without required
+field updates; same-status actions and unknown metadata are rejected.
+
+| Method and path | Role | Purpose |
+|---|---|---|
+| `GET /api/v1/issue-workflow-mappings?connection=<name>` | viewer | Credential-free definitions, optionally filtered by connection. |
+| `GET /api/v1/issue-workflow-mappings/{name}` | viewer | Definition with an ETag revision. |
+| `POST /api/v1/issue-workflow-mappings` | admin | Create after actual issue discovery and project-restricted account review. |
+| `PUT /api/v1/issue-workflow-mappings/{name}` | admin | Replace with a positive If-Match revision and fresh discovery. Disabling the exact saved definition works without remote access. |
+
+Input: `{name, connection, connectionRevision, sampleIssueKey, sampleIssueId,
+issueTypeId, fromStatusId, transitionId, targetStatusId, issueUpdated, enabled}`.
+A changed sample/connection returns conflict; required fields or invalid IDs
+return validation errors; remote discovery failures return 502. Mapping CAS
+atomically guards the reviewed connection revision. Arbitrary Jira field values,
+credentials and board column names are not accepted by this schema. Lifecycle
+adoption and operator synchronization recovery remain separate work.
+
 ## Source control connections
 
 Push and pull request tools act through server-held SCM connections; agents

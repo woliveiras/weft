@@ -545,3 +545,28 @@ name assumptions through discovered, scoped workflow mappings.
 - This core is not yet wired into tasks or exposed as an API/agent tool. Mapping
   configuration, lifecycle consent snapshots, operator recovery and Jira Cloud
   adoption remain incomplete. No live transition, grant or policy was changed.
+
+## INT-009-06d — Reviewed native workflow mapping storage and API
+
+- Added independent mapping records with connection revision, exact site/project,
+  issue type, source status and transition/destination IDs. Actual sample issue
+  ID/key/update metadata is rediscovered when saving; display names come from
+  that discovery. No transition or issue field update is sent by configuration.
+- Admin writes require mapping CAS and atomically guard the reviewed connection
+  revision. The initial connection read must also match that revision, avoiding
+  mixed audiences during rotation. Disabling exactly the saved definition needs
+  no remote access, so an unavailable Jira cannot prevent disabling it. Enabling
+  or changing it requires fresh discovery and project-restricted account review.
+- The initial mapping profile rejects same-status actions, unavailable metadata
+  and required fields rather than inventing values. Definitions do not attach
+  themselves to workflows, expand consent or rewrite execution history.
+- Unit + real TLS/fsstore/API integration fixtures cover ID validation, custom
+  names, stale discovery/CAS, role denial, credential-free reads, disabled and
+  changed connections, rotation between reads, revocation during discovery,
+  audit/save faults, actual reopen and corrupt rows (including a wrong stored
+  name pointing to another valid record). Docker `./scripts/go.sh test
+  ./internal/jiradc ./internal/api ./internal/domain -count=1` passed
+  (`/tmp/weft-jira-mappings-v3.log`). Final read-only subagent review found no
+  residual blockers after the revision and corrupted-key checks were corrected.
+- Mapping editor/selection, lifecycle pins/adoption, optional synchronization
+  recovery and Cloud adoption remain incomplete. No live configuration changed.

@@ -34,15 +34,16 @@ func TestTransitionIntentRequiresScopedIDsAndRejectsSameStatusActions(t *testing
 }
 
 type syncFixture struct {
-	issueReads atomic.Int32
-	root       string
-	syncer     TransitionSync
-	status     atomic.Int32
-	posts      atomic.Int32
-	mode       atomic.Int32
-	afterPost  func()
-	entered    chan struct{}
-	release    chan struct{}
+	beforeMetadata func()
+	issueReads     atomic.Int32
+	root           string
+	syncer         TransitionSync
+	status         atomic.Int32
+	posts          atomic.Int32
+	mode           atomic.Int32
+	afterPost      func()
+	entered        chan struct{}
+	release        chan struct{}
 }
 
 func transitionFixture(t *testing.T) *syncFixture {
@@ -86,6 +87,9 @@ func transitionFixture(t *testing.T) *syncFixture {
 			fmt.Fprint(w, issue)
 		case "/jira/rest/api/2/issue/10007/transitions":
 			if r.Method == "GET" {
+				if f.beforeMetadata != nil {
+					f.beforeMetadata()
+				}
 				fields := `{}`
 				if f.mode.Load() == 7 {
 					fmt.Fprint(w, `{"transitions":[]}`)
