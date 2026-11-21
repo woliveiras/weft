@@ -1185,3 +1185,48 @@ name assumptions through discovered, scoped workflow mappings.
   with exit 0; the container was healthy and `/healthz` returned `status: ok`.
   The local connection configuration survived the rebuild. No persistent data
   was deleted. Documentation-only evidence changes require no new tests.
+
+
+### Personal Cloud rehearsal — blocked before admission (2026-11-21)
+
+- The maintainer authorized the complete SCRUM-5 rehearsal through a branch and
+  PR in the disposable `woliveiras-home-made-software/weft-rehearsal` repository.
+  Its initially empty `main` was initialized with a README, commit
+  `9b7a27379bce027ffbfa80f942c5dd986b9e1c8e`. Authenticated HTTPS import succeeded
+  at 07:13:49Z, creating project `prj_mwq2nnpz3a635a3e34e124e9cdbe` pinned to that
+  commit. The transient Git credential was not retained in the import record.
+- Reviewed dry-runs preceded the separate `cloud-rehearsal` graph v1 and
+  `cloud-rehearsal-scrum-5` trigger applies. The Go 1.26 Alpine environment built
+  successfully in 25.952 seconds; agent execution uses Docker with no network.
+  Trigger `trg_mwq2pojod523194e8f9b64acea58` recorded Full consent at 07:15:22Z,
+  selected only project 10000 / SCRUM-5, and pinned `rehearsal-jira` revision 4.
+  Optional status mappings were not adopted; the unconfirmed project-restricted
+  profile was not represented as write-qualified. Existing budgets and GitHub
+  workflows were preserved. The selection label was applied at 07:15:30Z.
+- Preview and the first poll failed before readiness, claim or task creation.
+  Weft MCP history records error completions 60035 and 60037. Direct MCP V2
+  search and known-issue reads outside Weft also returned an error result:
+  `Failed to fetch accessible products: 401`. The organization UI confirmed API
+  token authentication enabled; account UI confirmed an unexpired token with
+  exactly the three intended Jira agent-interface scopes. These observations do
+  not establish the upstream cause. Discovery Ready is not live tool-call
+  qualification. The trigger was paused at 07:18:13Z, without current task or
+  processed key, preserving `weft:todo` on SCRUM-5.
+- An independent OAuth connection `rehearsal-jira-oauth` was prepared with
+  separate REST credentials and only identity, refresh, Jira read/search scopes.
+  The operator confirmed DCR in the console. At 07:21:16Z the provider returned
+  HTTP 201, but Weft rejected its response contract and persisted revision 3,
+  registration `uncertain`, diagnostic `response_incompatible`. No client ID or
+  secret was accepted and OAuth authorization was not reached. This category
+  does not identify the incompatible field or prove that no remote client was
+  created. No subsequent registration attempt or reset was performed.
+- Independent read-only review confirmed the failure category is a composite
+  validation result. The rejected field cannot be reconstructed from retained
+  evidence. Reconcile the original registration with Atlassian before deliberate
+  recovery; see [uncertain DCR recovery](../../../docs/mcp.md#diagnosing-an-uncertain-dcr-registration).
+  Do not loosen callback, method or scope checks to force live acceptance.
+- Final Weft spend remained USD 1.953861 / 301 model calls: this attempt added
+  zero inference calls or model cost. No task branch, Git push, PR, portable
+  review or Jira completion is claimed. Atlassian-side charges were not measured.
+  No production code changed and no new test results are claimed by this
+  operational/documentation evidence.
