@@ -175,3 +175,42 @@ Shared verification commands and results: [RUN-007 — Independent review of 925
 Go used cached Docker images with pulls disabled. Playwright used installed
 Chromium and a disposable Darwin backend. Live tracker qualification remains
 in PROD-14.
+
+## Portable failed-admission retry regression — 2026-11-23
+
+The Cloud rehearsal exposed a GitHub-only recovery guard: `RetryFailed` built a
+GitHub deduplication key and required the historical `triggerGitHubIssue` field,
+so an admitted Jira task could not be recovered after stopping. The regression
+fixture reproduced rejection for Jira Cloud and Data Center; it also exposed
+acceptance of a different connection for a portable GitHub origin.
+
+Recovery now validates the admitted portable origin (kind, connection, exact
+instance and issue, plus DC project) and workflow, and uses the source's existing
+deduplication identity. Credential revisions may change without changing source
+identity. Historical GitHub records retain their repository-bound path. Existing
+stopped-graph, terminal-execution, pending-approval, delivery and single-use
+generation fences remain effective. No tracker call occurs during recovery.
+
+Unit identity tests cover valid origins, credential rotation, malformed/mismatched
+origins and GitHub compatibility. Real filesystem-store/manager tests cover Cloud,
+DC and GitHub, foreign identity, delivered/running tasks, approvals, active
+executions, dependency failure, retained evidence and replay. API/application
+integration covers administrator/confirmation boundaries, source preservation,
+cancellation of undispatched drafts, audit and replay. A gateway/runner Cloud
+fixture proves old labels, old changelog events and app actors cannot consume a
+retry; a fresh project-administrator relabel creates exactly one new admission and
+preserves the original record. Native DC still fails closed because it cannot
+verify the label actor's role; this correction does not claim DC redispatch.
+
+Validation: `./scripts/go.sh test ./internal/trigger ./internal/api -count=1` passed
+(trigger 7.575s; API 46.282s). The subsequently added Cloud generation-consumption
+fixture passed separately with `./scripts/go.sh test ./internal/trigger -run
+TestJiraCloudRetryGeneration -count=1` (0.078s). Independent code review reported no
+blocking findings. Live rehearsal qualification remains separate.
+
+A repeat while the separate sandbox-Git correction was being edited passed the
+trigger package (8.630s), but the API package failed (45.957s) in
+`TestProjectTaskWorktreeThroughAPI` (`.git` is now a directory) and
+`TestTaskCleanupRequiresStoppedScopeAndReview` (source branch assertion). These
+failures belong to the concurrent Git layout change, not portable retry. The
+combined checkout requires a fresh full result after that correction is ready.

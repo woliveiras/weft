@@ -43,8 +43,8 @@ func (m Manager) RetryFailed(ctx context.Context, id, issue, taskID, actor strin
 	if err != nil {
 		return nil, err
 	}
-	key := DedupKey(t, Issue{Source: "github", Key: issue})
-	if t.State != Paused || t.Source.Kind != "github" || !strings.HasPrefix(issue, t.Source.Repository+"#") || t.ReadinessDisabled || t.CurrentTask != "" || t.Claiming != "" || (t.Processed[key] != "failed" && t.Processed[key] != taskID) || pendingFailedRetry(t, key) {
+	key := DedupKey(t, Issue{Source: t.Source.Kind, Key: issue})
+	if t.State != Paused || t.ReadinessDisabled || t.CurrentTask != "" || t.Claiming != "" || (t.Processed[key] != "failed" && t.Processed[key] != taskID) || pendingFailedRetry(t, key) {
 		return nil, fmt.Errorf("%w: select a paused readiness trigger with a failed admission or undelivered task", storage.ErrConflict)
 	}
 	tm := taskconfig.Manager{Store: m.Store}
@@ -52,7 +52,7 @@ func (m Manager) RetryFailed(ctx context.Context, id, issue, taskID, actor strin
 	if err != nil {
 		return nil, err
 	}
-	if d.TriggerGitHubIssue != issue || d.GraphID != t.Workflow {
+	if d.GraphID != t.Workflow || !retryMatchesOrigin(t, d, issue) {
 		return nil, fmt.Errorf("%w: recovery requires the original issue task", storage.ErrConflict)
 	}
 	if d.ExecutionGraphID != "" {
@@ -104,6 +104,31 @@ func (m Manager) RetryFailed(ctx context.Context, id, issue, taskID, actor strin
 		m.audit(ctx, out, "failed_retry_recorded", actor)
 	}
 	return out, err
+}
+
+// retryMatchesOrigin binds recovery to the immutable source admitted with the
+// original task. Credential revisions may change without changing resource
+// identity; equal Jira keys on other sites or connections are never equivalent.
+func retryMatchesOrigin(t *Trigger, d *taskconfig.Draft, issue string) bool {
+	if d.TriggerIssueOrigin == nil {
+		// Preserve historical GitHub tasks that predate portable issue origins.
+		legacy := taskconfig.IssueOrigin{Kind: "github", ConnectionID: t.Source.ConnectionID, ConnectionRevision: 1, Instance: "https://api.github.com", Key: issue}
+		return t.Source.Kind == "github" && d.TriggerGitHubIssue == issue && strings.HasPrefix(issue, t.Source.Repository+"#") && legacy.Validate() == nil
+	}
+	origin := d.TriggerIssueOrigin
+	if origin.Validate() != nil || origin.Kind != t.Source.Kind || origin.ConnectionID != t.Source.ConnectionID || origin.Key != issue {
+		return false
+	}
+	switch origin.Kind {
+	case "github":
+		return origin.Instance == "https://api.github.com" && strings.HasPrefix(issue, t.Source.Repository+"#") && (d.TriggerGitHubIssue == "" || d.TriggerGitHubIssue == issue)
+	case "jira":
+		return d.TriggerGitHubIssue == "" && origin.Instance == "https://api.atlassian.com/ex/jira/"+t.Source.CloudID && (origin.ProjectID == "" || origin.ProjectID == t.Source.ProjectID)
+	case "jira-dc":
+		return d.TriggerGitHubIssue == "" && origin.Instance == t.Source.SiteURL && origin.ProjectID == t.Source.ProjectID
+	default:
+		return false
+	}
 }
 
 // A stopped graph is the fence against redispatch and pending external effects.

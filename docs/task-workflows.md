@@ -365,11 +365,15 @@ diagnostics. Uncertain preparation/start is not automatically replayed.
 ### Explicit recovery after admission or delivery failure
 
 **Resume and record consent** plus relabeling alone cannot bypass an admission.
-For a readiness-enabled GitHub trigger, an administrator can authorize one new
-admission for an undispatched failed draft or a stopped task without a recorded
+For a readiness-enabled GitHub or Jira trigger, an administrator can authorize
+one new admission for an undispatched failed draft or a stopped task without a recorded
 pull request. A task that declared a blocker, or whose successful turn produced
 no required PR, is eligible. Prior tasks, execution graphs, events and admission
-records remain available for audit.
+records remain available for audit. Recovery validates the admitted immutable
+origin against the current provider, connection, instance, issue and workflow;
+Jira Data Center additionally requires the same project. Credential rotation
+does not change that resource identity. Historical GitHub tasks without a portable
+origin keep their original repository-bound recovery path.
 
 1. Inspect the original task, agent summary, tool outcomes, branch and tracker.
    Correct the cause within the reviewed scope. Keep the trigger paused. Confirm
@@ -381,16 +385,20 @@ records remain available for audit.
    Do not stop the source workflow or delete resources. Newly created tasks
    settle automatically when no work or approval remains.
 3. Call `POST /api/v1/triggers/{trigger}/retry-failed` as an administrator with
-   `{"key":"owner/repo#1","taskId":"tsk_original","confirm":true}`.
+   `{"key":"owner/repo#1","taskId":"tsk_original","confirm":true}`
+   (use a Jira key such as `APP-7` for Jira).
    An undispatched draft is cancelled; a finished task and its execution copy
    are retained unchanged. The operation audits the actor and a single-use
    retry generation. It does not resume the trigger or modify the tracker.
    Inspect a failed/uncertain response before repeating it.
 4. In workflow **Settings → Triggers**, select **Resume and record consent**.
-5. After the retry was recorded, a human with GitHub Maintain or Admin permission
-   must remove/reapply `weft:todo`. Also restore a custom selection label if
-   configured. Leave `weft:needs-attention` for the runner to remove on claim.
-   Existing, bot or unverified label events cannot authorize a retry.
+5. After the retry was recorded, a human with GitHub Maintain/Admin permission
+   or Jira Cloud project-administrator permission must remove/reapply `weft:todo`.
+   Also restore a custom selection label if configured. Leave `weft:needs-attention` for the runner to remove on claim.
+   Existing, bot or unverified label events cannot authorize a retry. Jira Data
+   Center currently cannot verify the relabel actor's project-administrator
+   permission: its recorded retry stays blocked before dispatch. Do not bypass
+   this check by deleting admission history or changing the source identity.
 6. Wait for current readiness, scope, consent and budget checks, a **new** task
    link and `weft:wip`. With Ask, review environment and tool approvals. The
    original task is never dispatched again.
