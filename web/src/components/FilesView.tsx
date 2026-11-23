@@ -1,10 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { GitView } from './GitView';
 import { api, errorMessage } from '../api/client';
-import type { FileEntry, GraphStatus, GraphSummary } from '../api/types';
+import type { FileEntry, GraphStatus, GraphSummary, NodeStatus } from '../api/types';
 import { Btn, ErrorBox, fmtDateTime } from './common';
 
 type FilesProps = { summary: GraphSummary; status?: GraphStatus };
+/** Include retained replicas after a scale-down without inventing gaps in historical indices. */
+export function workspaceReplicas(graphId: string, nodeId: string, status?: NodeStatus): number[] {
+  const desired = status?.desiredReplicas ?? 1;
+  const replicas = new Set(Array.from({length:Math.max(1,Number.isSafeInteger(desired) ? desired : 1)}, (_, index) => index));
+  for (const replica of status?.replicas ?? []) {
+    if (replica.graphId === graphId && replica.nodeId === nodeId && Number.isSafeInteger(replica.replica) && replica.replica >= 0) replicas.add(replica.replica);
+  }
+  return [...replicas].sort((a,b) => a-b);
+}
 export function FilesView(props: FilesProps) {
   return <WorkspaceFiles key={props.summary.graph.metadata.id} {...props} />;
 }
@@ -22,7 +31,7 @@ function WorkspaceFiles({ summary, status }: FilesProps) {
   const [contentLoading, setContentLoading] = useState(false);
   const contentRequest = useRef(0);
   const [error, setError] = useState<string>();
-  const replicaCount = Math.max(status?.nodes?.find((node) => node.nodeId === nodeId)?.desiredReplicas ?? 1, 1);
+  const replicas = workspaceReplicas(graphId,nodeId,status?.nodes?.find((node) => node.nodeId === nodeId));
   const location = nodeId ? { node: nodeId, replica } : {};
 
   useEffect(() => {
@@ -97,11 +106,11 @@ function WorkspaceFiles({ summary, status }: FilesProps) {
                   ))}
                 </select>
               </label>
-              {nodeId && replicaCount > 1 && (
+              {nodeId && replicas.length > 1 && (
                 <label className="small muted">
                   Replica
                   <select value={replica} onChange={(event) => setReplica(Number(event.target.value))}>
-                    {Array.from({ length: replicaCount }, (_, index) => (
+                    {replicas.map(index => (
                       <option key={index} value={index}>
                         {index}
                       </option>

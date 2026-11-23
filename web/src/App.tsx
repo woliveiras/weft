@@ -5,6 +5,7 @@ import {ProjectsPage, type ProjectView} from './components/ProjectsPage';
 import { ActivityPage } from './components/ActivityPage';
 import { activityHash, parseActivityState, type ActivityRouteState } from './components/activityView';
 import { TasksPage } from './components/TasksPage';
+import { TaskExecutionPage, taskOwnerId } from './components/TaskExecutionPage';
 import { PrimaryNavigation } from './components/PrimaryNavigation';
 import { runSection, type RunSection } from './components/runPresentation';
 import { agentSection, type AgentSection } from './components/agentSettingsModel';
@@ -180,7 +181,7 @@ function Shell() {
   );
 
   const list = graphs.data ?? [];
-  const ownedTask = route.view === 'graph' && route.id.startsWith('task-run-') ? 'tsk_' + route.id.slice('task-run-'.length) : undefined;
+  const ownedTask = route.view === 'graph' ? taskOwnerId(route.id) : undefined;
   const workflows = list.filter(g => !g.graph.metadata.id.startsWith('task-run-') && !g.graph.metadata.labels?.['weft.task']);
   const current = route.view === 'graph' ? workflows.find((g) => g.graph.metadata.id === route.id) : undefined;
   const pending = approvals.data?.length ?? 0;
@@ -236,11 +237,11 @@ function Shell() {
         )}
       </header>
       <div className="workspace-shell">
-        <PrimaryNavigation active={route.view === 'graph' ? 'graphs' : route.view} pending={pending}
+        <PrimaryNavigation active={ownedTask ? 'tasks' : route.view === 'graph' ? 'graphs' : route.view} pending={pending}
           onNavigate={view => go(view === 'administration' ? {view, section: 'health'} : view === 'activity' ? {view, activity: parseActivityState('')} : {view})} />
         <main>
           <ErrorBox error={info.error && !graphs.error ? `info: ${info.error}` : undefined} />
-          {ownedTask && <section className="page"><h1>Task execution</h1><p>This graph is the execution copy owned by a task.</p><a href={`#/tasks/${encodeURIComponent(ownedTask)}`}>Open task {ownedTask}</a></section>}
+          {ownedTask && route.view === 'graph' && <TaskExecutionPage key={route.id} graphId={route.id} tab={route.tab} executionId={route.executionId} section={route.runSection}/>}
           {route.view === 'activity' && <ActivityPage state={route.activity} onChange={activity => go({ view: 'activity', activity })} />}
           {route.view === 'projects' && <ProjectsPage key={route.projectView ?? 'list'} mode={route.projectView} nativeProfile={info.data?.nativeProfile===true} canEdit={info.data?.identity?.role==='admin'}/>}
           {route.view === 'tasks' && <TasksPage key={route.taskId ?? (route.create ? 'new' : 'list')} id={route.taskId} create={route.create} info={info.data} graphs={list}/>}
@@ -281,7 +282,7 @@ function Shell() {
                 onCorrelation={c => go({...workspaceRoute, tab: 'messages', correlationId: c})}/>
             </Activity>;
           })}
-          {route.view === 'graph' && !visibleSessions[route.id] && (graphs.loading
+          {route.view === 'graph' && !ownedTask && !visibleSessions[route.id] && (graphs.loading
             ? <p className="muted page">Loading…</p>
             : <ErrorBox error={graphs.error ?? `Graph “${route.id}” not found.`}/>)}
 

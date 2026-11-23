@@ -23,7 +23,7 @@ export function TaskAuthorization({taskId,canEdit,onChanged,running=false}:{task
  const capabilities=state.data?.capabilities;
  return <section className="card task-authorization" aria-label="Task authorization"><h2>Authorization</h2>
  <p>Current mode: {state.error?'unavailable':state.data?.record?.mode??(running?'Existing workflow approvals (legacy task)':'Ask for approval (default)')}. Tool grants and mandatory approvals remain unchanged.</p>
- {capabilities?.length ? <details><summary>Reviewed agents, tools and execution boundaries</summary>{capabilities.map(agent=><section key={agent.id}><h3>{agent.id}</h3><p>Isolation: {agent.isolation}</p><pre>{JSON.stringify(agent.grants ?? [],null,2)}</pre></section>)}</details>
+ {capabilities?.length ? <details><summary>Reviewed agents, tools and execution boundaries</summary>{capabilities.map(agent=><section className="task-access-agent" key={agent.id}><h3>{agent.id}</h3><p>Isolation: {agent.isolation}</p><ul aria-label={`Tools granted to ${agent.id}`}>{(agent.grants??[]).map((grant,index)=><li key={index}><code>{grant.name}</code>{grant.commands?.length ? <span> · Commands: {grant.commands.join(', ')}</span> : null}</li>)}</ul><details><summary>View raw grant data</summary><pre>{JSON.stringify(agent.grants ?? [],null,2)}</pre></details></section>)}</details>
   : <p className="muted">{state.loading?'Loading authorization details…':state.error?'Could not load reviewed agent details.':'No reviewed agent details are available for this task.'}</p>}
  <ErrorBox error={state.error||error}/>
  {state.data?.record&&state.data.record.scope!==state.data.scope&&<p role="alert">Saved authorization is stale. Review the current scope and confirm again before starting.</p>}

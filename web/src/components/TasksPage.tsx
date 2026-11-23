@@ -1,27 +1,17 @@
+import {TaskTracking} from './TaskDetails';
 import { HelpField } from './FieldHelp';
-import {TaskJourney} from "./TaskJourney";
 import {TaskAuthorization} from "./TaskAuthorization";
 import {RepositoryImport} from './RepositoryImport';
 import {TaskIssueSource} from "./TaskIssueSource";
-import {TaskEnvironment} from './TaskEnvironment';
 import {TaskRequirementRepairs} from './TaskRequirementRepairs';
-import {TaskDecisions} from './TaskDecisions';
-import {TaskActivity} from './TaskActivity';
 import {useEffect, useState} from 'react';
 import {api, errorMessage} from '../api/client';
 import type {GraphSummary, Info} from '../api/types';
-import type {TaskDraft, TaskInput, TaskReview, TaskProgress} from '../api/tasks';
-import {useAsync,useThrottled} from '../hooks/useData';
-import {useOptionalEventStream} from '../hooks/useEventStream';
+import type {TaskDraft, TaskInput, TaskReview} from '../api/tasks';
+import {useAsync} from '../hooks/useData';
 import {Btn, ErrorBox} from './common';
-import {TaskCleanup} from './TaskCleanup';
-import {WorkspaceHandoff} from './WorkspaceHandoff';
 import {TasksList} from './TasksList';
-import {TaskEvidence} from './TaskEvidence';
-import {TaskPlan} from './TaskPlan';
-import {TaskCheckpoints} from './TaskCheckpoints';
 import {workflowTaskDefaults,updateTaskInput,outcomeRequest,promptTitle} from './taskDefaults';
-import {BudgetBar} from './CostsSection';
 import {budgetLabel,money} from './cost';
 
 export const taskOutcomes = [
@@ -73,16 +63,6 @@ function SCMHandOffField({value,onChange}:{value:string;onChange:(v:string)=>voi
   </select><span className="muted small">After the workflow's human gate, the result agent commits on a task branch, pushes it and opens a pull request{options.find(c=>c.name===value)?.requirePullRequestApproval===false?'':' once a person approves it'}.</span></HelpField>;
 }
 
-/** What the SCM hand-off did: pushed branch, pull request, failures. */
-function TaskDeliveryView({delivery}:{delivery:import('../api/tasks').TaskDelivery}) {
-  return <section aria-label="Source control delivery">
-    <h3>Source control</h3>
-    <p>{delivery.branch?<>Pushed <code>{delivery.branch}</code> to {delivery.repository} ({delivery.connection}).</>:`Nothing pushed to ${delivery.connection} yet.`}</p>
-    {delivery.pullRequestUrl&&<p>Pull request <a href={delivery.pullRequestUrl} target="_blank" rel="noreferrer">#{delivery.pullRequestNumber}</a> is open.</p>}
-    {(delivery.failures??[]).length>0&&<ul role="alert" aria-label="Delivery failures">{delivery.failures!.map((f,i)=><li key={i}>{f}</li>)}</ul>}
-  </section>;
-}
-
 /** Budgets a new run of the selected workflow would be held to, for the caller. */
 function TaskBudgetPreview({workflow,project}:{workflow:string;project?:string}) {
   const preview=useAsync(()=>workflow?api.budgetPreview(workflow,project):Promise.resolve(undefined),[workflow,project]);
@@ -92,18 +72,6 @@ function TaskBudgetPreview({workflow,project}:{workflow:string;project?:string})
     <h3>Budget</h3>
     {data.taskRunBudgetMicros>0&&<p>This run may spend up to {money(data.taskRunBudgetMicros,data.currency)} before it pauses for a raise.</p>}
     <ul>{data.budgets.filter(b=>b.scope!=='run').map(b=><li key={b.scope+b.id}>{budgetLabel(b)}: {money(b.remainingMicros,b.currency||data.currency)} left of {money(b.limitMicros,b.currency||data.currency)}{b.reached&&' — reached, new tasks are refused'}</li>)}</ul>
-  </section>;
-}
-
-/** The run's own budget, with a raise when it paused the run. */
-function TaskRunBudget({graph,canRaise,active}:{graph:string;canRaise:boolean;active:boolean}) {
-  const budget=useAsync(()=>api.budget('run',graph).catch(()=>undefined),[graph]);
-  const reload=useThrottled(()=>void budget.reload(),300);
-  useOptionalEventStream({graph,types:['budget.raised','budget.graph_transition','budget.ledger_invalid']},reload);
-  if(!budget.data)return null;
-  return <section aria-label="Task run budget">
-    {active&&budget.data.paused&&!budget.data.notResumed?.length&&<p role="alert">This run is paused because it reached its budget. {canRaise?'Raise the budget to continue, or stop the task.':'Ask an administrator to raise the budget, or stop the task.'}</p>}
-    <ul className="integration-grid"><BudgetBar budget={budget.data} currency={budget.data.currency||'USD'} canRaise={canRaise} showPause={active} onRaised={()=>budget.reload()}/></ul>
   </section>;
 }
 
@@ -251,83 +219,5 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
       <Btn tone="primary" disabled={!canStart||!review.canStart||!confirmed||busy||modelBlocked} onClick={()=>void start()}>Start task</Btn>
       <a href={`#/g/${encodeURIComponent(input.graphId)}/agent?agent=${encodeURIComponent(input.nodeId)}&section=general`}>Review agent configuration</a>
     </article>}
-  </>;
-}
-
-function TaskRequestContent({request}: {request:string}) {
-  let issue: {key:string; body:string; replies:string[]} | undefined;
-  try {
-    const parsed = JSON.parse(request);
-    if (parsed && typeof parsed.notice === 'string' && typeof parsed.issue === 'string'
-      && typeof parsed.title === 'string' && typeof parsed.body === 'string') {
-      issue = {key:parsed.issue, body:parsed.body, replies:Array.isArray(parsed.replies)
-        ? parsed.replies.filter((reply:unknown): reply is string => typeof reply === 'string') : []};
-    }
-  } catch {
-    // Ordinary task requests are plain text.
-  }
-  return <>
-    {issue && <p className="muted">Issue <code>{issue.key}</code></p>}
-    <p className="task-request-text">{issue ? (issue.body || 'No description was provided for this issue.') : request}</p>
-    {!!issue?.replies.length && <details><summary>Issue replies ({issue.replies.length})</summary>
-      <ul>{issue.replies.map((reply,index)=><li className="task-request-text" key={index}>{reply}</li>)}</ul>
-    </details>}
-  </>;
-}
-
-function TaskTracking({task,canControl,canDecide,nativeProfile}:{task:TaskDraft;canControl:boolean;canDecide:boolean;nativeProfile:boolean}) {
-  const [progress,setProgress]=useState<TaskProgress>();
-  const [showDiagnostics,setShowDiagnostics]=useState(false);
-  const [error,setError]=useState<string>();
-  const [busy,setBusy]=useState(false);
-  const [confirmed,setConfirmed]=useState(false);
-  const [refresh,setRefresh]=useState(0);
-  useEffect(()=>{
-    let disposed=false;let timer:ReturnType<typeof setTimeout>;
-    const load=async()=>{
-      try{const result=await api.taskProgress(task.id);if(!disposed){setProgress(result);setError(undefined);}}
-      catch(e){if(!disposed)setError(errorMessage(e));}
-      if(!disposed)timer=setTimeout(()=>void load(),3000);
-    };
-    void load();return()=>{disposed=true;clearTimeout(timer);};
-  },[task.id,refresh]);
-  const cancel=async()=>{setBusy(true);try{await api.cancelTask(task.id);setRefresh(x=>x+1);setConfirmed(false);}catch(e){setError(errorMessage(e));}finally{setBusy(false);}};
-  const current=progress?.task??task;
-  const graph=current.executionGraphId;
-  return <>
-    <a className="task-back-link" href="#/tasks">Back to tasks</a>
-    <article className="task-detail-layout" aria-label="Task progress">
-      <section className="card task-progress-summary" aria-label="Status">
-      <div className="task-detail-heading"><h2>Status</h2><Btn small onClick={()=>setRefresh(x=>x+1)}>Refresh task</Btn></div>
-      <p role="status">{progress?`Task status: ${progress.state}`:'Loading progress…'}</p>
-      <TaskJourney progress={progress} error={error}/>
-      <ErrorBox error={error}/>
-      {current.launchError&&<p>{current.launchError}</p>}
-      {progress?.blockers.map(b=><p key={b}>{b}</p>)}
-      </section>
-      <section className="card task-result" aria-label="Result">
-        <h2>Result</h2><p className="task-request-text" aria-label="Agent summary">{progress?.result?.summary||'No result recorded yet.'}</p>
-        {progress?.result?.summary&&<p className="muted small">Agent output is generated content. Inspect tool outcomes and test evidence before accepting changes.</p>}
-        {progress?.delivery&&<TaskDeliveryView delivery={progress.delivery}/>}
-      </section>
-      <section className="card task-detail-request" aria-label="Request"><h2>Request</h2><TaskRequestContent request={task.request}/></section>
-      <TaskAuthorization taskId={task.id} canEdit={canControl&&["running","starting","environment_pending"].includes(current.status)} running={current.status!=="environment_pending"} onChanged={()=>setRefresh(x=>x+1)}/>
-      {graph&&<TaskRunBudget graph={graph} canRaise={canControl} active={progress?.state==='running'}/>}
-      {graph&&<TaskDecisions graphId={graph} approvals={error?undefined:progress?.pendingApprovals} canDecide={canDecide} canAdmin={canControl} onChanged={()=>setRefresh(x=>x+1)}/>}
-      {progress?.workspacePath&&<WorkspaceHandoff path={progress.workspacePath} nativeProfile={nativeProfile}/>}
-      {canControl&&progress?.state==='cancelled'&&current.projectId&&<TaskCleanup taskId={task.id} workspaces={progress.workspaces??[]} onChanged={()=>setRefresh(x=>x+1)}/>}
-      {progress?.environment&&<TaskEnvironment key={task.id} task={current} environment={progress.environment} canControl={canControl} onChanged={()=>setRefresh(x=>x+1)}/>}
-      {graph&&<TaskPlan key={`plan-${graph}`} graphId={graph}/>}
-      {graph&&<TaskEvidence key={graph} graphId={graph} workspaces={progress?.workspaces??[]} nativeProfile={nativeProfile} executions={progress?.executions??[]} role={canControl?'admin':canDecide?'operator':'viewer'}/>}
-      {graph&&<TaskCheckpoints key={`checkpoints:${graph}`} graphId={graph} canRestore={canControl}/>}
-      {graph&&<nav aria-label="Task evidence"><a href={`#/g/${encodeURIComponent(graph)}/runs`}>Execution details</a> · <a href={`#/g/${encodeURIComponent(graph)}/files`}>Workspace files</a> · <a href="#/approvals">Approvals</a></nav>}
-      <details className="card task-workflow-details"><summary>Workflow and executions</summary>
-        <dl><div><dt>Source workflow</dt><dd>{task.graphId}</dd></div><div><dt>Version</dt><dd>{task.graphVersion}</dd></div><div><dt>Execution copy</dt><dd>{graph||'Not prepared'}</dd></div></dl>
-        <ul>{progress?.executions.map(x=><li key={x.id}><a href={`#/g/${encodeURIComponent(x.graphId)}/runs?execution=${encodeURIComponent(x.id)}&section=result`}>{x.nodeId}: {x.status}</a></li>)}</ul>
-      </details>
-      {graph&&<details onToggle={e=>setShowDiagnostics(e.currentTarget.open)}><summary>Activity and diagnostics</summary>{showDiagnostics&&<TaskActivity graphId={graph} role={canControl?'admin':canDecide?'operator':'viewer'}/>}</details>}
-      {canControl&&progress?.state!=='cancelled'&&<><label><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>Stop this task's execution copy and retain its data.</label><Btn disabled={busy||!confirmed} onClick={()=>void cancel()}>Stop task</Btn></>}
-      <p>Task completion does not itself commit, push or delete the workspace. Agent actions still depend on the workflow grants and approvals.</p>
-    </article>
   </>;
 }

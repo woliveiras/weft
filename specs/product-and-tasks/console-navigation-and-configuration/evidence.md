@@ -296,3 +296,46 @@ These results were recorded at the time of the run. The documentation migration 
 - `git diff --check` passed. Go/Python suites and Go lint were not rerun for
   this CSS-only refinement; the standard image build compiled the Go binaries.
   Chromium verification does not establish cross-browser conformance.
+
+
+## Task detail hierarchy refinement — 2026-11-23
+
+- Overview now places Agent plans before the result, with the latest checklist
+  per agent/replica, current step, plan timestamp and expandable earlier attempts.
+  Step completion remains an agent claim, not verified checks or total progress.
+- Stable task section links separate changes/checks, activity, the original
+  request, and settings/access. Pending decisions and blockers remain visible
+  above sections. Full persisted summaries are fetched only on explicit request,
+  validated against execution ID and graph, and retain the preview on failure.
+  The preview can be shorter than 200 characters; its length never determines
+  whether the full result can be opened.
+- Header facts use recorded execution timestamps and recorded budget charges.
+  Failed progress/cost refreshes retain their last values with an explicit stale
+  indication. Recorded SCM delivery does not assert a fresh remote PR state.
+  Grants have a readable list plus raw detail. Historical terminal copies retain
+  cancellation unless their exact graph is confirmed stopped; viewer permissions,
+  confirmation and the existing cancellation API remain unchanged.
+- Docker command `npx tsc --noEmit && npx vitest run && npm run build` passed:
+  117 test files, 674 tests. Log: `/tmp/weft-task-details-web-final.log`.
+  Final graph-context and cost-failure refinements passed TypeScript, 17 focused
+  tests and the production build in Docker:
+  `/tmp/weft-task-details-last-focused.log`. Unit tests cover section parsing,
+  execution timing, plan ordering and workspace replicas; component integrations
+  exercise the real API client, routes, delayed snapshots/SSE, role restrictions,
+  dependency failures, retries, exact ownership and historical cancellation.
+- Independent subagent review found three defects (historical cancellation,
+  full-summary availability, replica inspection); all were corrected and reviewed
+  again without remaining blocking findings. Navigation-specific evidence is in
+  TASK-004's execution activity and run diagnostics evidence.
+- Standard `docker compose up -d --build --no-deps weftd` succeeded; the service
+  is healthy and `/healthz` returned `ok`. Live read-only browser inspection of
+  SCRUM-5 confirmed the new Overview and 4/4 recorded plan, full persisted result,
+  request, readable grants, historical Tool calls and Workspace files. A narrow
+  viewport had no horizontal document overflow; the viewport override was reset.
+  Screenshot: `/tmp/weft-task-details-overview.png`. No task, authorization,
+  budget, checkpoint, Jira or Bitbucket mutation was submitted during this check.
+- No backend, storage, authorization or telemetry contract changed. Go/Python
+  suites and Go lint were not rerun for this console-only change; the standard
+  image build compiled the Go binaries. No cross-browser or assistive-technology
+  conformance is claimed. The production build reports a large-chunk
+  advisory; it completed successfully.

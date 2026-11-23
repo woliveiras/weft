@@ -428,3 +428,11 @@ Inspect instructions at `#/skills/inspect` separates current saved configuration
 from immutable execution records. Execution search and 20-row pages bound the
 recent list; bodies expand on demand while provenance, hashes and omissions
 remain visible. A failed read offers retry and does not invent an empty record.
+
+### Task detail sections
+
+Task Overview shows the current state, actionable holds, live agent plans and recorded result before secondary configuration. Plan steps are agent reports, not independently verified test results or a percentage of total task completion. Earlier attempts remain expandable.
+
+Task links accept `?tab=changes`, `?tab=activity`, `?tab=request` and `?tab=settings`; the bare task URL opens Overview. Changes & checks contains workspace/Git inspection, declared checks, tool-call evidence and checkpoints. Request preserves the original text. Settings & access contains the pinned workflow, reviewed grants, environment, budget and retained-workspace cleanup. Pending decisions and preparation failures stay visible above these sections. Recorded SCM delivery is not a fresh remote-status query.
+
+Legacy execution-copy run/file links open task-owned evidence with no workflow editor. The owner task and execution-copy identity must match before evidence loads.

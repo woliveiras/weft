@@ -229,11 +229,13 @@ it('renders a tracked issue as text with separate replies and no link back to it
   'GET /api/v1/tasks/tsk_issue/authorization':()=>apiError(409,'storage: conflict','conflict')});
  render(<TasksPage id="tsk_issue" info={info} graphs={graphs}/>);
  await screen.findByRole('heading',{level:1,name:'Repair task output'});
+ await userEvent.click(screen.getByRole('link',{name:'Request'}));
  const request=screen.getByRole('region',{name:'Request'});
  expect(within(request).getByText('example/repo#10')).toBeTruthy();
  expect(request.textContent).toContain('Repair this output.\n\nKeep <b>literal text</b>.');
  expect(request.textContent).not.toContain('Internal task context');
  expect(within(request).getByText('Issue replies (1)')).toBeTruthy();
+ await userEvent.click(screen.getByRole('link',{name:'Settings & access'}));
  expect(await screen.findByText(/This task uses a different workflow version/)).toBeTruthy();
  expect(screen.queryByRole('link',{name:'Task details'})).toBeNull();
 });

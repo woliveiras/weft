@@ -75,6 +75,8 @@ Common forms and controls remain usable at narrow widths and in the supported th
 
 - 2026-11-20. Maintainer responsive-layout refinement: all main destinations use the available width and shared inline padding (32 px desktop, 16 px narrow), including loading, empty and error states. Reading-width limits remain local to explanatory text. Canvas/log workspace layouts remain intact.
 
+- 2026-11-23. Maintainer task-detail refinement: Overview places live agent plans before the result, with agent/replica identity, current step, earlier-attempt disclosure and explicit empty/loading/error states. Stable task-scoped query links separate Overview, Changes & checks, Activity, Request and Settings & access, preserve browser back/forward and leave approvals/environment/budget holds visible across sections. A compact header identifies workflow/version, recorded execution timing, snapshot freshness and recorded spend; plan completion is not a verified task percentage. Full results remain readable on demand, delivery records are distinguished from fresh remote verification, and raw grants are secondary to readable permissions. Evidence inspection, checkpoints and task controls preserve their existing roles, confirmations and ownership. Completed tasks do not show an active Stop action. The existing TASK-007 AC-005 task-owned execution link contract remains applicable after settlement.
+
 ## Reconciliation
 
 - [interface-navigation.md](../../../docs/interface-navigation.md), [getting-started.md](../../../docs/getting-started.md), [brand/brand-guidelines.md](../../../docs/brand/brand-guidelines.md).

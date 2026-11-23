@@ -1,4 +1,4 @@
-import type {TaskWorkspace} from '../api/tasks';
+import type {TaskDelivery,TaskWorkspace} from '../api/tasks';
 import {WorkspaceHandoff} from './WorkspaceHandoff';
 import {RunEvents} from './RunsView';
 import {ExecutionTreeView} from './ExecutionTreeView';
@@ -8,22 +8,22 @@ import {Btn} from './common';
 import {GitView} from './GitView';
 import {CheckEvidence} from './CheckEvidence';
 
-export function TaskEvidence({graphId,executions,role,workspaces=[],nativeProfile=false}:{graphId:string;executions:Execution[];role?:string;workspaces?:TaskWorkspace[];nativeProfile?:boolean}) {
+export function TaskEvidence({graphId,executions,role,workspaces=[],nativeProfile=false,delivery}:{graphId:string;executions:Execution[];role?:string;workspaces?:TaskWorkspace[];nativeProfile?:boolean;delivery?:TaskDelivery}) {
   const [workspaceKey,setWorkspaceKey]=useState('');
   const scope=workspaces.find(x=>JSON.stringify([x.nodeId,x.replica])===workspaceKey);
   const [inspect,setInspect]=useState(false);
   const [selected,setSelected]=useState('');
   const [showTree,setShowTree]=useState(false);
   const execution=executions.find(x=>x.id===selected&&x.graphId===graphId);
-  return <section aria-label="Review task evidence">
+  return <section className="task-evidence" aria-label="Review task evidence">
     <h3>Changes and checks</h3>
     <p>Inspect the current working tree, diff and history. A completed agent run is not proof that tests passed or that changes were committed or pushed; only recorded declared checks are.</p>
     <dl aria-label="Delivery verification">
       <dt>Checks</dt><dd><CheckEvidence graphId={graphId} scope={scope?{nodeId:scope.nodeId,replica:scope.replica}:undefined}/></dd>
       <dt>Commits</dt><dd>Not inferred from task completion. Inspect local Git history for the selected workspace.</dd>
-      <dt>Push</dt><dd>Remote state not verified. No automatic push is performed on task completion.</dd>
+      <dt>Push</dt><dd>{delivery?.branch ? <>Weft recorded a push of <code>{delivery.branch}</code> to {delivery.repository}. This is recorded delivery evidence, not a fresh remote check.</> : 'Remote state not verified. No automatic push is performed on task completion.'}</dd>
     </dl>
-    <label>Workspace to review<select value={workspaceKey} onChange={e=>setWorkspaceKey(e.target.value)}><option value="">Shared task workspace</option>{workspaces.map(x=><option key={JSON.stringify([x.nodeId,x.replica])} value={JSON.stringify([x.nodeId,x.replica])}>{x.nodeId} · replica {x.replica}{x.branch?` · ${x.branch}`:''}</option>)}</select></label>
+    <label>Workspace to review<select value={workspaceKey} onChange={e=>{setWorkspaceKey(e.target.value);setInspect(false);}}><option value="">Shared task workspace</option>{workspaces.map(x=><option key={JSON.stringify([x.nodeId,x.replica])} value={JSON.stringify([x.nodeId,x.replica])}>{x.nodeId} · replica {x.replica}{x.branch?` · ${x.branch}`:''}</option>)}</select></label>
     {workspaceKey&&!scope&&<p>The selected workspace is absent from this snapshot. Select an available workspace before inspecting.</p>}
     {scope&&<WorkspaceHandoff key={scope.path} path={scope.path} nativeProfile={nativeProfile}/>}
     <Btn disabled={!!workspaceKey&&!scope} onClick={()=>setInspect(value=>!value)}>{inspect?'Hide changes':'Inspect changes'}</Btn>
