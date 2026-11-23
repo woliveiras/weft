@@ -170,3 +170,43 @@ it('reviews native process configuration before saving and keeps environment val
  expect(screen.getByText('Stored variable names: FIXTURE_KEY')).toBeTruthy();
  expect(document.body.textContent).not.toContain('synthetic-key');
 });
+
+it('sends the explicitly reviewed Atlassian identity scopes from defaults through the form and API client',async()=>{
+ const scopes=['read:me','read:account','offline_access','read:jira:agent-interface','read:confluence:agent-interface'];
+ const saved:MCPConnection={...connection,id:'atlassian-review',name:'Atlassian review',service:'atlassian',enabled:false,status:'disabled',endpoint:'https://mcp.atlassian.com/v2/mcp?tools=all',oauth:{issuer:'https://auth.atlassian.com/VCeDsk8ZHncYF1g234fKtc4lNipbBhu3',clientId:'',registrationMode:'dcr',scopes,status:'authorization_required',clientSecretConfigured:false}};
+ let present=false;
+ const backend=fakeApi({
+  'GET /api/v1/mcp/connections':()=>present?[saved]:[],
+  'GET /api/v1/mcp/oauth/config':()=>({callbackUrl:'http://localhost:8080/api/v1/mcp/oauth/callback'}),
+  'POST /api/v1/mcp/connections':()=>{present=true;return saved;},
+ });
+ render(<MCPSection role="admin"/>);
+ await userEvent.selectOptions(screen.getByRole('combobox',{name:/Service/}),'atlassian');
+ expect(screen.queryByLabelText('OAuth scopes (space separated)')).toBeNull();
+ expect(backend.find('POST','/api/v1/mcp/connections')).toHaveLength(0);
+ await userEvent.click(screen.getByRole('button',{name:'Use OAuth defaults'}));
+ expect((screen.getByLabelText('OAuth scopes (space separated)') as HTMLInputElement).value).toBe(scopes.join(' '));
+ expect(screen.getByText(/Atlassian requires read:me, read:account and offline_access/)).toBeTruthy();
+ await userEvent.type(screen.getByLabelText('Connection ID'),'atlassian-review');
+ await userEvent.type(screen.getByLabelText('Connection name'),'Atlassian review');
+ await userEvent.selectOptions(screen.getByLabelText('Client registration method'),'dcr');
+ await userEvent.click(screen.getByRole('button',{name:'Save MCP connection'}));
+ expect(await screen.findByText('Atlassian review')).toBeTruthy();
+ expect(backend.find('POST','/api/v1/mcp/connections')[0].body).toMatchObject({service:'atlassian',oauth:{registrationMode:'dcr',scopes}});
+ expect(backend.calls.some(c=>c.path.endsWith('/oauth/start'))).toBe(false);
+});
+
+it('does not silently expand saved Atlassian scopes while editing or saving',async()=>{
+ const scopes=['read:jira:agent-interface'];
+ const existing:MCPConnection={...connection,service:'atlassian',enabled:false,status:'disabled',oauth:{issuer:'https://auth.atlassian.com/VCeDsk8ZHncYF1g234fKtc4lNipbBhu3',clientId:'registered',scopes,status:'authorization_required',clientSecretConfigured:false}};
+ const backend=fakeApi({
+  'GET /api/v1/mcp/connections':()=>[existing],
+  'GET /api/v1/mcp/oauth/config':()=>({callbackUrl:'http://localhost:8080/api/v1/mcp/oauth/callback'}),
+  'PUT /api/v1/mcp/connections/team':()=>existing,
+ });
+ render(<MCPSection role="admin"/>);
+ await userEvent.click(await screen.findByRole('button',{name:'Edit Team'}));
+ expect((screen.getByLabelText('OAuth scopes (space separated)') as HTMLInputElement).value).toBe(scopes.join(' '));
+ await userEvent.click(screen.getByRole('button',{name:'Save MCP connection'}));
+ expect(backend.find('PUT','/api/v1/mcp/connections/team')[0].body).toMatchObject({oauth:{scopes}});
+});

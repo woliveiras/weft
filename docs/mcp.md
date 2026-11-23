@@ -392,12 +392,23 @@ Public metadata checked on 2026-10-17 advertises:
 - Client methods: `none`, `client_secret_post`, `client_secret_basic`, and
   `private_key_jwt`; Weft supports the first three, not signed client assertions.
 
-Weft's suggested scopes are `read:me offline_access read:jira:agent-interface
+Weft's suggested scopes are `read:me read:account offline_access read:jira:agent-interface
 read:confluence:agent-interface`. Review the tools/sites actually needed before
 consent. Search and write tools may need additional **MCP** scopes; the defaults
 are not permission to use every discovered tool. The issuer is checked against
 resource metadata at every authorization start, so a changed provider contract
 fails visibly rather than silently redirecting credentials.
+
+Atlassian currently requires `read:me`, `read:account` and `offline_access` in
+both client registration and authorization, alongside the reviewed product
+scopes. Without them, consent can fail after **Accept** with `invalid_request`
+and `Incorrect request parameters`; see the official
+[ID-9242 workaround](https://jira.atlassian.com/browse/ID-9242).
+New connections receive these suggestions only through an explicit defaults
+selection. Saved connections and API requests are never silently expanded:
+review and edit their scope list, save it, then register/authorize again. Keep
+agent tool grants separate. This workaround does not qualify live consent or
+permit unrelated product scopes.
 
 For manual setup, a compatible pre-registered MCP client must be supplied by your administrator or
 Atlassian. Request a dedicated client with the exact callback displayed by Weft,

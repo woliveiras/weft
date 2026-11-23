@@ -23,3 +23,30 @@ none of the response acceptance checks are loosened.
   and unchanged manual/public GitLab/CIMD contracts.
 - Live outcome remains separate: initial method selection and fixture acceptance
   do not establish successful Atlassian consent, tool invocation or PR delivery.
+
+## Atlassian consent identity scopes — 2026-11-23
+
+The live DCR client reached consent, but the provider returned invalid_request
+after Accept without reaching the Weft callback. Official Atlassian bug
+[ID-9242](https://jira.atlassian.com/browse/ID-9242) documents this outcome when
+read:me, read:account or offline_access is absent and gives an explicit scope
+workaround. The saved rehearsal list lacked read:account. This identifies an
+upstream consent requirement; it does not establish a successful new consent.
+
+- Regression tests first failed because the defaults and rendered form omitted
+  read:account. The correction adds it to the explicitly selected Atlassian
+  family defaults and explains the requirement in the provider setup guide.
+- Docker Node 22 bookworm focused Vitest passed: mcpServices.test.ts and
+  MCPSection.test.tsx, 18 tests. TypeScript `tsc --noEmit` passed. Tests cover
+  defaults isolation, explicit selection, visible scope submission through the
+  real API client and preservation of a saved narrower scope list. Existing
+  invalid-input, dependency-failure and public OAuth assertions remain intact.
+- Docker `./scripts/go.sh test ./internal/mcpconfig -count=1` passed (2.010s).
+  The real TLS DCR/authorization integration asserts identical explicit scopes
+  on registration, persisted configuration and authorization, including a
+  deliberately narrow API caller to prove the backend does not expand scopes.
+- Full Docker web TypeScript, Vitest and production build also passed after
+  the focused checks; the existing bundle-size warning remains unchanged.
+- Updating a real connection and confirming provider consent remain separate
+  authorized operational steps. No live credentials or account configuration
+  were changed by this regression fix.

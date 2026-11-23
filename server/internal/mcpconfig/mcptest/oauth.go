@@ -34,6 +34,7 @@ type OAuthServer struct {
 type registeredClient struct {
 	method string
 	secret string
+	scopes string
 }
 
 func NewOAuth(resource string) *OAuthServer { return newOAuth(resource, "generic") }
@@ -126,7 +127,8 @@ func newOAuth(resource string, service string) *OAuthServer {
 				return
 			}
 			id := fmt.Sprintf("registered-fixture-client-%d", registrationNumber)
-			registered := registeredClient{method: method}
+			scopes, _ := in["scope"].(string)
+			registered := registeredClient{method: method, scopes: scopes}
 			if method != "none" {
 				registered.secret = fmt.Sprintf("fixture-registered-client-secret-%d", registrationNumber)
 				in["client_secret"] = registered.secret
@@ -324,4 +326,12 @@ func (f *OAuthServer) validClientAuthentication(r *http.Request) bool {
 	}
 	user, secret, basic := r.BasicAuth()
 	return registered.method == "client_secret_basic" && basic && user == r.Form.Get("client_id") && secret == registered.secret && r.Form.Get("client_secret") == ""
+}
+
+// RegisteredScopes returns the fixture's registered scope metadata, never client
+// credentials. Tests use it to compare the actual DCR request and authorization.
+func (f *OAuthServer) RegisteredScopes(clientID string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.registeredClients[clientID].scopes
 }

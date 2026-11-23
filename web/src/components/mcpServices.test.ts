@@ -17,3 +17,15 @@ it('starts Sentry with a public MCP issuer and minimal advertised scope',()=>{
  const first=oauthDefaults('sentry');first.oauth!.scopes.push('project:write');
  expect(oauthDefaults('sentry').oauth!.scopes).toEqual(['org:read']);
 });
+
+it('includes Atlassian identity and renewal scopes only in explicitly requested service defaults',()=>{
+ const expected=['read:me','read:account','offline_access','read:jira:agent-interface','read:confluence:agent-interface'];
+ for(const service of ['atlassian','jira','confluence','bitbucket']) {
+  const first=oauthDefaults(service);
+  expect(first.oauth?.scopes).toEqual(expected);
+  first.oauth!.scopes.push('write:jira:agent-interface');
+  expect(oauthDefaults(service).oauth?.scopes).toEqual(expected);
+ }
+ expect(oauthDefaults('generic').oauth?.scopes).toEqual([]);
+ expect(oauthDefaults('github').oauth?.scopes).not.toContain('read:account');
+});

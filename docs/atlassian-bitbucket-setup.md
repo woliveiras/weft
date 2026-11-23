@@ -293,6 +293,16 @@ Cloud-bound dispatch. Local fixture qualification is recorded in the specificati
 evidence; live REST qualification must be recorded separately. No issue mutation
 or task execution was performed during the initial MCP/scope qualification.
 
+For browser OAuth to Atlassian MCP, include `read:me read:account offline_access`
+alongside the product scopes reviewed for this connection. Atlassian documents
+these scopes as a workaround for consent failing after **Accept** with
+`invalid_request — Incorrect request parameters`
+([ID-9242](https://jira.atlassian.com/browse/ID-9242)). They must be included in
+both client registration and authorization. Review and update existing
+connections explicitly, then register/authorize again; Weft does not add scopes
+to saved connections or API requests automatically. This applies to browser
+OAuth, not the scope list for a personal API token.
+
 For the other supported connection choices:
 
 1. Open **Connections**, select **New connection** and choose the Atlassian

@@ -385,3 +385,41 @@ func TestAtlassianConfidentialDCRLifecycleIntegration(t *testing.T) {
 		})
 	}
 }
+
+func TestAtlassianScopesRemainExplicitAcrossDCRAndAuthorization(t *testing.T) {
+	for _, scopes := range [][]string{
+		{"read:me", "read:account", "offline_access", "read:jira:agent-interface", "read:confluence:agent-interface"},
+		{"read:jira:agent-interface"}, // Existing/custom configurations are not silently expanded.
+	} {
+		t.Run(strings.Join(scopes, ","), func(t *testing.T) {
+			m := testManager(t)
+			provider := mcptest.NewAtlassianOAuth()
+			defer provider.Close()
+			m.OAuthClient = mcptest.OAuthClient(provider)
+			in := Input{ID: "scope-review", Name: "Scope review", Service: "atlassian", Endpoint: atlassianFlatEndpoint, Enabled: true, OAuth: &OAuthConfig{Issuer: mcptest.AtlassianIssuer, RegistrationMode: "dcr", Scopes: scopes}}
+			if _, err := m.Put(t.Context(), in, 0, "admin"); err != nil {
+				t.Fatal(err)
+			}
+			start, err := m.StartOAuthReviewed(t.Context(), in.ID, "admin-session", registrationCallback, "dcr")
+			if err != nil {
+				t.Fatal(err)
+			}
+			authorize, err := url.Parse(start.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := strings.Join(scopes, " ")
+			query := authorize.Query()
+			if query.Get("scope") != want || provider.RegisteredScopes(query.Get("client_id")) != want {
+				t.Fatal("DCR and authorization did not preserve the explicitly selected scopes")
+			}
+			view, err := m.Get(t.Context(), in.ID)
+			if err != nil || !reflect.DeepEqual(view.OAuth.Scopes, scopes) {
+				t.Fatal("saving or registration expanded the requested scopes", err)
+			}
+			if provider.Registrations.Load() != 1 {
+				t.Fatal("unexpected registration count")
+			}
+		})
+	}
+}
