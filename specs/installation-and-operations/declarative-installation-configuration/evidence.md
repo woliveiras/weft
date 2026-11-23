@@ -1,5 +1,31 @@
 # OPS-003 verification evidence
 
+## OAuth configuration awaiting authorization — 2026-11-23
+
+The live scope-update rehearsal exposed an apply-reporting bug: the MCP manager
+saved the reviewed OAuth configuration, then apply attempted discovery before
+interactive authorization and reported failure. This restores AC-004/AC-007's
+existing service boundaries and interactive-consent exclusion; no acceptance
+intent or OAuth authorization rule changes.
+
+- Unit boundaries distinguish the expected credential-free
+  `authorization_required` state from authorized, unknown and busy states.
+- API plan/apply with the real store reports the pending configuration as applied,
+  returns its saved revision, keeps retry a no-op and survives manager restart.
+- Real TLS OAuth metadata, consent, PKCE and exchange prove authorized discovery
+  still runs. A discovery persistence failure remains a failed apply after the
+  saved configuration, rather than being converted to pending authorization.
+- A Jira fixture with an independently encrypted REST credential and a recovered
+  uncertain DCR attempt retains both across a reviewed scope update and restart,
+  without another registration or tool discovery.
+- Targeted Docker verification:
+  `./scripts/go.sh test ./internal/api -run 'TestConfigMCPAwaitingAuthorization|TestDeclarativeOAuth|TestDeclarativeMCPUnavailableReportsSanitizedDiscovery' -count=1`
+  passed. `./scripts/go.sh test ./internal/api ./internal/installation ./internal/mcpconfig -count=1`
+  passed (API 46.698s; installation 0.003s; MCP 1.994s). Final added invalid-scope
+  and non-pending OAuth state assertions passed in a focused rerun (0.053s).
+
+No real configuration, deployment or credentials were changed by these tests.
+
 Qualification date: 2026-11-17. Scope: local fixtures, Go/console verification,
 standard Dockerfile rebuild, and read-only export/plan against the rehearsal.
 No production apply or live provider/tracker/SCM qualification was performed.

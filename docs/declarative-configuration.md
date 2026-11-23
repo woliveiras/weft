@@ -284,6 +284,12 @@ process environment key to a reference. Omitted process keys remain stored.
 Basic MCP credentials use `credentialUsernameRef` with `secretRef` for the
 password. Browser OAuth authorization remains interactive. Export preserves
 existing credentials without exporting browser access or refresh tokens.
+An enabled OAuth connection saved without an access credential in
+`authorization_required` state is applied successfully with that status. Apply
+does not register an OAuth client, start consent or discover tools before
+authorization. Authorize the connection in the console, then refresh its tools.
+Changing OAuth scopes also requires authorization again. The saved configuration
+and independent credential slots are retained while authorization is pending.
 Independent Jira Cloud REST credentials on a first-party MCP connection use
 public `jiraRest: {cloudId: <site UUID>}`, `jiraRestUsernameRef` for the owner's
 email and `jiraRestSecretRef` for the token. Replacement requires both references;

@@ -406,6 +406,9 @@ func (s *Server) applyConfigObject(ctx context.Context, p configPrepared, old co
 		if err != nil {
 			return "", err
 		}
+		if v.Enabled && configMCPAwaitingAuthorization(v) {
+			return "authorization_required: saved; authorize this connection before tool discovery", nil
+		}
 		if v.Enabled {
 			v, err = s.MCP.Refresh(ctx, name, actor)
 		}
@@ -472,6 +475,12 @@ func (s *Server) applyConfigObject(ctx context.Context, p configPrepared, old co
 		return "", err
 	}
 	return "", fmt.Errorf("unsupported configuration kind")
+}
+
+// Saving OAuth configuration does not authorize it. Only this expected initial
+// state can defer discovery; other credential or manager failures still fail.
+func configMCPAwaitingAuthorization(v mcpconfig.View) bool {
+	return v.OAuth != nil && v.OAuth.Status == "authorization_required" && !v.CredentialConfigured
 }
 func (s *Server) applyConfigProject(ctx context.Context, p configPrepared, old configObject, actor string) (string, error) {
 	in := p.Input.(configProject)
