@@ -1,5 +1,40 @@
 # Documentation evidence — 2026-11-20
 
+## Bitbucket Cloud check-status collection — 2026-11-23
+
+The real reviewer received HTTP403 while requesting review evidence and published
+a changes-requested summary because evidence was unavailable. Subsequent isolated
+authorized Weft reads confirmed plain PR, diff-only and files-only succeeded;
+checks-only failed. These observations locate the defect without changing the
+credential or inferring missing permissions from a combined request.
+
+The adapter requested `GET /commit/{sha}/statuses/build`. The official
+[commit-status API](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-commit-statuses/)
+and current public [OpenAPI document](https://api.bitbucket.org/swagger.json)
+define `GET /commit/{commit}/statuses` as the collection; `/statuses/build/{key}`
+addresses an individual status. No collection GET exists at `/statuses/build`.
+The documented API-token scope is `read:repository:bitbucket`, already used for
+the successful commit reads. No new credential or grant is needed by this fix.
+
+Only the collection path changes. Full-head pinning, unfiltered bounded
+pagination, response/credential checks, before/after snapshot comparison and
+`requiredRules=unavailable` remain intact. Empty results do not imply passing
+checks or satisfied repository rules. The existing published summary and durable
+one-summary receipt are preserved; no comment, verdict, event or receipt was
+rewritten by this patch.
+
+The new unit transport fixture and tightened integration fixture failed against
+the old endpoint before the correction. Real HTTP + encrypted manager/storage +
+provider/gateway checks-only integration verifies API-token authentication,
+exact GET/collection/full-head requests, success/empty results, continuation
+including a failed check, HTTP403, malformed responses, foreign/filtered next
+links, ten-page exhaustion and changed head. Failures expose no partial successful
+evidence or synthetic credential; the flow makes no mutation requests.
+`./scripts/go.sh test ./internal/scm -count=1` passed (0.727s), and
+`./scripts/go.sh test ./internal/api ./internal/reviewroute -count=1` passed
+(41.260s / 1.063s). `git diff --check` passed.
+Live qualification after deployment remains separate from these fixture results.
+
 ## Bitbucket Cloud abbreviated PR revisions — 2026-11-23
 
 The authorized rehearsal opened PR#1 successfully, but its lifecycle event

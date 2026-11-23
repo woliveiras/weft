@@ -1,9 +1,57 @@
 package scm
 
 import (
+	"context"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 )
+
+func TestBitbucketCloudChecksUseCommitStatusCollection(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	for _, mode := range []string{"ok", "empty", "unknown", "denied", "malformed", "missing-values"} {
+		t.Run(mode, func(t *testing.T) {
+			h, err := newProviderHTTP("https://api.bitbucket.org/2.0", "synthetic")
+			if err != nil {
+				t.Fatal(err)
+			}
+			calls := 0
+			h.client.Transport = bitbucketRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+				calls++
+				if r.Method != "GET" || r.URL.Path != "/2.0/repositories/acme/app/commit/"+sha+"/statuses" || r.URL.RawQuery != "pagelen=100" {
+					t.Fatalf("not the complete immutable commit-status collection: %s %s", r.Method, r.URL)
+				}
+				status, body := 200, `{"values":[{"key":"build","state":"SUCCESSFUL"}]}`
+				switch mode {
+				case "empty":
+					body = `{"values":[]}`
+				case "unknown":
+					body = `{"values":[{"key":"build","state":"NEW_VENDOR_STATE"}]}`
+				case "denied":
+					status, body = 403, `{"error":{"message":"synthetic"}}`
+				case "malformed":
+					body = "{"
+				case "missing-values":
+					body = `{}`
+				}
+				return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
+			})
+			b := &bitbucketCloud{http: h, c: Connection{Repository: "acme/app"}}
+			out, err := b.PullRequestChecks(context.Background(), ReviewSnapshot{HeadSHA: sha})
+			valid := mode == "ok" || mode == "empty" || mode == "unknown"
+			if calls != 1 || valid != (err == nil) || out.Complete != valid || out.RequiredRules != "unavailable" {
+				t.Fatalf("checks: %+v error=%v calls=%d", out, err, calls)
+			}
+			if mode == "ok" && (len(out.Items) != 1 || out.Items[0].State != "passed") || mode == "unknown" && (len(out.Items) != 1 || out.Items[0].State != "unknown") {
+				t.Fatalf("unsafe reported state: %+v", out)
+			}
+			if err != nil && strings.Contains(err.Error(), "synthetic") {
+				t.Fatalf("credential in failure: %v", err)
+			}
+		})
+	}
+}
 
 func TestReportedChecksNeverInferRequiredRulesOrUnknownSuccess(t *testing.T) {
 	for _, tc := range []struct{ state, want string }{{"SUCCESSFUL", "passed"}, {"success", "passed"}, {"FAILED", "failed"}, {"INPROGRESS", "pending"}, {"neutral", "unknown"}, {"skipped", "unknown"}, {"NEW_VENDOR_STATE", "unknown"}, {"", "unknown"}} {

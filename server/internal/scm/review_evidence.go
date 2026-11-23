@@ -245,7 +245,7 @@ func (g *github) PullRequestChecks(ctx context.Context, s ReviewSnapshot) (Revie
 }
 func (b *bitbucketCloud) PullRequestChecks(ctx context.Context, s ReviewSnapshot) (ReviewChecks, error) {
 	out := ReviewChecks{Available: true, RequiredRules: "unavailable", Items: []ReviewCheck{}}
-	path := fmt.Sprintf("%s/commit/%s/statuses/build?pagelen=100", b.path(), s.HeadSHA)
+	path := fmt.Sprintf("%s/commit/%s/statuses?pagelen=100", b.path(), s.HeadSHA)
 	for page := 0; page < adapterPageLimit; page++ {
 		if err := reviewPageQuery(path, false); err != nil {
 			return out, err
