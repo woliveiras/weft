@@ -270,7 +270,8 @@ MCP token in the connection's normal Authentication fields.
 Jira can return the token owner's email as an issue reporter, assignee or comment
 author. At the independent REST boundary, Weft removes `emailAddress` only when
 it exactly matches the credential account in known identity positions of issue,
-myself and comment responses (including a posted comment receipt). Account IDs
+myself, comment responses (including a posted comment receipt), and changelog
+authors used to verify a fresh issue requeue. Account IDs
 and readiness metadata remain available. Reusable tokens/Basic credentials,
 encoded reflections, duplicate JSON keys and the credential email outside those
 positions still reject the response; identity redaction does not grant access.

@@ -2,6 +2,13 @@
 
 ## Jira REST identity-email redaction — 2026-11-23
 
+Recovery also reads `GET issue/{key}/changelog` to verify a fresh label event.
+Its `values[].author.emailAddress` has the same legitimate identity shape. That
+exact GET route/path now receives the same narrow redaction; other paths/methods
+and reflected tokens remain rejected. Unit and real TLS boundary fixtures passed
+with `./scripts/go.sh test ./internal/mcpconfig -run TestJiraRESTIdentity -count=1`
+(0.052s). This is fixture evidence, not a claim that a live changelog was inspected.
+
 The authorized live rehearsal reached MCP search, then a successful-HTTP REST
 issue read was rejected by the result guard before task creation. No live response
 or secret value was inspected. The code and synthetic fixtures demonstrate one

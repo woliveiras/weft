@@ -20,6 +20,7 @@ func TestJiraRESTIdentityEmailRedactionKeepsReflectionGuard(t *testing.T) {
 		{"comments", http.MethodGet, "/ex/jira/" + restTestCloud + "/rest/api/3/issue/APP-7/comment", `{"comments":[{"author":` + identity + `,"updateAuthor":` + identity + `}]}`},
 		{"single comment", http.MethodGet, "/ex/jira/" + restTestCloud + "/rest/api/3/issue/APP-7/comment/1", `{"author":` + identity + `}`},
 		{"posted comment receipt", http.MethodPost, "/ex/jira/" + restTestCloud + "/rest/api/3/issue/APP-7/comment", `{"author":` + identity + `,"updateAuthor":` + identity + `}`},
+		{"changelog author", http.MethodGet, "/ex/jira/" + restTestCloud + "/rest/api/3/issue/APP-7/changelog?startAt=0&maxResults=10", `{"total":1,"values":[{"id":"7","author":` + identity + `,"items":[{"field":"labels","toString":"weft:todo"}]}]}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if !containsJiraRESTCredential([]byte(tc.raw), basic) {
@@ -41,6 +42,8 @@ func TestJiraRESTIdentityEmailRedactionKeepsReflectionGuard(t *testing.T) {
 		{"unrelated method", http.MethodPut, restTestPath, `{"fields":{"reporter":` + identity + `}}`},
 		{"partial email value", http.MethodGet, restTestPath, `{"fields":{"reporter":{"emailAddress":"prefix ` + restTestEmail + `"}}}`},
 		{"encoded email value", http.MethodGet, restTestPath, `{"fields":{"reporter":{"emailAddress":"rest-fixture%40example.test"}}}`},
+		{"changelog wrong method", http.MethodPost, "/ex/jira/" + restTestCloud + "/rest/api/3/issue/APP-7/changelog", `{"values":[{"author":` + identity + `}]}`},
+		{"changelog unknown identity path", http.MethodGet, "/ex/jira/" + restTestCloud + "/rest/api/3/issue/APP-7/changelog", `{"values":[{"reviewer":` + identity + `}]}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out, err := redactJiraRESTIdentityEmail([]byte(tc.raw), basic, tc.method, tc.path)
@@ -67,6 +70,8 @@ func TestJiraRESTIdentityEmailRedactionOverTLS(t *testing.T) {
 	}{
 		{"issue reporter", http.MethodGet, restTestPath, `{"id":9007199254740993,"key":"APP-7","fields":{"reporter":{"accountId":"human","emailAddress":"` + restTestEmail + `"}}}`, false},
 		{"comment receipt", http.MethodPost, "/ex/jira/" + restTestCloud + "/rest/api/3/issue/APP-7/comment", `{"id":"1","author":{"accountId":"human","emailAddress":"` + restTestEmail + `"}}`, false},
+		{"changelog author", http.MethodGet, "/ex/jira/" + restTestCloud + "/rest/api/3/issue/APP-7/changelog?startAt=0&maxResults=10", `{"total":1,"values":[{"id":"7","author":{"accountId":"human","emailAddress":"` + restTestEmail + `"},"items":[{"field":"labels","toString":"weft:todo"}]}]}`, false},
+		{"changelog reflected token", http.MethodGet, "/ex/jira/" + restTestCloud + "/rest/api/3/issue/APP-7/changelog", `{"values":[{"author":{"accountId":"human","emailAddress":"` + restTestEmail + `"},"items":[{"toString":"` + restTestToken + `"}]}]}`, true},
 		{"reflected outside identity", http.MethodGet, restTestPath, `{"fields":{"reporter":{"emailAddress":"` + restTestEmail + `"},"summary":"` + restTestEmail + `"}}`, true},
 		{"duplicate hidden token", http.MethodGet, restTestPath, `{"fields":{"summary":"\u0072est-scoped-fixture-token"},"fields":{"reporter":{"emailAddress":"` + restTestEmail + `"}}}`, true},
 		{"POST receipt token", http.MethodPost, "/ex/jira/" + restTestCloud + "/rest/api/3/issue/APP-7/comment", `{"author":{"emailAddress":"` + restTestEmail + `"},"body":"%72est-scoped-fixture-token"}`, true},

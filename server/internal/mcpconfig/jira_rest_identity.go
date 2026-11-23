@@ -31,6 +31,9 @@ func jiraRESTIdentityPaths(method, requestPath string) [][]string {
 		return nil
 	}
 	actors := []string{"author", "updateAuthor"}
+	if method == http.MethodGet && len(parts) == 3 && parts[2] == "changelog" {
+		return [][]string{{"values", "*", "author"}}
+	}
 	if method == http.MethodGet && len(parts) == 2 {
 		paths := [][]string{{"fields", "reporter"}, {"fields", "assignee"}, {"fields", "creator"}}
 		for _, actor := range actors {
