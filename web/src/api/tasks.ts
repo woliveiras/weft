@@ -42,7 +42,7 @@ export interface TaskWorkspace {nodeId:string;replica:number;path:string;branch?
 export interface TaskDelivery {connection:string;branch?:string;repository?:string;pullRequestUrl?:string;pullRequestNumber?:number;failures?:string[]}
 export interface TaskProgress {delivery?:TaskDelivery;decisions?:Approval[];environment?:import('./types').EnvironmentView;workspaces?:TaskWorkspace[];pendingApprovals?:Approval[]|null;workspacePath?:string; task: TaskDraft; state: string; executions: Execution[]; result?: Execution; blockers: string[] }
 
-export interface CleanupPreview {path:string;branch:string;head:string;status:string;clean:boolean;fingerprint:string}
+export interface CleanupPreview {retainedRepository?:string;path:string;branch:string;head:string;status:string;clean:boolean;fingerprint:string}
 
 export interface RepositoryImportRecord {authentication?:string;id:string;url:string;ref:string;state:string;message:string;revision:number;attempt:string;projectId?:string;commit?:string;bytes:number;createdAt:string;updatedAt:string;deadline:string}
 
