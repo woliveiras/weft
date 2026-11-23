@@ -431,12 +431,26 @@ type jiraSearchReply struct {
 	Next   string      `json:"nextPageToken"`
 }
 
+type jiraSearchPayload struct {
+	jiraSearchReply
+	Data    json.RawMessage `json:"data"`
+	IsError bool            `json:"isError"`
+	Error   json.RawMessage `json:"error"`
+}
+
+func jiraSearchFailed(reply jiraSearchPayload) bool {
+	return reply.IsError || len(reply.Error) != 0 && strings.TrimSpace(string(reply.Error)) != "null"
+}
+
 // MCP returns search data either as structured content or a single text block.
 // Direct replies remain supported for legacy callers. Missing or malformed
 // issue arrays are failures, rather than evidence that no work is eligible.
 func decodeJiraSearch(res *tools.Result, err error) (jiraSearchReply, error) {
+	if err != nil {
+		return jiraSearchReply{}, err
+	}
 	var envelope struct {
-		jiraSearchReply
+		jiraSearchPayload
 		Structured json.RawMessage `json:"structuredContent"`
 		Content    []struct {
 			Type string `json:"type"`
@@ -444,23 +458,63 @@ func decodeJiraSearch(res *tools.Result, err error) (jiraSearchReply, error) {
 		} `json:"content"`
 	}
 	if err := decode(res, err, &envelope); err != nil {
+		if res != nil && !res.IsError {
+			return jiraSearchReply{}, jiraSearchFormatError(res, nil, "envelope")
+		}
 		return jiraSearchReply{}, err
 	}
-	if envelope.Issues != nil {
+	if jiraSearchFailed(envelope.jiraSearchPayload) {
+		return jiraSearchReply{}, errors.New("tracker operation failed")
+	}
+	if envelope.Issues != nil && len(envelope.Data) == 0 {
 		return envelope.jiraSearchReply, nil
 	}
+	if envelope.Next != "" {
+		return jiraSearchReply{}, jiraSearchFormatError(res, nil, "pagination")
+	}
 	payload := envelope.Structured
+	if len(envelope.Data) != 0 {
+		if envelope.Issues != nil || envelope.Next != "" {
+			return jiraSearchReply{}, jiraSearchFormatError(res, envelope.Data, "data")
+		}
+		return decodeJiraSearchData(res, envelope.Data)
+	}
 	if len(payload) == 0 || string(payload) == "null" {
 		if len(envelope.Content) != 1 || envelope.Content[0].Type != "text" {
-			return jiraSearchReply{}, errors.New("unexpected Jira issue search result")
+			return jiraSearchReply{}, jiraSearchFormatError(res, payload, "content")
 		}
 		payload = []byte(envelope.Content[0].Text)
 	}
-	var reply jiraSearchReply
-	if json.Unmarshal(payload, &reply) != nil || reply.Issues == nil {
-		return jiraSearchReply{}, errors.New("unexpected Jira issue search result")
+	var reply jiraSearchPayload
+	if json.Unmarshal(payload, &reply) != nil {
+		return jiraSearchReply{}, jiraSearchFormatError(res, payload, "payload")
 	}
-	return reply, nil
+	if jiraSearchFailed(reply) {
+		return jiraSearchReply{}, errors.New("tracker operation failed")
+	}
+	if len(reply.Data) != 0 {
+		if reply.Issues != nil || reply.Next != "" {
+			return jiraSearchReply{}, jiraSearchFormatError(res, reply.Data, "data")
+		}
+		return decodeJiraSearchData(res, reply.Data)
+	}
+	if reply.Issues == nil {
+		return jiraSearchReply{}, jiraSearchFormatError(res, payload, "payload")
+	}
+	return reply.jiraSearchReply, nil
+}
+
+// The current Jira MCP search wraps its reply once in data. Do not recursively
+// unwrap unknown structures or turn a missing/malformed issues array into [].
+func decodeJiraSearchData(res *tools.Result, payload json.RawMessage) (jiraSearchReply, error) {
+	var reply jiraSearchPayload
+	if json.Unmarshal(payload, &reply) != nil || reply.Issues == nil || len(reply.Data) != 0 {
+		return jiraSearchReply{}, jiraSearchFormatError(res, payload, "data")
+	}
+	if jiraSearchFailed(reply) {
+		return jiraSearchReply{}, errors.New("tracker operation failed")
+	}
+	return reply.jiraSearchReply, nil
 }
 
 func (j jira) search(ctx context.Context, call Invoker, label, key string) ([]Issue, error) {
@@ -475,7 +529,7 @@ func (j jira) search(ctx context.Context, call Invoker, label, key string) ([]Is
 		jql += fmt.Sprintf(` AND key = "%s"`, key)
 	}
 	jql += " ORDER BY created ASC"
-	args := map[string]any{"cloudId": j.c.CloudID, "jql": jql, "maxResults": trackerSearchLimit, "fields": jiraFields}
+	args := map[string]any{"cloudId": j.c.CloudID, "jql": jql, "maxResults": trackerSearchLimit, "fields": jiraFields, "view": "full"}
 	res, err := call(ctx, tool(j.c, "searchJiraIssuesUsingJql"), args)
 	out, err := decodeJiraSearch(res, err)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -84,6 +85,10 @@ func TestCloudProfileSearchUsesProjectAndBoundedContinuation(t *testing.T) {
 			rows, err := (jira{c: source}).Search(t.Context(), func(_ context.Context, _ string, args any) (*tools.Result, error) {
 				calls++
 				a := args.(map[string]any)
+				fields, ok := a["fields"].([]string)
+				if a["view"] != "full" || !ok || !slices.Equal(fields, jiraFields) || a["maxResults"] != trackerSearchLimit {
+					t.Error("search lost the full view, required fields or bound")
+				}
 				query := a["jql"].(string)
 				if mode == "legacy" {
 					if !strings.Contains(query, `statusCategory = "To Do"`) {

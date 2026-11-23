@@ -1,5 +1,57 @@
 # Documentation evidence — 2026-11-20
 
+## Jira MCP search shape diagnostics — 2026-11-23
+
+The live rehearsal reached authorized MCP discovery, but a trigger search failed
+with `unexpected Jira issue search result`. The provider's current search schema
+advertises multiple response views. The first checkpoint added only structural
+diagnostics at the existing decoder failure boundary, before selecting a view or
+changing accepted payloads.
+
+Diagnostics contain only fixed local stage/type categories, presence/types of
+allowlisted envelope/payload keys, a content-block count saturated at `10+`, and
+at most three allowlisted block categories. They contain no issue text, arbitrary
+keys, field values, cursors, JSON decoder errors or credentials. That initial
+checkpoint preserved accepted shapes and added no view argument.
+
+Unit tests cover invalid JSON, primitive roots, missing/wrong fields, hostile
+provider keys/text, unknown block types and count/output bounds. The real TLS MCP
+fixture passes through encrypted connection storage, the remote tool gateway,
+trigger scan and persisted diagnostic/events; malformed search dispatches no task
+and valid empty replies recover without a false failure.
+
+`./scripts/go.sh test ./internal/trigger -run 'TestJiraSearch' -count=1` passed
+(0.040s). `./scripts/go.sh test ./internal/trigger ./internal/mcpconfig ./internal/api -count=1`
+passed (trigger 9.136s; MCP 2.940s; API 47.432s). `git diff --check` passed.
+
+The subsequent live diagnostic identified a single text block containing a JSON
+object with a `data` object and no top-level `issues`. The final correction accepts
+one `data.issues` layer, preserving the legacy direct/structured/text replies and
+requiring an actual issue array. It requests `view: full` with the existing
+explicit field list, as advertised by the current live search tool schema, to
+avoid compact-view filtering of blocker links. Older schemas without `view` are
+not qualified and receive no silent retry/fallback.
+
+Final tests cover complete scoped issue metadata, valid empty arrays, wrapped
+pagination, missing/null/nonarray issues, nested/ambiguous data, explicit provider
+errors, transport failures and incomplete profile identities. A cursor outside
+the accepted reply layer fails rather than disappearing; held-key lookup cannot
+treat a paginated empty page as final absence. The TLS integration exercises both
+structured and JSON-text wrappers through the real MCP manager/gateway and tests
+diagnostic persistence in the trigger runner without starting work on bad input.
+
+`./scripts/go.sh test ./internal/trigger -run 'TestJiraSearch|TestCloudProfileSearch' -count=1`
+passed (0.038s). Final `./scripts/go.sh test ./internal/trigger ./internal/mcpconfig ./internal/api -count=1`
+passed (trigger 10.436s; MCP 3.430s; API 46.591s); `git diff --check` passed.
+
+The operator-authorized live qualification after the standard deployment at
+11:40 UTC confirmed `data.issues` with `view: full`: the matches endpoint returned
+SCRUM-5 as the next candidate, including issue/type/status identities and labels,
+with no waiting/skipped entries. No credential or provider payload was recorded.
+The operator-authorized trigger resumed at 11:41:07.906 UTC with the existing
+reviewed Full consent and tracker revision 15. This confirms search compatibility;
+task execution and real-account PR delivery remain separate pending outcomes.
+
 ## Request and decisions
 
 The maintainer requested documentation before further setup questions. Both
