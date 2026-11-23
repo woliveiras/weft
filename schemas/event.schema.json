@@ -68,7 +68,7 @@
         "graph.updated", "agent.version_published", "installation.history_retention.updated", "installation.network_policy.updated", "instruction.skill.updated",
         "log", "mcp.connection.changed", "mcp.connection.deleted", "mcp.connection.tested",
         "mcp.oauth.authorized", "mcp.oauth.cleanup", "mcp.oauth.exchanging", "mcp.oauth.reauthorization_required",
-        "mcp.oauth.refreshing", "mcp.oauth.registration_failed", "mcp.oauth.registration_ready", "mcp.oauth.registration_started",
+        "mcp.oauth.refreshing", "mcp.oauth.registration_failed", "mcp.oauth.registration_recovered", "mcp.oauth.registration_ready", "mcp.oauth.registration_started",
         "mcp.oauth.renewed", "mcp.oauth.revocation_result", "mcp.oauth.revoked", "mcp.tools.refreshed",
         "message.acked", "message.dead_lettered", "message.delivered", "message.dropped",
         "message.held", "message.injected", "message.nacked", "message.published",

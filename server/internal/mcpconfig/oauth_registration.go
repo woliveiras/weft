@@ -25,11 +25,12 @@ type clientRegistration struct {
 	Diagnostic *RegistrationDiagnostic `json:"diagnostic,omitempty"`
 }
 
-// RegistrationDiagnostic contains only locally authored categories and HTTP status.
+// RegistrationDiagnostic contains only locally authored categories, field names and HTTP status.
 // Never retain upstream descriptions, response bodies, headers or credentials.
 type RegistrationDiagnostic struct {
-	Code       string `json:"code"`
-	HTTPStatus int    `json:"httpStatus,omitempty"`
+	Code       string   `json:"code"`
+	HTTPStatus int      `json:"httpStatus,omitempty"`
+	Fields     []string `json:"fields,omitempty"`
 }
 
 type RegistrationPlan struct {
@@ -206,21 +207,16 @@ func (m *Manager) registerClient(ctx context.Context, r *record, meta oauthMetad
 		diagnostic.Code = "http_rejected"
 		return oauthError(fmt.Sprintf("Registration rejected or unavailable (provider HTTP %d); review provider policy or use manual registration", res.StatusCode))
 	}
-	var out struct {
-		ClientID  string   `json:"client_id"`
-		Secret    string   `json:"client_secret"`
-		Method    string   `json:"token_endpoint_auth_method"`
-		Redirects []string `json:"redirect_uris"`
-		Scope     string   `json:"scope"`
-		Expires   int64    `json:"client_secret_expires_at"`
-	}
 	diagnostic.Code = "response_incompatible"
-	if json.Unmarshal(data, &out) != nil || strings.TrimSpace(out.ClientID) == "" || len(out.ClientID) > 256 || len(out.Secret) > 16384 || out.Method != method || len(out.Redirects) != 1 || out.Redirects[0] != redirect || (method == "none" && out.Secret != "") || (method != "none" && out.Secret == "") || out.Expires != 0 {
-		return oauthError("Registration response incompatible; use a supported pre-registered client")
+	out, fields := decodeRegistrationResponse(data, method, redirect)
+	if len(fields) != 0 {
+		diagnostic.Fields = fields
+		return oauthError("Registration response incompatible; inspect the safe field diagnostics before retrying")
 	}
 	for _, scope := range strings.Fields(out.Scope) {
 		if !slices.Contains(r.OAuth.Scopes, scope) {
 			diagnostic.Code = "scope_expansion"
+			diagnostic.Fields = []string{"scope"}
 			return oauthError("Registration scope expansion rejected")
 		}
 	}
@@ -235,4 +231,49 @@ func (m *Manager) registerClient(ctx context.Context, r *record, meta oauthMetad
 	r.Registration.Method = method
 	r.Registration.Diagnostic = nil
 	return nil
+}
+
+// registrationResponse is used only after all known fields satisfy the requested
+// contract. Values from rejected responses must never enter persisted diagnosis.
+type registrationResponse struct {
+	ClientID  string
+	Secret    string
+	Method    string
+	Redirects []string
+	Scope     string
+	Expires   int64
+}
+
+// decodeRegistrationResponse reports only fixed, locally authored field names.
+// Decode fields independently so JSON type errors cannot leak upstream values or
+// cause a misleading diagnosis of an otherwise absent/zero-valued sibling field.
+func decodeRegistrationResponse(data []byte, method, redirect string) (registrationResponse, []string) {
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(data, &raw) != nil || raw == nil {
+		return registrationResponse{}, []string{"response"}
+	}
+	var out registrationResponse
+	var fields []string
+	check := func(name string, target any, valid func() bool) {
+		value, present := raw[name]
+		if present && (bytes.Equal(bytes.TrimSpace(value), []byte("null")) || json.Unmarshal(value, target) != nil) {
+			fields = append(fields, name)
+			return
+		}
+		if !valid() {
+			fields = append(fields, name)
+		}
+	}
+	check("client_id", &out.ClientID, func() bool { return strings.TrimSpace(out.ClientID) != "" && len(out.ClientID) <= 256 })
+	check("client_secret", &out.Secret, func() bool {
+		return len(out.Secret) <= 16384 && ((method == "none" && out.Secret == "") || (method != "none" && out.Secret != ""))
+	})
+	check("token_endpoint_auth_method", &out.Method, func() bool { return out.Method == method })
+	check("redirect_uris", &out.Redirects, func() bool { return len(out.Redirects) == 1 && out.Redirects[0] == redirect })
+	check("scope", &out.Scope, func() bool { return true })
+	check("client_secret_expires_at", &out.Expires, func() bool { return out.Expires == 0 })
+	if len(fields) != 0 {
+		return registrationResponse{}, fields
+	}
+	return out, nil
 }

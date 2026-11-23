@@ -32,7 +32,11 @@ A reviewed browser flow uses session-bound state and PKCE. Durable pending trans
 
 ### AC-003 — Capability-gated client setup
 
-DCR/CIMD follow reviewed issuer/resource metadata and supported policy. Unsupported or uncertain setup offers a documented manual route and avoids duplicate client creation.
+DCR/CIMD follow reviewed issuer/resource metadata and supported policy. Unsupported or uncertain setup offers a documented manual route and never automatically repeats client registration. An administrator may explicitly recover an uncertain DCR attempt after acknowledging that the provider may retain a duplicate or orphaned client. Recovery is revision-bound, preserves the previous attempt and its safe diagnostics across restarts and configuration edits, performs no provider request itself, and permits one newly reviewed registration attempt. Pending and ready attempts cannot be recovered this way. Client, callback, scope and credential validation remain unchanged.
+
+### AC-004 — Safe registration diagnosis
+
+Registration failures expose only locally defined diagnostic categories, HTTP status and a bounded list of incompatible response field names. Upstream values, credentials, response bodies and headers are never retained in diagnostics or returned to the console. Invalid JSON and malformed field types remain failures.
 
 ## Explicit exclusions
 
@@ -46,6 +50,8 @@ DCR/CIMD follow reviewed issuer/resource metadata and supported policy. Unsuppor
 
 - 2026-10-17. Documented metadata, browser links and generic pre-registration informed the initial design.
 - 2026-10-18. Shared transactions, reviewed template upgrades and hosted-CIMD fixture qualification were recorded.
+
+- 2026-11-23. Maintainer approved explicit uncertain-DCR recovery for a disposable rehearsal, acknowledging orphaned client risk. Recovery preserves history and validation; provider support confirmation is not mandatory for this explicit path. Safe field diagnostics were approved before implementation.
 
 ## Reconciliation
 

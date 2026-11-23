@@ -36,7 +36,7 @@ test('reviews DCR, authorizes, reuses registration and offers manual fallback on
  await card.getByRole('button',{name:'Edit DCR browser',exact:true}).click();await page.getByRole('combobox',{name:'Client registration method',exact:true}).selectOption('manual');
  await expect(page.getByLabel('OAuth client ID',{exact:true})).toBeVisible();
 });
-test('registration dependency failure is visible and never automatically retried; manual remains usable',async({page})=>{
+test('registration dependency failure requires reviewed recovery and preserves manual fallback',async({page})=>{
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
  const config=await (await page.request.get('/api/v1/mcp/connections/oauth-fixture-config',{headers})).json();
  await page.request.post(config.oauth.issuer+'/registration-failure?enabled=true');
@@ -47,7 +47,23 @@ test('registration dependency failure is visible and never automatically retried
  await expect(card).toContainText('Registration rejected or unavailable');
  const count=(await (await page.request.get(config.oauth.issuer+'/stats')).json()).registrations;
  await expect(card).toContainText('Provider HTTP 503');await expect(card.getByRole('button',{name:'Confirm dcr and authorize DCR failure'})).toHaveCount(0);
- await page.reload();await expect(card).toContainText('Provider HTTP 503');await expect(card).toContainText('uncertain');await card.getByRole('button',{name:'Review OAuth setup DCR failure'}).click();await expect(card).toContainText('No automatic retry');expect((await (await page.request.get(config.oauth.issuer+'/stats')).json()).registrations).toBe(count);
+ await page.reload();await expect(card).toContainText('Provider HTTP 503');await expect(card).toContainText('uncertain');
+ await expect(card.getByRole('button',{name:'Review OAuth setup DCR failure'})).toBeDisabled();
+ expect((await (await page.request.get(config.oauth.issuer+'/stats')).json()).registrations).toBe(count);
+ await card.getByRole('button',{name:'Review registration recovery',exact:true}).click();
+ await expect(card.getByRole('button',{name:'Prepare new registration attempt',exact:true})).toBeDisabled();
+ await card.getByRole('checkbox',{name:'I accept the duplicate or orphaned client risk.',exact:true}).check();
+ await card.getByRole('button',{name:'Prepare new registration attempt',exact:true}).click();
+ await expect(card).toContainText('Previous attempt preserved');
+ expect((await (await page.request.get(config.oauth.issuer+'/stats')).json()).registrations).toBe(count);
+ await card.getByText('Previous registration attempts (1)',{exact:true}).click();
+ await expect(card).toContainText('Previous remote outcome remains uncertain');
+ await card.getByRole('button',{name:'Review OAuth setup DCR failure'}).click();
+ expect((await (await page.request.get(config.oauth.issuer+'/stats')).json()).registrations).toBe(count);
+ await card.getByRole('button',{name:'Confirm dcr and authorize DCR failure'}).click();
+ await expect(card).toContainText('Registration rejected or unavailable');
+ await expect(card.getByRole('button',{name:'Review OAuth setup DCR failure'})).toBeDisabled();
+ expect((await (await page.request.get(config.oauth.issuer+'/stats')).json()).registrations).toBe(count+1);
  await card.getByRole('button',{name:'Edit DCR failure'}).click();await page.getByRole('combobox',{name:'Client registration method',exact:true}).selectOption('manual');await page.getByLabel('OAuth client ID',{exact:true}).fill('fixture-client');await page.getByRole('button',{name:'Save MCP connection',exact:true}).click();
  await card.getByRole('button',{name:'Authorize DCR failure',exact:true}).click();await page.getByRole('button',{name:'Allow fixture access'}).click();await page.getByRole('button',{name:'Complete OAuth connection'}).click();await expect(page.getByRole('region',{name:'OAuth return',exact:true}).getByRole('status')).toContainText('OAuth connected');
  }finally {await page.request.post(config.oauth.issuer+'/registration-failure?enabled=false');}

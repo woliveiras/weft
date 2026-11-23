@@ -209,6 +209,7 @@ export const api = {
   saveDelegationProfile: (profile: DelegationProfile, revision?: number) => request<DelegationProfileView>(`${V1}/delegation-profiles${revision === undefined ? '' : '/'+enc(profile.id)}`, {method:revision === undefined ? 'POST' : 'PUT', body:profile, headers:revision === undefined ? {} : {'If-Match':`"${revision}"`}}),
   mcpOAuthConfig: () => request<{callbackUrl:string}>(`${V1}/mcp/oauth/config`),
   previewMCPOAuth: (id: string) => request<{mode:string;reason:string}>(`${V1}/mcp/connections/${enc(id)}/oauth/preview`),
+  recoverMCPRegistration: (id: string, expectRevision: number) => request<MCPConnection>(`${V1}/mcp/connections/${enc(id)}/oauth/registration/recover`, {method:'POST', body:{expectRevision,acknowledgeDuplicateClientRisk:true}}),
   startMCPOAuth: (id: string, mode?: string) => request<{url: string; state: string}>(`${V1}/mcp/connections/${enc(id)}/oauth/start${mode?`?registrationMode=${enc(mode)}`:""}`, {method:'POST'}),
   completeMCPOAuth: (state: string) => request<MCPConnection>(`${V1}/mcp/oauth/complete`, {method:'POST', body:{state}}),
   revokeMCPOAuth: (id: string) => request<MCPConnection>(`${V1}/mcp/connections/${enc(id)}/oauth/revoke`, {method:'POST'}),

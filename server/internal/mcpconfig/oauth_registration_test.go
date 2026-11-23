@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -185,6 +186,10 @@ func TestDCRResponseValidationAndSecretStorage(t *testing.T) {
 				want := map[string]string{"wrong-callback": "response_incompatible", "method": "response_incompatible", "scope": "scope_expansion", "expiry": "response_incompatible", "oversize": "response_unreadable", "failure": "http_rejected", "forbidden": "provider_error", "malformed": "response_incompatible"}[variant]
 				if r.Registration.Diagnostic == nil || r.Registration.Diagnostic.Code != want {
 					t.Fatal("wrong failure category", variant)
+				}
+				wantFields := map[string][]string{"wrong-callback": {"redirect_uris"}, "method": {"token_endpoint_auth_method"}, "scope": {"scope"}, "expiry": {"client_secret_expires_at"}, "malformed": {"response"}}[variant]
+				if !reflect.DeepEqual(r.Registration.Diagnostic.Fields, wantFields) {
+					t.Fatalf("diagnostic fields = %v, want %v", r.Registration.Diagnostic.Fields, wantFields)
 				}
 			}
 			if variant == "valid" && r.Registration.Diagnostic != nil {

@@ -89,13 +89,14 @@ type View struct {
 	UpdatedBy              string            `json:"updatedBy"`
 }
 type record struct {
-	JiraRESTSealed           string              `json:"jiraRestSealed,omitempty"`
-	ProcessEnvironmentSealed string              `json:"processEnvironmentSealed,omitempty"`
-	Deleted                  bool                `json:"deleted,omitempty"`
-	Registration             *clientRegistration `json:"registration,omitempty"`
-	OAuthClientSealed        string              `json:"oauthClientSealed,omitempty"`
-	OAuthRefreshSealed       string              `json:"oauthRefreshSealed,omitempty"`
-	OAuthMeta                oauthMetadata       `json:"oauthMetadata,omitempty"`
+	RegistrationHistory      []RegistrationRecovery `json:"registrationHistory,omitempty"`
+	JiraRESTSealed           string                 `json:"jiraRestSealed,omitempty"`
+	ProcessEnvironmentSealed string                 `json:"processEnvironmentSealed,omitempty"`
+	Deleted                  bool                   `json:"deleted,omitempty"`
+	Registration             *clientRegistration    `json:"registration,omitempty"`
+	OAuthClientSealed        string                 `json:"oauthClientSealed,omitempty"`
+	OAuthRefreshSealed       string                 `json:"oauthRefreshSealed,omitempty"`
+	OAuthMeta                oauthMetadata          `json:"oauthMetadata,omitempty"`
 	View
 	Sealed string `json:"sealed,omitempty"`
 }
@@ -233,6 +234,7 @@ func (m *Manager) save(ctx context.Context, r record, rev int64, actor, event st
 	r.syncJiraRESTPresence()
 	if r.OAuth != nil {
 		r.OAuth.ClientSecretConfigured = r.OAuthClientSealed != ""
+		r.OAuth.RegistrationHistory = r.RegistrationHistory
 		if r.Registration != nil {
 			r.OAuth.RegistrationStatus = r.Registration.Status
 			r.OAuth.RegistrationDiagnostic = r.Registration.Diagnostic

@@ -536,13 +536,31 @@ pending and require separately authorized test accounts/resources.
 
 ### Diagnosing an uncertain DCR registration
 
-Do not create another connection, reset registration state, or change the issuer,
-scopes or callback just to retry an uncertain registration. First establish with
-the provider whether the original attempt created a client. Weft does not
-currently implement remote registration reconciliation or client deletion. A
-historical uncertain record without diagnostic details must remain blocked until
-external evidence allows a deliberate recovery; an HTTP error reported by the
-browser alone does not establish the upstream result.
+Weft never automatically repeats an uncertain DCR registration. Do not create
+another connection or change the issuer, scopes or callback just to bypass this
+state. First inspect the safe diagnostic: `code`, provider `httpStatus`, and
+`fields` identify locally defined failure categories and incompatible field names.
+No upstream values, response bodies, headers or credentials are retained. Older
+attempts may lack field details; those cannot be reconstructed retrospectively.
+
+Prefer reconciling the client with the provider. Weft does not implement remote
+client lookup or deletion. If reconciliation is unavailable, an administrator can
+choose **Review registration recovery**, acknowledge that the provider may retain
+a duplicate/orphaned client, and confirm against the current connection revision.
+Use this deliberate path only when that risk is acceptable, for example in a
+disposable demo. Recovery archives the prior attempt and diagnosis, performs no
+provider request, and does not claim remote cleanup. Review OAuth setup separately
+to start a fresh registration; ordinary starts and reloads never retry it.
+
+The admin-only API is
+`POST /api/v1/mcp/connections/{id}/oauth/registration/recover` with
+`{"expectRevision":3,"acknowledgeDuplicateClientRisk":true}`. Stale revisions,
+missing acknowledgement, pending/ready attempts, or retained client credentials
+are rejected. History survives restarts and configuration edits, with a maximum
+of ten recoveries; reaching the limit requires reconciliation instead of silently
+evicting evidence. Every recovery emits `mcp.oauth.registration_recovered` with
+connection ID, revision and actor through the existing audit stream. Normal
+callback, scopes, PKCE, method and credential validation still apply.
 
 A provider HTTP 403 points to refusal of the registration request. It does not by
 itself prove a localhost incompatibility or prove that no remote client exists.

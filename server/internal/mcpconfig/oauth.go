@@ -33,6 +33,7 @@ type OAuthConfig struct {
 	Scopes           []string `json:"scopes"`
 }
 type OAuthView struct {
+	RegistrationHistory       []RegistrationRecovery  `json:"registrationHistory,omitempty"`
 	RegistrationDiagnostic    *RegistrationDiagnostic `json:"registrationDiagnostic,omitempty"`
 	RegistrationStatus        string                  `json:"registrationStatus,omitempty"`
 	EffectiveRegistrationMode string                  `json:"effectiveRegistrationMode,omitempty"`

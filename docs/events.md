@@ -124,7 +124,7 @@ has drained.
 | `installation.network_policy.updated` | `{revision}` |
 | `mcp.connection.changed`, `mcp.connection.deleted`, `mcp.tools.refreshed` | `{connectionId, revision, status, toolCount}` |
 | `mcp.connection.tested` | `{connectionId, outcome, durationMs}` |
-| `mcp.oauth.registration_started`, `mcp.oauth.registration_failed`, `mcp.oauth.registration_ready`, `mcp.oauth.exchanging`, `mcp.oauth.authorized`, `mcp.oauth.reauthorization_required`, `mcp.oauth.refreshing`, `mcp.oauth.renewed`, `mcp.oauth.revoked`, `mcp.oauth.revocation_result` | `{connectionId, revision, status, toolCount}` |
+| `mcp.oauth.registration_started`, `mcp.oauth.registration_failed`, `mcp.oauth.registration_recovered`, `mcp.oauth.registration_ready`, `mcp.oauth.exchanging`, `mcp.oauth.authorized`, `mcp.oauth.reauthorization_required`, `mcp.oauth.refreshing`, `mcp.oauth.renewed`, `mcp.oauth.revoked`, `mcp.oauth.revocation_result` | `{connectionId, revision, status, toolCount}` |
 | `mcp.oauth.cleanup` | `{connectionId, outcome}` |
 | `project.registration_requested` | `{projectId, importId?}` |
 | `project.execution_preference_requested` | `{projectId, mode}` |

@@ -158,3 +158,25 @@ func (s *Server) mcpOAuthClientDocument(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, 200, doc)
 	return nil
 }
+
+func (s *Server) mcpOAuthRegistrationRecover(w http.ResponseWriter, r *http.Request) error {
+	if s.MCP == nil {
+		return storage.ErrNotFound
+	}
+	var in struct {
+		ExpectRevision                 int64 `json:"expectRevision"`
+		AcknowledgeDuplicateClientRisk bool  `json:"acknowledgeDuplicateClientRisk"`
+	}
+	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
+	d.DisallowUnknownFields()
+	if d.Decode(&in) != nil || d.Decode(new(any)) != io.EOF {
+		return badRequest("Invalid registration recovery body")
+	}
+	v, err := s.MCP.RecoverOAuthRegistration(r.Context(), r.PathValue("connection"), in.ExpectRevision, in.AcknowledgeDuplicateClientRisk, identityFrom(r.Context()).Name)
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, v)
+	return nil
+}
