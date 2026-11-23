@@ -1,0 +1,20 @@
+# Review this installation-specific network ceiling before apply. Preserve any
+# additional hosts from your existing policy; this is not a universal default.
+apiVersion: weft.io/v1
+kind: NetworkPolicy
+metadata:
+  name: installation
+spec:
+  setupNetworks: [none, bridge]
+  runNetworks: [none, egress]
+  egressHosts: [proxy.golang.org, sum.golang.org, storage.googleapis.com, registry.npmjs.org]
+---
+# A separate project snapshot keeps existing task/project pins unchanged.
+apiVersion: weft.io/v1
+kind: Project
+metadata:
+  name: weft-security
+spec:
+  url: https://github.com/woliveiras/weft
+  ref: refs/heads/main
+  executionMode: workflow

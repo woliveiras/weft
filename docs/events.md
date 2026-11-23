@@ -133,6 +133,7 @@ has drained.
 | `task.transition_requested` | `{taskId, from, to, expectedRevision}` |
 | `task.prompt_resolution` | `{taskId, state, expectedRevision}` |
 | `task.authorization_requested`, `task.authorization_preference_requested` | `{taskId, mode, scope, expectedRevision}` |
+| `task.authorization_decision` | Tool gateway authorization recheck: `{tool, outcome: "taskId:revision:mode" or "legacy", durationMs}`. Records the consent snapshot used for dispatch; contains no tool arguments or credentials. |
 | `task.workspace_cleanup_requested`, `task.workspace_cleanup_completed` | `{taskId, nodeId, replica}` |
 | `sandbox.capacity` | `{state, node?, replica?, phase?}` |
 | `sandbox.lifecycle` | See [sandbox idle lifecycle](sandbox-runtime.md#idle-suspension-and-task-resume). |

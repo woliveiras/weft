@@ -24,6 +24,7 @@ navigation tools.
 | `git.read` | `git.status`, `git.diff` `{staged?, ref?, path?}`, `git.log` `{n?, ref?}`, `git.show` `{ref}`, `git.branches` | `paths` (pathspecs) | Executed through the sandbox (works in docker isolation); refs starting with `-` rejected, paths after `--` |
 | `git.write` | `git.add` `{paths}`, `git.commit` `{message, all?, author?}`, `git.branch` `{name, from?, checkout?}`, `git.checkout` `{ref}`, `git.merge` `{branch, noFF?, message?}` | `paths` | Fallback identity `Weft Agent <agent@weft.local>` |
 | `scm.push` | `git.push` `{connection, branch?}` | `repositories` | Runs in Weft's own Git process with the connection's server-held token; only branches under the connection prefix (default `weft/`), never the base branch, tags or forced updates. See [SCM connections](api.md#source-control-connections) |
+| `scm.security.alerts` | `scm.security.alerts` `{connection, baseBranch}` | `repositories` | Read-only open dependency alert groups, stable branch hints and matching open PRs. Initially GitHub Dependabot only; requires its alerts read permission. Pagination/permission failures are explicit, not an empty list. No dismissal or merge. See [manual security workflow](../examples/dependency-security/README.md) |
 | `scm.pull_request` | `scm.pull_request.create` `{connection, title (≤256, one line), body? (≤16 KiB), branch?}` | `repositories` | Base is the repository's default branch; returns the open pull request for the branch instead of a second one; a person approves it first in every authorization mode unless the connection sets `requirePullRequestApproval: false` |
 | `http.fetch` | `http.fetch` `{url, method?, headers?, body?, maxBytes? (≤5 MiB)}` | `hosts` | http/https only, ≤ 5 redirects (each re-checked), HTML → text, SSRF guard |
 | `human.ask` | `human.ask` `{question}` | — | Opens a `question` approval and blocks until a human answers |
@@ -65,7 +66,7 @@ tools:
 | `paths` | filesystem.*, git (pathspecs) | Workspace-relative globs: `**` = any number of segments (incl. none), `*`/`?`/`[…]` within one segment. Empty = whole workspace |
 | `commands` | shell.exec | Pattern **without** a space → matched against `basename(argv[0])` (`go`, `pytest*`). Pattern **with** a space → matched against the full command line with `argv[0]` reduced to its basename (`npm *`, `git status`). Empty = any command |
 | `hosts` | http.fetch | Case-insensitive host globs; also applied to every redirect. Empty = any **public** host |
-| `repositories` | git.push, scm.pull_request.create | SCM connection names. Unlike the other axes, **empty grants none**, so `git.*` or `*` never implies a push |
+| `repositories` | git.push, scm.pull_request.create, scm.pull_request.read/review/merge, scm.security.alerts | SCM connection names. Unlike the other axes, **empty grants none**, so `git.*` or `*` never implies a push or alert access |
 | `requiresApproval` | all | Each call waits for a human (`tool` approval) |
 | `rateLimit` | all | Calls per minute per (graph, node, tool): token bucket, burst = limit |
 

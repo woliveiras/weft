@@ -20,7 +20,7 @@ sequences. IDs and slugs remain stable after assignment.
 | `product-and-tasks` | `TASK-001`–`TASK-008` | Release contracts, console navigation, graph editing, Activity, prompt tasks, consent, admission, and registered projects |
 | `workspaces-and-environments` | `ENV-001`–`ENV-009` | Repository imports, workspace review, journal, human review, Docker isolation, capacity, definitions, build/reuse, and network policy |
 | `providers-and-integrations` | `INT-001`–`INT-009` | Built-in inference plugins, adapters, external plugins, budgets, MCP invocation, MCP OAuth, vendor profiles, hosting, and portable issue/SCM integrations |
-| `runtime-and-delivery` | `RUN-001`–`RUN-008` | Steering, delegation, native coding, evaluation, SCM, issue triggers, issue readiness, and context usage |
+| `runtime-and-delivery` | `RUN-001`–`RUN-009` | Steering, delegation, native coding, evaluation, SCM, issue triggers, issue readiness, context usage, and manual dependency security |
 | `installation-and-operations` | `OPS-001`–`OPS-003` | Compose, standalone and declarative installations |
 
 Keep existing specification IDs and paths. Use `implemented`, `in-progress`,
@@ -111,6 +111,7 @@ The [historical source map](./historical-source-map.md) records the migration of
 ### Planned
 
 - [RUN-008 — Agent Context Usage Breakdown](./runtime-and-delivery/agent-context-usage/spec.md) — `planned`, pending maintainer review. Show how each native agent's context window is spent, by category, for every model call.
+- [RUN-009 — Manual Dependency Security Remediation](./runtime-and-delivery/manual-dependency-security-remediation/spec.md) — `in-progress`. Read scoped alerts and manually prepare a bounded, verified dependency security PR.
 
 ## Installation and operations
 

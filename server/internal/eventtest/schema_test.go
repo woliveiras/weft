@@ -35,6 +35,28 @@ func TestValidateEvent(t *testing.T) {
 	}
 }
 
+func TestTaskAuthorizationDecisionEvent(t *testing.T) {
+	schema, err := eventSchema()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		data  string
+		valid bool
+	}{
+		{`{"tool":"scm.security.alerts","outcome":"tsk_fixture:1:full","durationMs":0}`, true},
+		{`{"tool":"scm.security.alerts","outcome":42,"durationMs":0}`, false},
+		{`{"tool":"scm.security.alerts","outcome":"legacy"}`, false},
+		{`{"tool":"scm.security.alerts","outcome":"legacy","durationMs":0,"args":{"secret":"forbidden"}}`, false},
+	} {
+		e := domain.NewEvent("task.authorization_decision", "fixture", json.RawMessage(tc.data))
+		e.Seq = 1
+		if err := validateEvent(schema, e); (err == nil) != tc.valid {
+			t.Fatalf("valid=%t: %v", tc.valid, err)
+		}
+	}
+}
+
 func TestEventSchemaClosesEnvelopeAndProposalBlock(t *testing.T) {
 	schema, err := eventSchema()
 	if err != nil {

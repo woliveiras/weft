@@ -26,6 +26,7 @@
     {"if": {"properties": {"type": {"const": "replica.state_changed"}}}, "then": {"properties": {"data": {"$ref": "#/$defs/ReplicaStatus"}}}},
     {"if": {"properties": {"type": {"enum": ["approval.requested", "approval.decided"]}}}, "then": {"properties": {"data": {"type": "object", "required": ["id", "kind", "status"]}}}},
     {"if": {"properties": {"type": {"enum": ["agent.output", "agent.broadcast"]}}}, "then": {"properties": {"data": {"type": "object", "required": ["text"]}}}},
+    {"if": {"properties": {"type": {"const": "task.authorization_decision"}}}, "then": {"properties": {"data": {"type": "object", "required": ["tool", "outcome", "durationMs"], "additionalProperties": false, "properties": {"tool": {"type": "string", "minLength": 1}, "outcome": {"type": "string", "minLength": 1}, "durationMs": {"type": "integer", "minimum": 0}}}}}},
     {"if": {"properties": {"type": {"enum": ["tool.invoked", "tool.completed", "tool.denied"]}}}, "then": {"properties": {"data": {"type": "object", "required": ["tool", "outcome", "durationMs"], "properties": {"tool": {"type": "string"}, "outcome": {"enum": ["started", "ok", "error", "denied", "rejected", "rate_limited", "unknown"]}, "durationMs": {"type": "integer"}, "args": {}, "error": {"type": "string"}}}}}},
     {"if": {"properties": {"type": {"const": "message.published"}}}, "then": {"properties": {"data": {"type": "object", "required": ["channel", "type", "source", "consumers"]}}}},
     {"if": {"properties": {"type": {"enum": ["budget.warning", "budget.reached"]}}}, "then": {"properties": {"data": {"$ref": "#/$defs/BudgetView"}}, "required": ["data"]}},
@@ -78,7 +79,7 @@
         "review.decided", "review.expired", "review.requested", "review.restarted",
         "review.session", "review.session_failed", "review.session_stopped", "sandbox.capacity",
         "sandbox.lifecycle", "scm.branch_pushed", "scm.connection_changed", "scm.pull_request_opened", "scm.review_summary_published", "scm.review_route_change_requested", "scm.review_route_recovery_requested",
-        "task.authorization_preference_requested", "task.authorization_requested", "task.draft_save_requested", "task.prompt_resolution",
+        "task.authorization_decision", "task.authorization_preference_requested", "task.authorization_requested", "task.draft_save_requested", "task.prompt_resolution",
         "task.transition_requested", "task.workspace_cleanup_completed", "task.workspace_cleanup_requested", "tool.completed",
         "tool.denied", "tool.invoked", "trigger.changed", "tracker.connection_change_requested", "tracker.jira_cloud_profile_change_requested", "tracker.transition_sync_requested", "tracker.lifecycle_sync_recovery_requested", "tracker.workflow_mapping_change_requested", "trigger.failed_retry_requested", "trigger.hold_resolved",
         "trigger.note", "trigger.run", "workspace.observed"
