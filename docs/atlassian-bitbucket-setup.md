@@ -177,6 +177,15 @@ transitions or execute writes. Saving a mapping does not attach it to a trigger.
 
 ## Atlassian Cloud (Jira and Confluence)
 
+Jira Cloud polling requests the current MCP search tool's explicit `view: full`
+and required issue fields. The compact default may filter out blocker links even
+when `fields` requests them. Search accepts a legacy `issues` reply or one
+`data.issues` wrapper in structured content or a single JSON text block; malformed
+arrays, explicit error replies and ambiguous pagination fail the scan. Workflow
+profiles still require issue/project/type/status identities matching their
+reviewed scope. Compatibility with older MCP schemas lacking `view` has not been
+qualified; Weft does not retry silently with reduced evidence.
+
 Jira issue triggers use comments and label changes through the gateway.
 They require a scoped API token and a reviewed source connection.
 [Issue-trigger setup and permissions](task-workflows.md#issue-trigger-readiness-and-delivery)
