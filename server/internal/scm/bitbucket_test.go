@@ -16,6 +16,7 @@ import (
 func TestBitbucketCloudDelivery(t *testing.T) {
 	var created bool
 	var comments int
+	var lookups, posts int
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -32,8 +33,23 @@ func TestBitbucketCloudDelivery(t *testing.T) {
 			}
 			fmt.Fprint(w, `{"values":[{"repository":{"full_name":"acme/app"},"user":{"nickname":"bot"},"permission":"write"}]}`)
 		case "/2.0/repositories/acme/app/pullrequests":
+			if r.Method == "GET" {
+				lookups++
+				q := r.URL.Query()
+				if q.Get("pagelen") != "50" {
+					// Bitbucket rejects this endpoint's values above 50 with HTTP 400.
+					http.Error(w, "invalid pagelen", http.StatusBadRequest)
+					return
+				}
+				if q.Get("state") != "OPEN" || q.Get("q") != `source.branch.name="weft/fix" AND destination.branch.name="main"` {
+					t.Error("missing exact open branch-pair filter")
+					http.Error(w, "invalid filter", http.StatusBadRequest)
+					return
+				}
+			}
 			pull := `{"id":7,"state":"OPEN","source":{"branch":{"name":"weft/fix"},"repository":{"full_name":"acme/app"},"commit":{"hash":"abcdef"}},"destination":{"branch":{"name":"main"},"repository":{"full_name":"acme/app"}},"links":{"html":{"href":"https://bitbucket.org/acme/app/pull-requests/7"}}}`
 			if r.Method == "POST" {
+				posts++
 				var in map[string]any
 				if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 					t.Error(err)
@@ -70,7 +86,8 @@ func TestBitbucketCloudDelivery(t *testing.T) {
 	git(t, work, "checkout", "-q", "-b", "weft/fix")
 	reg := tools.NewRegistry()
 	reg.MustRegister(scm.Tools(m)...)
-	gw := tools.NewGateway(reg, &approver{approve: true}, nil)
+	ap := &approver{approve: true}
+	gw := tools.NewGateway(reg, ap, nil)
 	p := principal(work, domain.ToolGrant{Name: "git.push", Repositories: []string{"bb"}}, domain.ToolGrant{Name: "scm.pull_request.create", Repositories: []string{"bb"}})
 	out, err := gw.Invoke(ctx, p, "git.push", json.RawMessage(`{"connection":"bb"}`))
 	if err != nil || out.IsError {
@@ -85,6 +102,9 @@ func TestBitbucketCloudDelivery(t *testing.T) {
 		if err = json.Unmarshal(out.Data, &pr); err != nil || pr.Number != 7 || pr.Created != (i == 0) {
 			t.Fatalf("PR: %+v %v", pr, err)
 		}
+	}
+	if lookups != 2 || posts != 1 || len(ap.asked) != 1 {
+		t.Fatalf("lookup/create/approval contract: lookups=%d posts=%d approvals=%d", lookups, posts, len(ap.asked))
 	}
 	if git(t, remote, "rev-parse", "refs/heads/weft/fix") != git(t, work, "rev-parse", "HEAD") {
 		t.Fatal("remote revision differs")
@@ -115,6 +135,68 @@ func TestBitbucketCloudFailures(t *testing.T) {
 			_, err = m.Test(ctx, "bb")
 			if err == nil || !strings.Contains(err.Error(), fmt.Sprint(status)) || strings.Contains(err.Error(), token) {
 				t.Fatalf("unsafe/missing error: %v", err)
+			}
+		})
+	}
+}
+
+func TestBitbucketCloudLookupFailureDoesNotApproveOrCreate(t *testing.T) {
+	for _, mode := range []string{"bad-request", "malformed", "page-limit"} {
+		t.Run(mode, func(t *testing.T) {
+			lookups, posts := 0, 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.Header.Get("Authorization") != "Bearer "+token {
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
+				switch r.URL.Path {
+				case "/2.0/repositories/acme/app":
+					fmt.Fprint(w, `{"full_name":"acme/app","mainbranch":{"name":"main"}}`)
+				case "/2.0/user/workspaces/acme/permissions/repositories":
+					fmt.Fprint(w, `{"values":[{"repository":{"full_name":"acme/app"},"user":{"nickname":"bot"},"permission":"write"}]}`)
+				case "/2.0/repositories/acme/app/pullrequests":
+					if r.Method != "GET" {
+						posts++
+						http.Error(w, "unexpected write", http.StatusInternalServerError)
+						return
+					}
+					lookups++
+					if r.URL.Query().Get("pagelen") != "50" {
+						t.Error("lookup did not use the endpoint page limit")
+					}
+					switch mode {
+					case "bad-request":
+						w.WriteHeader(http.StatusBadRequest)
+						fmt.Fprintf(w, `{"error":{"message":%q}}`, token)
+					case "malformed":
+						fmt.Fprint(w, `{"values":null}`)
+					case "page-limit":
+						fmt.Fprintf(w, `{"values":[],"next":"http://%s%s?pagelen=50&page=%d"}`, r.Host, r.URL.Path, lookups+1)
+					}
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+			m, _ := manager(t)
+			if _, err := m.Save(ctx, scm.Input{Name: "bb", Kind: "bitbucket-cloud", Repository: "acme/app", APIURL: srv.URL + "/2.0", Token: ptr(token)}, "admin", false); err != nil {
+				t.Fatal(err)
+			}
+			ap := &approver{approve: true}
+			reg := tools.NewRegistry()
+			reg.MustRegister(scm.Tools(m)...)
+			gw := tools.NewGateway(reg, ap, nil)
+			out, err := gw.Invoke(ctx, principal("", domain.ToolGrant{Name: "scm.pull_request.create", Repositories: []string{"bb"}}), "scm.pull_request.create", json.RawMessage(`{"connection":"bb","title":"Fix","branch":"weft/fix"}`))
+			if err != nil || out == nil || !out.IsError || !strings.Contains(out.Content, "could not look for an existing pull request") || strings.Contains(out.Content, token) {
+				t.Fatalf("missing or unsafe lookup failure: %+v %v", out, err)
+			}
+			wantLookups := 1
+			if mode == "page-limit" {
+				wantLookups = 10
+			}
+			if lookups != wantLookups || posts != 0 || len(ap.asked) != 0 {
+				t.Fatalf("lookup failure advanced delivery: lookups=%d posts=%d approvals=%d", lookups, posts, len(ap.asked))
 			}
 		})
 	}

@@ -3,11 +3,48 @@ package scm
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+type bitbucketRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f bitbucketRoundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestBitbucketCloudPullRequestLookupRequest(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusBadRequest} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			h, err := newProviderHTTP("https://api.bitbucket.org/2.0", "synthetic")
+			if err != nil {
+				t.Fatal(err)
+			}
+			calls := 0
+			h.client.Transport = bitbucketRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+				calls++
+				if r.Method != "GET" || r.URL.Path != "/2.0/repositories/acme/app/pullrequests" {
+					t.Fatalf("unexpected lookup: %s %s", r.Method, r.URL.Path)
+				}
+				q := r.URL.Query()
+				// This endpoint has a lower limit than Bitbucket's global maximum of 100.
+				if q.Get("pagelen") != "50" || q.Get("state") != "OPEN" || len(q) != 3 {
+					t.Fatalf("invalid collection constraints: %v", q)
+				}
+				if q.Get("q") != `source.branch.name="weft/topic\"quoted" AND destination.branch.name="release/next"` {
+					t.Fatalf("branch filter was not quoted exactly: %s", q.Get("q"))
+				}
+				return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"values":[]}`))}, nil
+			})
+			b := &bitbucketCloud{http: h, c: Connection{Repository: "acme/app"}}
+			pr, err := b.FindPullRequest(context.Background(), `weft/topic"quoted`, "release/next")
+			if pr != nil || calls != 1 || (status == http.StatusOK) != (err == nil) {
+				t.Fatalf("lookup: pr=%+v error=%v calls=%d", pr, err, calls)
+			}
+		})
+	}
+}
 
 func TestBitbucketCloudDefaultsAndInput(t *testing.T) {
 	f, _ := factory("bitbucket-cloud")

@@ -1,5 +1,37 @@
 # Documentation evidence — 2026-11-20
 
+## Bitbucket Cloud PR lookup page size — 2026-11-23
+
+The authorized rehearsal pushed its task branch, then PR delivery stopped before
+approval because `FindPullRequest` returned HTTP400. The adapter requested
+`pagelen=100`. Atlassian's [BCLOUD-9659](https://jira.atlassian.com/browse/BCLOUD-9659)
+and [BCLOUD-13229](https://jira.atlassian.com/browse/BCLOUD-13229) document that the
+pull-request collection accepts 50 and rejects larger page sizes, despite the
+global maximum of 100. This matches the observed failure; live confirmation of
+the corrected request remains a separate operational step.
+
+Only the pull-request lookup page size changes to 50. Its OPEN state and exact
+source/destination branch query remain unchanged, as do local branch/repository
+identity checks, same-collection continuation, ten-page bound and approval gate.
+The permissions endpoint retains its separate page size. No provider error body
+is exposed and no automatic retry/fallback or PR write was added.
+
+The unit transport fixture checks the collection, state, page size, quoting of
+branch values and HTTP400 propagation. The existing integration now rejects
+oversized requests with HTTP400 and exercises encrypted connection persistence,
+real Git push, the actual provider and tool gateway, one approved PR creation,
+idempotent lookup and commenting. Both tests failed with the original page size;
+the delivery failure reproduced the observed pre-approval error message.
+Additional gateway fixtures verify HTTP400, malformed collections and exhausted
+pagination stop with no approval request or POST and no reflected synthetic
+credential. Existing continuation/scope/uncertain-write tests remain enabled.
+
+Validation: `./scripts/go.sh test ./internal/scm -count=1` passed (0.638s),
+`./scripts/go.sh test ./internal/api -count=1` passed (45.956s), and
+`git diff --check` passed. Independent final review found no blocking issue.
+No live authenticated request, task mutation, configuration change, deployment or
+commit was performed by this diagnostic implementation.
+
 ## Jira REST identity-email redaction — 2026-11-23
 
 Recovery also reads `GET issue/{key}/changelog` to verify a fresh label event.
