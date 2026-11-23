@@ -103,7 +103,7 @@ func (m Manager) PrepareEnvironment(ctx context.Context, id string, revision int
 		if m.Workspaces == nil {
 			return fail(errors.New("task workspaces unavailable"))
 		}
-		if _, err = projectconfig.CreateWorktree(ctx, project, d.BaseCommit, m.Workspaces.Root, g.Metadata.ID); err != nil {
+		if _, err = (projectconfig.Manager{Store: m.Store}).CreateTaskCheckout(ctx, project, d.BaseCommit, m.Workspaces.Root, g.Metadata.ID, actor); err != nil {
 			return fail(err)
 		}
 	}

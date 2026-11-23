@@ -318,7 +318,7 @@ func (m Manager) Start(ctx context.Context, id string, revision int64, actor str
 		if m.Workspaces == nil {
 			return fail(errors.New("task workspaces unavailable"))
 		}
-		if _, e = projectconfig.CreateWorktree(ctx, project, d.BaseCommit, m.Workspaces.Root, g.Metadata.ID); e != nil {
+		if _, e = (projectconfig.Manager{Store: m.Store}).CreateTaskCheckout(ctx, project, d.BaseCommit, m.Workspaces.Root, g.Metadata.ID, actor); e != nil {
 			return fail(e)
 		}
 	}

@@ -111,7 +111,7 @@ func TestProjectTaskWorktreeThroughAPI(t *testing.T) {
 		t.Fatal("unknown scope accepted")
 	}
 	// A modified .git pointer must not expose a different repository.
-	if err := os.WriteFile(filepath.Join(review.WorkspacePath, ".git"), []byte("gitdir: /outside/fixture\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(review.WorkspacePath, ".git", "commondir"), []byte("/outside/fixture\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if code := call(t, srv, "GET", endpoint, viewerTok, "", "", nil); code == 200 {
@@ -188,8 +188,11 @@ func TestTaskCleanupRequiresStoppedScopeAndReview(t *testing.T) {
 	if _, err := os.Stat(preview.Path); !os.IsNotExist(err) {
 		t.Fatal("checkout not removed", err)
 	}
-	cmd := exec.Command("git", "-C", repo, "rev-parse", "--verify", "refs/heads/"+preview.Branch)
-	if b, e := cmd.CombinedOutput(); e != nil {
+	if preview.RetainedRepository == "" {
+		t.Fatal("missing retained task repository")
+	}
+	cmd := exec.Command("git", "--git-dir="+preview.RetainedRepository, "rev-parse", "--verify", "refs/heads/"+preview.Branch)
+	if b, e := cmd.CombinedOutput(); e != nil || strings.TrimSpace(string(b)) != p.Head {
 		t.Fatal("branch lost", e, string(b))
 	}
 }

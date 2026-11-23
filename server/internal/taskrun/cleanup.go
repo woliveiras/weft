@@ -53,7 +53,7 @@ func (m Manager) PreviewCleanup(ctx context.Context, id, node string, replica in
 	if err != nil {
 		return nil, err
 	}
-	return projectconfig.PreviewCleanup(ctx, p, dir)
+	return (projectconfig.Manager{Store: m.Store}).PreviewTaskCleanup(ctx, p, ExecutionID(id), dir)
 }
 
 func (m Manager) Cleanup(ctx context.Context, id, node string, replica int, fingerprint, actor string) error {
@@ -64,7 +64,7 @@ func (m Manager) Cleanup(ctx context.Context, id, node string, replica int, fing
 	if err = m.Store.AppendEvent(ctx, domain.NewEvent("task.workspace_cleanup_requested", ExecutionID(id), map[string]any{"taskId": id, "nodeId": node, "replica": replica}).WithActor(actor)); err != nil {
 		return err
 	}
-	if err = projectconfig.RemoveReviewedWorktree(ctx, p, dir, fingerprint); err != nil {
+	if err = (projectconfig.Manager{Store: m.Store}).RemoveReviewedTaskCheckout(ctx, p, ExecutionID(id), dir, fingerprint); err != nil {
 		return err
 	}
 	return m.Store.AppendEvent(ctx, domain.NewEvent("task.workspace_cleanup_completed", ExecutionID(id), map[string]any{"taskId": id, "nodeId": node, "replica": replica}).WithActor(actor))

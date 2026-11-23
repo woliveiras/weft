@@ -47,6 +47,8 @@ Cleanup applies to the stopped task's reviewed worktree only. Path, branch, HEAD
 - 2026-10-19. FLOW-03c added registered projects and version-pinned worktrees. Later native increments added cleanup review and remembered environment suggestions.
 - 2026-11-19. The maintainer requested Projects follow the console's table and form conventions. The list supports repository search and environment filters, row disclosures retain server paths and preference editing, and Add project opens reviewed registration or URL import on dedicated routes.
 
+- 2026-11-23. A live Docker task exposed a linked Git directory outside its sole workspace mount. New registered-project tasks now receive self-contained Git metadata and reviewed-base ancestry, with platform-owned checkout provenance. Legacy linked tasks are preserved. Reviewed cleanup retains private branches, checkpoints and objects outside the removed checkout; local linked replica cleanup preserves the task base. This restores AC-001/AC-003 without mounting shared source metadata. Docker per-node linked replicas remain a separate, unqualified limitation.
+
 ## Reconciliation
 
 - [task-workflows.md](../../../docs/task-workflows.md), [standalone.md](../../../docs/standalone.md), [tool-permissions.md](../../../docs/tool-permissions.md).

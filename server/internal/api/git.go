@@ -57,7 +57,10 @@ func (s *Server) inspectGit(w http.ResponseWriter, r *http.Request) error {
 			if e != nil || canonical != project.Path {
 				return badRequest("registered project path is unavailable or changed")
 			}
-			base = project.Path
+			base, e = (projectconfig.Manager{Store: s.Store}).TaskInspectionBase(r.Context(), project, g.Metadata.ID, actual)
+			if e != nil {
+				return e
+			}
 		}
 	}
 	result, err := s.Workspaces.Inspect(r.Context(), root, base, view, path)

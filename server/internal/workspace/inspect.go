@@ -76,6 +76,17 @@ func InspectionArgs(view, path string) ([]string, error) {
 // Inspect uses a bounded private copy of Git metadata so concurrent agent
 // changes cannot replace validated configuration before Git reads it.
 func (m *Manager) Inspect(ctx context.Context, dir, base, view, path string) (*Inspection, error) {
+	return m.inspect(ctx, dir, base, view, path, false)
+}
+
+// InspectCleanup uses the same confined metadata snapshot and inert config
+// validation as read-only inspection, including ignored files in the cleanup
+// decision. It is not exposed as an additional console inspection route.
+func (m *Manager) InspectCleanup(ctx context.Context, dir, base string) (*Inspection, error) {
+	return m.inspect(ctx, dir, base, "status", "", true)
+}
+
+func (m *Manager) inspect(ctx context.Context, dir, base, view, path string, includeIgnored bool) (*Inspection, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if _, err := InspectionArgs(view, path); err != nil {
@@ -142,13 +153,16 @@ func (m *Manager) Inspect(ctx context.Context, dir, base, view, path string) (*I
 		return nil, err
 	}
 	defer os.RemoveAll(snapshot)
-	return m.inspectSnapshot(ctx, dir, snapshot, relativeGit, view, path)
+	return m.inspectSnapshot(ctx, dir, snapshot, relativeGit, view, path, includeIgnored)
 }
 
-func (m *Manager) inspectSnapshot(ctx context.Context, dir, snapshot, relativeGit, view, path string) (*Inspection, error) {
+func (m *Manager) inspectSnapshot(ctx context.Context, dir, snapshot, relativeGit, view, path string, includeIgnored bool) (*Inspection, error) {
 	args, err := InspectionArgs(view, path)
 	if err != nil {
 		return nil, err
+	}
+	if includeIgnored {
+		args = append(args[:len(args)-1], "--ignored", "--")
 	}
 	result := &Inspection{Directory: dir, Attribution: "inconclusive"}
 	gitdir := filepath.Join(snapshot, relativeGit)

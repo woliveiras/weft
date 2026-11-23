@@ -763,14 +763,38 @@ The task explicitly selects a project and full commit. Review and admission
 recheck the registered path and commit. A workflow with its own repository/path
 override cannot silently replace this choice.
 
-Admission creates `weft/task-run-<id>` in the managed task workspace from the
-reviewed commit. Existing directories or branches cause an error, never force
-replacement. Failure preserves partial resources for inspection. Source dirty
-files and HEAD remain unchanged; different tasks have different worktrees and
-branches. Git hooks and fsmonitor are disabled for these management commands;
-repository-configured checkout filters can still run, so task start authorizes
-local repository processing under the server OS account. Worktrees do not isolate
-OS permissions. No commit, push, merge, source reset or cleanup is automatic.
+Admission creates `weft/task-run-<id>` in a self-contained task checkout from
+that reviewed commit. A new object pack contains only its ancestry; the task has
+its own `.git` directory, with no source hardlinks, alternates, unrelated refs,
+remotes, hooks or configuration. The platform persists the project, task, base,
+checkout path and future archive path separately before creating files. Existing
+bindings, checkouts or archives are never replaced automatically. Failure retains
+partial resources for inspection. Source dirty files, refs, configuration and HEAD
+remain unchanged. Management commands disable hooks, fsmonitor, host Git settings,
+replacement objects and lazy network fetches.
+
+Docker mounts only the task checkout at `/workspace`; neither the registered
+repository nor another task's metadata is exposed. Shared-workspace task Git
+commands, server-side delivery and checkpoints use this same private repository.
+Previously created linked task worktrees remain inspectable and are not migrated.
+Per-node `WorkspaceWorktree` replicas retain their existing Git branch-sharing
+model. **Docker execution of those linked replicas is not qualified by this fix**:
+their external common Git metadata still needs a separately designed isolation
+solution. Local replica inspection and reviewed cleanup remain supported.
+
+Reviewed cleanup requires the task to be cancelled and its graph stopped. It
+rechecks the platform binding, path, HEAD, branch, all metadata and clean state,
+including ignored files. Stop external writers before reviewing. Locked metadata,
+changed refs/checkpoints, redirects, unsupported executable Git configuration or
+linked replicas still referencing the base prevent base removal. Cleanup uses a
+confined metadata snapshot for status, so agent filters and config includes cannot
+execute on the server. Remove linked local replicas first. Their branches and
+checkpoints stay in the task repository. Removing a clean private base retains
+its complete Git metadata at the previewed server-side
+`<workspaces>/.task-checkouts/<task-graph-id>.git` path before removing checkout
+files. A failed archive/removal is reported without automatic compensating deletion.
+Legacy linked tasks retain their prior cleanup path. Worktrees do not isolate OS
+permissions. No commit, push, merge, source reset or cleanup is automatic.
 
 The UI explains server versus container paths and links worktree background
 information. A container-mounted repository still runs commands in the container;
@@ -827,9 +851,11 @@ summary does not prove test success, commit or push. Declared checks and their r
 workspace state, not an immutable execution snapshot. Existing read permissions,
 Git path validation and observation limitations remain unchanged.
 
-For registered-project tasks, Git inspection resolves the source repository only
-from the persisted task/project binding, verifies graph ownership and expected
+For registered-project tasks, Git inspection selects metadata through the
+persisted task/project/checkout binding, verifies graph ownership and expected
 workspace location, and retains the existing bounded private metadata snapshot.
+New self-contained tasks use their local `.git`; legacy linked tasks use the
+registered source metadata. Local replicas resolve only their bound task base.
 Changing a worktree's `.git` pointer cannot select arbitrary external metadata.
 
 

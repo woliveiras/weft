@@ -267,7 +267,7 @@ func TestInspectionSnapshotSurvivesConcurrentMetadataReplacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, view := range []string{"status", "diff", "history"} {
-		got, err := m.inspectSnapshot(context.Background(), dir, snapshot, ".", view, "")
+		got, err := m.inspectSnapshot(context.Background(), dir, snapshot, ".", view, "", false)
 		if err != nil {
 			t.Fatalf("%s: %v", view, err)
 		}

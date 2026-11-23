@@ -14,12 +14,14 @@ import (
 )
 
 type CleanupPreview struct {
-	Path        string `json:"path"`
-	Branch      string `json:"branch"`
-	Head        string `json:"head"`
-	Status      string `json:"status"`
-	Clean       bool   `json:"clean"`
-	Fingerprint string `json:"fingerprint"`
+	Path                string `json:"path"`
+	Branch              string `json:"branch"`
+	Head                string `json:"head"`
+	Status              string `json:"status"`
+	Clean               bool   `json:"clean"`
+	Fingerprint         string `json:"fingerprint"`
+	RetainedRepository  string `json:"retainedRepository,omitempty"`
+	MetadataFingerprint string `json:"metadataFingerprint,omitempty"`
 }
 
 // PreviewCleanup only accepts an existing linked checkout of the registered
