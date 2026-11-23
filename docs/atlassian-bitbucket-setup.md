@@ -558,3 +558,22 @@ reconcile uncertain outcomes by reading; admins can retry confirmed preflight
 failures under the original authority. No intent means the destination is not
 inferred from today's mapping. Page controls bound history; search/status filters
 apply only to the current page. A revision conflict requires refresh and review.
+
+
+### Atlassian OAuth client authentication
+
+For a fresh DCR registration, the server-side Weft client prefers advertised
+`client_secret_basic`, then `client_secret_post`, only for the selected Atlassian
+service and canonical Atlassian MCP/issuer/authorization/token URLs. Setup preview
+shows the chosen method. Returned credentials must satisfy the same strict
+method, callback, scope, size and expiry checks; the client secret is encrypted
+and stays on the server. Existing manual registrations and public CIMD are not
+changed. This follows the client metadata and confidential-client distinction in
+[RFC 7591 sections 2 and 3.2.1](https://www.rfc-editor.org/rfc/rfc7591.html).
+
+An HTTP 201 with `registrationDiagnostic.fields: ["client_secret"]` means only
+that credential validation failed; it does not expose or establish the returned
+value. Use the separately confirmed uncertain-registration recovery flow before
+another reviewed attempt. Do not bypass the response checks or automatically
+repeat registration. Real consent and a scoped Jira tool call still need live
+qualification after registration succeeds.

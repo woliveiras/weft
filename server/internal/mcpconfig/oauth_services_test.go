@@ -222,3 +222,166 @@ func TestOAuthProviderErrorsAreUsefulAndRedacted(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAtlassianDCRMethodSelection(t *testing.T) {
+	for _, tc := range []struct {
+		name, service, endpoint, issuer, authorization, token string
+		methods                                               []string
+		want                                                  string
+	}{
+		{name: "basic preferred", methods: []string{"none", "client_secret_post", "client_secret_basic"}, want: "client_secret_basic"},
+		{name: "post advertised", methods: []string{"none", "client_secret_post"}, want: "client_secret_post"},
+		{name: "public only", methods: []string{"none"}, want: "none"},
+		{name: "unsupported only", methods: []string{"private_key_jwt"}},
+		{name: "empty methods", methods: []string{}},
+		{name: "default basic", want: "client_secret_basic"},
+		{name: "jira", service: "jira", methods: []string{"none", "client_secret_basic"}, want: "client_secret_basic"},
+		{name: "confluence", service: "confluence", methods: []string{"none", "client_secret_basic"}, want: "client_secret_basic"},
+		{name: "bitbucket", service: "bitbucket", methods: []string{"none", "client_secret_basic"}, want: "client_secret_basic"},
+		{name: "flat", endpoint: atlassianFlatEndpoint, methods: []string{"none", "client_secret_basic"}, want: "client_secret_basic"},
+		{name: "generic unchanged", service: "generic", methods: []string{"none", "client_secret_basic"}, want: "none"},
+		{name: "other resource", endpoint: "https://other.example/mcp", methods: []string{"none", "client_secret_basic"}, want: "none"},
+		{name: "other issuer", issuer: "https://other.example", methods: []string{"none", "client_secret_basic"}, want: "none"},
+		{name: "other authorize", authorization: "https://other.example/authorize", methods: []string{"none", "client_secret_basic"}, want: "none"},
+		{name: "other token", token: "https://other.example/token", methods: []string{"none", "client_secret_basic"}, want: "none"},
+		{name: "gitlab unchanged", service: "gitlab", endpoint: "https://gitlab.example/api/v4/mcp", issuer: "https://gitlab.example", authorization: "https://gitlab.example/oauth/authorize", token: "https://gitlab.example/oauth/token", methods: []string{"client_secret_basic"}, want: "none"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.service == "" {
+				tc.service = "atlassian"
+			}
+			if tc.endpoint == "" {
+				tc.endpoint = atlassianMCPEndpoint
+			}
+			if tc.issuer == "" {
+				tc.issuer = mcptest.AtlassianIssuer
+			}
+			if tc.authorization == "" {
+				tc.authorization = "https://auth.atlassian.com/authorize"
+			}
+			if tc.token == "" {
+				tc.token = "https://auth.atlassian.com/oauth/token"
+			}
+			r := record{View: View{Service: tc.service, Endpoint: tc.endpoint, OAuth: &OAuthView{OAuthConfig: OAuthConfig{Issuer: tc.issuer, RegistrationMode: "dcr"}}}}
+			meta := oauthMetadata{Issuer: tc.issuer, Authorization: tc.authorization, Token: tc.token, Registration: "https://auth.atlassian.com/register", Methods: tc.methods}
+			method, err := registrationClientMethod(r, meta)
+			if tc.want == "" {
+				if err == nil {
+					t.Fatal("unsupported authentication accepted")
+				}
+				return
+			}
+			if err != nil || method != tc.want {
+				t.Fatalf("method = %q, error = %v; want %q", method, err, tc.want)
+			}
+			plan, err := registrationPlan(r, meta, registrationCallback)
+			if err != nil || !strings.Contains(plan.Reason, tc.want) {
+				t.Fatalf("method absent from setup preview: %+v %v", plan, err)
+			}
+		})
+	}
+}
+
+func TestAtlassianConfidentialDCRLifecycleIntegration(t *testing.T) {
+	for _, method := range []string{"client_secret_basic", "client_secret_post"} {
+		t.Run(method, func(t *testing.T) {
+			m := testManager(t)
+			provider := mcptest.NewAtlassianOAuth()
+			defer provider.Close()
+			provider.AtlassianMethods = []string{"none", method}
+			m.OAuthClient = mcptest.OAuthClient(provider)
+			upstream := mcptest.New()
+			defer upstream.Close()
+			m.Discover = func(ctx context.Context, endpoint, token string) ([]Tool, error) {
+				return DiscoverWithClient(ctx, upstream.URL, token, upstream.Client())
+			}
+			in := Input{ID: "confidential", Name: "Atlassian confidential", Service: "atlassian", Enabled: true, Endpoint: atlassianFlatEndpoint, OAuth: &OAuthConfig{Issuer: mcptest.AtlassianIssuer, RegistrationMode: "dcr", Scopes: []string{"read:me", "offline_access", "read:jira:agent-interface", "read:confluence:agent-interface"}}}
+			if _, err := m.Put(t.Context(), in, 0, "admin"); err != nil {
+				t.Fatal(err)
+			}
+			plan, err := m.PreviewOAuth(t.Context(), in.ID, registrationCallback)
+			if err != nil || !strings.Contains(plan.Reason, method) || provider.Registrations.Load() != 0 {
+				t.Fatalf("unsafe preview %+v %v", plan, err)
+			}
+			start, err := m.StartOAuthReviewed(t.Context(), in.ID, "admin-session", registrationCallback, "dcr")
+			if err != nil {
+				t.Fatal(err)
+			}
+			r, err := m.load(t.Context(), in.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if r.Registration.Method != method || r.OAuthClientSealed == "" {
+				t.Fatal("confidential client not persisted")
+			}
+			saved, err := m.Store.GetSetting(t.Context(), prefix+in.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(saved.Value), "fixture-registered-client-secret") {
+				t.Fatal("client secret persisted in plaintext")
+			}
+			// The real TLS fixture must reject missing or wrong client authentication
+			// before any exchange/refresh can occur. It does not accept confidential
+			// registration just because the client sends a syntactically valid form.
+			for _, secret := range []string{"", "wrong-fixture-secret"} {
+				form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {"fixture-refresh-token"}, "client_id": {r.Registration.ClientID}, "resource": {atlassianMCPEndpoint}}
+				basicSecret := secret
+				if method == "client_secret_post" {
+					form.Set("client_secret", secret)
+					basicSecret = ""
+				}
+				if err := oauthJSON(t.Context(), m.OAuthClient, "https://auth.atlassian.com/oauth/token", form, basicSecret, nil); err == nil {
+					t.Fatal("invalid client authentication accepted")
+				}
+			}
+			if provider.Refreshes.Load() != 0 {
+				t.Fatal("unauthenticated client refreshed")
+			}
+			u, err := url.Parse(start.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			q := u.Query()
+			q.Set("decision", "allow")
+			u.RawQuery = q.Encode()
+			client := *m.OAuthClient
+			client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+			response, err := client.Get(u.String())
+			if err != nil {
+				t.Fatal(err)
+			}
+			response.Body.Close()
+			callback, err := url.Parse(response.Header.Get("Location"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			cq := callback.Query()
+			// The durable registration and pending browser transaction survive a manager restart.
+			restarted := New(m.Store, m.Box, nil)
+			restarted.OAuthClient = m.OAuthClient
+			restarted.Discover = m.Discover
+			if err = restarted.CaptureOAuth(start.State, start.Binding, cq.Get("code"), cq.Get("iss"), ""); err != nil {
+				t.Fatal(err)
+			}
+			view, err := restarted.CompleteOAuth(t.Context(), start.State, start.Binding, "admin-session")
+			if err != nil || view.Status != "ready" || view.OAuth.Status != "authorized" || !view.OAuth.ClientSecretConfigured {
+				t.Fatalf("confidential OAuth failed: %s %v", view.Status, err)
+			}
+			if provider.Refreshes.Load() != 1 || provider.Registrations.Load() != 1 {
+				t.Fatal("lifecycle did not authenticate exactly one registered client")
+			}
+			data, err := json.Marshal(view)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(data), "fixture-registered-client-secret") || strings.Contains(string(data), "fixture-refresh-token") || strings.Contains(string(data), "fixture-mcp-token") {
+				t.Fatal("credential leaked in view")
+			}
+			revoked, err := restarted.RevokeOAuth(t.Context(), in.ID, "admin")
+			if err != nil || revoked.OAuth.Revocation != "requested" || provider.Revocations.Load() != 2 {
+				t.Fatal("access and refresh revocation did not authenticate", err)
+			}
+		})
+	}
+}

@@ -86,7 +86,11 @@ func registrationPlan(r record, meta oauthMetadata, redirect string) (Registrati
 		if err := oauthURL(meta.Registration); err != nil {
 			return RegistrationPlan{}, err
 		}
-		return RegistrationPlan{"dcr", "Register a client with the advertised provider endpoint; provider consent is still required. CIMD is unavailable or was not selected"}, nil
+		method, err := registrationClientMethod(r, meta)
+		if err != nil {
+			return RegistrationPlan{}, err
+		}
+		return RegistrationPlan{"dcr", "Register a client using " + method + " authentication with the advertised provider endpoint; provider consent is still required. CIMD is unavailable or was not selected"}, nil
 	}
 	return RegistrationPlan{}, oauthError("Automatic client setup unavailable; configure a pre-registered client manually")
 }
@@ -162,14 +166,9 @@ func (m *Manager) prepareRegistration(ctx context.Context, r record, meta oauthM
 func (m *Manager) registerClient(ctx context.Context, r *record, meta oauthMetadata, redirect string) error {
 	r.Registration.Diagnostic = &RegistrationDiagnostic{Code: "request_setup_failed"}
 	diagnostic := r.Registration.Diagnostic
-	method := "none"
-	// GitLab's DCR contract is public; the returned method must explicitly agree.
-	if !slices.Contains(meta.Methods, "none") && r.Service != "gitlab" {
-		var err error
-		method, err = oauthClientMethod(meta, true)
-		if err != nil {
-			return err
-		}
+	method, err := registrationClientMethod(*r, meta)
+	if err != nil {
+		return err
 	}
 	payload := map[string]any{"client_name": "Weft", "redirect_uris": []string{redirect}, "grant_types": []string{"authorization_code", "refresh_token"}, "response_types": []string{"code"}, "token_endpoint_auth_method": method, "scope": strings.Join(r.OAuth.Scopes, " ")}
 	b, err := json.Marshal(payload)
@@ -276,4 +275,21 @@ func decodeRegistrationResponse(data []byte, method, redirect string) (registrat
 		return registrationResponse{}, fields
 	}
 	return out, nil
+}
+
+// registrationClientMethod keeps the generic and GitLab public-client behavior.
+// Weft is a server-side confidential client for the reviewed Atlassian profile
+// when the issuer advertises a supported secret-based authentication method.
+// Selecting that method never permits the response to substitute another one.
+func registrationClientMethod(r record, meta oauthMetadata) (string, error) {
+	atlassianService := slices.Contains([]string{"atlassian", "jira", "confluence", "bitbucket"}, r.Service)
+	atlassianIssuer := "https://auth.atlassian.com/VCeDsk8ZHncYF1g234fKtc4lNipbBhu3"
+	if atlassianService && canonicalMCPResource(r.Endpoint) == atlassianMCPEndpoint && r.OAuth != nil && r.OAuth.Issuer == atlassianIssuer && meta.Issuer == atlassianIssuer && meta.Authorization == "https://auth.atlassian.com/authorize" && meta.Token == "https://auth.atlassian.com/oauth/token" && (slices.Contains(meta.Methods, "client_secret_basic") || slices.Contains(meta.Methods, "client_secret_post")) {
+		return oauthClientMethod(meta, true)
+	}
+	// GitLab's DCR contract is public; the returned method must explicitly agree.
+	if slices.Contains(meta.Methods, "none") || r.Service == "gitlab" {
+		return "none", nil
+	}
+	return oauthClientMethod(meta, true)
 }

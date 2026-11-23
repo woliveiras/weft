@@ -20,6 +20,8 @@ type OAuthServer struct {
 	*httptest.Server
 	mu                        sync.Mutex
 	codes                     map[string]url.Values
+	registeredClients         map[string]registeredClient
+	AtlassianMethods          []string // fixture metadata override, set before requests
 	hosts                     []string
 	Registrations             atomic.Int32
 	FailRegistration          atomic.Bool
@@ -27,6 +29,11 @@ type OAuthServer struct {
 	ClientDocument            func(string) bool
 	Refreshes                 atomic.Int32
 	Revocations               atomic.Int32
+}
+
+type registeredClient struct {
+	method string
+	secret string
 }
 
 func NewOAuth(resource string) *OAuthServer { return newOAuth(resource, "generic") }
@@ -52,7 +59,7 @@ func newOAuth(resource string, service string) *OAuthServer {
 	if service == "gitlab" {
 		issuer = strings.TrimSuffix(resource, "/api/v4/mcp")
 	}
-	f := &OAuthServer{codes: map[string]url.Values{}}
+	f := &OAuthServer{codes: map[string]url.Values{}, registeredClients: map[string]registeredClient{}}
 	if issuer != "" {
 		for _, raw := range []string{issuer, resource} {
 			u, _ := url.Parse(raw)
@@ -68,6 +75,9 @@ func newOAuth(resource string, service string) *OAuthServer {
 				methods := []string{"none", "client_secret_post", "client_secret_basic"}
 				if service == "gitlab" {
 					methods = []string{"client_secret_basic", "client_secret_post"}
+				}
+				if service == "atlassian" && f.AtlassianMethods != nil {
+					methods = f.AtlassianMethods
 				}
 				auth := origin + "/authorize"
 				if service == "gitlab" {
@@ -106,11 +116,26 @@ func newOAuth(resource string, service string) *OAuthServer {
 				return
 			}
 			var in map[string]any
-			if r.Method != "POST" || json.NewDecoder(r.Body).Decode(&in) != nil || in["token_endpoint_auth_method"] != "none" {
+			if r.Method != "POST" || json.NewDecoder(r.Body).Decode(&in) != nil {
 				http.Error(w, "invalid registration", 400)
 				return
 			}
-			in["client_id"] = fmt.Sprintf("registered-fixture-client-%d", registrationNumber)
+			method, _ := in["token_endpoint_auth_method"].(string)
+			if method != "none" && (service != "atlassian" || (method != "client_secret_basic" && method != "client_secret_post")) {
+				http.Error(w, "invalid registration method", 400)
+				return
+			}
+			id := fmt.Sprintf("registered-fixture-client-%d", registrationNumber)
+			registered := registeredClient{method: method}
+			if method != "none" {
+				registered.secret = fmt.Sprintf("fixture-registered-client-secret-%d", registrationNumber)
+				in["client_secret"] = registered.secret
+				in["client_secret_expires_at"] = 0
+			}
+			f.mu.Lock()
+			f.registeredClients[id] = registered
+			f.mu.Unlock()
+			in["client_id"] = id
 			w.WriteHeader(201)
 			json.NewEncoder(w).Encode(in)
 
@@ -177,9 +202,11 @@ func newOAuth(resource string, service string) *OAuthServer {
 				http.Error(w, "invalid form", 400)
 				return
 			}
-			if (service == "gitlab" || service == "atlassian") && (r.Form.Get("client_secret") != "" || r.Header.Get("Authorization") != "") {
-				http.Error(w, "public fixture client required", 401)
-				return
+			if service == "gitlab" || service == "atlassian" {
+				if !f.validClientAuthentication(r) {
+					http.Error(w, "invalid fixture client authentication", 401)
+					return
+				}
 			}
 			if github && (r.Form.Get("client_secret") != "fixture-client-secret" || r.Header.Get("Authorization") != "") {
 				json.NewEncoder(w).Encode(map[string]string{"error": "incorrect_client_credentials", "error_description": "fixture-client-secret must not leak"})
@@ -233,6 +260,10 @@ func newOAuth(resource string, service string) *OAuthServer {
 				http.Error(w, "bad form", 400)
 				return
 			}
+			if (service == "gitlab" || service == "atlassian") && !f.validClientAuthentication(r) {
+				http.Error(w, "invalid fixture client authentication", 401)
+				return
+			}
 			if r.Form.Get("client_id") == "fail-revoke" {
 				http.Error(w, "revocation unavailable", 503)
 				return
@@ -278,3 +309,19 @@ func OAuthClient(fixtures ...*OAuthServer) *http.Client {
 type fixtureTransport func(*http.Request) (*http.Response, error)
 
 func (f fixtureTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// validClientAuthentication verifies the method and per-client credential issued
+// by this fixture. Unregistered manual and CIMD clients keep the public contract.
+func (f *OAuthServer) validClientAuthentication(r *http.Request) bool {
+	f.mu.Lock()
+	registered, ok := f.registeredClients[r.Form.Get("client_id")]
+	f.mu.Unlock()
+	if !ok || registered.method == "none" {
+		return r.Form.Get("client_secret") == "" && r.Header.Get("Authorization") == ""
+	}
+	if registered.method == "client_secret_post" {
+		return r.Header.Get("Authorization") == "" && r.Form.Get("client_secret") == registered.secret
+	}
+	user, secret, basic := r.BasicAuth()
+	return registered.method == "client_secret_basic" && basic && user == r.Form.Get("client_id") && secret == registered.secret && r.Form.Get("client_secret") == ""
+}
