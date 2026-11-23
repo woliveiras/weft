@@ -49,7 +49,29 @@
   with `registry.npmjs.org`, create `Project/weft-security` at
   `refs/heads/main`, and create `Graph/dependency-security`. No issue trigger,
   schedule, credential, budget or review-route change is included. Applying this
-  plan remains pending the operator's explicit approval under the rehearsal rule.
+  plan was subsequently explicitly approved by the operator.
+- 2026-11-23 16:26:46 UTC: applied the three approved objects. Network policy
+  revision 3 includes `registry.npmjs.org`; workflow `dependency-security` version
+  1 is saved and stopped. Catalog registration created reusable agent
+  `workflow-agent-672de9aca790bee4b3b4fd7efb437f9e`, version 1. The new project is
+  `prj_mwthafxobc7a6166576c8151f76e`, pinned to
+  `32a5768b864eee11f2c695facd102e4b6d04a4fe` on `refs/heads/main`.
+- The imported project keeps the repository-derived console name `weft.git`;
+  `weft-security` is its declarative resource identity. Select the newest import
+  and verify its pinned commit when preparing a task. Import display names are
+  not currently overridden by the declarative resource name.
+- The first CLI invocation applied all three objects but could not write its
+  client-side revision file beside the bundled read-only `/app/examples` input.
+  No apply was replayed. Exported the current secret-free configuration, copied
+  the two reviewed YAML files into the persistent writable
+  `/var/lib/weft/operator-config/dependency-security/` directory and recovered
+  its sibling revision state from a read-only configuration plan. A subsequent
+  dry-run reported all three objects unchanged. Future applies should use this
+  writable directory, not the bundled example path.
+- 2026-11-23 16:29 UTC: API verification confirmed stopped workflow state, zero
+  executions, no security issue trigger, reusable catalog entry, the new project
+  and the exact approved network ceiling. The apply does not build or run the
+  task environment. No task was started.
 - Live SCM credential permission for Dependabot reading, the dedicated task
   environment admission, live model remediation and actual PR delivery remain
   unqualified. No remediation task, remote branch, PR or alert mutation was

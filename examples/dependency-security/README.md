@@ -20,7 +20,9 @@ manual task. Saving the workflow does not execute it or create a schedule.
    `weft-security` repository snapshot at `main`. Merge with any additional hosts
    in your installation rather than overwriting them. It does not alter secrets,
    budgets, connections, existing projects, reviewer routes or PR approval.
-3. Inspect the plan:
+3. Copy the two YAML files to a writable operator configuration directory, then
+   inspect the plan. The CLI writes a sibling `.weft-state.json` revision file
+   after apply; bundled `/app/examples` is not writable by the container user.
 
    ```sh
    weft apply -f examples/dependency-security/ --dry-run
@@ -42,7 +44,10 @@ manual task. Saving the workflow does not execute it or create a schedule.
    agent **Dependency Security Fixer**, and project **weft-security** with the
    workflow environment. Review the pinned base commit; if it is stale, import
    and review a fresh `main` snapshot before starting. Existing task pins never
-   advance silently.
+   advance silently. `weft-security` is the YAML resource identity; the console
+   currently shows URL imports under the repository-derived name `weft.git`.
+   Select the newest import and confirm its base commit, particularly when an
+   older project has the same display name.
 2. Use a request such as:
 
    > Investigate the current dependency security alerts. Resolve at most one
