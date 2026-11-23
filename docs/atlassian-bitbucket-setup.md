@@ -267,6 +267,14 @@ MCP token in the connection's normal Authentication fields.
    revision. Review and update dependent profile pins and trigger consent before
    resuming. Do not assume an MCP tool test also tested REST.
 
+Jira can return the token owner's email as an issue reporter, assignee or comment
+author. At the independent REST boundary, Weft removes `emailAddress` only when
+it exactly matches the credential account in known identity positions of issue,
+myself and comment responses (including a posted comment receipt). Account IDs
+and readiness metadata remain available. Reusable tokens/Basic credentials,
+encoded reflections, duplicate JSON keys and the credential email outside those
+positions still reject the response; identity redaction does not grant access.
+
 Editing without entering replacement credentials preserves the stored pair.
 Replacing it requires both email and token. Clearing it leaves the selected
 Cloud ID visible but makes REST unavailable; Weft never falls back to the MCP

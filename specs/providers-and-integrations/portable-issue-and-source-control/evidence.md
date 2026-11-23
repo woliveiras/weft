@@ -1,5 +1,38 @@
 # Documentation evidence — 2026-11-20
 
+## Jira REST identity-email redaction — 2026-11-23
+
+The authorized live rehearsal reached MCP search, then a successful-HTTP REST
+issue read was rejected by the result guard before task creation. No live response
+or secret value was inspected. The code and synthetic fixtures demonstrate one
+plausible cause: the Basic reflection guard also recognizes its username, while
+Jira legitimately includes that account email in reporter/author identities.
+
+The correction retains `containsJiraRESTCredential` and its original tests intact.
+Before that guard, only exact matching `emailAddress` values in method/route-scoped
+Jira issue/myself/comment identity positions are removed, including POST comment
+receipts. Reusable token/password/Basic material is checked before projection;
+duplicate JSON keys fail before any discarded value can hide a reflection.
+JSON number tokens preserve provider metadata, and output retains the response
+size bound. Free text, arbitrary paths, encoded/partial email values and reusable
+secrets remain rejected. No authentication or issue-write authority changes.
+
+Unit fixtures first assert that the unchanged guard rejects the realistic raw
+identity response, then prove the narrow sanitized response passes without the
+email. TLS fixtures exercise successful identity reads/comment receipts and
+hostile reflections. The existing TLS MCP + independent REST trigger fixture now
+includes matching reporter/myself/comment-author emails, reaches readiness,
+claims/completes one task and publishes both comments. Readiness input and
+persisted task/events contain no credential email, token or encoded Basic pair.
+
+Final focused Docker tests passed: identity/old reflection checks including the
+raw-below-limit to escaped-output-above-limit TLS case (0.084s), and the enriched
+trigger fixture with task/event secrecy assertions (0.047s).
+`./scripts/go.sh test ./internal/mcpconfig ./internal/trigger ./internal/api -count=1`
+passed (MCP 2.459s; trigger 8.563s; API 46.388s); `git diff --check` passed.
+Live outcome remains pending qualification; this checkpoint does not assert the
+actual live response contained an identity email.
+
 ## Jira MCP search shape diagnostics — 2026-11-23
 
 The live rehearsal reached authorized MCP discovery, but a trigger search failed

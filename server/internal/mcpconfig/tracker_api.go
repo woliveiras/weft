@@ -127,6 +127,12 @@ func (a *TrackerAPI) Call(ctx context.Context, connection, kind string, revision
 		return nil, res.StatusCode, failure
 	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, maxBody+1))
+	if err != nil || len(raw) > maxBody {
+		return nil, res.StatusCode, errors.New("tracker API result rejected")
+	}
+	if explicitREST {
+		raw, err = redactJiraRESTIdentityEmail(raw, token, method, path)
+	}
 	if err != nil || len(raw) > maxBody ||
 		(explicitREST && containsJiraRESTCredential(raw, token)) ||
 		(!explicitREST && containsTransportCredential(authctx, raw, token)) {

@@ -17,6 +17,7 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/mcpconfig"
 	"github.com/woliveiras/weft/server/internal/secrets"
+	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/tools"
 	"github.com/woliveiras/weft/server/internal/trigger"
 )
@@ -159,6 +160,28 @@ func TestJiraCloudTriggerSeparatesMCPAndRESTCredentialsOverTLS(t *testing.T) {
 		if err != nil {
 			t.Errorf("Jira REST fixture: %v", err)
 		}
+		// Jira may return the authentication account as a normal reporter or
+		// comment author. This is identity metadata, never reusable credentials.
+		var response map[string]any
+		if code >= 200 && code < 300 && len(raw) > 0 && json.Unmarshal(raw, &response) == nil {
+			if r.Method == http.MethodGet {
+				if fields, ok := response["fields"].(map[string]any); ok {
+					fields["reporter"] = map[string]any{"accountId": "human-reporter", "accountType": "atlassian", "emailAddress": restEmail}
+				}
+				if strings.HasSuffix(r.URL.Path, "/myself") {
+					response["emailAddress"] = restEmail
+				}
+			}
+			if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/comment") {
+				response["author"] = map[string]any{"accountId": "jira-service", "emailAddress": restEmail}
+			}
+			raw, err = json.Marshal(response)
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(500)
+				return
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
 		if len(raw) > 0 {
@@ -209,6 +232,14 @@ func TestJiraCloudTriggerSeparatesMCPAndRESTCredentialsOverTLS(t *testing.T) {
 	r.Gateway.ResolveTool = manager.Resolve
 	fake := &tasks{status: map[string]trigger.TaskStatus{}}
 	r.Tasks, r.BaseURL = fake, "https://weft.example/"
+	var assessments atomic.Int32
+	r.Assessor = assessFunc(func(ctx context.Context, tr *trigger.Trigger, input string) trigger.ReadinessAssessment {
+		assessments.Add(1)
+		if strings.Contains(input, restEmail) || strings.Contains(input, restToken) {
+			t.Error("REST authentication material reached readiness")
+		}
+		return ready(ctx, tr, input)
+	})
 	in := input()
 	in.Source = trigger.SourceConfig{Kind: "jira", ConnectionID: connection.ID, CloudID: cloud}
 	in.Owner = ""
@@ -221,7 +252,7 @@ func TestJiraCloudTriggerSeparatesMCPAndRESTCredentialsOverTLS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(fake.started) != 1 || got.CurrentTask == "" || searches.Load() != 1 || restReads.Load() == 0 || restWrites.Load() == 0 {
+	if len(fake.started) != 1 || got.CurrentTask == "" || searches.Load() != 1 || restReads.Load() == 0 || restWrites.Load() == 0 || assessments.Load() == 0 {
 		t.Fatalf("trigger did not claim through both real transports: started=%d search=%d reads=%d writes=%d state=%s error=%s", len(fake.started), searches.Load(), restReads.Load(), restWrites.Load(), got.State, got.LastError)
 	}
 	fake.status[got.CurrentTask] = trigger.TaskStatus{State: "succeeded", PullRequestURL: "https://bitbucket.example/pull/2"}
@@ -233,6 +264,19 @@ func TestJiraCloudTriggerSeparatesMCPAndRESTCredentialsOverTLS(t *testing.T) {
 	}
 	if got, err := r.Triggers.Get(t.Context(), tr.ID); err != nil || got.CurrentTask != "" {
 		t.Fatalf("task lifecycle: %+v %v", got, err)
+	}
+	events, err := st.ListEvents(t.Context(), storage.EventFilter{Limit: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := json.Marshal([]any{fake.started, got, events})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{restEmail, restToken, mcpToken, base64.StdEncoding.EncodeToString([]byte(restEmail + ":" + restToken))} {
+		if strings.Contains(string(public), secret) {
+			t.Fatal("credential identity or reusable secret reached task/evidence")
+		}
 	}
 	// REST-only rotation advances the same reviewed revision. No stale trigger
 	// may search or mutate even though its MCP credential is unchanged.
