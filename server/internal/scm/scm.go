@@ -47,14 +47,15 @@ type Identity struct {
 
 // PullRequest is a provider pull request.
 type PullRequest struct {
-	HeadSHA string `json:"headSha,omitempty"`
-	BaseSHA string `json:"baseSha,omitempty"`
-	Number  int    `json:"number"`
-	URL     string `json:"url"`
-	Head    string `json:"head"`
-	Base    string `json:"base"`
-	State   string `json:"state"`
-	Created bool   `json:"created"` // false when an open one already existed
+	HeadSHA             string `json:"headSha,omitempty"`
+	BaseSHA             string `json:"baseSha,omitempty"`
+	Number              int    `json:"number"`
+	URL                 string `json:"url"`
+	Head                string `json:"head"`
+	Base                string `json:"base"`
+	State               string `json:"state"`
+	Created             bool   `json:"created"` // false when an open one already existed
+	reviewRevisionError string
 }
 
 // PullRequestInput creates a pull request.

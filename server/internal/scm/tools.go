@@ -249,7 +249,11 @@ func (t pullRequestTool) result(ctx context.Context, inv *tools.Invocation, c Co
 	if !pr.Created {
 		verb = "An open pull request already exists:"
 	}
-	return &tools.Result{Content: fmt.Sprintf("%s pull request #%d %s (%s into %s).", verb, safe.Number, safe.URL, safe.Head, safe.Base), Data: data}
+	content := fmt.Sprintf("%s pull request #%d %s (%s into %s).", verb, safe.Number, safe.URL, safe.Head, safe.Base)
+	if safe.reviewRevisionError != "" {
+		content += " Automatic review is unavailable: pull request commit identity could not be resolved."
+	}
+	return &tools.Result{Content: content, Data: data}
 }
 
 func deliveryEvent(c Connection, pr PullRequest, token string) map[string]any {
@@ -263,7 +267,11 @@ func deliveryEvent(c Connection, pr PullRequest, token string) map[string]any {
 		}
 	}
 	ready := instance != "" && !c.UpdatedAt.IsZero() && pr.Number > 0 && validPullRequestURL(pr.URL) && validBranch(pr.Head) && validBranch(pr.Base) && pr.State == "open" && commitID.MatchString(pr.HeadSHA) && commitID.MatchString(pr.BaseSHA)
-	return map[string]any{"connection": c.Name, "connectionRevision": c.UpdatedAt.UTC().Format(time.RFC3339Nano), "provider": c.Kind, "instance": redactReviewURL(instance, token), "repository": c.Repository, "number": pr.Number, "url": pr.URL, "head": pr.Head, "base": pr.Base, "headSha": pr.HeadSHA, "baseSha": pr.BaseSHA, "created": pr.Created, "reviewRevisionAvailable": ready}
+	data := map[string]any{"connection": c.Name, "connectionRevision": c.UpdatedAt.UTC().Format(time.RFC3339Nano), "provider": c.Kind, "instance": redactReviewURL(instance, token), "repository": c.Repository, "number": pr.Number, "url": pr.URL, "head": pr.Head, "base": pr.Base, "headSha": pr.HeadSHA, "baseSha": pr.BaseSHA, "created": pr.Created, "reviewRevisionAvailable": ready}
+	if pr.reviewRevisionError != "" {
+		data["reviewRevisionError"] = pr.reviewRevisionError
+	}
+	return data
 }
 
 // approve asks a person before a pull request is opened, whatever the task

@@ -317,7 +317,7 @@ func (b *bitbucketCloud) FindPullRequest(ctx context.Context, head, base string)
 				if p.ID <= 0 || !validPullRequestURL(p.Links.HTML.Href) {
 					return nil, errors.New("SCM pull request has no identity")
 				}
-				return p.pr(false), nil
+				return b.deliveredPull(ctx, p, false), nil
 			}
 		}
 		if result.Next == "" {
@@ -351,7 +351,7 @@ func (b *bitbucketCloud) CreatePullRequest(ctx context.Context, in PullRequestIn
 	if p.State != "OPEN" || p.ID <= 0 || !validPullRequestURL(p.Links.HTML.Href) || p.Source.Branch.Name != in.Head || p.Destination.Branch.Name != in.Base || !strings.EqualFold(p.Source.Repository.FullName, b.c.Repository) || !strings.EqualFold(p.Destination.Repository.FullName, b.c.Repository) {
 		return nil, errors.New("SCM returned an invalid or mismatched pull request")
 	}
-	return p.pr(true), nil
+	return b.deliveredPull(ctx, p, true), nil
 }
 func (b *bitbucketCloud) Comment(ctx context.Context, number int, body string) error {
 	if number <= 0 || strings.TrimSpace(body) == "" || len(body) > MaxBody {

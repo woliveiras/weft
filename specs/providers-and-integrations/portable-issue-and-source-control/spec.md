@@ -190,6 +190,15 @@ merge confirmation can request the explicitly configured tracker synchronization
 without relying on GitHub closing syntax. External authenticated webhooks are a
 separate capability and are not required for Weft-created PR review.
 
+The 2026-11-23 Cloud rehearsal confirmed twelve-character commit hashes in
+Bitbucket PR objects. The adapter resolves these prefixes through the configured
+repository's commit endpoint, requiring a full SHA1, matching prefix and matching
+repository identity. It never substitutes a branch tip or pads an identifier.
+Resolution failure preserves an already delivered PR and its Created outcome,
+with a categorical review-unavailable diagnostic; it cannot produce an eligible
+review event. Review reads fail explicitly and retain the existing full-revision
+and before/after source-and-destination fences.
+
 ### AC-007 — Compatible configuration and staged adoption
 
 Existing GitHub connections, triggers, workflows, version pins and saved tasks

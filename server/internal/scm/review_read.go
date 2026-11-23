@@ -243,6 +243,9 @@ func (b *bitbucketCloud) ReadPullRequest(ctx context.Context, number int) (Revie
 	if !strings.EqualFold(p.Source.Repository.FullName, b.c.Repository) || !strings.EqualFold(p.Destination.Repository.FullName, b.c.Repository) {
 		return ReviewSnapshot{}, errors.New("pull request repository does not match the connection")
 	}
+	if err := b.pullRevisions(ctx, &p.bbCloudPull); err != nil {
+		return ReviewSnapshot{}, err
+	}
 	state := strings.ToLower(p.State)
 	if state == "declined" || state == "superseded" {
 		state = "closed"

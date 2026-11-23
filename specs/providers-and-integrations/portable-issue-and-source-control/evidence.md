@@ -1,5 +1,41 @@
 # Documentation evidence — 2026-11-20
 
+## Bitbucket Cloud abbreviated PR revisions — 2026-11-23
+
+The authorized rehearsal opened PR#1 successfully, but its lifecycle event
+correctly marked `reviewRevisionAvailable=false` after receiving abbreviated
+commit IDs. A separate authorized read confirmed twelve-character hex source and
+destination IDs in the actual PR object, and commit reads confirmed full SHA1s
+with matching prefixes and the exact repository. No secret values or response
+payload are retained here. Atlassian's [PR payload documentation](https://support.atlassian.com/bitbucket-cloud/docs/event-payloads/)
+also illustrates this representation; its [commit API](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-commits/)
+returns the full commit object within a repository.
+
+The adapter now resolves only twelve-character hex commit prefixes through that
+repository-scoped endpoint. It requires a full forty-character SHA1, prefix
+agreement and exact repository identity. Full SHA1s need no extra read; missing,
+invalid, mismatched or unavailable identities cannot become review evidence.
+No branch-tip lookup, arbitrary provider link, local Git assumption, padding,
+credential fallback or repeated PR POST is used.
+
+An enrichment failure after creation or existing-PR lookup retains the actual
+PR identity and Created outcome, explicitly reports review unavailability in the
+tool result, and emits only the fixed `commit_resolution_failed` event category
+with empty revisions and `reviewRevisionAvailable=false`. Read/review operations
+propagate safe explicit errors; all full-hash validation and before/after
+source/destination comparison remain in place.
+
+Unit fixtures cover full/no-network, abbreviated resolution, missing/invalid
+inputs, prefix/repository mismatches, denied and malformed replies. Real HTTP +
+encrypted manager/storage/provider/gateway integration covers API-token auth,
+one POST followed by idempotent lookup, persisted eligible/ineligible delivery
+events, immutable full-hash diff requests, failed enrichment and changed head or
+base between evidence reads. `./scripts/go.sh test ./internal/scm -count=1`
+passed (0.931s); `./scripts/go.sh test ./internal/api ./internal/reviewroute -count=1`
+passed (45.940s / 0.984s). Independent production/test review and `git diff --check`
+found no blocking issue. Live review routing after this correction remains an operational
+qualification step; no task, PR or configuration was mutated by this patch.
+
 ## Bitbucket Cloud PR lookup page size — 2026-11-23
 
 The authorized rehearsal pushed its task branch, then PR delivery stopped before
