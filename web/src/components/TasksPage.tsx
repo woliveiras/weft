@@ -4,14 +4,14 @@ import {TaskAuthorization} from "./TaskAuthorization";
 import {RepositoryImport} from './RepositoryImport';
 import {TaskIssueSource} from "./TaskIssueSource";
 import {TaskRequirementRepairs} from './TaskRequirementRepairs';
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {api, errorMessage} from '../api/client';
 import type {GraphSummary, Info} from '../api/types';
 import type {TaskDraft, TaskInput, TaskReview} from '../api/tasks';
 import {useAsync} from '../hooks/useData';
 import {Btn, ErrorBox} from './common';
 import {TasksList} from './TasksList';
-import {workflowTaskDefaults,updateTaskInput,outcomeRequest,promptTitle} from './taskDefaults';
+import {workflowTaskDefaults,updateTaskInput,outcomeRequest,promptTitle,missingTaskConfiguration} from './taskDefaults';
 import {budgetLabel,money} from './cost';
 
 export const taskOutcomes = [
@@ -80,17 +80,23 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
   const [submissionKey,setSubmissionKey]=useState(()=>crypto.randomUUID());
  const [importOpen,setImportOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
+  const settingsRef=useRef<HTMLDetailsElement>(null);
+  const openSettings=()=>{setSettingsOpen(true);if(settingsRef.current){settingsRef.current.open=true;settingsRef.current.querySelector('summary')?.focus();}};
   const [customTitle,setCustomTitle]=useState(!!draft);
   const projects=useAsync(()=>api.projects(),[]);
   const [saved,setSaved] = useState(draft);
-  const [review,setReview] = useState<TaskReview>();
+  const [reviewResult,setReview] = useState<TaskReview>();
   const [error,setError] = useState<string>();
   const [busy,setBusy] = useState(false);
   const [confirmed,setConfirmed] = useState(false);
   const [dirty,setDirty] = useState(false);
+  const review=!dirty&&reviewResult?.task.revision===saved?.revision?reviewResult:undefined;
   const selected=graphs.find(g=>g.graph.metadata.id===input.graphId)?.graph;
   // Drafts can still be saved; running needs a model when the workflow does.
   const modelBlocked=noModel&&needsModel(selected);
+  const missing=missingTaskConfiguration(input);
+  const savedMissing=saved?missingTaskConfiguration(saved):[];
+  const manualReview=!!saved&&!saved.resolution&&savedMissing.length===0;
   useEffect(()=>{
     if(!dirty)return;
     const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};
@@ -149,10 +155,10 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
       <fieldset disabled={!canEdit||busy}>
         <HelpField label={"Request"} help={"Describe what work should be done and how to judge the result. Include file names or constraints that the agent cannot infer from the repository."}><textarea required rows={8} placeholder="Describe the work you want the agents to do and the result you expect." maxLength={16384} value={input.request} onChange={e=>editRequest(e.target.value)}/></HelpField>
         <p>Run task authorizes a separate execution of the selected workflow with its existing permissions. Weft checks requirements first; missing configuration or required approvals keep the task waiting. Saving alone keeps a draft.</p>
-        <div className="row"><Btn tone="primary" disabled={!input.request.trim()||busy||!canStart||modelBlocked} onClick={()=>void submit()}>{saved?.submitted?'Continue task':'Run task'}</Btn>
+        <div className="row"><Btn tone="primary" disabled={!input.request.trim()||busy||!canStart||modelBlocked||(manualReview&&dirty)} onClick={()=>void (manualReview?inspect():submit())}>{manualReview?'Review and run':saved?.submitted?'Continue task':'Run task'}</Btn>
         <Btn disabled={!input.request.trim()||busy||!canEdit} onClick={()=>void resolve()}>Resolve request</Btn></div>
-        <p>Uses the configured default model to interpret and save your request. Your workflow selection takes priority, then a named workflow, then Software Factory. Title, project and environment choices are retained; input bindings are rebuilt. No agents start.</p>
-        {saved?.resolution&&<aside aria-label="Request interpretation"><p>{saved.resolution.message}</p>{saved.resolution.repository&&<p>Repository: {saved.resolution.repository}</p>}{['needs_model','model_error'].includes(saved.resolution.state)&&<a href="#/models">Configure models</a>}<p>Your original request is preserved. Resolving never grants tool access.</p></aside>}
+        <p>Resolve request uses the configured default model to interpret and save your request. Your workflow selection takes priority, then a named workflow, then Software Factory. Title, project and environment choices are retained; input bindings are rebuilt. No agents start.</p>{manualReview&&<p>Review and run checks your saved manual configuration without interpreting the request again. Review requirements and confirm authorization before starting.</p>}
+        {saved?.resolution&&<aside aria-label="Request interpretation"><p>{saved.resolution.message}</p>{saved.resolution.repository&&<p>Repository: {saved.resolution.repository}</p>}{['needs_model','model_error'].includes(saved.resolution.state)&&<a href="#/models">Configure models</a>}<p>Your original request is preserved. Resolving never grants tool access.</p>{savedMissing.length>0&&<><p>Task setup is incomplete: {savedMissing.join(', ')}. Retry Resolve request, or configure it manually without using the model.</p><Btn onClick={openSettings}>Configure task manually</Btn></>}</aside>}
         <HelpField label={"Workflow"} help={"Choose the saved workflow to run this task. Review the agents, their versions and the permissions used by the task."}><select required value={input.graphId} onChange={e=>{const g=graphs.find(g=>g.graph.metadata.id===e.target.value)?.graph;change({graphId:e.target.value,graphVersion:g?.metadata.version??0,...workflowTaskDefaults(g,input.title,input.request)});}}>
           <option value="">Select workflow</option>{!selected&&input.graphId&&<option value={input.graphId}>{input.graphId} (unavailable)</option>}
           {graphs.map(({graph:g})=><option key={g.metadata.id} value={g.metadata.id}>{g.metadata.name||g.metadata.id}</option>)}
@@ -164,7 +170,7 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
         {input.executionMode==='sandbox'&&<p>Sandbox requires all enabled agents to use Docker isolation and the configured Docker/Colima daemon to be available. Weft never falls back to local execution.</p>}
         <p>New tasks ask for tool approval by default. Save or resolve your request to review and confirm Workspace access or Full access. Mandatory workflow approvals and installation restrictions always apply.</p>
         <ErrorBox error={projects.error}/>
-        <details open={settingsOpen} onToggle={e=>setSettingsOpen(e.currentTarget.open)}>
+        <details ref={settingsRef} open={settingsOpen} onToggle={e=>setSettingsOpen(e.currentTarget.open)}>
           <summary>Review settings</summary>
           <div className="task-review-fields">
         <HelpField label={"Goal"} help={"Select the expected delivery format. Use it to make clear whether the task should present findings, make changes or hand off a result."}><select value={input.outcome} onChange={e=>change({outcome:e.target.value,request:outcomeRequest(input,e.target.value),...(!customTitle?{title:promptTitle(outcomeRequest(input,e.target.value))}:{})})}>{taskOutcomes.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}</select><small className="muted">{taskOutcomes.find(o=>o.id===input.outcome)?.description}</small></HelpField>
@@ -199,10 +205,15 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
       {saved?.resolution?.state==='needs_repository'&&!importOpen&&<Btn onClick={()=>setImportOpen(true)}>Prepare repository</Btn>}
       <ErrorBox error={error}/>
       <div className="row"><Btn type="submit" tone="primary" disabled={!canEdit||busy}>Save draft</Btn><Btn disabled={!saved||dirty||busy} onClick={()=>void inspect()}>Review requirements</Btn></div>
-      <p className="task-request-status" role="status">{dirty?'Unsaved changes':saved?'Draft saved. No agents have been started.':''}</p>
+      <p className="task-request-status" role="status">{dirty?'Unsaved changes. Save draft before reviewing authorization.':saved?'Draft saved. No agents have been started.':''}</p>
     </form>
-    {saved&&<TaskAuthorization key={`${saved.id}:${saved.revision}`} taskId={saved.id} canEdit={canStart} onChanged={()=>{setReview(undefined);setConfirmed(false);}}/>}
-    {review&&<article className="card" aria-label="Task requirements"><h2>Requirements</h2>
+    {saved&&<TaskAuthorization key={`${saved.id}:${saved.revision}`} taskId={saved.id} canEdit={canStart} configurationIssue={dirty?'Save your task changes before reviewing authorization.':missing.length>0?`Task setup is incomplete: ${missing.join(', ')}.`:undefined} onConfigure={canEdit?openSettings:undefined} onChanged={()=>{setReview(undefined);setConfirmed(false);}}/>}
+    {review&&savedMissing.length>0&&<article className="card" aria-label="Task requirements"><h2>Requirements</h2>
+      {review.blockers.map(b=><p key={b}>{b}</p>)}
+      <p>Complete and save the task configuration before reviewing execution requirements. The execution environment and agent permissions have not been reviewed yet.</p>
+      <Btn onClick={openSettings}>Review task settings</Btn>
+    </article>}
+    {review&&savedMissing.length===0&&<article className="card" aria-label="Task requirements"><h2>Requirements</h2>
       <p>Current workflow version: {review.currentGraphVersion} · Requested environment: {review.task.executionMode||'workflow'}</p>
       {review.blockers.map(b=><p key={b}>{b}</p>)}
       {[...(review.validation.errors??[]),...(review.validation.warnings??[])].map((v,i)=><p key={i}>{v.path}: {v.message}</p>)}

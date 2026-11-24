@@ -52,3 +52,13 @@ export function promptTitle(request:string):string {
  }
  return title.trim();
 }
+
+/** Missing saved bindings prevent a meaningful authorization review. Server admission remains authoritative. */
+export function missingTaskConfiguration(input:TaskInput):string[] {
+ const missing:string[]=[];
+ if(!input.graphId)missing.push('workflow');
+ if(!Number.isInteger(input.graphVersion)||input.graphVersion<1)missing.push('workflow version');
+ if(!input.nodeId)missing.push('entry agent');
+ if(input.channelId&&(!input.messageType||!input.payloadJson))missing.push('channel message type and payload');
+ return missing;
+}

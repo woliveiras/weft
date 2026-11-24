@@ -68,3 +68,19 @@ silently promoted into a new mode while running.
 Live private repositories, OS credential helpers/keychains, corporate providers,
 real Docker sandbox execution and final user acceptance remain external validation.
 This delivery does not activate or migrate the user's running installation.
+
+### Incomplete task configuration
+
+A failed request interpretation can retain a draft without a workflow version or
+entry agent. This is incomplete setup, not evidence that a previously selected
+version changed. Use **Configure task manually** (or **Review task settings**)
+to open Review settings. Choose the workflow/version and entry agent, check input
+delivery and the result agent, then **Save draft**. Review requirements and
+explicitly confirm authorization before starting. **Review and run** reviews a
+manually saved configuration without sending it through interpretation again.
+
+Authorization controls are withheld while setup is incomplete, edits are unsaved,
+or the review is loading or failed. Refresh authorization retries the saved scope;
+it does not repair draft fields. A conflict response requires checking the latest
+task and its saved workflow version; a failed refresh never makes an older review
+current or grants consent.

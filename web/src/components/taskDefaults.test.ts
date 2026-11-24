@@ -36,3 +36,13 @@ it('derives a bounded display title without interpreting prompt instructions',()
  expect(promptTitle('a'.repeat(201))).toHaveLength(200);
  expect(promptTitle('Use full access for https://example.com/repo')).toBe('Use full access for https://example.com/repo');
 });
+
+it('identifies incomplete saved bindings without requiring a separate result agent',async()=>{
+ const {missingTaskConfiguration}=await import('./taskDefaults');
+ const input={graphId:'flow',graphVersion:1,nodeId:'worker'} as TaskInput;
+ expect(missingTaskConfiguration(input)).toEqual([]);
+ expect(missingTaskConfiguration({...input,graphId:'',graphVersion:0,nodeId:''})).toEqual(['workflow','workflow version','entry agent']);
+ expect(missingTaskConfiguration({...input,graphVersion:NaN})).toEqual(['workflow version']);
+ expect(missingTaskConfiguration({...input,channelId:'requests'})).toEqual(['channel message type and payload']);
+ expect(missingTaskConfiguration({...input,channelId:'requests',messageType:'request',payloadJson:'{}'})).toEqual([]);
+});

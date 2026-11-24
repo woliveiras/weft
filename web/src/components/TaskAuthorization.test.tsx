@@ -58,3 +58,39 @@ it('explains that process and Kubernetes use native shell under Workspace access
  expect(screen.getByText(/Process and Kubernetes isolation both use native shell/)).toBeTruthy();
  expect(screen.getByText(/Workspace access refuses native shell/)).toBeTruthy();
 });
+
+it('explains incomplete setup without requesting or offering authorization',async()=>{
+ const configure=vi.fn();
+ render(<TaskAuthorization taskId="tsk_1" canEdit onChanged={()=>{}} configurationIssue="Task setup is incomplete: workflow version, entry agent." onConfigure={configure}/>);
+ expect(screen.getByText(/select the workflow version and entry agent/)).toBeTruthy();
+ fireEvent.click(screen.getByRole('button',{name:'Review task settings'}));expect(configure).toHaveBeenCalledOnce();
+ expect(api.taskAuthorization).not.toHaveBeenCalled();expect(screen.queryByRole('checkbox')).toBeNull();
+});
+
+it('discards a previously displayed review after refresh fails and offers recovery',async()=>{
+ const {ApiError}=await import('../api/client');const configure=vi.fn();
+ render(<TaskAuthorization taskId="tsk_1" canEdit onChanged={()=>{}} onConfigure={configure}/>);
+ await screen.findByText('Isolation: process');fireEvent.click(screen.getByRole('checkbox'));
+ vi.mocked(api.taskAuthorization).mockRejectedValue(new ApiError(409,'storage: conflict','conflict'));
+ fireEvent.click(screen.getByRole('button',{name:'Refresh authorization'}));
+ await screen.findByText(/Authorization review is out of date/);
+ expect(screen.queryByText('Isolation: process')).toBeNull();expect(screen.queryByRole('checkbox')).toBeNull();
+ expect(screen.queryByRole('button',{name:'Confirm authorization'})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Review task settings'}));expect(configure).toHaveBeenCalledOnce();
+ expect(api.saveTaskAuthorization).not.toHaveBeenCalled();
+});
+
+it('withholds consent during refresh and resets confirmation before a successful retry',async()=>{
+ let finish!:(value:Awaited<ReturnType<typeof api.taskAuthorization>>)=>void;
+ render(<TaskAuthorization taskId="tsk_1" canEdit onChanged={()=>{}}/>);
+ await screen.findByText('Isolation: process');fireEvent.click(screen.getByRole('checkbox'));
+ vi.mocked(api.taskAuthorization).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+ fireEvent.click(screen.getByRole('button',{name:'Refresh authorization'}));
+ await screen.findByText(/Current mode: loading/);
+ expect(screen.queryByRole('checkbox')).toBeNull();expect(screen.queryByText('Isolation: process')).toBeNull();
+ finish({scope:'new-scope',capabilities:[{id:'worker',isolation:'docker',grants:[]}]});
+ await screen.findByText('Isolation: docker');
+ expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+ expect((screen.getByRole('button',{name:'Confirm authorization'}) as HTMLButtonElement).disabled).toBe(true);
+ expect(api.saveTaskAuthorization).not.toHaveBeenCalled();
+});

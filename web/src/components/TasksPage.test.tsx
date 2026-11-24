@@ -1,4 +1,4 @@
-import {cleanup,render,screen,waitFor,within} from '@testing-library/react';
+import {act,cleanup,render,screen,waitFor,within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach,expect,it,vi} from 'vitest';
 import {TasksPage,taskOutcomes,needsModel} from './TasksPage';
@@ -236,7 +236,7 @@ it('renders a tracked issue as text with separate replies and no link back to it
  expect(request.textContent).not.toContain('Internal task context');
  expect(within(request).getByText('Issue replies (1)')).toBeTruthy();
  await userEvent.click(screen.getByRole('link',{name:'Settings & access'}));
- expect(await screen.findByText(/This task uses a different workflow version/)).toBeTruthy();
+ expect(await screen.findByText(/Authorization review is out of date/)).toBeTruthy();
  expect(screen.queryByRole('link',{name:'Task details'})).toBeNull();
 });
 it('offers Same as entry when the result is omitted',async()=>{
@@ -252,4 +252,60 @@ it('shows a retained launch failure and the pending environment approval on a dr
  expect((await screen.findByRole('alert')).textContent).toBe(draft.launchError);
  expect(screen.getByRole('link',{name:'Approvals'}).getAttribute('href')).toBe('#/approvals');
  expect(screen.getByText(/The issue remains in progress/)).toBeTruthy();
+});
+
+it('repairs incomplete interpretation manually, preserving inputs and reviewing without another model submission',async()=>{
+ const draft={id:'tsk_repair',revision:6,status:'draft',submitted:true,title:'Security task',request:'Inspect alerts without merging.',outcome:'freeform',graphId:'factory',graphVersion:0,nodeId:'',executionMode:'sandbox',projectId:'p',baseCommit:'a'.repeat(40),resolution:{state:'invalid_proposal',message:'The model returned an invalid proposal.'}};
+ let stored:Record<string,unknown>={...draft};
+ const backend=fakeApi({
+  'GET /api/v1/providers':()=>[{status:'ready'}],
+  'GET /api/v1/projects':()=>[{id:'p',name:'Repository',head:draft.baseCommit}],
+  'GET /api/v1/tasks/tsk_repair':()=>stored,
+  'PUT /api/v1/tasks/tsk_repair':c=>{stored={...c.body as object,id:draft.id,revision:7,status:'draft',submitted:true};return stored;},
+  'GET /api/v1/tasks/tsk_repair/authorization':()=>({scope:'repaired',capabilities:[{id:'worker',isolation:'docker',grants:[]}]}),
+  'GET /api/v1/tasks/tsk_repair/review':()=>({task:stored,currentGraphVersion:1,canStart:false,blockers:[],validation:{errors:[],warnings:[]},agents:[]}),
+ });
+ render(<TasksPage id="tsk_repair" info={{identity:{role:'admin'}} as Info} graphs={graphs}/>);
+ await userEvent.click(await screen.findByRole('button',{name:'Configure task manually'}));
+ expect(screen.getByText('Review settings').closest('details')?.open).toBe(true);
+ expect(document.activeElement).toBe(screen.getByText('Review settings'));
+ expect(screen.queryByText(/different workflow version/)).toBeNull();
+ expect(backend.find('GET','/api/v1/tasks/tsk_repair/authorization')).toHaveLength(0);
+ await screen.findByText(/The execution environment and agent permissions have not been reviewed yet/);
+ expect(screen.queryByText(/Isolation: process/)).toBeNull();
+ expect(screen.queryByText(/Current workflow version: 0/)).toBeNull();
+ await userEvent.click(screen.getByRole('button',{name:'Use current workflow version'}));
+ await userEvent.selectOptions(screen.getByLabelText('Entry agent'),'worker');
+ await userEvent.click(screen.getByRole('button',{name:'Save draft'}));
+ await screen.findByText('Isolation: docker');
+ expect(stored).toMatchObject({request:draft.request,title:draft.title,projectId:'p',baseCommit:draft.baseCommit,executionMode:'sandbox',graphVersion:1,nodeId:'worker'});
+ await userEvent.click(screen.getByRole('button',{name:'Review and run'}));
+ await screen.findByRole('article',{name:'Task requirements'});
+ expect(backend.calls.filter(c=>c.method!=='GET').map(c=>c.path)).toEqual(['/api/v1/tasks/tsk_repair']);
+ expect(backend.find('POST','/api/v1/tasks/submit')).toHaveLength(0);
+ expect((screen.getByRole('button',{name:'Start task'}) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it('ignores a late review of the incomplete revision after a manual repair is saved',async()=>{
+ const draft={id:'tsk_late',revision:1,status:'draft',submitted:true,title:'Task',request:'Inspect alerts.',outcome:'freeform',graphId:'factory',graphVersion:0,nodeId:'',resolution:{state:'invalid_proposal',message:'Invalid proposal'}};
+ let finish!:(value:unknown)=>void;
+ const backend=fakeApi({
+  'GET /api/v1/providers':()=>[{status:'ready'}], 'GET /api/v1/projects':()=>[],
+  'GET /api/v1/tasks/tsk_late':()=>draft,
+  'GET /api/v1/tasks/tsk_late/review':()=>new Promise(resolve=>{finish=resolve;}),
+  'PUT /api/v1/tasks/tsk_late':c=>({...c.body as object,id:draft.id,revision:2,status:'draft'}),
+  'GET /api/v1/tasks/tsk_late/authorization':()=>({scope:'new',capabilities:[]}),
+ });
+ render(<TasksPage id="tsk_late" info={{identity:{role:'admin'}} as Info} graphs={graphs}/>);
+ await userEvent.click(await screen.findByRole('button',{name:'Configure task manually'}));
+ await waitFor(()=>expect(backend.find('GET','/api/v1/tasks/tsk_late/review')).toHaveLength(1));
+ await userEvent.click(screen.getByRole('button',{name:'Use current workflow version'}));
+ await userEvent.selectOptions(screen.getByLabelText('Entry agent'),'worker');
+ await userEvent.click(screen.getByRole('button',{name:'Save draft'}));
+ await screen.findByRole('button',{name:'Review and run'});
+ await act(async()=>{finish({task:draft,currentGraphVersion:0,canStart:true,blockers:[],validation:{errors:[],warnings:[]},isolation:'process'});});
+ await waitFor(()=>expect(screen.queryByRole('article',{name:'Task requirements'})).toBeNull());
+ expect(screen.queryByRole('button',{name:'Start task'})).toBeNull();
+ expect(screen.queryByText(/Isolation: process/)).toBeNull();
+ expect(backend.calls.filter(c=>c.method!=='GET').map(c=>c.path)).toEqual(['/api/v1/tasks/tsk_late']);
 });
