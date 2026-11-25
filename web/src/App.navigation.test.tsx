@@ -44,3 +44,27 @@ it('opens a task-owned run directly even when workflow inventory excludes execut
  expect(screen.queryByRole('button',{name:'Save graph'})).toBeNull();
  expect(backend.calls.every(c=>c.method==='GET')).toBe(true);
 });
+
+it('retains the reviewed new task across its saved-task route transition without model or execution writes',async()=>{
+ localStorage.setItem('weftToken','test-token');location.hash='#/tasks/new?workflow=echo';
+ let draft:any;
+ const graph={graph:{metadata:{id:'echo',name:'Echo',version:1},spec:{nodes:[{id:'worker',name:'Worker',runtime:{kind:'echo'}}],channels:[]}}};
+ const backend=fakeApi({
+  'GET /api/v1/info':()=>({identity:{name:'admin',role:'admin'}}),'GET /api/v1/graphs':()=>[graph],
+  'GET /api/v1/approvals':()=>[],'GET /api/v1/providers':()=>[],'GET /api/v1/projects':()=>[],
+  'GET /api/v1/scm/connections':()=>[],
+  'POST /api/v1/tasks':call=>(draft={...call.body as object,id:'tsk_navigation',revision:1,status:'draft'}),
+  'GET /api/v1/tasks/tsk_navigation':()=>draft,
+  'GET /api/v1/tasks/tsk_navigation/review':()=>({task:draft,blockers:['Install the test environment'],canStart:false,validation:{},model:{},grants:[]}),
+ });
+ render(<App/>);
+ await screen.findByLabelText('Request');
+ await waitFor(()=>expect(screen.getByLabelText('Entry agent')).toHaveProperty('value','worker'));
+ await userEvent.type(screen.getByLabelText('Request'),'Inspect the source');
+ await userEvent.click(screen.getByRole('button',{name:'Review task'}));
+ await waitFor(()=>expect(location.hash).toBe('#/tasks/tsk_navigation?review=1'));
+ await screen.findByRole('heading',{name:'Task draft'});
+ await waitFor(()=>expect(screen.getAllByText('Install the test environment').length).toBeGreaterThan(0));
+ expect(screen.getByLabelText('Request')).toHaveProperty('value','Inspect the source');
+ expect(backend.calls.filter(c=>c.method!=='GET').map(c=>c.path)).toEqual(['/api/v1/tasks']);
+});

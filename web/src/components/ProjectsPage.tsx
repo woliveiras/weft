@@ -95,7 +95,7 @@ export function ProjectsPage({ canEdit, nativeProfile = false, mode }: {
               </details>
             </td>
             <td>{project.createdAt ? <time dateTime={project.createdAt}>{fmtDateTime(project.createdAt)}</time> : '—'}</td>
-            <td><a href="#/tasks/new">Create task</a></td>
+            <td><a href={`#/tasks/new?project=${encodeURIComponent(project.id)}`}>Create task</a></td>
           </tr>)}</tbody>
         </table>
       </div>}

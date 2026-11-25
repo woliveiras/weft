@@ -5,6 +5,7 @@ import {ProjectsPage, type ProjectView} from './components/ProjectsPage';
 import { ActivityPage } from './components/ActivityPage';
 import { activityHash, parseActivityState, type ActivityRouteState } from './components/activityView';
 import { TasksPage } from './components/TasksPage';
+import {taskCreateLink,taskReturnLink,type TaskEntryContext} from './components/taskEntryContext';
 import {WorkflowCreate} from './components/WorkflowCreate';
 import { TaskExecutionPage, taskOwnerId } from './components/TaskExecutionPage';
 import { PrimaryNavigation } from './components/PrimaryNavigation';
@@ -41,7 +42,7 @@ type Route =
   | { view: 'agents'; agentId?: string; create?: boolean }
   | { view: 'activity'; activity: ActivityRouteState }
   | { view: 'projects'; projectView?: ProjectView }
-  | { view: 'tasks'; taskId?: string; create?: boolean }
+  | { view: 'tasks'; taskId?: string; create?: boolean; entry?:TaskEntryContext; review?:boolean }
   | { view: 'approvals' }
   | { view: 'connections'; connectionID?: string; connectionTab?: ConnectionTab; create?: boolean; sourceControlCreate?: boolean; issueEdition?: 'jira'; issueConnectionCreate?: boolean; issueConnectionID?: string; issueTransitions?: boolean; issueMapping?: {name?: string; create?: boolean}; history?: boolean; connectQuery?: string; oauthQuery?: string }
   | ({ view: 'models' } & ModelsRoute)
@@ -61,7 +62,15 @@ export function parseRoute(hash: string): Route {
     ...(parts[1] === 'new' ? { projectView: 'register' as const } : parts[1] === 'import' ? { projectView: 'import' as const } : {}),
   };
   if (parts[0] === 'graphs' && parts[1] === 'new') return {view:'graphs',create:true};
-  if (parts[0] === 'tasks') return {view:'tasks', ...(parts[1] === 'new' ? {create:true} : parts[1] ? {taskId:decodeURIComponent(parts[1])} : {})};
+  if (parts[0] === 'tasks') {
+    const query=new URLSearchParams(qs);
+    if(parts[1]==='new') {
+      const project=query.get('project')||undefined;
+      const workflow=query.get('workflow')||undefined;
+      return {view:'tasks',create:true,...(project||workflow?{entry:{...(project?{project}:{}),...(workflow?{workflow}:{})}}:{})};
+    }
+    return {view:'tasks',...(parts[1]?{taskId:decodeURIComponent(parts[1]),...(query.get('review')==='1'?{review:true}:{})}:{})};
+  }
   if (parts[0] === 'approvals') return { view: 'approvals' };
   if (parts[0] === 'skills') return { view: 'skills', skills:parseSkillsRoute(parts,qs) };
   if (parts[0] === 'models') return { view: 'models', ...parseModelsRoute(parts) };
@@ -103,7 +112,7 @@ export function routeHash(r: Route): string {
   }
   if (r.view === 'projects') return r.projectView === 'register' ? '#/projects/new' : r.projectView === 'import' ? '#/projects/import' : '#/projects';
   if (r.view === 'graphs'&&r.create) return '#/graphs/new';
-  if (r.view === 'tasks') return r.create ? '#/tasks/new' : r.taskId ? `#/tasks/${encodeURIComponent(r.taskId)}` : '#/tasks';
+  if (r.view === 'tasks') return r.create ? taskCreateLink(r.entry) : r.taskId ? `#/tasks/${encodeURIComponent(r.taskId)}${r.review?'?review=1':''}` : '#/tasks';
   if (r.view === 'approvals') return '#/approvals';
   if (r.view === 'skills') return skillsHash(r.skills);
   if (r.view === 'connections') {
@@ -153,6 +162,7 @@ function Shell() {
   const [route, setRoute] = useState<Route>(() => parseRoute(location.hash));
   const configurationDraft=useRef({dirty:false,busy:false});
   const onConfigurationDraft=useCallback((value:{dirty:boolean;busy:boolean})=>{configurationDraft.current=value;},[]);
+  const [returnTask,setReturnTask]=useState(()=>taskReturnLink(location.hash));
   const administrationDraft=useRef({dirty:false,busy:false});
   const onAdministrationDraft=useCallback((value:{dirty:boolean;busy:boolean})=>{administrationDraft.current=value;},[]);
   useEffect(() => {
@@ -163,6 +173,8 @@ function Shell() {
         if(configurationDraft.current.busy||(configurationDraft.current.dirty&&!window.confirm('Discard unpublished configuration changes?'))){history.replaceState(null,'',routeHash(previous));return;}
         configurationDraft.current={dirty:false,busy:false};
       }
+      const taskReturn=taskReturnLink(location.hash);
+      if(taskReturn)setReturnTask(taskReturn);else if(next.view==='tasks')setReturnTask(undefined);
       if(previous.view==='administration'&&routeHash(next)!==routeHash(previous)) {
         if(administrationDraft.current.busy||(administrationDraft.current.dirty&&!window.confirm('Discard unsaved administration changes?'))){history.replaceState(null,'',routeHash(previous));return;}
         administrationDraft.current={dirty:false,busy:false};
@@ -250,10 +262,11 @@ function Shell() {
           onNavigate={view => go(view === 'administration' ? {view, section: 'health'} : view === 'activity' ? {view, activity: parseActivityState('')} : {view})} />
         <main>
           <ErrorBox error={info.error && !graphs.error ? `info: ${info.error}` : undefined} />
+          {returnTask&&<aside className="card task-return-context" aria-label="Task configuration context"><a href={returnTask}>Return to saved task</a><p>Configuration changes do not start the task. Return to review its requirements and authorization.</p></aside>}
           {ownedTask && route.view === 'graph' && <TaskExecutionPage key={route.id} graphId={route.id} tab={route.tab} executionId={route.executionId} section={route.runSection}/>}
           {route.view === 'activity' && <ActivityPage state={route.activity} onChange={activity => go({ view: 'activity', activity })} />}
           {route.view === 'projects' && <ProjectsPage key={route.projectView ?? 'list'} mode={route.projectView} nativeProfile={info.data?.nativeProfile===true} canEdit={info.data?.identity?.role==='admin'}/>}
-          {route.view === 'tasks' && <TasksPage key={route.taskId ?? (route.create ? 'new' : 'list')} id={route.taskId} create={route.create} info={info.data} graphs={list}/>}
+          {route.view === 'tasks' && <TasksPage key={route.taskId ?? (route.create ? 'new' : 'list')} id={route.taskId} create={route.create} entry={route.entry} reviewOnLoad={route.review} graphsLoading={graphs.loading} graphsError={graphs.error} onReloadGraphs={()=>void graphs.reload()} info={info.data} graphs={list}/>}
           {route.view==='graphs'&&route.create&&<WorkflowCreate canCreate={info.data?.identity?.role==='admin'} onDraftState={onConfigurationDraft} onCreated={summary=>{void graphs.reload();go({view:'graph',id:summary.graph.metadata.id,tab:'agent',agentId:summary.graph.spec.nodes[0]?.id});}} onCancel={()=>go({view:'graphs'})}/>}
           {route.view === 'graphs' && !route.create && (
             <GraphList

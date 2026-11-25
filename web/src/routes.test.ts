@@ -88,3 +88,7 @@ it('round-trips native workflow mapping list, create and named review routes',()
  }
  expect(parseRoute('#/connections/issues/c/native/mappings/new')).toEqual({view:'connections',issueConnectionID:'native',issueMapping:{create:true}});
 });
+it('round-trips contextual task entry, explicit review and guided workflow creation',()=>{
+ for(const hash of ['#/tasks/new?project=repo+one&workflow=flow','#/tasks/new?workflow=flow','#/tasks/tsk_review?review=1','#/graphs/new'])expect(routeHash(parseRoute(hash))).toBe(hash);
+ expect(parseRoute('#/tasks/tsk_review?review=0')).toEqual({view:'tasks',taskId:'tsk_review'});
+});
