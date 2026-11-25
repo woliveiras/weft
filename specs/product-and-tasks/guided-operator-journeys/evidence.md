@@ -100,6 +100,25 @@ pre-existing bundle-size warning.
 
 ## Residual limitations
 
+### Local follow-up — 2026-11-25 10:28–10:30 UTC
+
+The operator reported unavailable Activity sections and an offline event stream.
+An authenticated request reproduced all five section errors. Server logs showed
+PostgreSQL refusing connections in recovery mode; PostgreSQL logs identified
+`No space left on device` during its recovery checkpoint. The Docker/Colima
+filesystem was 100% full despite free host disk space. The preceding liveness
+and asset smoke checks were insufficient to establish ongoing store readiness.
+
+Using the operator's prior authorization for cache/image cleanup, unused build
+cache was pruned (5.529 GB reported), with dangling images reclaiming a further
+4.876 MB. No volume or database/workspace data was deleted, no credentials changed
+and no schema or application code changed. PostgreSQL recovered automatically.
+Verification: database container healthy, `pg_isready` accepting connections,
+`/readyz` HTTP 200 with storage/queue/sandbox ok, authenticated Activity with
+`errors: []`, and event-stream HTTP 200 with `text/event-stream`. About 5.5 GB
+was free afterward; VM capacity remains an operational consideration before
+another large build. The recovery procedure is recorded in `docs/operations.md`.
+
 Production qualification and real-account execution are outside this UI refactor.
 No human usability study, completion-time comparison or training reduction was
 measured. Task goals provide guidance; they do not provision credentials or

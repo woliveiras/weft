@@ -293,6 +293,20 @@ from ciphertext; restore the key or re-enter/re-authorize affected credentials.
 
 - **Store/queue unavailable:** preserve volumes, inspect dependency health and
   restore connectivity. Do not reset data to make readiness green.
+- **Activity sections unavailable and events offline:** check `/readyz` and the
+  authenticated Activity response, not only `/healthz`. Liveness can return 200
+  while the database cannot serve requests. If PostgreSQL reports recovery mode,
+  inspect its logs for the underlying failure before restarting it.
+- **Docker disk full:** `No space left on device` during a PostgreSQL recovery
+  checkpoint can cause an endless recovery loop. Check free space inside the
+  database container (`docker compose exec -T postgres df -h
+  /var/lib/postgresql/data`) and `docker system df`. Free space on the host does
+  not establish free space inside a Colima/Docker VM. With operator approval,
+  remove unused build cache or unused images on the affected daemon; preserve
+  database, queue, workspace and sandbox volumes. Never remove PostgreSQL files
+  or reset WAL to recover disk space. After space is available, confirm
+  `pg_isready`, `/readyz`, authenticated Activity with no section errors, and
+  the event stream. Review VM capacity before the next large build.
 - **Unknown encryption key:** verify the matching key set; avoid repeated OAuth
   registrations or overwriting an existing connection while investigating.
 - **DCR outcome uncertain:** reconcile with the provider before retrying creation;
