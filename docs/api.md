@@ -230,6 +230,23 @@ that marker. Existing audit events remain. This endpoint never deletes a
 workflow, execution history, repository, import or workspace. Tasks already
 prepared or executed remain available for inspection.
 
+Operators/admins can call `POST /api/v1/tasks/{id}/retry` with the failed
+manual task's positive `If-Match` revision and strict `{"confirm":true}`.
+It creates a new draft containing the original editable input and read-only
+`retryOfTaskId`/`retryOfRevision` provenance. It copies no execution, approvals,
+authorization or result. The response is 201 on creation or 200 on replay, with
+the child's `ETag` and API `Location`. One child exists per source revision;
+concurrent requests and lost responses return the same child, including later
+edits/status. A deleted child returns 409 rather than being recreated.
+
+The source is unchanged. Retry creates no workspace, build, model call or remote
+action. Normal review, consent, approvals and start remain required. A stale
+workflow version is retained for explicit repair. Nonfailed or trigger-owned
+sources and stale revisions return 409, invalid confirmation/revision/JSON 400,
+and missing source 404. Audit/storage failures surface as errors; repeating the
+same request can recover a committed child. Issue-trigger recovery remains in
+its separate trigger endpoint.
+
 A task draft may name one connection in `scmConnection`. Preparing its run
 grants the result agent (or the entry agent when none is set) `git.read`,
 `git.write`, and `git.push`/`scm.pull_request.create` for that connection

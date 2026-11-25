@@ -130,6 +130,7 @@ has drained.
 | `project.execution_preference_requested` | `{projectId, mode}` |
 | `project.checks_requested` | `{projectId, checks}` |
 | `task.draft_save_requested` | `{taskId, expectedRevision}` |
+| `task.retry_requested` | `{taskId, retryOfTaskId, retryOfRevision}` — intent before creating a fresh linked draft; contains no request or credentials |
 | `task.transition_requested` | `{taskId, from, to, expectedRevision}` |
 | `task.prompt_resolution` | `{taskId, state, expectedRevision}` |
 | `task.authorization_requested`, `task.authorization_preference_requested` | `{taskId, mode, scope, expectedRevision}` |

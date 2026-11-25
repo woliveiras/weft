@@ -44,6 +44,7 @@ The [historical source map](./historical-source-map.md) records the migration of
 
 ### In progress
 
+- [TASK-011 — Failed Task Retry](./product-and-tasks/failed-task-retry/spec.md) — `in-progress`. Prepare a fresh linked draft after a failed manual attempt, with independent review and approvals.
 - [TASK-009 — Guided Operator Journeys](./product-and-tasks/guided-operator-journeys/spec.md) — `implemented`. Contextual task entry, reusable workflow defaults, guided creation and explicit agent adoption.
 
 ### Implemented

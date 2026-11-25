@@ -73,6 +73,8 @@ func (m Manager) savePrompt(ctx context.Context, p PromptInput, actor, newID str
 			return nil, storage.ErrConflict
 		}
 		d.Input = old.Input
+		d.RetryOfTaskID = old.RetryOfTaskID
+		d.RetryOfRevision = old.RetryOfRevision
 		d.EnvironmentApprovalID = old.EnvironmentApprovalID
 		d.TriggerGitHubIssue = old.TriggerGitHubIssue
 		d.TriggerIssueOrigin = old.TriggerIssueOrigin

@@ -423,6 +423,51 @@ paths:
         '404': {description: Draft not found or already deleted}
         '409': {description: Stale revision or task already prepared or executed}
         '500': {description: Storage or audit failure; reload the task before retrying}
+  /api/v1/tasks/{tid}/retry:
+    post:
+      summary: Create a fresh linked draft from a failed manual task
+      description: |
+        Copies only editable input and server-owned retry provenance. Does not
+        start, prepare, authorize or modify the source task. One child is retained
+        per source revision; replays return that child even after editing or start.
+        Deleted children are not recreated. Trigger tasks use trigger recovery.
+      x-weft-role: operator
+      parameters:
+        - {in: path, name: tid, required: true, schema: {type: string}}
+        - {in: header, name: If-Match, required: true, schema: {type: string}, description: Current positive source task revision}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [confirm]
+              properties:
+                confirm: {type: boolean, const: true}
+      responses:
+        '201':
+          description: Fresh draft created without execution or consent
+          headers:
+            ETag: {schema: {type: string}}
+            Location: {schema: {type: string}, description: API path of the child task}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TaskDraft'}
+        '200':
+          description: Existing child returned; may already have been edited or started
+          headers:
+            ETag: {schema: {type: string}}
+            Location: {schema: {type: string}, description: API path of the child task}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TaskDraft'}
+        '400': {description: Invalid confirmation, revision, JSON or unexpected fields}
+        '401': {description: Authentication required}
+        '403': {description: Operator role required}
+        '404': {description: Source task not found}
+        '409': {description: Stale source, nonfailed or trigger-owned source, or deleted child}
+        '500': {description: Audit or storage failure; repeat the same request to recover an uncertain committed child}
   /api/v1/tasks/{tid}/review:
     get:
       summary: Preview current workflow requirements without admitting execution
@@ -2881,6 +2926,8 @@ components:
       type: object
       required: [id, revision, status, title, request, outcome, graphId, graphVersion, nodeId, createdBy, updatedBy, createdAt, updatedAt]
       properties:
+        retryOfTaskId: {type: string, readOnly: true, description: Failed manual task from which this attempt was created}
+        retryOfRevision: {type: integer, minimum: 1, readOnly: true, description: Source revision used to prepare this attempt}
         resolution:
           type: object
           description: Server-owned interpretation metadata; pending or repair states block task admission until resolved or explicitly repaired and saved.
@@ -2891,7 +2938,7 @@ components:
             repository: {type: string, description: Untrusted URL quoted from the original request; never fetched by interpretation}
         id: {type: string}
         revision: {type: integer, minimum: 1}
-        status: {enum: [draft, preparing, environment_build_requested, environment_pending, environment_cancel_requested, starting, running, interrupted, cancel_requested, cancelled]}
+        status: {enum: [draft, preparing, environment_build_requested, environment_pending, environment_cancel_requested, starting, running, succeeded, failed, blocked, interrupted, cancel_requested, cancelled]}
         executionGraphId: {type: string}
         launchError: {type: string}
         observedState: {type: string, description: Optional list projection; persisted admission status is separate}

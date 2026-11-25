@@ -43,6 +43,8 @@ type Input struct {
 	SCMConnection string `json:"scmConnection,omitempty"`
 }
 type Draft struct {
+	RetryOfTaskID         string       `json:"retryOfTaskId,omitempty"`
+	RetryOfRevision       int64        `json:"retryOfRevision,omitempty"`
 	TriggerIssueOrigin    *IssueOrigin `json:"triggerIssueOrigin,omitempty"`
 	EnvironmentApprovalID string       `json:"environmentApprovalId,omitempty"`
 	TriggerGitHubIssue    string       `json:"triggerGitHubIssue,omitempty"`
@@ -275,6 +277,8 @@ func (m Manager) saveWithOrigin(ctx context.Context, id string, in Input, revisi
 			return nil, fmt.Errorf("%w: select a registered project for the repository URL or remove the URL from the request", ErrInvalid)
 		}
 		d.Submitted = old.Submitted
+		d.RetryOfTaskID = old.RetryOfTaskID
+		d.RetryOfRevision = old.RetryOfRevision
 		d.TriggerGitHubIssue = old.TriggerGitHubIssue
 		d.TriggerIssueOrigin = old.TriggerIssueOrigin
 		d.EnvironmentApprovalID = old.EnvironmentApprovalID
