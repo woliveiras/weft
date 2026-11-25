@@ -24,7 +24,8 @@ it('reviews a task workflow before saving without granting tools or starting wor
   await userEvent.click(screen.getByRole('button',{name:'Propose connections'}));
   expect(backend.calls).toEqual([]);
   await userEvent.click(screen.getByRole('button',{name:'Review workflow'}));
-  expect(await screen.findByRole('heading',{name:'Review before saving'})).toBeTruthy();
+  const heading=await screen.findByRole('heading',{name:'Review before saving'});
+  await waitFor(()=>expect(document.activeElement).toBe(heading));
   expect(screen.getByText(/Versioned definition only/)).toBeTruthy();
   expect(backend.find('POST','/api/v1/graphs')).toHaveLength(0);
   await userEvent.click(screen.getByRole('button',{name:'Save workflow'}));

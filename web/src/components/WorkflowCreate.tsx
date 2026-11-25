@@ -40,6 +40,9 @@ export function WorkflowCreate({onCreated,onCancel,onDraftState,canCreate=true}:
   const lock = useRef(false);
   const completed = useRef(false);
   const root = useRef<HTMLDivElement>(null);
+  useEffect(()=>{
+    if (reviewed) root.current?.querySelector<HTMLElement>('[data-review-heading]')?.focus();
+  },[reviewed]);
   const dirty = !completed.current && (JSON.stringify(input)!==JSON.stringify(blank) || !!advanced || !!agentName || !!agentPrompt);
   useEffect(()=>{onDraftState?.({dirty,busy:!!busy});return()=>onDraftState?.({dirty:false,busy:false});},[dirty,busy,onDraftState]);
   useEffect(()=>{
@@ -104,7 +107,6 @@ export function WorkflowCreate({onCreated,onCancel,onDraftState,canCreate=true}:
       setWarnings((result.warnings??[]).map(issue=>`${issue.path}: ${issue.message}`));
       if (!result.valid) {setError((result.errors??[]).map(issue=>`${issue.path}: ${issue.message}`).join('\n') || 'Workflow validation failed. Correct the definition and review again.');return;}
       setReviewed({document,graph});
-      queueMicrotask(()=>root.current?.querySelector<HTMLElement>('[data-review-heading]')?.focus());
     } catch (cause) {setError(errorMessage(cause));}
     finally {lock.current=false;setBusy(undefined);}
   };
