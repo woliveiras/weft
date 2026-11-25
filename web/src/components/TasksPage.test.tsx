@@ -1,9 +1,25 @@
-import {act,cleanup,render,screen,waitFor,within} from '@testing-library/react';
+import {act,cleanup,fireEvent,render as renderUI,screen,waitFor,within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {TasksPage,taskOutcomes,needsModel} from './TasksPage';
-import {fakeApi,apiError} from '../test/fakeApi';
+import {fakeApi as routeApi,apiError} from '../test/fakeApi';
 import type {GraphSummary,Info} from '../api/types';
+
+function render(ui:Parameters<typeof renderUI>[0]) {
+ const view=renderUI(ui);
+ const advanced=screen.queryByText('Advanced settings')?.closest('details');
+ if(advanced){advanced.open=true;fireEvent(advanced,new Event('toggle'));}
+ return view;
+}
+function fakeApi(routes:Parameters<typeof routeApi>[0]) {
+ const defaults:Parameters<typeof routeApi>[0]={'GET /api/v1/cost/budgets/preview':()=>({taskRunBudgetMicros:0,currency:'USD',budgets:[]})};
+ for(const key of Object.keys(routes)){
+  const match=key.match(/^GET (\/api\/v1\/tasks\/[^/]+)(?:\/review)?$/);
+  if(match)defaults[`GET ${match[1]}/authorization`]=()=>({scope:'fixture',capabilities:[]});
+ }
+ return routeApi({...defaults,...routes});
+}
+
 const graphs=[{graph:{metadata:{id:'factory',name:'Software Factory',version:1},spec:{nodes:[{id:'worker',name:'Worker',runtime:{kind:'echo'}}]}}}] as GraphSummary[];
 const info={identity:{role:'operator'}} as Info;
 const showModal=Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype,'showModal');
@@ -45,23 +61,23 @@ it('requires reviewed confirmation and admin authority before starting',async()=
  const draft={id:'tsk_a',revision:1,status:'draft',title:'Task',request:'Explain',outcome:'freeform',graphId:'factory',graphVersion:1,nodeId:'worker',resultNodeId:'worker'};
  const backend=fakeApi({'GET /api/v1/projects':()=>[],'GET /api/v1/tasks':()=>({items:[draft]}),'GET /api/v1/tasks/tsk_a':()=>draft,'GET /api/v1/tasks/tsk_a/review':()=>({task:draft,canStart:true,blockers:[],validation:{errors:[],warnings:[]},executionGraphId:'task-run-a',grants:[],model:{},isolation:'process'})});
  render(<TasksPage id="tsk_a" info={info} graphs={graphs}/>);
- await userEvent.click(await screen.findByRole('button',{name:'Review requirements'}));
- await userEvent.click(await screen.findByRole('checkbox'));
- expect((screen.getByRole('button',{name:'Start task'}) as HTMLButtonElement).disabled).toBe(true);
+ await userEvent.click(await screen.findByRole('button',{name:'Run task'}));
+
+ expect(screen.queryByRole('button',{name:'Start task'})).toBeNull();
  expect(backend.calls.filter(c=>c.method!=='GET')).toHaveLength(0);
 });
 it('exposes configuration, derives an editable title and preserves errors',async()=>{
  const backend=fakeApi({'GET /api/v1/projects':()=>[],'GET /api/v1/tasks':()=>({items:[]}), 'POST /api/v1/tasks':()=>apiError(503,'Storage unavailable','unavailable')});
  render(<TasksPage create info={info} graphs={graphs}/>);
  expect(screen.getByLabelText('Project').closest('details')).toBeNull();
- expect(screen.getByLabelText('Workflow version').closest('details')).toBeNull();
+ expect(screen.getByLabelText('Workflow version').closest('details')).toHaveProperty('open',true);
  await userEvent.type(screen.getByLabelText('Request'),'Fix https://example.com/repo\nDo not push');
  await userEvent.selectOptions(screen.getByLabelText('Workflow'),'factory');
  await userEvent.click(screen.getByRole('button',{name:'Save draft'}));
  await screen.findByText('Storage unavailable');
  expect(backend.find('POST','/api/v1/tasks')[0].body).toMatchObject({title:'Fix https://example.com/repo',request:'Fix https://example.com/repo\nDo not push',nodeId:'worker'});
  expect(backend.calls.filter(c=>c.method!=='GET')).toHaveLength(1);
- expect(screen.getByLabelText('Title').closest('details')).toBeNull();
+ expect(screen.getByLabelText('Title').closest('details')).toHaveProperty('open',true);
  await userEvent.clear(screen.getByLabelText('Title'));
  await userEvent.type(screen.getByLabelText('Title'),'My title');
  await userEvent.type(screen.getByLabelText('Request'),' and inspect tests');
@@ -107,9 +123,9 @@ it('reviews a new concrete draft without interpreting or starting and preserves 
  const backend=fakeApi({'GET /api/v1/projects':()=>[],'POST /api/v1/tasks':()=>apiError(503,'Save outcome unavailable','unavailable')});
  render(<TasksPage create info={{identity:{role:'admin'}} as Info} graphs={graphs}/>);
  await userEvent.type(screen.getByLabelText('Request'),'Explain the parser');await userEvent.selectOptions(screen.getByLabelText('Workflow'),'factory');
- await userEvent.click(screen.getByRole('button',{name:'Review task'}));await screen.findByText('Save outcome unavailable');
- expect(screen.getByRole('button',{name:'Review task'}).getAttribute('aria-busy')).toBe('false');
- await userEvent.click(screen.getByRole('button',{name:'Review task'}));
+ await userEvent.click(screen.getByRole('button',{name:'Run task'}));await screen.findByText('Save outcome unavailable');
+ expect(screen.getByRole('button',{name:'Run task'}).getAttribute('aria-busy')).toBe('false');
+ await userEvent.click(screen.getByRole('button',{name:'Run task'}));
  await waitFor(()=>expect(backend.find('POST','/api/v1/tasks')).toHaveLength(2));
  expect(backend.calls.filter(c=>c.method!=='GET').every(c=>c.path==='/api/v1/tasks')).toBe(true);
  expect((screen.getByLabelText('Request') as HTMLTextAreaElement).value).toBe('Explain the parser');
@@ -117,27 +133,27 @@ it('reviews a new concrete draft without interpreting or starting and preserves 
 it('allows operators to review drafts while execution remains separately administrator-only',async()=>{
  fakeApi({'GET /api/v1/projects':()=>[]});render(<TasksPage create info={info} graphs={graphs}/>);
  await userEvent.type(screen.getByLabelText('Request'),'Review this request');
- expect((screen.getByRole('button',{name:'Review task'}) as HTMLButtonElement).disabled).toBe(false);
+ expect((screen.getByRole('button',{name:'Run task'}) as HTMLButtonElement).disabled).toBe(false);
 });
 it('defaults the version and reports remaining missing configuration without reinterpreting a draft',async()=>{
  const draft={id:'tsk_feedback',revision:4,status:'draft',submitted:true,title:'Inspect',request:'Inspect dependencies',outcome:'freeform',graphId:'factory',graphVersion:0,nodeId:'',resolution:{state:'invalid_proposal',message:'Invalid proposal'}};
  const backend=fakeApi({'GET /api/v1/projects':()=>[],'GET /api/v1/tasks/tsk_feedback':()=>draft,
  'GET /api/v1/tasks/tsk_feedback/review':()=>({task:draft,blockers:['Invalid proposal']})});
  render(<TasksPage id="tsk_feedback" info={{identity:{role:'admin'}} as Info} graphs={graphs}/>);
- await userEvent.click(await screen.findByRole('button',{name:'Review task'}));
- const actions=screen.getByRole('region',{name:'Save and review task'});
+ await userEvent.click(await screen.findByRole('button',{name:'Run task'}));
+ const actions=screen.getByRole('region',{name:'Run task'});
  expect(within(actions).getByRole('status').textContent).toContain('Task has not started. Complete entry agent');
  expect(screen.getByRole('combobox',{name:'Workflow version'})).toHaveProperty('value','1');
  expect(screen.getByLabelText('Workflow version').getAttribute('aria-invalid')).toBeNull();
  expect(screen.getByLabelText('Entry agent').getAttribute('aria-invalid')).toBe('true');
  await userEvent.click(within(actions).getByRole('button',{name:'Complete task setup'}));
- expect(document.activeElement).toBe(screen.getByRole('region',{name:'2. Workflow & repository'}));
+ expect(document.activeElement).toBe(screen.getByRole('region',{name:'Workflow & repository'}));
  expect(screen.getByLabelText('Request')).toHaveProperty('value',draft.request);
  expect(backend.calls.filter(c=>c.method!=='GET')).toEqual([]);
  await userEvent.selectOptions(screen.getByLabelText('Entry agent'),'worker');
  expect(screen.getByLabelText('Entry agent').getAttribute('aria-invalid')).toBeNull();
  expect(within(actions).queryByRole('button',{name:'Complete task setup'})).toBeNull();
- expect(within(actions).getByRole('status').textContent).toContain('Unsaved changes');
+ expect(within(actions).getByRole('status').textContent).toContain('Run task saves these changes');
 });
 it('explains a missing model provider and blocks running only workflows that need a model',async()=>{
  const ready={name:'local',type:'ollama',status:'ready',default:true,source:'managed',editable:true,credential:{configured:false,source:'none'}};
@@ -157,12 +173,12 @@ it('explains a missing model provider and blocks running only workflows that nee
  await userEvent.type(screen.getByLabelText('Request'),'Plan the change');
  await userEvent.selectOptions(screen.getByLabelText('Workflow'),'factory-native');
  expect(await screen.findByRole('note',{name:'No model provider'})).toBeTruthy();
- expect((screen.getByRole('button',{name:'Review task'}) as HTMLButtonElement).disabled).toBe(false);
+ expect((screen.getByRole('button',{name:'Run task'}) as HTMLButtonElement).disabled).toBe(false);
  expect((screen.getByRole('button',{name:'Save draft'}) as HTMLButtonElement).disabled).toBe(false);
  // An echo-only workflow is not blocked.
  await userEvent.selectOptions(screen.getByLabelText('Workflow'),'factory');
  await waitFor(()=>expect(screen.queryByRole('note',{name:'No model provider'})).toBeNull());
- expect((screen.getByRole('button',{name:'Review task'}) as HTMLButtonElement).disabled).toBe(false);
+ expect((screen.getByRole('button',{name:'Run task'}) as HTMLButtonElement).disabled).toBe(false);
  cleanup();
 
  // An unavailable provider does not count; a ready one clears the notice.
@@ -286,7 +302,7 @@ it('repairs incomplete interpretation manually, preserving inputs and reviewing 
  render(<TasksPage id="tsk_repair" info={{identity:{role:'admin'}} as Info} graphs={graphs}/>);
  await userEvent.click(await screen.findByRole('button',{name:'Configure task manually'}));
  expect(screen.getByLabelText('Workflow').closest('details')).toBeNull();
- expect(document.activeElement).toBe(screen.getByRole('region',{name:'2. Workflow & repository'}));
+ expect(document.activeElement).toBe(screen.getByRole('region',{name:'Workflow & repository'}));
  expect(screen.queryByText(/different workflow version/)).toBeNull();
  expect(backend.find('GET','/api/v1/tasks/tsk_repair/authorization')).toHaveLength(0);
  expect(screen.queryByRole('article',{name:'Task requirements'})).toBeNull();
@@ -295,36 +311,36 @@ it('repairs incomplete interpretation manually, preserving inputs and reviewing 
  await userEvent.selectOptions(screen.getByRole('combobox',{name:'Workflow version'}),'1');
  await userEvent.selectOptions(screen.getByLabelText('Entry agent'),'worker');
  await userEvent.click(screen.getByRole('button',{name:'Save draft'}));
+ await screen.findByRole('region',{name:'Launch review'});
+ await userEvent.click(screen.getByText('Access settings',{exact:false,selector:'summary'}));
  await screen.findByText('Isolation: docker');
  expect(stored).toMatchObject({request:draft.request,title:draft.title,projectId:'p',baseCommit:draft.baseCommit,executionMode:'sandbox',graphVersion:1,nodeId:'worker'});
- await userEvent.click(screen.getByRole('button',{name:'Review task'}));
+ await userEvent.click(screen.getByRole('button',{name:'Run task'}));
  await screen.findByRole('article',{name:'Task requirements'});
  expect(backend.calls.filter(c=>c.method!=='GET').map(c=>c.path)).toEqual(['/api/v1/tasks/tsk_repair']);
  expect(backend.find('POST','/api/v1/tasks/submit')).toHaveLength(0);
- expect((screen.getByRole('button',{name:'Start task'}) as HTMLButtonElement).disabled).toBe(true);
+ expect(screen.queryByRole('button',{name:'Start task'})).toBeNull();
 });
 
-it('ignores a late review of the incomplete revision after a manual repair is saved',async()=>{
- const draft={id:'tsk_late',revision:1,status:'draft',submitted:true,title:'Task',request:'Inspect alerts.',outcome:'freeform',graphId:'factory',graphVersion:0,nodeId:'',resolution:{state:'invalid_proposal',message:'Invalid proposal'}};
- let finish!:(value:unknown)=>void;
+it('ignores a late review when the operator edits and saves a newer revision',async()=>{
+ const draft={id:'tsk_late',revision:1,status:'draft',title:'Task',request:'Inspect alerts.',outcome:'freeform',graphId:'factory',graphVersion:1,nodeId:'worker'};
+ let finish!:(value:unknown)=>void, count=0;
  const backend=fakeApi({
   'GET /api/v1/providers':()=>[{status:'ready'}], 'GET /api/v1/projects':()=>[],
   'GET /api/v1/tasks/tsk_late':()=>draft,
-  'GET /api/v1/tasks/tsk_late/review':()=>new Promise(resolve=>{finish=resolve;}),
+  'GET /api/v1/tasks/tsk_late/review':()=>++count===1?new Promise(resolve=>{finish=resolve;}):apiError(503,'New revision review unavailable','unavailable'),
   'PUT /api/v1/tasks/tsk_late':c=>({...c.body as object,id:draft.id,revision:2,status:'draft'}),
-  'GET /api/v1/tasks/tsk_late/authorization':()=>({scope:'new',capabilities:[]}),
  });
  render(<TasksPage id="tsk_late" info={{identity:{role:'admin'}} as Info} graphs={graphs}/>);
- await userEvent.click(await screen.findByRole('button',{name:'Configure task manually'}));
  await waitFor(()=>expect(backend.find('GET','/api/v1/tasks/tsk_late/review')).toHaveLength(1));
- await userEvent.selectOptions(screen.getByRole('combobox',{name:'Workflow version'}),'1');
- await userEvent.selectOptions(screen.getByLabelText('Entry agent'),'worker');
+ await userEvent.type(screen.getByLabelText('Request'),' Manual correction.');
  await userEvent.click(screen.getByRole('button',{name:'Save draft'}));
- await screen.findByRole('button',{name:'Review task'});
- await act(async()=>{finish({task:draft,currentGraphVersion:0,canStart:true,blockers:[],validation:{errors:[],warnings:[]},isolation:'process'});});
- await waitFor(()=>expect(screen.queryByRole('article',{name:'Task requirements'})).toBeNull());
- expect(screen.queryByRole('button',{name:'Start task'})).toBeNull();
- expect(screen.queryByText(/Isolation: process/)).toBeNull();
+ await screen.findByText(/New revision review unavailable/);
+ await act(async()=>{finish({task:draft,currentGraphVersion:1,canStart:true,blockers:[],validation:{errors:[],warnings:[]},isolation:'process'});});
+ expect(screen.queryByRole('region',{name:'Launch review'})).toBeNull();
+ expect(screen.queryByRole('article',{name:'Task requirements'})).toBeNull();
+ expect(screen.getByLabelText('Request')).toHaveProperty('value','Inspect alerts. Manual correction.');
+ expect(backend.find('POST','/api/v1/tasks/tsk_late/start')).toHaveLength(0);
  expect(backend.calls.filter(c=>c.method!=='GET').map(c=>c.path)).toEqual(['/api/v1/tasks/tsk_late']);
 });
 
@@ -349,7 +365,7 @@ it('keeps repository selection through discovery failure and retries with distin
  expect(backend.calls.filter(c=>c.method!=='GET')).toHaveLength(0);
 });
 
-it('saves visible configuration together and places execution after the selected repository',async()=>{
+it('saves visible configuration together and keeps the primary execution action above the fields',async()=>{
  const backend=fakeApi({'GET /api/v1/projects':()=>[{id:'p',name:'Repo',head:'a'.repeat(40),path:'/repo',executionMode:'sandbox'}],
  'POST /api/v1/tasks':c=>({...c.body as object,id:'tsk_visible',revision:1,status:'draft'})});
  render(<TasksPage create info={info} graphs={graphs}/>);
@@ -361,7 +377,7 @@ it('saves visible configuration together and places execution after the selected
  expect(screen.getByLabelText('Workflow version')).toHaveProperty('value','1');
  const form=screen.getByRole('form',{name:'Task request'});
  const order=[...form.querySelectorAll('select,button')];
- expect(order.indexOf(screen.getByLabelText('Project'))).toBeLessThan(order.indexOf(screen.getByRole('button',{name:'Review task'})));
+ expect(order.indexOf(screen.getByRole('button',{name:'Run task'}))).toBeLessThan(order.indexOf(screen.getByLabelText('Project')));
  await userEvent.click(screen.getByRole('button',{name:'Save draft'}));
  await waitFor(()=>expect(backend.find('POST','/api/v1/tasks')).toHaveLength(1));
  expect(backend.find('POST','/api/v1/tasks')[0].body).toMatchObject({graphId:'factory',graphVersion:1,nodeId:'worker',projectId:'p',baseCommit:'a'.repeat(40),executionMode:'sandbox',request:'Inspect dependencies'});
@@ -409,27 +425,27 @@ it('continues corrected bindings without model resolution and retains the saved 
  await userEvent.selectOptions(screen.getByLabelText('Project'),'p');
  await userEvent.selectOptions(screen.getByLabelText('Execution environment'),'sandbox');
  await userEvent.clear(screen.getByLabelText('Title'));await userEvent.type(screen.getByLabelText('Title'),'Corrected');
- await userEvent.click(screen.getByRole('button',{name:'Review task'}));
+ await userEvent.click(screen.getByRole('button',{name:'Run task'}));
  await screen.findByText('Draft changed');
  expect(screen.getByLabelText('Title')).toHaveProperty('value','Corrected');
  expect(screen.getByLabelText('Entry agent')).toHaveProperty('value','worker');
  expect(stored.revision).toBe(4);
  failSave=false;
- await userEvent.click(screen.getByRole('button',{name:'Review task'}));
+ await userEvent.click(screen.getByRole('button',{name:'Run task'}));
  await waitFor(()=>expect(finishSave).toBeTypeOf('function'));
- expect(screen.getByRole('button',{name:'Reviewing task…'})).toHaveProperty('disabled',true);
- expect(screen.getByRole('button',{name:'Reviewing task…'}).getAttribute('aria-busy')).toBe('true');
+ expect(screen.getByRole('button',{name:'Checking task…'})).toHaveProperty('disabled',true);
+ expect(screen.getByRole('button',{name:'Checking task…'}).getAttribute('aria-busy')).toBe('true');
  await act(async()=>finishSave(undefined));
- await screen.findByText('Review unavailable');
+ await screen.findByText(/Review unavailable/);
  expect(stored).toMatchObject({revision:5,title:'Corrected',request:'fixture-invalid',graphVersion:1,nodeId:'worker',projectId:'p',baseCommit:'a'.repeat(40),executionMode:'sandbox',scmConnection:'delivery',resultNodeId:'worker',channelId:'requests',messageType:'security.request',payloadJson:'{"custom":true}'});
  expect(stored).not.toHaveProperty('resolution');expect(stored).not.toHaveProperty('status','running');
  failReview=false;
- await userEvent.click(screen.getByRole('button',{name:'Review task'}));
+ await userEvent.click(screen.getByRole('button',{name:'Run task'}));
  await screen.findByRole('article',{name:'Task requirements'});
  expect(backend.find('PUT','/api/v1/tasks/tsk_continue')).toHaveLength(2);
  expect(backend.find('PUT','/api/v1/tasks/tsk_continue')[1].headers['If-Match']).toBe('4');
  expect(backend.find('POST','/api/v1/tasks/submit')).toHaveLength(0);
- expect(screen.getByRole('button',{name:'Start task'})).toHaveProperty('disabled',true);
+ expect(screen.queryByRole('button',{name:'Start task'})).toBeNull();
  expect(screen.getByLabelText('Title')).toHaveProperty('value','Corrected');
 });
 
@@ -442,7 +458,7 @@ it('retains a saved version until the operator chooses the current version and p
  expect(version).toHaveProperty('value','1');
  expect(screen.getByRole('option',{name:'Version 1 (saved)'})).toBeTruthy();
  await userEvent.selectOptions(version,'2');
- await userEvent.click(screen.getByRole('button',{name:'Review task'}));
+ await userEvent.click(screen.getByRole('button',{name:'Run task'}));
  await screen.findByText('Workflow changed');
  expect(version).toHaveProperty('value','2');
  expect(backend.find('PUT','/api/v1/tasks/tsk_version')[0].body).toMatchObject({graphVersion:2});
@@ -472,23 +488,16 @@ it('explains environment preparation beside the action and focuses its reviewed 
  'GET /api/v1/tasks/tsk_build_ux/review':()=>review,
  'POST /api/v1/tasks/tsk_build_ux/prepare-environment':()=>new Promise((_,reject)=>{fail=reject;})});
  render(<TasksPage id={draft.id} info={{identity:{role:'admin'}} as Info} graphs={graphs}/>);
- await userEvent.click(await screen.findByRole('button',{name:'Review task'}));
- const notice=screen.getByRole('complementary',{name:'Environment preparation required'});
- expect(notice.textContent).toContain('You can prepare it from this page');
- expect(notice.textContent).toContain('Approve the build in Approvals if requested');
- expect(notice.textContent).not.toContain('Graph settings');
- expect(screen.getByRole('region',{name:'Save and review task'}).textContent).toContain('Review and prepare its Docker environment here');
+ await userEvent.click(await screen.findByRole('button',{name:'Run task'}));
+ const preparation=screen.getByRole('region',{name:'Review task environment preparation'});
  expect(screen.getByText('Task authorization is stale.',{selector:'article > p'})).toBeTruthy();
  expect(screen.getAllByText(raw).every(text=>text.closest('details')?.open===false)).toBe(true);
  expect(screen.getByText('spec.environment: environment not ready: warning fixture').closest('details')).toHaveProperty('open',false);
  expect(screen.getByText('spec.nodes: Review optional agent setting',{selector:'article > p'})).toBeTruthy();
- await userEvent.click(within(notice).getByRole('button',{name:'Review environment preparation'}));
- const preparation=screen.getByRole('region',{name:'Review task environment preparation'});
- expect(document.activeElement).toBe(preparation);
  expect(preparation.textContent).toContain('Preparation does not start agents.');
  expect(preparation.textContent).toContain('alpine:3.22');
  expect(screen.getByRole('button',{name:'Prepare task environment'})).toHaveProperty('disabled',true);
- expect(screen.getByRole('button',{name:'Start task'})).toHaveProperty('disabled',true);
+ expect(screen.queryByRole('button',{name:'Start task'})).toBeNull();
  expect(backend.calls.filter(c=>c.method!=='GET')).toEqual([]);
  await userEvent.click(within(preparation).getByRole('checkbox'));
  await userEvent.click(screen.getByRole('button',{name:'Prepare task environment'}));
@@ -497,7 +506,7 @@ it('explains environment preparation beside the action and focuses its reviewed 
  await act(async()=>fail(new Error('Build service unavailable')));
  await screen.findByText('network error: Build service unavailable');
  expect(screen.getByLabelText('Request')).toHaveProperty('value',draft.request);
- expect(screen.getByRole('button',{name:'Start task'})).toHaveProperty('disabled',true);
+ expect(screen.queryByRole('button',{name:'Start task'})).toBeNull();
  expect(backend.find('POST','/api/v1/tasks/tsk_build_ux/prepare-environment')).toHaveLength(1);
  expect(backend.find('POST','/api/v1/tasks/tsk_build_ux/start')).toHaveLength(0);
 });
@@ -508,8 +517,7 @@ it('shows the preparation path to an operator while leaving the build administra
  'GET /api/v1/tasks/tsk_operator_build/authorization':()=>({scope:'fixture',capabilities:[]}),
  'GET /api/v1/tasks/tsk_operator_build/review':()=>({task:draft,canStart:false,canPrepareEnvironment:true,blockers:[],validation:{errors:[],warnings:[]}})});
  render(<TasksPage id={draft.id} info={info} graphs={graphs}/>);
- await userEvent.click(await screen.findByRole('button',{name:'Review requirements'}));
- await userEvent.click(screen.getByRole('button',{name:'Review environment preparation'}));
+ await userEvent.click(await screen.findByRole('button',{name:'Run task'}));
  expect(screen.getByText('An administrator must prepare this task environment.')).toBeTruthy();
  await userEvent.click(within(screen.getByRole('region',{name:'Review task environment preparation'})).getByRole('checkbox'));
  expect(screen.getByRole('button',{name:'Prepare task environment'})).toHaveProperty('disabled',true);

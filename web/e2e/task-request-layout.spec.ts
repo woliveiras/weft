@@ -16,10 +16,10 @@ test('uses the available task form width and aligns visible fields and import co
   expect(card.y - link.y - link.height).toBeGreaterThanOrEqual(12);
 
   const save = (await form.getByRole('button', { name: 'Save draft', exact: true }).boundingBox())!;
-  const run = (await form.getByRole('button', { name: 'Review task', exact: true }).boundingBox())!;
-  const review = (await form.getByRole('button', { name: 'Review requirements', exact: true }).boundingBox())!;
-  expect(run.x - save.x - save.width).toBeGreaterThanOrEqual(12);
-  expect(review.x - run.x - run.width).toBeGreaterThanOrEqual(12);
+  const run = (await form.getByRole('button', { name: 'Run task', exact: true }).boundingBox())!;
+  expect(save.x - run.x - run.width).toBeGreaterThanOrEqual(12);
+  await expect(form.getByRole('button',{name:'Review requirements',exact:true})).toHaveCount(0);
+  await form.locator('summary').filter({hasText:/^Advanced settings/}).click();
 
   const goal = (await form.getByRole('combobox', { name: 'Goal', exact: true }).boundingBox())!;
   const title = (await form.getByRole('textbox', { name: 'Title', exact: true }).boundingBox())!;
@@ -28,11 +28,9 @@ test('uses the available task form width and aligns visible fields and import co
 
   const workflow = (await form.getByRole('combobox', { name: 'Workflow', exact: true }).boundingBox())!;
   const project = (await form.getByRole('combobox', { name: 'Project', exact: true }).boundingBox())!;
-  const environment = (await form.getByRole('combobox', { name: 'Execution environment', exact: true }).boundingBox())!;
-  expect(project.x).toBe(workflow.x);
   expect(project.width).toBe(workflow.width);
-  expect(environment.y).toBe(project.y);
-  expect(project.y - workflow.y - workflow.height).toBeGreaterThanOrEqual(16);
+  expect(project.y).toBe(workflow.y);
+  expect(project.x - workflow.x - workflow.width).toBeGreaterThanOrEqual(16);
   const checkIssueAlignment = async () => {
     const delivery = (await form.getByRole('combobox', { name: 'Input delivery', exact: true }).boundingBox())!;
     const legend = (await form.getByText('Issue source (optional)', { exact: true }).boundingBox())!;
@@ -59,9 +57,8 @@ test('uses the available task form width and aligns visible fields and import co
   await page.setViewportSize({ width: 390, height: 844 });
   await checkIssueAlignment();
   const narrowSave = (await form.getByRole('button', { name: 'Save draft', exact: true }).boundingBox())!;
-  const narrowRun = (await form.getByRole('button', { name: 'Review task', exact: true }).boundingBox())!;
-  const narrowReview = (await form.getByRole('button', { name: 'Review requirements', exact: true }).boundingBox())!;
-  for (const [before, after] of [[narrowSave, narrowRun], [narrowRun, narrowReview]]) {
+  const narrowRun = (await form.getByRole('button', { name: 'Run task', exact: true }).boundingBox())!;
+  for (const [before, after] of [[narrowRun, narrowSave]]) {
     const gap = after.y === before.y ? after.x - before.x - before.width : after.y - before.y - before.height;
     expect(gap).toBeGreaterThanOrEqual(12);
   }

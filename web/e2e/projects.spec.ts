@@ -1,4 +1,4 @@
-import {openTaskSettings} from './task-settings';
+import {openTaskSettings,openTaskSection} from './task-settings';
 import {test,expect} from '@playwright/test';
 import {mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -53,16 +53,21 @@ test('registers a repository and reviews a separate task worktree without touchi
   await openTaskSettings(page);
  await page.getByRole('textbox',{name:'Title',exact:true}).fill('Review local fixture');await page.getByRole('textbox',{name:'Request',exact:true}).fill('Explain the fixture');
   await openTaskSettings(page);
- await page.getByRole('combobox',{name:'Project',exact:true}).selectOption({label:'Local fixture'});
+ await expect(page.getByRole('combobox',{name:'Project',exact:true}).locator('option:checked')).toContainText(`Local fixture · ${repo}`);
   await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption('project-task-flow');
   await openTaskSettings(page);
  await page.getByRole('combobox',{name:'Entry agent',exact:true}).selectOption('worker');await openTaskSettings(page);
  await page.getByRole('combobox',{name:'Result agent',exact:true}).selectOption('worker');
-  await page.getByRole('button',{name:'Save draft',exact:true}).click();await page.getByRole('button',{name:'Review requirements'}).click();
-  await expect(page.getByRole('article',{name:'Task requirements'})).toContainText(repo);
-  await page.getByRole('checkbox',{name:'I reviewed the workflow and authorize a separate execution copy.'}).check();await page.getByRole('button',{name:'Start task',exact:true}).click();
-  await expect(page.getByRole('status')).toHaveText('Task status: succeeded');
-  await expect(page.getByRole('article',{name:'Task progress'})).toContainText('Task workspace on the Weft server');
+  await page.getByRole('button',{name:'Save draft',exact:true}).click();await expect(page.getByRole('region',{name:'Launch review',exact:true})).toBeVisible();
+  await expect(page.getByRole('region',{name:'Launch review',exact:true})).toContainText('Local fixture');
+  const review=await(await page.request.get(`/api/v1/tasks/${page.url().split('/').at(-1)}/review`,{headers})).json();
+  expect(review.project.path).toBe(repo);expect(review.workspacePath).not.toBe(repo);
+  await expect(page.getByRole('article',{name:'Task requirements'})).toContainText(review.workspacePath);
+  await page.getByRole('button',{name:'Run task',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
+  await openTaskSection(page,'Changes & checks');
+  await page.getByText('Open workspace in your editor',{exact:true}).click();
+  await expect(page.getByRole('region',{name:'Review workspace'})).toContainText('Task workspace on the Weft server');
   expect(readFileSync(join(repo,'dirty.txt'),'utf8')).toBe('keep');
  }finally{rmSync(repo,{recursive:true,force:true});}
 });

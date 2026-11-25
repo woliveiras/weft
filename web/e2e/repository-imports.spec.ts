@@ -51,11 +51,10 @@ test('imports a public snapshot, reuses it and starts a reviewed task in its own
  await expect(page.getByRole('combobox',{name:'Project',exact:true})).toHaveValue(imported.projectId);
  await page.getByRole('button',{name:'Save draft',exact:true}).click();
  await expect(page).toHaveURL(/#\/tasks\/tsk_/);await page.reload();
- await page.getByRole('button',{name:'Review requirements'}).click();
+ await expect(page.getByRole('region',{name:'Launch review',exact:true})).toBeVisible();
  await expect(page.getByRole('article',{name:'Task requirements'})).toContainText(imported.commit);
- await page.getByRole('checkbox',{name:'I reviewed the workflow and authorize a separate execution copy.'}).check();
- await page.getByRole('button',{name:'Start task',exact:true}).click();
- await expect(page.getByRole('status')).toHaveText('Task status: succeeded');
+ await page.getByRole('button',{name:'Run task',exact:true}).click();
+ await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
  const tasks=await (await page.request.get('/api/v1/tasks',{headers})).json();const task=tasks.items.find((t:{projectId:string})=>t.projectId===imported.projectId);
  expect(task.baseCommit).toBe(imported.commit);
  const original=await (await page.request.get('/api/v1/graphs/import-task-flow',{headers})).json();expect(original.record.version).toBe(1);expect(original.graph.spec.nodes[0].tools??[]).toEqual([]);

@@ -15,7 +15,7 @@ it('explains draft submission outcomes without claiming execution or hiding miss
  expect(submissionDraftFeedback({...draft,graphVersion:0,nodeId:''})).toEqual({message:expect.stringContaining('Complete workflow version, entry agent'),configure:true});
  expect(submissionDraftFeedback(draft,{blockers:['Environment approval is required.']} as TaskReview)).toEqual({message:expect.stringContaining('Environment approval is required.'),configure:false});
  expect(submissionDraftFeedback({...draft,resolution:{state:'needs_clarification',message:'Choose a workflow.'}})).toEqual({message:expect.stringContaining('Choose a workflow.'),configure:true});
- expect(submissionDraftFeedback(draft)).toEqual({message:'Task has not started. Review requirements below and confirm authorization before starting.',configure:false});
+ expect(submissionDraftFeedback(draft)).toEqual({message:'Task has not started. Select Run task to check the saved configuration and continue.',configure:false});
  for(const status of ['running','succeeded','failed','cancelled'])expect(submissionDraftFeedback({...draft,status})).toBeUndefined();
 });
 it('suggests only unique document-defined entry, type and result',()=>{
@@ -70,6 +70,9 @@ it('identifies only missing required configuration fields with actionable messag
  expect(taskConfigurationFieldErrors({...input,channelId:'requests',payloadJson:'{}'})).toEqual({messageType:expect.stringContaining('message type')});
  expect(taskConfigurationFieldErrors({...input,channelId:'requests',messageType:'request'})).toEqual({payloadJson:expect.stringContaining('JSON payload')});
  expect(taskConfigurationFieldErrors({...input,channelId:'requests',messageType:'request',payloadJson:'{}'})).toEqual({});
+ expect(taskConfigurationFieldErrors({...input,channelId:'requests',messageType:'request',payloadJson:'{broken'})).toEqual({payloadJson:'Enter valid JSON for the selected channel.'});
+ expect(taskConfigurationFieldErrors({...input,channelId:'requests',messageType:'request',payloadJson:'  '})).toEqual({payloadJson:expect.stringContaining('JSON payload')});
+ expect(taskConfigurationFieldErrors({...input,payloadJson:'{broken'})).toEqual({});
 });
 
 it('identifies project snapshots using repository, reference and commit with local fallbacks',async()=>{

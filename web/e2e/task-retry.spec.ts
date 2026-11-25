@@ -39,9 +39,9 @@ test('creates a reviewed linked draft from a failed manual task without replayin
  await page.reload();
  await expect(page.getByRole('link',{name:'Original failed task'})).toBeVisible();
  await expect(page.getByRole('textbox',{name:'Request',exact:true})).toHaveValue(input.request);
+ await page.locator('summary').filter({hasText:/^Advanced settings/}).click();
  await expect(page.getByRole('combobox',{name:'Workflow version',exact:true})).toHaveValue('1');
- await page.getByRole('button',{name:'Review task',exact:true}).click();
- await expect(page.getByRole('article',{name:'Task requirements',exact:true})).toBeVisible();
+ await expect(page.getByRole('region',{name:'Launch review',exact:true})).toBeVisible();
  const requirements=await(await page.request.get(`/api/v1/tasks/${newID}/review`,{headers})).json();
  expect(requirements.canStart).toBe(true);
  expect(requirements.validation.errors??[]).toEqual([]);
@@ -57,10 +57,8 @@ test('creates a reviewed linked draft from a failed manual task without replayin
  await page.getByRole('button',{name:'Try again',exact:true}).click();
  await expect(page).toHaveURL(new RegExp(`#/tasks/${newID}$`));
  // An explicit new start must pass admission and keep evidence linked to the long task ID.
- await page.getByRole('button',{name:'Review task',exact:true}).click();
- const ready=page.getByRole('article',{name:'Task requirements',exact:true});
- await ready.getByRole('checkbox',{name:'I reviewed the workflow and authorize a separate execution copy.'}).check();
- await ready.getByRole('button',{name:'Start task',exact:true}).click();
+ await expect(page.getByRole('region',{name:'Launch review',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Run task',exact:true}).click();
  await expect(page.getByRole('region',{name:'Task decisions',exact:true})).toBeVisible();
  const started=await(await page.request.get(`/api/v1/tasks/${newID}`,{headers})).json();
  expect(started.executionGraphId).toBe(requirements.executionGraphId);

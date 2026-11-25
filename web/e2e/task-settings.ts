@@ -1,8 +1,11 @@
 import type {Page} from '@playwright/test';
 
-// Configuration prerequisites remain visible; scroll the section into view.
+// Ordinary prerequisites remain visible; optional fields live in one disclosure.
 export async function openTaskSettings(page:Page) {
- await page.getByRole('heading',{name:'2. Workflow & repository'}).scrollIntoViewIfNeeded();
+ const advanced=page.locator('details').filter({has:page.locator('summary').filter({hasText:/^Advanced settings/})}).first();
+ await advanced.waitFor({state:'visible'});
+ if(!await advanced.evaluate(element=>(element as HTMLDetailsElement).open))await advanced.locator('summary').first().click();
+ await advanced.scrollIntoViewIfNeeded();
 }
 
 // Task tracking uses explicit sections instead of one long disclosure list.

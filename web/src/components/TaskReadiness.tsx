@@ -21,11 +21,10 @@ export function TaskReadiness({input,graph,project,projectsLoading,projectsError
   ['Model',nodes.length&&nodes.every(n=>n.runtime?.kind==='echo')?'Not required for echo agents':modelState==='loading'?'Loading providers…':modelState==='unavailable'?'Provider discovery unavailable — review or retry configuration':modelState==='missing'?'No model provider ready — administrator configuration required':'Provider configured — the task review checks each agent’s model'],
   ['Environment',`${input.executionMode||'workflow'} · ${isolation||'select a workflow'} isolation · ${review?.canPrepareEnvironment?'Build required':review?'See reviewed requirements':'Preparation and compatibility require task review'}`],
   ['Delivery',input.scmConnection?`Pull request via ${input.scmConnection} — task review checks repository and approvals`:'No task SCM hand-off selected; only the workflow’s existing grants can allow delivery'],
-  ['Access',review?.canStart?'Requirements reviewed; explicit consent and Start task still required':'Review required — suggestions do not grant access'],
-  ['Budget','Review applicable limits before start; recorded spend and admission remain authoritative'],
+  ['Access',review?.canStart?'Checked — Run task starts with the displayed permissions':'Ask by default — Run task checks the saved permissions'],
  ];
  return <section className="card task-readiness" aria-label="Task setup summary">
-  <header><div><h2>Task setup summary</h2><p className="muted">These are configuration facts and next steps. Readiness is verified when you review the saved task.</p></div></header>
+  <header><div><h2>Task setup summary</h2><p className="muted">Your task uses these settings. Run task saves changes and checks requirements before starting.</p></div></header>
   <dl>{rows.map(([name,value])=><div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}</dl>
   <details><summary>Prepare this task for a specific goal</summary>
    <label>Setup goal<select value={goal} onChange={e=>setGoal(e.target.value)}><option value="work">Run work in a repository</option><option value="pr">Deliver a pull request</option><option value="issue">Work from an issue</option><option value="review">Review a pull request</option></select></label>

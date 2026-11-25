@@ -10,9 +10,12 @@ const project={id:'repo',name:'Repository',head:'a'.repeat(40),repositoryUrl:'ht
 afterEach(()=>{cleanup();vi.unstubAllGlobals();vi.restoreAllMocks();});
 
 it('carries project/workflow context through the real API client into a reviewed saved draft without starting',async()=>{
+ let savedTask:Record<string,unknown>={};
  const backend=fakeApi({'GET /api/v1/providers':()=>[], 'GET /api/v1/projects':()=>[project], 'GET /api/v1/scm/connections':()=>[],
-  'POST /api/v1/tasks':call=>({...call.body as object,id:'tsk_new',revision:1,status:'draft'}),
-  'GET /api/v1/tasks/tsk_new/review':()=>({task:{id:'tsk_new',revision:1,status:'draft'},blockers:[],canStart:true,validation:{},model:{},grants:[]}),
+  'POST /api/v1/tasks':call=>{savedTask={...call.body as object,id:'tsk_new',revision:1,status:'draft'};return savedTask;},
+  'GET /api/v1/cost/budgets/preview':()=>({taskRunBudgetMicros:0,currency:'USD',budgets:[]}),
+  'GET /api/v1/tasks/tsk_new/authorization':()=>({scope:'fixture'}),
+  'GET /api/v1/tasks/tsk_new/review':()=>({task:savedTask,blockers:[],canStart:true,validation:{},model:{},grants:[]}),
  });
  render(<TasksPage create entry={{project:'repo',workflow:'flow'}} info={info} graphs={[graph]}/>);
  await waitFor(()=>expect(screen.getByLabelText('Project')).toHaveProperty('value','repo'));
@@ -20,8 +23,9 @@ it('carries project/workflow context through the real API client into a reviewed
  expect(screen.getByLabelText('Entry agent')).toHaveProperty('value','worker');
  await userEvent.type(screen.getByLabelText('Request'),'Inspect the repository');
  expect(screen.getByRole('region',{name:'Task setup summary'}).textContent).toContain('Commit '+project.head);
- await userEvent.click(screen.getByRole('button',{name:'Review task'}));
- await waitFor(()=>expect(backend.find('GET','/api/v1/tasks/tsk_new/review')).toHaveLength(1));
+ await userEvent.click(screen.getByRole('button',{name:'Run task'}));
+ await screen.findByRole('region',{name:'Launch review'});
+ expect(backend.find('GET','/api/v1/tasks/tsk_new/review').length).toBeGreaterThan(0);
  expect(backend.find('POST','/api/v1/tasks')[0].body).toMatchObject({projectId:'repo',baseCommit:project.head,graphVersion:3,nodeId:'worker'});
  expect(backend.calls.filter(c=>c.method!=='GET').map(c=>c.path)).toEqual(['/api/v1/tasks']);
 });

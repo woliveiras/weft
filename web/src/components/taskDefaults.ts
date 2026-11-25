@@ -75,12 +75,17 @@ export function missingTaskConfiguration(input:TaskInput):string[] {
 }
 
 export function taskConfigurationFieldErrors(input:TaskInput):Partial<Record<'graphId'|'graphVersion'|'nodeId'|'messageType'|'payloadJson',string>> {
+ let payloadError:string|undefined;
+ if(input.channelId){
+  if(!input.payloadJson?.trim())payloadError='Enter the JSON payload sent to the selected channel.';
+  else try{JSON.parse(input.payloadJson);}catch{payloadError='Enter valid JSON for the selected channel.';}
+ }
  return {
   ...(!input.graphId?{graphId:'Choose a workflow.'}:{}),
   ...(!Number.isInteger(input.graphVersion)||input.graphVersion<1?{graphVersion:input.graphId?'Choose a saved workflow version.':'Choose a workflow to select its version.'}:{}),
   ...(!input.nodeId?{nodeId:'Choose the entry agent that will receive this task.'}:{}),
   ...(input.channelId&&!input.messageType?{messageType:'Enter the message type expected by the selected channel.'}:{}),
-  ...(input.channelId&&!input.payloadJson?{payloadJson:'Enter the JSON payload sent to the selected channel.'}:{}),
+  ...(payloadError?{payloadJson:payloadError}:{}),
  };
 }
 
@@ -88,12 +93,12 @@ export function taskConfigurationFieldErrors(input:TaskInput):Partial<Record<'gr
 export function submissionDraftFeedback(task:TaskDraft,review?:TaskReview):{message:string;configure:boolean}|undefined {
  if(task.status!=='draft')return undefined;
  const missing=missingTaskConfiguration(task);
- if(missing.length)return {message:`Task has not started. Complete ${missing.join(', ')} in Workflow & repository and Input & delivery, then save the draft and review requirements.`,configure:true};
+ if(missing.length)return {message:`Task has not started. Complete ${missing.join(', ')} in Advanced settings, then select Run task to save and check the configuration.`,configure:true};
  if(review?.canPrepareEnvironment)return {message:'Task has not started. Review and prepare its Docker environment here, then review again before starting agents.',configure:false};
  const blockers=review?.blockers?.filter(Boolean)??[];
  if(blockers.length)return {message:`Task has not started. ${blockers.join(' ')} Review requirements below for the next step.`,configure:false};
  if(task.resolution&&task.resolution.state!=='resolved')return {message:`Task has not started. ${task.resolution.message} Review the request and settings before continuing.`,configure:true};
- return {message:'Task has not started. Review requirements below and confirm authorization before starting.',configure:false};
+ return {message:'Task has not started. Select Run task to check the saved configuration and continue.',configure:false};
 }
 
 /** Disambiguate registered snapshots without depending on unique display names. */

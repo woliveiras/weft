@@ -77,14 +77,16 @@ it('retains the reviewed new task across its saved-task route transition without
   'GET /api/v1/scm/connections':()=>[],
   'POST /api/v1/tasks':call=>(draft={...call.body as object,id:'tsk_navigation',revision:1,status:'draft'}),
   'GET /api/v1/tasks/tsk_navigation':()=>draft,
+  'GET /api/v1/tasks/tsk_navigation/authorization':()=>({scope:'navigation-scope'}),
+  'GET /api/v1/cost/budgets/preview':()=>({currency:'USD',taskRunBudgetMicros:0,budgets:[]}),
   'GET /api/v1/tasks/tsk_navigation/review':()=>({task:draft,blockers:['Install the test environment'],canStart:false,validation:{},model:{},grants:[]}),
  });
  render(<App/>);
  await screen.findByLabelText('Request');
  await waitFor(()=>expect(screen.getByLabelText('Entry agent')).toHaveProperty('value','worker'));
  await userEvent.type(screen.getByLabelText('Request'),'Inspect the source');
- await userEvent.click(screen.getByRole('button',{name:'Review task'}));
- await waitFor(()=>expect(location.hash).toBe('#/tasks/tsk_navigation?review=1'));
+ await userEvent.click(screen.getByRole('button',{name:'Run task'}));
+ await waitFor(()=>expect(location.hash).toBe('#/tasks/tsk_navigation'));
  await screen.findByRole('heading',{name:'Task draft'});
  await waitFor(()=>expect(screen.getAllByText('Install the test environment').length).toBeGreaterThan(0));
  expect(screen.getByLabelText('Request')).toHaveProperty('value','Inspect the source');

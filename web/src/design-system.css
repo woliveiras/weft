@@ -1081,6 +1081,7 @@ main > .page:not(.fill) {
 .task-environment-panel, .task-environment-controls, .task-build-log,
 .task-environment-confirmation, .task-environment-requirements { display: grid; gap: var(--space-4); min-width: 0; }
 .task-environment-controls .btn-row, .task-environment-controls .check { margin: 0; }
+.task-environment-requirements pre { max-height: 20rem; overflow: auto; }
 .task-environment-controls .check { display: flex; align-items: start; gap: var(--space-2); line-height: 1.6; }
 .task-environment-controls .check input { flex: none; margin-block-start: 5px; }
 .task-environment-confirmation { padding-block-start: var(--space-4); border-block-start: 1px solid var(--border); }

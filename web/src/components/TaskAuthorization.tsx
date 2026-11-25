@@ -9,7 +9,7 @@ export function TaskAuthorization(props:Props) {
  if(props.configurationIssue)return <section className="card task-authorization" aria-label="Task authorization">
   <h2>Authorization</h2><p role="status">{props.configurationIssue}</p>
   <p>Authorization becomes available after you save a complete task configuration. No agents have started.</p>
-  {props.onConfigure&&<><p>In Workflow & repository and Input & delivery, select the workflow version and entry agent, and review the input delivery and result agent. Save draft, then Review requirements and confirm authorization before starting.</p><Btn onClick={props.onConfigure}>Review task settings</Btn></>}
+  {props.onConfigure&&<><p>Choose the workflow and repository. In Advanced settings, select the workflow version and entry agent, and review input delivery and the result agent. Run task saves these choices and shows the launch details. Confirm any access mode change before starting.</p><Btn onClick={props.onConfigure}>Review task settings</Btn></>}
  </section>;
  return <ReviewedTaskAuthorization {...props}/>;
 }
@@ -36,7 +36,7 @@ function ReviewedTaskAuthorization({taskId,canEdit,onChanged,running=false,onCon
   : <p className="muted">{state.loading?'Loading authorization details…':state.error?'Could not load reviewed agent details.':'No reviewed agent details are available for this task.'}</p>}
  <ErrorBox error={state.error||error}/>
  {!state.loading&&!state.error&&state.data?.record&&state.data.record.scope!==state.data.scope&&<p role="alert">Saved authorization is stale. Review the current scope and confirm again before starting.</p>}
- {state.error&&<p>Refreshing authorization only retries the saved configuration. {onConfigure?'Review task settings to repair it, save the draft, then review requirements again.':'Reload this task to check its latest state. If the error persists, ask an administrator to check the saved workflow version.'}</p>}
+ {state.error&&<p>Refreshing authorization only retries the saved configuration. {onConfigure?'Review task settings to repair it, then use Run task to save and check those choices.':'Reload this task to check its latest state. If the error persists, ask an administrator to check the saved workflow version.'}</p>}
  {state.error&&onConfigure&&<Btn onClick={onConfigure}>Review task settings</Btn>}
  <Btn disabled={busy||state.loading} onClick={()=>{setConfirmed(false);void state.reload();}}>{state.loading?'Loading authorization…':'Refresh authorization'}</Btn>
  {canEdit&&state.data&&!state.error&&!state.loading&&(!running||state.data.record)&&<><HelpField label={"Authorization mode"} help={"Ask prompts for gated actions. Workspace access covers reviewed worktree operations. Full access preauthorizes only reviewed grants within task scope; mandatory approvals and installation rules still apply."}><select value={mode} onChange={e=>{setMode(e.target.value as AuthorizationMode);setConfirmed(false);}}><option value="ask">Ask for approval</option><option value="workspace" disabled={running&&state.data?.record?.mode!=="full"}>Workspace access</option><option value="full" disabled={running}>Full access</option></select></HelpField>
