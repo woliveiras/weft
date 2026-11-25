@@ -1,0 +1,22 @@
+.workflow-create { display:grid; align-content:start; gap:var(--space-5, 24px); }
+.workflow-create .page-head { margin-bottom:0; }
+.workflow-create .section-navigation { margin-block:0; }
+.workflow-create .section-navigation button[aria-pressed="true"] { color:var(--primary); background:var(--primary-soft); }
+.workflow-create-fields { border:0; padding:0; margin:0; min-width:0; display:grid; gap:24px; }
+.workflow-create .form { max-width:none; gap:16px; }
+.workflow-create .form :is(h2,h3,p) { margin:0; }
+.workflow-create .form label { display:grid; gap:8px; font-size:inherit; color:var(--text); min-width:0; }
+.workflow-create :is(input,select,textarea) { width:100%; min-width:0; }
+.workflow-create [aria-invalid="true"] { border-color:var(--danger); }
+.workflow-create-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.workflow-create-wide { grid-column:1/-1; }
+.workflow-create-agents { max-height:640px; overflow:auto; display:grid; gap:20px; }
+.workflow-create-agent { border-block-end:1px solid var(--border); padding-block:12px 24px; display:grid; gap:16px; }
+.workflow-create-agent header { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.workflow-create-new-agent { display:grid; gap:16px; border-block-start:1px solid var(--border); padding-block-start:20px; }
+.workflow-create-connection { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)) auto; gap:16px; align-items:end; padding-block:16px; border-block-end:1px solid var(--border); }
+.workflow-create-review-list { max-height:480px; overflow:auto; display:grid; gap:20px; }
+.workflow-create-review-list article { border-block-end:1px solid var(--border); padding-block-end:16px; display:grid; gap:8px; }
+.workflow-create pre { max-height:320px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
+.workflow-create .btn-row { flex-wrap:wrap; gap:12px; }
+@media(max-width:760px) { .workflow-create-grid,.workflow-create-connection { grid-template-columns:minmax(0,1fr); } .workflow-create-wide { grid-column:auto; } }

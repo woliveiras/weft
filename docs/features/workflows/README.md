@@ -8,17 +8,28 @@ workflows.
 
 ## Create the definition
 
-1. An administrator selects **New workflow**. The current creation experience
-   is a modal containing a YAML/JSON definition, not a form wizard.
-2. Paste a definition, upload YAML/JSON or adapt the supplied echo example.
-   The example contains continuous/event echo agents; adapt their loop modes
-   before intending to use the workflow as a task template.
-3. Optionally add an existing agent from the catalogue picker. Choose its
-   explicit version and parameter values. This adds a node to the document;
-   it does not replace example agents or wire channels automatically.
-4. **Validate** checks the document. **Create** also performs server validation,
-   persists the first graph version and opens the canvas. It does not start it.
-   Errors leave the document available for repair.
+1. An administrator selects **New workflow** (`#/graphs/new`). The visual
+   builder starts with identity and a task, event or continuous purpose.
+2. Choose published catalogue agents with explicit versions/parameter values,
+   or add a new native agent with a name and instructions. New agents use Docker
+   isolation with no tools. Their remaining settings can be completed after
+   saving; registration makes them available in the catalogue.
+3. Review each instance's run mode and order. Task-purpose instances must use
+   once/event. The first enabled agent receives task input and the last supplies
+   its result through the proposed `spec.task` defaults.
+4. **Propose connections** produces editable queue ingress/sequential handoffs.
+   Correct/remove proposals before saving. Proposing channels does not make an
+   agent publish messages; its instructions and tool permissions must agree.
+5. **Review workflow** validates the complete definition against the server and
+   presents agent versions, modes, instructions, grants, defaults and channels.
+   **Save workflow** persists a version and opens configuration. Neither action
+   starts agents, builds an environment or grants execution consent. Failed
+   validation or save retains edits; pending save prevents repeat submission.
+6. **Advanced YAML / JSON** supports document upload/edit and catalogue insertion.
+   It retains the visual draft separately; replacing the advanced document from
+   the visual draft requires explicit confirmation. YAML comments are preserved
+   when inserting a selected agent. Cancelling a dirty page or leaving it warns
+   before discarding; drafts do not survive browser reload.
 
 A workflow needs its receiving agents, channels, runtime/model choices, tools
 and workspace/environment configuration to agree. Installation providers and
@@ -58,6 +69,7 @@ values and instance settings belong to the workflow. See [agents](../agents/READ
 | Settings section | Responsibility |
 | --- | --- |
 | General | Stable ID, display name/description and message-chain hop limit |
+| Task defaults | Suggested entry/result agents, input channel/type, project and source control connection for new tasks |
 | Workspace | Repository initialization and Git tracking for the workflow workspace |
 | Environment | Discover/select a toolchain definition and inspect/build its image |
 | Network | Environment network/hosts within the installation policy ceiling |
@@ -69,6 +81,19 @@ Workspace initialization is distinct from selecting a project for a task.
 Existing workspace contents are not replaced just because a clone URL changes.
 Environment builds and trigger saves have their own operations; **Save graph**
 does not imply either happened.
+
+Task defaults are optional, versioned `spec.task` suggestions. An explicit entry
+agent without an input channel uses direct delivery. An input channel must be an
+unconditional queue ingress with one enabled receiver matching that entry, and
+its required message type must match the channel's accepted types. The editor
+discovers projects and source control connections independently, retaining saved
+unavailable choices with an explanation and offering retry on discovery failure.
+Only an administrator can edit the defaults, through the complete graph draft.
+They never grant tools, save consent, start work or change submitted tasks.
+When a new task uses them, explicit task/project entry choices take priority;
+task save and admission still capture/check the concrete workflow version,
+repository base, connection and permissions. Workflows without defaults keep
+their existing unambiguous topology inference.
 
 ## Review and save
 
@@ -98,6 +123,7 @@ has its own confirmation and interruption/redelivery implications.
 Direct workflow execution is useful for message-driven services and loops.
 Starting a [task](../tasks/README.md) is different: the task records a request,
 reviews admission/authorization and creates a separate task-owned graph.
+**New task** on a workflow row carries that workflow into the task editor.
 Continuous/scheduled agents are not automatically valid task entry points.
 
 Administrative workflow deletion is separate from stopping execution and from
@@ -107,13 +133,24 @@ remote changes or removes task history.
 
 ## Implementation and verification map
 
-- [GraphList](../../../web/src/components/GraphList.tsx): table, creation
-  document, catalogue insertion, lifecycle controls and deletion entry point.
+- [GraphList](../../../web/src/components/GraphList.tsx): table, contextual task
+  entry, lifecycle controls and deletion entry point.
+- [WorkflowCreate](../../../web/src/components/WorkflowCreate.tsx) and
+  [creation model](../../../web/src/components/workflowCreation.ts): visual/advanced
+  drafts, catalogue insertion, connection proposals and review-before-save.
+  [Unit tests](../../../web/src/components/workflowCreation.test.ts) and
+  [UI/API integration tests](../../../web/src/components/WorkflowCreate.test.tsx)
+  cover validation, draft preservation, role restrictions and failed/repeated saves.
 - [GraphWorkspace](../../../web/src/components/GraphWorkspace.tsx),
   [GraphCanvas](../../../web/src/components/canvas/GraphCanvas.tsx),
   [GraphSettings](../../../web/src/components/GraphSettings.tsx) and
   [AgentConfiguration](../../../web/src/components/AgentConfiguration.tsx):
   shared draft, navigation, canvas and configuration.
+- [WorkflowTaskDefaults](../../../web/src/components/WorkflowTaskDefaults.tsx),
+  [task defaults helper](../../../web/src/components/taskDefaults.ts) and
+  [graph validation](../../../server/internal/graph/task_defaults.go): reusable
+  suggestions and local binding validation; external resources remain subject
+  to task admission.
 - [API server](../../../server/internal/api/server.go): graph create/update,
   validation, version reads and runtime-action permissions.
 - [GraphWorkspace tests](../../../web/src/components/GraphWorkspace.test.tsx),

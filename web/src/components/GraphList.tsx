@@ -1,33 +1,11 @@
-import { FieldHelp, HelpField } from './FieldHelp';
+import { FieldHelp } from './FieldHelp';
 import { useRef, useState } from 'react';
-import { parse, parseDocument } from 'yaml';
+import { parse } from 'yaml';
 import { ApiError, api, errorMessage } from '../api/client';
-import { nodeWithAgent } from '../api/agents';
-import { AgentPicker } from './AgentBinding';
-import { addAgent, updateNode } from './canvas/edit';
 import type { Graph, GraphAction, GraphSummary } from '../api/types';
 import { Badge, Btn, Empty, ErrorBox, Icon, Modal, PageHeading, fmtDateTime } from './common';
 
 import { listedWorkflows, workflowStates } from './workflowPresentation';
-
-const TEMPLATE = `apiVersion: weft.io/v1
-kind: Graph
-metadata:
-  name: hello-factory
-  description: A producer feeding a consumer through a durable queue.
-spec:
-  nodes:
-    - id: writer
-      runtime: { kind: echo }
-      prompt: Write a short idea and hand it to @output.
-      loop: { mode: continuous, stop: { policy: iterations, maxIterations: 3 } }
-    - id: reader
-      runtime: { kind: echo }
-      prompt: Read @input and summarise it.
-      loop: { mode: event }
-  channels:
-    - { id: ideas, type: queue, from: writer, to: [reader] }
-`;
 
 export function GraphList({
   graphs,
@@ -62,7 +40,6 @@ export function GraphList({
   const lastPage = Math.max(0, Math.ceil(matches.length / pageSize) - 1);
   const currentPage = Math.min(page, lastPage);
   const visible = matches.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
-  const [creating, setCreating] = useState(false);
   const [actionError, setActionError] = useState<string>();
   const [budgetError, setBudgetError] = useState<{ graphId: string; message: string }>();
   const [deletion, setDeletion] = useState<{ graph: GraphSummary; reason: string }>();
@@ -123,7 +100,7 @@ export function GraphList({
       <PageHeading title="Workflows" description="Find workflows, configure their agents and manage execution.">
         <div className="btn-row">
           <Btn disabled={loading} onClick={onChanged}>Refresh workflows</Btn>
-          {canCreate && <Btn tone="primary" onClick={() => setCreating(true)}>New workflow</Btn>}
+          {canCreate && <Btn tone="primary" onClick={() => { location.hash = '#/graphs/new'; }}>New workflow</Btn>}
         </div>
       </PageHeading>
       <section className="card connections-panel" aria-label="Workflow list" aria-busy={loading}>
@@ -173,6 +150,7 @@ export function GraphList({
                 <td>{s.record.updatedAt ? <time dateTime={s.record.updatedAt}>{fmtDateTime(s.record.updatedAt)}</time> : 'Date unavailable'}
                   {s.record.startedAt && <span className="muted small connection-meta">Started {fmtDateTime(s.record.startedAt)}</span>}</td>
                 <td><div className="btn-row workflow-actions" aria-label={`Actions for ${name}`}>
+                  {canControl && <a className="btn btn-sm" href={`#/tasks/new?workflow=${encodeURIComponent(id)}`}>New task<span className="sr-only"> for {name}</span></a>}
                   {canControl && (state === 'stopped' || state === 'failed' ?
                     <Btn small tone="primary" disabled={disabled} onClick={() => void act(id, 'start')}><Icon name="play" />{busy ? 'Starting…' : 'Start'}</Btn> : <>
                       <Btn small disabled={disabled} onClick={() => void act(id, 'stop')}><Icon name="stop" />{busy && pendingAction.action === 'stop' ? 'Stopping…' : 'Stop'}</Btn>
@@ -211,120 +189,8 @@ export function GraphList({
           </div>
         </Modal>
       )}
-      {creating && (
-        <CreateDialog
-          initial={TEMPLATE}
-          title="New workflow"
-          onClose={() => setCreating(false)}
-          onCreated={(id) => {
-            setCreating(false);
-            onChanged();
-            onOpen(id);
-          }}
-        />
-      )}
+
     </div>
-  );
-}
-
-function CreateDialog({
-  initial,
-  title,
-  onClose,
-  onCreated,
-}: {
-  initial: string;
-  title: string;
-  onClose: () => void;
-  onCreated: (id: string) => void;
-}) {
-  const [text, setText] = useState(initial);
-  const [picker, setPicker] = useState(false);
-  const [error, setError] = useState<string>();
-  const [issues, setIssues] = useState<string[]>([]);
-
-  const doc = (): Graph | { yaml: string } => {
-    const t = text.trim();
-    if (t.startsWith('{')) return JSON.parse(t) as Graph;
-    return { yaml: t };
-  };
-
-  const validate = async () => {
-    try {
-      const r = await api.validateGraph(doc());
-      setIssues([
-        ...(r.errors ?? []).map((e) => `✗ ${e.path}: ${e.message}`),
-        ...(r.warnings ?? []).map((e) => `⚠ ${e.path}: ${e.message}`),
-        ...(r.valid ? ['✓ valid'] : []),
-      ]);
-      setError(undefined);
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  };
-
-  const create = async () => {
-    try {
-      const s = await api.createGraph(doc());
-      onCreated(s.graph.metadata.id);
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  };
-
-  const onFile = async (f?: File) => {
-    if (f) setText(await f.text());
-  };
-
-  if (picker) return <AgentPicker onCancel={() => setPicker(false)} onSelect={(binding, definition) => {
-    setPicker(false);
-    try {
-      const json = text.trimStart().startsWith('{');
-      const document = json ? undefined : parseDocument(text);
-      if (document?.errors.length) throw document.errors[0];
-      const source: Graph = document ? document.toJS() : JSON.parse(text);
-      if (!source?.spec || !Array.isArray(source.spec.nodes)) throw new Error('Add a spec.nodes list before selecting an agent.');
-      const rightEdge = Math.max(0, ...source.spec.nodes.map(node => node.position?.x ?? 0));
-      const {graph, id} = addAgent(source, {x: rightEdge + 280, y: 0});
-      const node = graph.spec.nodes.find(item => item.id === id);
-      if (!node) throw new Error('Could not add the selected agent.');
-      const linked = nodeWithAgent(node, binding, definition);
-      if (document) {
-        document.addIn(['spec', 'nodes'], linked);
-        setText(document.toString());
-      } else {
-        setText(JSON.stringify(updateNode(graph, id, linked), null, 2));
-      }
-      setIssues([]);
-      setError(undefined);
-    } catch (cause) {
-      setError(errorMessage(cause));
-    }
-  }} />;
-
-  return (
-    <Modal title={title} onClose={onClose}>
-      <p className="muted small">Paste or upload a graph document (YAML or JSON).</p>
-      <input type="file" accept=".yaml,.yml,.json" onChange={(e) => void onFile(e.target.files?.[0])} />
-      <HelpField label="Workflow document" help="Define the workflow in YAML or JSON. The document includes agents, channels and optional defaults. Use Validate to review issues before creating the workflow.">
-        <textarea className="code-editor mono" rows={18} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
-      </HelpField>
-      {issues.length > 0 && (
-        <ul className="small">
-          {issues.map((i, k) => (
-            <li key={k}>{i}</li>
-          ))}
-        </ul>
-      )}
-      <ErrorBox error={error} />
-      <div className="btn-row">
-        <Btn onClick={() => setPicker(true)}>Add existing agent</Btn>
-        <Btn onClick={validate}>Validate</Btn>
-        <Btn tone="primary" onClick={create}>
-          Create
-        </Btn>
-      </div>
-    </Modal>
   );
 }
 

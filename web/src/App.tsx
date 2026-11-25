@@ -5,6 +5,7 @@ import {ProjectsPage, type ProjectView} from './components/ProjectsPage';
 import { ActivityPage } from './components/ActivityPage';
 import { activityHash, parseActivityState, type ActivityRouteState } from './components/activityView';
 import { TasksPage } from './components/TasksPage';
+import {WorkflowCreate} from './components/WorkflowCreate';
 import { TaskExecutionPage, taskOwnerId } from './components/TaskExecutionPage';
 import { PrimaryNavigation } from './components/PrimaryNavigation';
 import { runSection, type RunSection } from './components/runPresentation';
@@ -36,7 +37,7 @@ import { ThemeSwitcher } from './components/ThemeSwitcher';
  *   #/g/<id>/<tab>[?c=<correlation id>]  #/g/<id>/settings/<section>
  */
 type Route =
-  | { view: 'graphs' }
+  | { view: 'graphs'; create?:boolean }
   | { view: 'agents'; agentId?: string; create?: boolean }
   | { view: 'activity'; activity: ActivityRouteState }
   | { view: 'projects'; projectView?: ProjectView }
@@ -59,6 +60,7 @@ export function parseRoute(hash: string): Route {
     view: 'projects',
     ...(parts[1] === 'new' ? { projectView: 'register' as const } : parts[1] === 'import' ? { projectView: 'import' as const } : {}),
   };
+  if (parts[0] === 'graphs' && parts[1] === 'new') return {view:'graphs',create:true};
   if (parts[0] === 'tasks') return {view:'tasks', ...(parts[1] === 'new' ? {create:true} : parts[1] ? {taskId:decodeURIComponent(parts[1])} : {})};
   if (parts[0] === 'approvals') return { view: 'approvals' };
   if (parts[0] === 'skills') return { view: 'skills', skills:parseSkillsRoute(parts,qs) };
@@ -100,6 +102,7 @@ export function routeHash(r: Route): string {
     return r.create ? '#/agents/new' : r.agentId ? `#/agents/${encodeURIComponent(r.agentId)}` : '#/agents';
   }
   if (r.view === 'projects') return r.projectView === 'register' ? '#/projects/new' : r.projectView === 'import' ? '#/projects/import' : '#/projects';
+  if (r.view === 'graphs'&&r.create) return '#/graphs/new';
   if (r.view === 'tasks') return r.create ? '#/tasks/new' : r.taskId ? `#/tasks/${encodeURIComponent(r.taskId)}` : '#/tasks';
   if (r.view === 'approvals') return '#/approvals';
   if (r.view === 'skills') return skillsHash(r.skills);
@@ -156,7 +159,7 @@ function Shell() {
     const f = () => {
       const previous = route;
       const next = parseRoute(location.hash);
-      if(previous.view==='agents'&&routeHash(next)!==routeHash(previous)){
+      if((previous.view==='agents'||(previous.view==='graphs'&&previous.create))&&routeHash(next)!==routeHash(previous)){
         if(configurationDraft.current.busy||(configurationDraft.current.dirty&&!window.confirm('Discard unpublished configuration changes?'))){history.replaceState(null,'',routeHash(previous));return;}
         configurationDraft.current={dirty:false,busy:false};
       }
@@ -251,7 +254,8 @@ function Shell() {
           {route.view === 'activity' && <ActivityPage state={route.activity} onChange={activity => go({ view: 'activity', activity })} />}
           {route.view === 'projects' && <ProjectsPage key={route.projectView ?? 'list'} mode={route.projectView} nativeProfile={info.data?.nativeProfile===true} canEdit={info.data?.identity?.role==='admin'}/>}
           {route.view === 'tasks' && <TasksPage key={route.taskId ?? (route.create ? 'new' : 'list')} id={route.taskId} create={route.create} info={info.data} graphs={list}/>}
-          {route.view === 'graphs' && (
+          {route.view==='graphs'&&route.create&&<WorkflowCreate canCreate={info.data?.identity?.role==='admin'} onDraftState={onConfigurationDraft} onCreated={summary=>{void graphs.reload();go({view:'graph',id:summary.graph.metadata.id,tab:'agent',agentId:summary.graph.spec.nodes[0]?.id});}} onCancel={()=>go({view:'graphs'})}/>}
+          {route.view === 'graphs' && !route.create && (
             <GraphList
               graphs={list}
               canDelete={info.data?.identity?.role === 'admin'}
