@@ -42,6 +42,10 @@ The [historical source map](./historical-source-map.md) records the migration of
 
 ## Product and tasks
 
+### In progress
+
+- [TASK-009 — Guided Operator Journeys](./product-and-tasks/guided-operator-journeys/spec.md) — `in-progress`. Contextual task entry, reusable workflow defaults, guided creation and explicit agent adoption.
+
 ### Implemented
 
 - [TASK-001 — Release 1 Product Contracts](./product-and-tasks/release-one-product-contracts/spec.md) — `implemented`. Define shared release boundaries, observable errors, and audit identity.
