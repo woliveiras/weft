@@ -168,16 +168,21 @@ test("Activity shows historical progressive guidance to a viewer", async ({ page
 
 test('catalogue filters and full-page editing preserve drafts, conflicts and read-only roles',async({page})=>{
   const headers={Authorization:'Bearer e2e-admin-token'};
+  const created:Array<{title:string;at:string}>=[];
   await page.addInitScript(()=>{if(!localStorage.getItem('weftToken'))localStorage.setItem('weftToken','e2e-admin-token');});
   for(let i=0;i<21;i++) {
-    expect((await page.request.post('/api/v1/skills',{headers,data:{id:`catalogue-${i}`,title:`Catalogue skill ${i}`,description:'Reusable review guidance',body:'# Review\n**Security** first.\n- Inspect inputs',enabled:i!==0}})).ok()).toBe(true);
+    const response=await page.request.post('/api/v1/skills',{headers,data:{id:`catalogue-${i}`,title:`Catalogue skill ${i}`,description:'Reusable review guidance',body:'# Review\n**Security** first.\n- Inspect inputs',enabled:i!==0}});
+    expect(response.ok()).toBe(true);
+    created.push(await response.json());
   }
   expect((await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id:'skill-usage',name:'Skill usage'},spec:{instructions:{skillIds:['catalogue-20']},nodes:[{id:'reviewer',name:'Reviewer',runtime:{kind:'echo'}}]}}})).ok()).toBe(true);
   await page.goto('/#/skills');
   await page.getByLabel('Search skills').fill('Catalogue skill');
   await page.getByRole('combobox',{name:'Origin',exact:true}).selectOption('custom');
   const table=page.getByRole('table');await expect(table.getByRole('row')).toHaveCount(21);
-  await expect(table.getByRole('row').nth(1)).toContainText('Catalogue skill 20');
+  // API writes can share a millisecond. Any record at the newest timestamp is valid first.
+  const newest=Math.max(...created.map(skill=>Date.parse(skill.at)));
+  expect(created.filter(skill=>Date.parse(skill.at)===newest).map(skill=>skill.title)).toContain(await table.getByRole('row').nth(1).getByRole('link').innerText());
   await page.getByRole('button',{name:'Next',exact:true}).click();await expect(table.getByRole('row')).toHaveCount(2);
   await page.getByLabel('Skill status').selectOption('disabled');await expect(table.getByRole('row')).toHaveCount(2);
   await page.getByLabel('Skill status').selectOption('current');

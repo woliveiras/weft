@@ -339,3 +339,91 @@ These results were recorded at the time of the run. The documentation migration 
   image build compiled the Go binaries. No cross-browser or assistive-technology
   conformance is claimed. The production build reports a large-chunk
   advisory; it completed successfully.
+
+## Configuration field feedback — 2026-11-24
+
+- AC-003: shared HelpField controls preserve native constraints and reveal a
+  danger border, adjacent explanation, aria-invalid and an associated error
+  description after invalid submission or field interaction. Optional empty
+  inputs and untouched new forms stay neutral. Corrected fields clear their
+  own indication without hiding other errors or discarding drafts.
+- Custom field maps cover skill content, task defaults, monthly budgets,
+  model prices, provider settings, retention and delegation limits/profiles.
+  Existing connection and project controls use the shared native feedback.
+  Validation does not grant permissions, confirm a policy, submit an invalid
+  request, change saved credentials or bypass role/consent gates. Unmapped
+  service failures remain form-level errors rather than guessed field errors.
+- A shared focus request opens containing disclosures and survives deferred
+  content mounting; it is consumed once and does not steal focus while editing.
+  Saving invalid skill content from Workflows returns to Content/Write and
+  preserves the draft. A duplicate installation budget points to the visible
+  Scope control; an invalid price retry clears the earlier save confirmation.
+- Independent subagent review identified those skill/budget feedback defects
+  and the stale price notice; fixes and regression tests were reviewed again
+  without remaining blocking findings.
+- Docker validation: pnpm exec tsc --noEmit, pnpm test --maxWorkers=2 and
+  pnpm build passed, with 705 tests in 119 files. Log:
+  /tmp/weft-form-feedback-full3.txt. Shared-helper tests cover native callbacks,
+  descriptions, independent correction, deferred mounting and focus; component
+  integrations exercise API-client writes, invalid-request prevention,
+  dependency failures, retained drafts and existing access/review behavior.
+- Chromium passed 23 distinct scenarios across form-feedback, task-prompts,
+  task-request-layout, field-help, administration, delegation-settings and
+  instructions using a disposable backend and deterministic prompt provider.
+  The combined run passed 22 cases; its existing catalogue-order fixture assumed
+  consecutive writes had distinct millisecond timestamps. The assertion now
+  checks the newest recorded timestamp, allowing ties. The affected instructions
+  and form-feedback files then passed all 8 cases. Logs:
+  /tmp/weft-form-feedback-e2e3.txt and /tmp/weft-form-feedback-e2e-final.txt.
+  An unrelated PAT test now awaits its saved checkbox prefill before asserting
+  that replacing the token resets that review; its authorization assertions
+  and API checks remain intact.
+- Standard docker compose up -d --build --no-deps weftd completed; Compose
+  reported healthy and /healthz returned ok. Read-only local browser inspection
+  confirmed the missing workflow version and entry agent have visible borders
+  and field explanations. No user draft, authorization, budget or integration
+  was saved and no user task was started during verification.
+- This extension changes console feedback only. Earlier full Go/lint checks
+  for draft deletion remain recorded in TASK-005; Go/Python suites were not
+  repeated for this UI extension. The image build compiled the server normally.
+  The web build retains its existing large-chunk advisory. Automated Chromium
+  results do not establish cross-browser or assistive-technology conformance.
+
+## Task environment monitoring and refresh feedback — 2026-11-25
+
+- AC-001/AC-004 maintainer refinement: environment preparation moves from the
+  persistent task header into the linked Environment & logs section. The header
+  retains its short summary and entry point. Build logs are inert text in a
+  bounded, keyboard-scrollable area, with optional follow-latest output. Review,
+  confirmation, administrator controls and the separate start remain explicit.
+  Navigation uses document flow and transparent background, preventing the
+  previous overlap with long grant/log content. Controls and access details use
+  the shared spacing tokens.
+- Manual Refresh task immediately shows pending feedback, prevents repeat clicks
+  and announces a completed snapshot check even if the state did not change.
+  Errors keep the last snapshot with a stale marker and retry; cost errors are
+  separately identified. Initial environment loading/failure is distinct from
+  absence confirmed by a valid snapshot.
+- Docker validation: full web suite passed 717 tests across 119 files before
+  the final initial-snapshot refinement; afterward all 21 affected
+  helper/component tests, TypeScript and production build passed. All 22
+  Chromium draft, prompt and layout integration cases passed against a
+  disposable backend. The monitor scenario passed again with delayed initial
+  loading, initial failure and successful recovery after the final refinement.
+  Successful requests use the real API; injected delays/failures affect only
+  the progress HTTP boundary. No execution is recorded from monitoring.
+- Browser checks cover the task-scoped link, reload/back navigation, keyboard
+  access, read-only inspection, disabled start, failure recovery, bounded logs,
+  transparent/static navigation and 390 px reflow without document overflow.
+  Dark-theme screenshots of the header/navigation and preparation/log cards
+  were visually inspected. Automated checks do not establish accessibility
+  conformance; assistive-technology testing remains outside this validation.
+- Independent subagent review found a misleading initial empty state (P2),
+  corrected with component and browser regressions. No authorization, isolation
+  or concurrency findings remained in the static review. Backend code was
+  unchanged by this UI delta, so Go suites were not rerun. The existing
+  bundle-size advisory remains. No user task was prepared, changed or started
+  during verification. No commit or push.
+- Local rebuild used `docker compose up -d --build --no-deps weftd`.
+  The container is healthy, `/healthz` returned `{"status":"ok"}` and localhost
+  serves the verified `index-BUbnQVz0.js` bundle.

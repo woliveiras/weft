@@ -132,7 +132,11 @@ func (m Manager) Get(ctx context.Context, id string) (*Draft, error) {
 	if err != nil {
 		return nil, err
 	}
-	return decode(rec)
+	d, err := decode(rec)
+	if err == nil && d.Status == "deleted" {
+		return nil, storage.ErrNotFound
+	}
+	return d, err
 }
 func (m Manager) List(ctx context.Context, after string, limit int) (Page, error) {
 	page := Page{Items: []*Draft{}}
@@ -150,13 +154,16 @@ func (m Manager) List(ctx context.Context, after string, limit int) (Page, error
 		if rec.Key <= prefix+after {
 			continue
 		}
-		if len(page.Items) == limit {
-			page.Next = page.Items[len(page.Items)-1].ID
-			break
-		}
 		d, err := decode(rec)
 		if err != nil {
 			return Page{}, err
+		}
+		if d.Status == "deleted" {
+			continue
+		}
+		if len(page.Items) == limit {
+			page.Next = page.Items[len(page.Items)-1].ID
+			break
 		}
 		page.Items = append(page.Items, d)
 	}
@@ -189,6 +196,9 @@ func (m Manager) ListRecentlyUpdated(ctx context.Context, after string, limit in
 		draft, err := decode(record)
 		if err != nil {
 			return Page{}, err
+		}
+		if draft.Status == "deleted" {
+			continue
 		}
 		if after == "" || compareUpdatedTasks(draft, &boundary) > 0 {
 			eligible = append(eligible, draft)
@@ -314,4 +324,30 @@ func (m Manager) Transition(ctx context.Context, d *Draft, status, actor string)
 	}
 	d.Revision = rev
 	return d, nil
+}
+
+// DeleteDraft removes a never-prepared draft from ordinary task reads. A minimal
+// tombstone retains the CAS revision so stale saves, model results and admission
+// claims cannot resurrect it. No execution, workspace or repository is deleted.
+func (m Manager) DeleteDraft(ctx context.Context, id string, revision int64, actor string) error {
+	d, err := m.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if revision < 1 || revision != d.Revision || d.Status != "draft" || d.ExecutionGraphID != "" || d.EnvironmentApprovalID != "" {
+		return fmt.Errorf("%w: only an unchanged draft without execution or environment preparation can be deleted", storage.ErrConflict)
+	}
+	if err := m.Store.AppendEvent(ctx, domain.NewEvent("task.transition_requested", d.GraphID, map[string]any{
+		"taskId": id, "from": d.Status, "to": "deleted", "expectedRevision": revision,
+	}).WithActor(actor)); err != nil {
+		return err
+	}
+	// Keep only identity and lifecycle metadata, not the discarded request.
+	tombstone := Draft{ID: id, Status: "deleted", CreatedBy: d.CreatedBy, CreatedAt: d.CreatedAt, UpdatedBy: actor, UpdatedAt: time.Now().UTC()}
+	b, err := json.Marshal(tombstone)
+	if err != nil {
+		return err
+	}
+	_, err = m.Store.PutSetting(ctx, prefix+id, b, revision, actor)
+	return err
 }

@@ -130,7 +130,7 @@ function RegisterProject({ canEdit }: { canEdit: boolean }) {
     <p className="muted">Choose an existing Git checkout on the Weft server. For Docker installations, use its path inside the container.</p>
     {!canEdit && <p>An administrator must register repositories.</p>}
     <fieldset disabled={!canEdit || busy}>
-      <label>Project name<input value={name} required maxLength={200} onChange={event => setName(event.target.value)} /></label>
+      <HelpField label="Project name" help="A display name used when selecting this repository for a task."><input value={name} required maxLength={200} onChange={event => setName(event.target.value)} /></HelpField>
       <HelpField label="Repository path" help="An absolute path to an existing Git repository on the Weft server. For a Docker installation, use the mounted path inside the container.">
         <input value={path} required maxLength={4096} placeholder="/absolute/path/to/repository" onChange={event => {
           setPath(event.target.value);

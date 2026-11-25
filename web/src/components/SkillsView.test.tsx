@@ -190,8 +190,13 @@ it('retains skill edits across detail tabs and rejects invalid UTF-8 byte size b
   expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Changed title');
   expect(screen.getByText('Unsaved changes')).toBeTruthy();
   fireEvent.change(screen.getByLabelText('Markdown body'),{target:{value:'é'.repeat(8193)}});
+  fireEvent.click(screen.getByRole('link',{name:'Workflows'}));
+  await screen.findByText('No saved workflow uses this skill.');
   fireEvent.click(screen.getByRole('button',{name:'Save'}));
   expect(await screen.findByText('Markdown instructions must fit within 16 KiB of UTF-8 text.')).toBeTruthy();
+  expect(screen.getByLabelText('Title')).toHaveProperty('value','Changed title');
+  expect(screen.getByLabelText('Markdown body').getAttribute('aria-invalid')).toBe('true');
+  await waitFor(()=>expect(document.activeElement).toBe(screen.getByLabelText('Markdown body')));
   expect(fixture.find('PUT','/api/v1/skills/review')).toHaveLength(0);
 });
 it('shows a failed association save without discarding narrowed selection',async()=>{
@@ -265,4 +270,22 @@ it('keeps built-in copy actions hidden for viewers and handles a missing copy so
   render(<SkillsView role="admin" route={{create:true,copyFrom:'missing'}} onChanged={()=>{}}/>);
   await screen.findByRole('heading',{name:'Source skill not found'});
   expect(screen.queryByRole('button',{name:'Save'})).toBeNull();
+});
+
+it('identifies missing skill fields after save and reveals invalid Markdown while previewing',async()=>{
+ const fixture=fakeApi({'GET /api/v1/skills':()=>[]});
+ render(<SkillsView role="admin" onChanged={()=>{}} route={{create:true}}/>);
+ await screen.findByLabelText('Skill ID');
+ fireEvent.change(screen.getByLabelText('Skill ID'),{target:{value:'new-skill'}});
+ expect(screen.queryByRole('alert')).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Preview'}));
+ fireEvent.click(screen.getByRole('button',{name:'Save'}));
+ const title=screen.getByLabelText('Title');const body=screen.getByLabelText('Markdown body');
+ expect(title.getAttribute('aria-invalid')).toBe('true');
+ expect(body.getAttribute('aria-invalid')).toBe('true');
+ expect(document.activeElement).toBe(title);
+ expect(fixture.find('PUT','/api/v1/skills/new-skill')).toHaveLength(0);
+ fireEvent.change(title,{target:{value:'New skill'}});
+ expect(title.getAttribute('aria-invalid')).toBeNull();
+ expect(body.getAttribute('aria-invalid')).toBe('true');
 });

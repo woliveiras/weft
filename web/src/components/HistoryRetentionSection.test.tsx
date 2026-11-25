@@ -34,7 +34,10 @@ it('rejects invalid limits and handles conflicts without silent retry', async ()
  render(<HistoryRetentionSection canManage />);
  const input = await screen.findByLabelText('Retention days (1–90)');
  await userEvent.clear(input); await userEvent.type(input, '91');
- expect((screen.getByRole('button', { name: 'Review retention changes' }) as HTMLButtonElement).disabled).toBe(true);
+ await userEvent.click(screen.getByRole('button', { name: 'Review retention changes' }));
+ expect(input.getAttribute('aria-invalid')).toBe('true');
+ expect(document.activeElement).toBe(input);
+ expect(screen.queryByRole('button', {name:'Confirm retention changes'})).toBeNull();
  await userEvent.clear(input); await userEvent.type(input, '3');
  await userEvent.click(screen.getByRole('button', { name: 'Review retention changes' }));
  await userEvent.click(screen.getByRole('button', { name: 'Confirm retention changes' }));

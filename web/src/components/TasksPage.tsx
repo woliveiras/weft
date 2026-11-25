@@ -1,3 +1,4 @@
+import {TaskDraftDelete} from './TaskDraftDelete';
 import {TaskTracking} from './TaskDetails';
 import { HelpField } from './FieldHelp';
 import {TaskAuthorization} from "./TaskAuthorization";
@@ -11,7 +12,7 @@ import type {TaskDraft, TaskInput, TaskReview} from '../api/tasks';
 import {useAsync} from '../hooks/useData';
 import {Btn, ErrorBox} from './common';
 import {TasksList} from './TasksList';
-import {workflowTaskDefaults,updateTaskInput,outcomeRequest,promptTitle,missingTaskConfiguration} from './taskDefaults';
+import {isTaskEnvironmentPreparationNotice,defaultTaskWorkflowVersion,workflowTaskDefaults,updateTaskInput,outcomeRequest,promptTitle,missingTaskConfiguration,projectChoiceLabel,submissionDraftFeedback,taskConfigurationFieldErrors} from './taskDefaults';
 import {budgetLabel,money} from './cost';
 
 export const taskOutcomes = [
@@ -22,6 +23,10 @@ export const taskOutcomes = [
   {id:'freeform',label:'Something else',description:'Describe the work and the result you expect.'},
 ];
 const empty: TaskInput = {title:'',request:'',outcome:'freeform',graphId:'',graphVersion:0,nodeId:''};
+
+function editableInput(draft:TaskDraft):TaskInput {
+  return {source:draft.source,executionMode:draft.executionMode,title:draft.title,request:draft.request,outcome:draft.outcome,graphId:draft.graphId,graphVersion:draft.graphVersion,nodeId:draft.nodeId,resultNodeId:draft.resultNodeId,scmConnection:draft.scmConnection,projectId:draft.projectId,baseCommit:draft.baseCommit,channelId:draft.channelId,messageType:draft.messageType,payloadJson:draft.payloadJson};
+}
 
 export function TasksPage({id,create,info,graphs}: {id?:string;create?:boolean;info?:Info;graphs:GraphSummary[]}) {
   const detail = useAsync(()=>id?api.task(id):Promise.resolve(undefined),[id]);
@@ -76,41 +81,53 @@ function TaskBudgetPreview({workflow,project}:{workflow:string;project?:string})
 }
 
 function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:{draft?:TaskDraft;graphs:GraphSummary[];canEdit:boolean;canStart:boolean;nativeProfile:boolean;noModel:boolean;admin:boolean}) {
-  const [input,setInput] = useState<TaskInput>(()=>draft?{source:draft.source,executionMode:draft.executionMode,title:draft.title,request:draft.request,outcome:draft.outcome,graphId:draft.graphId,graphVersion:draft.graphVersion,nodeId:draft.nodeId,resultNodeId:draft.resultNodeId,scmConnection:draft.scmConnection,projectId:draft.projectId,baseCommit:draft.baseCommit,channelId:draft.channelId,messageType:draft.messageType,payloadJson:draft.payloadJson}:empty);
+  const [input,setInput] = useState<TaskInput>(()=>draft?editableInput(draft):empty);
   const [submissionKey,setSubmissionKey]=useState(()=>crypto.randomUUID());
  const [importOpen,setImportOpen]=useState(false);
-  const [settingsOpen,setSettingsOpen]=useState(false);
-  const settingsRef=useRef<HTMLDetailsElement>(null);
-  const openSettings=()=>{setSettingsOpen(true);if(settingsRef.current){settingsRef.current.open=true;settingsRef.current.querySelector('summary')?.focus();}};
+  const settingsRef=useRef<HTMLElement>(null);
+  const environmentRef=useRef<HTMLElement>(null);
+  const openEnvironmentReview=()=>{environmentRef.current?.scrollIntoView?.({block:'start',behavior:'smooth'});environmentRef.current?.focus();};
+  const openSettings=()=>{settingsRef.current?.scrollIntoView?.({block:'start',behavior:'smooth'});settingsRef.current?.focus();};
   const [customTitle,setCustomTitle]=useState(!!draft);
   const projects=useAsync(()=>api.projects(),[]);
   const [saved,setSaved] = useState(draft);
   const [reviewResult,setReview] = useState<TaskReview>();
   const [error,setError] = useState<string>();
   const [busy,setBusy] = useState(false);
+  const [submitting,setSubmitting] = useState(false);
+  const [preparingEnvironment,setPreparingEnvironment] = useState(false);
+  const [submissionFeedback,setSubmissionFeedback] = useState<ReturnType<typeof submissionDraftFeedback>>(()=>draft?.submitted?submissionDraftFeedback(draft):undefined);
   const [confirmed,setConfirmed] = useState(false);
   const [dirty,setDirty] = useState(false);
   const review=!dirty&&reviewResult?.task.revision===saved?.revision?reviewResult:undefined;
   const selected=graphs.find(g=>g.graph.metadata.id===input.graphId)?.graph;
+  useEffect(()=>{
+    if(!canEdit)return;
+    const next=defaultTaskWorkflowVersion(input,selected);
+    if(next===input)return;
+    setInput(next);setDirty(true);setReview(undefined);setConfirmed(false);
+    if(saved)setSubmissionFeedback(previous=>previous?submissionDraftFeedback({...saved,...next}):undefined);
+  },[input,selected,canEdit,saved]);
   // Drafts can still be saved; running needs a model when the workflow does.
   const modelBlocked=noModel&&needsModel(selected);
   const missing=missingTaskConfiguration(input);
   const savedMissing=saved?missingTaskConfiguration(saved):[];
+  const fieldErrors=saved?.submitted||saved?.resolution||reviewResult?taskConfigurationFieldErrors(input):{};
   const manualReview=!!saved&&!saved.resolution&&savedMissing.length===0;
   useEffect(()=>{
     if(!dirty)return;
     const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};
     window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);
   },[dirty]);
-  const change=(next:Partial<TaskInput>)=>{setSubmissionKey(crypto.randomUUID());setInput(old=>updateTaskInput(old,next));setDirty(true);setReview(undefined);setConfirmed(false);};
+  const change=(next:Partial<TaskInput>)=>{setSubmissionFeedback(undefined);setSubmissionKey(crypto.randomUUID());setInput(old=>updateTaskInput(old,next));setDirty(true);setReview(undefined);setConfirmed(false);};
   const editRequest=(request:string)=>change({request,...(!customTitle?{title:promptTitle(request)}:{})});
   const save=async()=>{
-    setBusy(true);setError(undefined);
+    setBusy(true);setSubmissionFeedback(undefined);setError(undefined);
     try {const result=await api.saveTask(input,saved?.id,saved?.revision);setSaved(result);setDirty(false);setReview(undefined);if(!saved)location.hash=`#/tasks/${encodeURIComponent(result.id)}`;}
     catch(e){setError(errorMessage(e));}finally{setBusy(false);}
   };
   const resolve=async()=>{
-    setBusy(true);setError(undefined);
+    setBusy(true);setSubmissionFeedback(undefined);setError(undefined);
     try {
       const result=await api.resolveTaskPrompt(input,saved?.id,saved?.revision);
       setSaved(result);setInput({source:result.source,title:result.title,request:result.request,outcome:result.outcome,graphId:result.graphId,graphVersion:result.graphVersion,nodeId:result.nodeId,resultNodeId:result.resultNodeId,channelId:result.channelId,messageType:result.messageType,payloadJson:result.payloadJson,projectId:result.projectId,baseCommit:result.baseCommit,executionMode:result.executionMode});setDirty(false);setReview(undefined);setConfirmed(false);
@@ -119,25 +136,40 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
   };
   useEffect(()=>{if(!draft?.submitted||draft.status!=='draft')return;let disposed=false;void api.reviewTask(draft.id).then(value=>{if(!disposed)setReview(value);}).catch(e=>{if(!disposed)setError(errorMessage(e));});return()=>{disposed=true;};},[draft?.id,draft?.submitted]);
   const submit=async()=>{
-    setBusy(true);setError(undefined);
-    try{const result=await api.submitTaskPrompt(input,submissionKey,saved?.id,saved?.revision);const task=result.task;
-      setSaved(task);setInput(task);setDirty(false);setReview(result.review);setConfirmed(false);setSubmissionKey(crypto.randomUUID());
+    setBusy(true);setSubmitting(true);setSubmissionFeedback(undefined);setError(undefined);
+    try{
+      // Continuing a manually configured draft must not send it through interpretation,
+      // which deliberately rebuilds bindings. Save first, then review that exact revision.
+      if(saved){
+        setReview(undefined);setConfirmed(false);
+        if(missing.length>0){
+          setSubmissionFeedback(submissionDraftFeedback({...saved,...input}));
+          return;
+        }
+        const task=dirty?await api.saveTask(input,saved.id,saved.revision):saved;
+        setSaved(task);setDirty(false);setReview(undefined);setConfirmed(false);
+        const checked=await api.reviewTask(task.id);
+        setReview(checked);setSubmissionFeedback(submissionDraftFeedback(task,checked));
+        return;
+      }
+      const result=await api.submitTaskPrompt(input,submissionKey);const task=result.task;
+      setSaved(task);setInput(editableInput(task));setDirty(false);setReview(result.review);setSubmissionFeedback(submissionDraftFeedback(task,result.review));setConfirmed(false);setSubmissionKey(crypto.randomUUID());
       if(!saved)location.hash=`#/tasks/${encodeURIComponent(task.id)}`;
-    }catch(e){setError(errorMessage(e));}finally{setBusy(false);}
+    }catch(e){setError(errorMessage(e));}finally{setBusy(false);setSubmitting(false);}
   };
   const inspect=async()=>{
-    if(!saved)return;setBusy(true);setError(undefined);setConfirmed(false);
+    if(!saved)return;setBusy(true);setSubmissionFeedback(undefined);setError(undefined);setConfirmed(false);
     try{setReview(await api.reviewTask(saved.id));}catch(e){setError(errorMessage(e));}finally{setBusy(false);}
   };
   const prepareEnvironment=async()=>{
-    if(!saved||!review||!confirmed)return;
-    setBusy(true);setError(undefined);
+    if(!saved||!review||!confirmed||!review.canPrepareEnvironment)return;
+    setBusy(true);setPreparingEnvironment(true);setSubmissionFeedback(undefined);setError(undefined);
     try{setSaved(await api.prepareTaskEnvironment(saved.id,review.task.revision));setReview(undefined);}
-    catch(e){setError(errorMessage(e));try{setSaved(await api.task(saved.id));}catch(readError){setError(`${errorMessage(e)}; ${errorMessage(readError)}`);}}finally{setBusy(false);}
+    catch(e){setError(errorMessage(e));try{setSaved(await api.task(saved.id));}catch(readError){setError(`${errorMessage(e)}; ${errorMessage(readError)}`);}}finally{setBusy(false);setPreparingEnvironment(false);}
   };
   const start=async()=>{
     if(!saved||!review||!confirmed)return;
-    setBusy(true);setError(undefined);
+    setBusy(true);setSubmissionFeedback(undefined);setError(undefined);
     try{setSaved(await api.startTask(saved.id,review.task.revision));setReview(undefined);}
     catch(e){setError(errorMessage(e));}finally{setBusy(false);}
   };
@@ -147,67 +179,97 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
     {saved?.environmentApprovalId&&<p>Environment preparation requires a decision in <a href="#/approvals">Approvals</a>. The issue remains in progress.</p>}
     {saved?.launchError&&<p role="alert">{saved.launchError}</p>}
     {modelBlocked&&<NoModelProvider admin={admin}/>}
-    {input.graphId&&<TaskBudgetPreview workflow={input.graphId} project={input.projectId}/>}
-    <form className="card form task-request-form" aria-label="Task request" onInvalidCapture={e=>{
-      const details=(e.target as HTMLElement).closest('details');
-      if(details){details.open=true;setSettingsOpen(true);}
-    }} onSubmit={e=>{e.preventDefault();void save();}}>
+    <form className="task-request-form" aria-label="Task request" onSubmit={e=>{e.preventDefault();void save();}}>
       <fieldset disabled={!canEdit||busy}>
+        <section className="card form task-editor-section" aria-labelledby="task-request-heading">
+          <header><h2 id="task-request-heading">1. Describe the work</h2><p className="muted">Give the agents a clear request and the result you expect.</p></header>
         <HelpField label={"Request"} help={"Describe what work should be done and how to judge the result. Include file names or constraints that the agent cannot infer from the repository."}><textarea required rows={8} placeholder="Describe the work you want the agents to do and the result you expect." maxLength={16384} value={input.request} onChange={e=>editRequest(e.target.value)}/></HelpField>
-        <p>Run task authorizes a separate execution of the selected workflow with its existing permissions. Weft checks requirements first; missing configuration or required approvals keep the task waiting. Saving alone keeps a draft.</p>
-        <div className="row"><Btn tone="primary" disabled={!input.request.trim()||busy||!canStart||modelBlocked||(manualReview&&dirty)} onClick={()=>void (manualReview?inspect():submit())}>{manualReview?'Review and run':saved?.submitted?'Continue task':'Run task'}</Btn>
-        <Btn disabled={!input.request.trim()||busy||!canEdit} onClick={()=>void resolve()}>Resolve request</Btn></div>
-        <p>Resolve request uses the configured default model to interpret and save your request. Your workflow selection takes priority, then a named workflow, then Software Factory. Title, project and environment choices are retained; input bindings are rebuilt. No agents start.</p>{manualReview&&<p>Review and run checks your saved manual configuration without interpreting the request again. Review requirements and confirm authorization before starting.</p>}
+          <div className="task-field-grid">
+        <HelpField label={"Goal"} help={"Select the expected delivery format. Use it to make clear whether the task should present findings, make changes or hand off a result."}><select value={input.outcome} onChange={e=>change({outcome:e.target.value,request:outcomeRequest(input,e.target.value),...(!customTitle?{title:promptTitle(outcomeRequest(input,e.target.value))}:{})})}>{taskOutcomes.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}</select><small className="muted">{taskOutcomes.find(o=>o.id===input.outcome)?.description}</small></HelpField>
+        <HelpField label="Title" help="A short name used to identify this task in lists and its history. It starts from the first line of your request; editing it keeps your chosen title."><input maxLength={200} required value={input.title} onChange={e=>{setCustomTitle(true);change({title:e.target.value});}}/></HelpField>
+          </div>
+          <div className="task-interpretation">
+            <Btn disabled={!input.request.trim()||busy||!canEdit} onClick={()=>void resolve()}>Resolve request</Btn>
+            <p className="muted small">Optional: ask the default model to suggest task settings and save the request. Your title, project and environment choices are retained; input bindings are rebuilt. No agents start.</p>
+          </div>
         {saved?.resolution&&<aside aria-label="Request interpretation"><p>{saved.resolution.message}</p>{saved.resolution.repository&&<p>Repository: {saved.resolution.repository}</p>}{['needs_model','model_error'].includes(saved.resolution.state)&&<a href="#/models">Configure models</a>}<p>Your original request is preserved. Resolving never grants tool access.</p>{savedMissing.length>0&&<><p>Task setup is incomplete: {savedMissing.join(', ')}. Retry Resolve request, or configure it manually without using the model.</p><Btn onClick={openSettings}>Configure task manually</Btn></>}</aside>}
-        <HelpField label={"Workflow"} help={"Choose the saved workflow to run this task. Review the agents, their versions and the permissions used by the task."}><select required value={input.graphId} onChange={e=>{const g=graphs.find(g=>g.graph.metadata.id===e.target.value)?.graph;change({graphId:e.target.value,graphVersion:g?.metadata.version??0,...workflowTaskDefaults(g,input.title,input.request)});}}>
+        </section>
+        <section ref={settingsRef} tabIndex={-1} className="card form task-editor-section" aria-labelledby="task-settings-heading">
+          <header><h2 id="task-settings-heading">2. Workflow &amp; repository</h2><p className="muted">Review where the work will run and which repository it will use.</p></header>
+          <div className="task-field-grid">
+        <HelpField label={"Workflow"} error={fieldErrors.graphId} help={"Choose the saved workflow to run this task. Review the agents, their versions and the permissions used by the task."}><select required value={input.graphId} onChange={e=>{const g=graphs.find(g=>g.graph.metadata.id===e.target.value)?.graph;change({graphId:e.target.value,graphVersion:g?.metadata.version??0,...workflowTaskDefaults(g,input.title,input.request)});}}>
           <option value="">Select workflow</option>{!selected&&input.graphId&&<option value={input.graphId}>{input.graphId} (unavailable)</option>}
           {graphs.map(({graph:g})=><option key={g.metadata.id} value={g.metadata.id}>{g.metadata.name||g.metadata.id}</option>)}
         </select></HelpField>
+            <HelpField label="Workflow version" error={fieldErrors.graphVersion} help="The current saved workflow version is selected by default. Saving pins that version to this task. Existing pins do not change when a workflow is published; select the current version and review again to update a draft.">
+              <select required disabled={!selected?.metadata.version} value={input.graphVersion||''} onChange={e=>change({graphVersion:Number(e.target.value)})}>
+                {!input.graphVersion&&!selected?.metadata.version&&<option value="">Select a workflow</option>}
+                {selected?.metadata.version&&<option value={selected.metadata.version}>Current workflow version (Version {selected.metadata.version})</option>}
+                {!!input.graphVersion&&input.graphVersion!==selected?.metadata.version&&<option value={input.graphVersion}>Version {input.graphVersion} (saved)</option>}
+              </select>
+            </HelpField>
+        <HelpField label={"Project"} help={"Links the task to a registered repository and its preferences. Choose the project whose files the task should use."}><select value={input.projectId??''} onChange={e=>{const p=projects.data?.find(p=>p.id===e.target.value);change({projectId:p?.id,baseCommit:p?.head,executionMode:p?.executionMode??'workflow'});}}>
+          <option value="">No repository (managed workspace)</option>{input.projectId&&!projects.data?.some(p=>p.id===input.projectId)&&<option value={input.projectId}>{input.projectId} (saved selection)</option>}{projects.data?.map(p=><option key={p.id} value={p.id}>{projectChoiceLabel(p)}</option>)}
+        </select>
+          {input.projectId&&<small className="muted">Base commit: <code>{input.baseCommit}</code>. A separate worktree will be created on the Weft server. Uncommitted source files are not copied.</small>}
+          <small className="muted">Choose the repository whose files this task should use, or import one below. No repository creates an empty managed workspace.</small>
+        </HelpField>
         <HelpField label={"Execution environment"} help={"Use the workflow environment or an eligible project preference when available. The choice controls where task commands run."}><select value={input.executionMode??'workflow'} onChange={e=>change({executionMode:e.target.value as TaskInput['executionMode']})}>
           <option value="workflow">Use workflow environment</option><option value="local" disabled={!nativeProfile}>Local worktree{!nativeProfile?' (native Weft required)':''}</option><option value="sandbox">Sandbox</option>
         </select></HelpField>
-        <p>Environment selection is checked against the workflow; it does not change agent isolation or permissions. Local worktrees use the native Weft host and do not isolate processes or network access. <a href="https://woliveiras.com/posts/why-git-worktrees-matter-coding-agents/" target="_blank" rel="noreferrer">About worktrees</a></p>
-        {input.executionMode==='sandbox'&&<p>Sandbox requires all enabled agents to use Docker isolation and the configured Docker/Colima daemon to be available. Weft never falls back to local execution.</p>}
-        <p>New tasks ask for tool approval by default. Save or resolve your request to review and confirm Workspace access or Full access. Mandatory workflow approvals and installation restrictions always apply.</p>
-        <ErrorBox error={projects.error}/>
-        <details ref={settingsRef} open={settingsOpen} onToggle={e=>setSettingsOpen(e.currentTarget.open)}>
-          <summary>Review settings</summary>
-          <div className="task-review-fields">
-        <HelpField label={"Goal"} help={"Select the expected delivery format. Use it to make clear whether the task should present findings, make changes or hand off a result."}><select value={input.outcome} onChange={e=>change({outcome:e.target.value,request:outcomeRequest(input,e.target.value),...(!customTitle?{title:promptTitle(outcomeRequest(input,e.target.value))}:{})})}>{taskOutcomes.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}</select><small className="muted">{taskOutcomes.find(o=>o.id===input.outcome)?.description}</small></HelpField>
-        <label>Title<input maxLength={200} required value={input.title} onChange={e=>{setCustomTitle(true);change({title:e.target.value});}}/></label>
-        <HelpField label={"Project"} help={"Links the task to a registered repository and its preferences. Choose the project whose files the task should use."}><select value={input.projectId??''} onChange={e=>{const p=projects.data?.find(p=>p.id===e.target.value);change({projectId:p?.id,baseCommit:p?.head,executionMode:p?.executionMode??'workflow'});}}>
-          <option value="">No repository (managed workspace)</option>{projects.data?.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-          {input.projectId&&<small className="muted">Base commit: <code>{input.baseCommit}</code>. A separate worktree will be created on the Weft server. Uncommitted source files are not copied.</small>}
-          <small className="muted">Use a registered project or import a public repository below. The source checkout is retained; each task gets a separate worktree at the selected commit.</small>
-        </HelpField>
-        <p className="muted">Unambiguous workflow inputs and result agents are suggested below. Review them before saving. Models and permissions are unchanged.</p>
-        <HelpField label={"Input delivery"} help={"Choose how to send the request to the workflow. A channel delivers a structured message to eligible receivers; direct entry targets the selected agent."}><select value={input.channelId??''} onChange={e=>{const c=selected?.spec.channels?.find(c=>c.id===e.target.value);change({channelId:c?.id,messageType:c?(c.types?.length===1&&!/[?*]/.test(c.types[0])?c.types[0]:''):undefined,payloadJson:c?JSON.stringify({title:input.title,description:input.request},null,2):undefined,...(c?{nodeId:c.to?.[0]??''}:{})});}}>
-          <option value="">Direct agent instruction</option>{selected?.spec.channels?.filter(c=>!c.from&&c.to?.length===1&&(!c.type||c.type==='queue')&&!c.when).map(c=><option key={c.id} value={c.id}>{c.id} → {c.to?.[0]}</option>)}
-        </select></HelpField>
-        {input.channelId&&<><HelpField label={"Message type"} help={"Use the message type expected by the workflow\u2019s channel or routing conditions. For example, issue.opened must match the type consumed by the workflow."}><input required maxLength={128} value={input.messageType??''} onChange={e=>change({messageType:e.target.value})}/></HelpField><HelpField label={"Input payload (JSON)"} help={"Additional structured data delivered with the request. Use valid JSON and fields the receiving workflow understands."}><textarea required rows={6} maxLength={16384} value={input.payloadJson??''} onChange={e=>change({payloadJson:e.target.value})}/></HelpField><p>The selected channel receives this JSON. Request text is retained for context; it is not sent separately. Check the workflow's expected message type and fields.</p></>}
-        <HelpField label={"Entry agent"} help={"The workflow node that starts or receives the task. Pick the agent responsible for interpreting the request."}><select required value={input.nodeId} onChange={e=>change({nodeId:e.target.value})}>
+          </div>
+          {projects.loading&&<p role="status">Loading registered projects…</p>}
+          <ErrorBox error={projects.error}/>
+          {projects.error&&<Btn onClick={()=>void projects.reload()}>Retry projects</Btn>}
+          <div className="task-import-entry">
+            <Btn aria-expanded={importOpen} onClick={()=>setImportOpen(!importOpen)}>{importOpen?'Close repository import':'Import repository from URL'}</Btn>
+            <p className="muted small">Import a Git snapshot when the repository is not registered yet. This requires administrator approval and does not start agents.</p>
+          </div>
+          {importOpen&&<RepositoryImport nativeProfile={nativeProfile} canEdit={canStart&&!busy} canSelect={canEdit&&!busy} initialURL={saved?.resolution?.repository} onProject={project=>{change({projectId:project.id,baseCommit:project.head});void projects.reload();}}/>}
+          <p className="muted small">Workflow environment inherits agent isolation. Sandbox requires Docker for every enabled agent; local worktrees require native Weft and do not isolate processes or network access. <a href="https://woliveiras.com/posts/why-git-worktrees-matter-coding-agents/" target="_blank" rel="noreferrer">About worktrees</a></p>
+          {input.executionMode==='sandbox'&&<p>Sandbox requires all enabled agents to use Docker isolation and the configured Docker/Colima daemon to be available. Weft never falls back to local execution.</p>}
+        </section>
+        <section className="card form task-editor-section" aria-labelledby="task-routing-heading">
+          <header><h2 id="task-routing-heading">3. Input &amp; delivery</h2><p className="muted">Confirm the receiving agent, message format and final delivery. Suggestions do not change workflow permissions.</p></header>
+          <div className="task-field-grid">
+        <HelpField label={"Entry agent"} error={fieldErrors.nodeId} help={"The workflow node that starts or receives the task. Pick the agent responsible for interpreting the request."}><select required value={input.nodeId} onChange={e=>change({nodeId:e.target.value})}>
           <option value="">Select entry agent</option>{input.nodeId&&!selected?.spec.nodes.some(n=>n.id===input.nodeId)&&<option value={input.nodeId}>{input.nodeId} (unavailable)</option>}
           {selected?.spec.nodes.filter(n=>!n.disabled).map(n=><option key={n.id} value={n.id}>{n.name||n.id}</option>)}
         </select></HelpField>
-        <TaskIssueSource source={input.source} grants={selected?.spec.nodes.find(n=>n.id===input.nodeId)?.tools??selected?.spec.defaults?.tools??[]} onChange={source=>change({source})}/>
         <HelpField label={"Result agent"} help={"The workflow node expected to produce the final task result. Use a distinct node when the workflow has a separate finishing stage."}><select value={input.resultNodeId??''} onChange={e=>change({resultNodeId:e.target.value})}>
           <option value="">Same as entry</option>
           {selected?.spec.nodes.filter(n=>!n.disabled).map(n=><option key={n.id} value={n.id}>{n.name||n.id}</option>)}
         </select></HelpField>
-        <SCMHandOffField value={input.scmConnection??''} onChange={scmConnection=>change({scmConnection:scmConnection||undefined})}/>
-        <p className="muted">Version {input.graphVersion||'not selected'}. Saving a request does not change the workflow or grant tools.</p>
-        {selected&&selected.metadata.version!==input.graphVersion&&<Btn onClick={()=>change({graphVersion:selected.metadata.version??0})}>Use current workflow version</Btn>}
           </div>
-        </details>
+        <HelpField label={"Input delivery"} help={"Choose how to send the request to the workflow. A channel delivers a structured message to eligible receivers; direct entry targets the selected agent."}><select value={input.channelId??''} onChange={e=>{const c=selected?.spec.channels?.find(c=>c.id===e.target.value);change({channelId:c?.id,messageType:c?(c.types?.length===1&&!/[?*]/.test(c.types[0])?c.types[0]:''):undefined,payloadJson:c?JSON.stringify({title:input.title,description:input.request},null,2):undefined,...(c?{nodeId:c.to?.[0]??''}:{})});}}>
+          <option value="">Direct agent instruction</option>{selected?.spec.channels?.filter(c=>!c.from&&c.to?.length===1&&(!c.type||c.type==='queue')&&!c.when).map(c=><option key={c.id} value={c.id}>{c.id} → {c.to?.[0]}</option>)}
+        </select></HelpField>
+        {input.channelId&&<><HelpField label={"Message type"} error={fieldErrors.messageType} help={"Use the message type expected by the workflow\u2019s channel or routing conditions. For example, issue.opened must match the type consumed by the workflow."}><input required maxLength={128} value={input.messageType??''} onChange={e=>change({messageType:e.target.value})}/></HelpField><HelpField label={"Input payload (JSON)"} error={fieldErrors.payloadJson} help={"Additional structured data delivered with the request. Use valid JSON and fields the receiving workflow understands."}><textarea required rows={6} maxLength={16384} value={input.payloadJson??''} onChange={e=>change({payloadJson:e.target.value})}/></HelpField><p>The selected channel receives this JSON. Request text is retained for context; it is not sent separately. Check the workflow's expected message type and fields.</p></>}
+        <TaskIssueSource source={input.source} grants={selected?.spec.nodes.find(n=>n.id===input.nodeId)?.tools??selected?.spec.defaults?.tools??[]} onChange={source=>change({source})}/>
+        <SCMHandOffField value={input.scmConnection??''} onChange={scmConnection=>change({scmConnection:scmConnection||undefined})}/>
+        </section>
       </fieldset>
-      <details open={importOpen} onToggle={e=>setImportOpen(e.currentTarget.open)}><summary>Import repository from URL</summary>{importOpen&&<RepositoryImport nativeProfile={nativeProfile} canEdit={canStart} canSelect={canEdit} initialURL={saved?.resolution?.repository} onProject={project=>{change({projectId:project.id,baseCommit:project.head});void projects.reload();setSettingsOpen(true);}}/>}</details>
-      {saved?.resolution?.state==='needs_repository'&&!importOpen&&<Btn onClick={()=>setImportOpen(true)}>Prepare repository</Btn>}
-      <ErrorBox error={error}/>
-      <div className="row"><Btn type="submit" tone="primary" disabled={!canEdit||busy}>Save draft</Btn><Btn disabled={!saved||dirty||busy} onClick={()=>void inspect()}>Review requirements</Btn></div>
-      <p className="task-request-status" role="status">{dirty?'Unsaved changes. Save draft before reviewing authorization.':saved?'Draft saved. No agents have been started.':''}</p>
+      <section className="card task-editor-actions" aria-label="Save and review task">
+        {input.graphId&&<TaskBudgetPreview workflow={input.graphId} project={input.projectId}/>}
+        <p>Save keeps an editable draft. Review checks requirements before you authorize execution; mandatory approvals and installation restrictions still apply.</p>
+        <ErrorBox error={error}/>
+        <div className="task-editor-action-row">
+          <div className="row"><Btn type="submit" disabled={!canEdit||busy}>Save draft</Btn>
+          <Btn tone="primary" disabled={!input.request.trim()||busy||!canStart||modelBlocked} aria-busy={submitting} onClick={()=>void submit()}>{submitting?'Continuing task…':manualReview?'Review and run':saved?.submitted?'Continue task':'Run task'}</Btn>
+          <Btn disabled={!saved||dirty||busy} onClick={()=>void inspect()}>Review requirements</Btn></div>
+          {saved&&<TaskDraftDelete task={saved} canEdit={canEdit} disabled={busy} onDeleted={()=>{setDirty(false);location.hash='#/tasks';}}/>}
+        </div>
+        <p className="task-request-status" role="status" aria-atomic="true">{submitting?'Continuing task. Checking the request and execution requirements…':submissionFeedback?submissionFeedback.message:dirty?'Unsaved changes. Save draft before reviewing authorization.':saved?'Draft saved. No agents have been started.':'No agents have been started.'}</p>
+        {submissionFeedback?.configure&&<Btn onClick={openSettings}>Complete task setup</Btn>}
+        {review?.canPrepareEnvironment&&<aside className="task-environment-next-step" aria-label="Environment preparation required">
+          <h3>Prepare the task environment</h3>
+          <p>This task needs its Docker environment before agents can run. You can prepare it from this page.</p>
+          <ol><li>Review the build definition and confirm preparation.</li><li>Approve the build in Approvals if requested.</li><li>After the build, review the prepared environment and start the task.</li></ol>
+          <Btn onClick={openEnvironmentReview}>Review environment preparation</Btn>
+        </aside>}
+      </section>
     </form>
-    {saved&&<TaskAuthorization key={`${saved.id}:${saved.revision}`} taskId={saved.id} canEdit={canStart} configurationIssue={dirty?'Save your task changes before reviewing authorization.':missing.length>0?`Task setup is incomplete: ${missing.join(', ')}.`:undefined} onConfigure={canEdit?openSettings:undefined} onChanged={()=>{setReview(undefined);setConfirmed(false);}}/>}
+    {saved&&savedMissing.length===0&&<TaskAuthorization key={`${saved.id}:${saved.revision}`} taskId={saved.id} canEdit={canStart} configurationIssue={dirty?'Save your task changes before reviewing authorization.':missing.length>0?`Task setup is incomplete: ${missing.join(', ')}.`:undefined} onConfigure={canEdit?openSettings:undefined} onChanged={()=>{setReview(undefined);setConfirmed(false);}}/>}
     {review&&savedMissing.length>0&&<article className="card" aria-label="Task requirements"><h2>Requirements</h2>
       {review.blockers.map(b=><p key={b}>{b}</p>)}
       <p>Complete and save the task configuration before reviewing execution requirements. The execution environment and agent permissions have not been reviewed yet.</p>
@@ -215,18 +277,31 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin}:
     </article>}
     {review&&savedMissing.length===0&&<article className="card" aria-label="Task requirements"><h2>Requirements</h2>
       <p>Current workflow version: {review.currentGraphVersion} · Requested environment: {review.task.executionMode||'workflow'}</p>
-      {review.blockers.map(b=><p key={b}>{b}</p>)}
-      {[...(review.validation.errors??[]),...(review.validation.warnings??[])].map((v,i)=><p key={i}>{v.path}: {v.message}</p>)}
+      {review.canPrepareEnvironment&&<section ref={environmentRef} tabIndex={-1} className="task-environment-review" aria-label="Review task environment preparation">
+        <h3>Review the environment build</h3>
+        <p>Weft will prepare a Docker environment on its sandbox daemon. Building can download images and dependencies and execute the setup commands shown below.</p>
+        <p><strong>Preparation does not start agents.</strong> The task stays waiting for any required approval. After the build, you will review the prepared environment before starting.</p>
+        {review.environmentDefinition&&<section aria-label="Task environment definition">
+          <p>{review.environmentDefinition.image?`Image: ${review.environmentDefinition.image}`:'Build from the workflow Dockerfile.'}</p>
+          <details><summary>Build definition and network settings</summary><pre>{JSON.stringify(review.environmentDefinition,null,2)}</pre></details>
+        </section>}
+        {!canStart&&<p>An administrator must prepare this task environment.</p>}
+        <label className="check"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I reviewed the workflow and authorize a separate execution copy.</label>
+        <Btn tone="primary" disabled={!canStart||!confirmed||busy||modelBlocked} aria-busy={preparingEnvironment} onClick={()=>void prepareEnvironment()}>{preparingEnvironment?'Preparing environment…':'Prepare task environment'}</Btn>
+        {preparingEnvironment&&<p role="status">Requesting environment preparation. Any required build approval will appear in Approvals. No agents are starting.</p>}
+      </section>}
+      {review.blockers.filter(b=>!review.canPrepareEnvironment||!isTaskEnvironmentPreparationNotice(b)).map(b=><p key={b}>{b}</p>)}
+      {[...(review.validation.errors??[]),...(review.validation.warnings??[])].filter(v=>!review.canPrepareEnvironment||v.path!=='spec.environment'||!isTaskEnvironmentPreparationNotice(v.message)).map((v,i)=><p key={i}>{v.path}: {v.message}</p>)}
+      {review.canPrepareEnvironment&&<details><summary>Technical validation details</summary>{review.blockers.map((b,i)=><p key={i}>{b}</p>)}{[...(review.validation.errors??[]),...(review.validation.warnings??[])].map((v,i)=><p key={`validation-${i}`}>{v.path}: {v.message}</p>)}</details>}
       {review.project&&<p>Project: {review.project.name} · Source: {review.project.path} · Base: {input.baseCommit} · Task worktree: {review.workspacePath}. Commands use the workflow's configured isolation and permissions.</p>}
       <p>Execution copy: {review.executionGraphId}. Starting runs the whole workflow with a fresh managed workspace. Input goes through the selected channel or directly to the entry agent; the selected result agent supplies the result.</p>
       <p>Entry agent model: {review.model?.provider||'runtime default'} / {review.model?.name||'runtime default'}. Isolation: {review.isolation||'process'}. Process execution uses the server machine and is not a sandbox.</p>
       <TaskRequirementRepairs agents={review.agents??[]}/>
-      {review.environmentDefinition&&<section aria-label="Task environment definition"><h3>Environment to prepare</h3><p>Building may execute setup commands under the installation sandbox policies and limits. Build completion does not start agents.</p><pre>{JSON.stringify(review.environmentDefinition,null,2)}</pre></section>}
+      {review.environmentDefinition&&!review.canPrepareEnvironment&&<section aria-label="Task environment definition"><h3>Environment to prepare</h3><p>Building may execute setup commands under the installation sandbox policies and limits. Build completion does not start agents.</p><pre>{JSON.stringify(review.environmentDefinition,null,2)}</pre></section>}
       <p>Tool permissions remain unchanged. Every call still passes gateway policies and approvals.</p>
       <details><summary>All workflow agents and permissions</summary>{review.agents?.map(agent=><section key={agent.id}><h3>{agent.id}</h3><p>{agent.model?.provider} / {agent.model?.name} · {agent.isolation}</p><pre>{JSON.stringify(agent.grants??[],null,2)}</pre></section>)}</details>
-      <label><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I reviewed the workflow and authorize a separate execution copy.</label>
+      {!review.canPrepareEnvironment&&<label className="check"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I reviewed the workflow and authorize a separate execution copy.</label>}
       {!canStart&&<p>An administrator must start this task, because it creates an execution copy.</p>}
-      {review.canPrepareEnvironment&&<Btn tone="primary" disabled={!canStart||!confirmed||busy||modelBlocked} onClick={()=>void prepareEnvironment()}>Prepare task environment</Btn>}
       <Btn tone="primary" disabled={!canStart||!review.canStart||!confirmed||busy||modelBlocked} onClick={()=>void start()}>Start task</Btn>
       <a href={`#/g/${encodeURIComponent(input.graphId)}/agent?agent=${encodeURIComponent(input.nodeId)}&section=general`}>Review agent configuration</a>
     </article>}

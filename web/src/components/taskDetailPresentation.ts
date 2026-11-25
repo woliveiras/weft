@@ -1,7 +1,7 @@
 import type {Execution} from '../api/types';
 
 export const taskSections = {
-  overview: 'Overview', changes: 'Changes & checks', activity: 'Activity',
+  overview: 'Overview', environment: 'Environment & logs', changes: 'Changes & checks', activity: 'Activity',
   request: 'Request', settings: 'Settings & access',
 } as const;
 export type TaskSection = keyof typeof taskSections;

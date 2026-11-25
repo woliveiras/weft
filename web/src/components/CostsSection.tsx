@@ -1,3 +1,4 @@
+import {useFieldValidation} from './useFieldValidation';
 import { HelpField } from './FieldHelp';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, errorMessage } from '../api/client';
@@ -223,15 +224,17 @@ function MonthlyBudgetEditor({definition,budget,definitions,currency,disabled,on
   const [busy,setBusy]=useState(false);
   const input=useRef<HTMLInputElement>(null);
   useEffect(()=>{input.current?.focus();},[]);
+  const micros=toMicros(limit);
+  const nextId=scope==='installation'?'*':id.trim();
+  const validation=useFieldValidation({
+    limit: !removing && (!micros || micros>1_000_000_000_000_000) ? 'Enter a monthly limit greater than zero, up to 1,000,000,000.' : undefined,
+    id: !removing && !nextId ? 'Enter the ID this budget applies to.' : !removing && definitions.some(d=>d!==definition && d.scope===scope && d.id===nextId) ? 'A monthly budget already exists for this scope and ID. Edit that budget instead.' : undefined,
+    interrupt: !removing && interrupt!=='' && (!/^\d+$/.test(interrupt) || Number(interrupt)<101 || Number(interrupt)>1000) ? 'Interrupt level must be between 101 and 1000, or empty for none.' : undefined,
+  });
   const title=definition?`Edit ${budgetLabel(definition)} budget`:'Add monthly budget';
   const save=async()=>{
     setError(undefined);
-    const micros=toMicros(limit);
-    const nextId=scope==='installation'?'*':id.trim();
-    if(!removing && (!micros || micros>1_000_000_000_000_000)) return setError('Enter a monthly limit greater than zero, up to 1,000,000,000.');
-    if(!removing && !nextId) return setError('Enter the ID this budget applies to.');
-    if(!removing && interrupt!=='' && (!/^\d+$/.test(interrupt) || Number(interrupt)<101 || Number(interrupt)>1000)) return setError('Interrupt level must be between 101 and 1000, or empty for none.');
-    if(!removing && definitions.some(d=>d!==definition && d.scope===scope && d.id===nextId)) return setError('A monthly budget already exists for this scope and ID. Edit that budget instead.');
+    if(!validation.validate()) return;
     const next:BudgetDefinition={...definition,scope,id:nextId,limitMicros:micros!,interruptPercent:interrupt?Number(interrupt):undefined};
     const updated=definition?definitions.flatMap(d=>d===definition?(removing?[]:[next]):[d]):[...definitions,next];
     setBusy(true);
@@ -243,21 +246,21 @@ function MonthlyBudgetEditor({definition,budget,definitions,currency,disabled,on
       await onSaved(result,message);
     } catch(e) {setError(errorMessage(e));} finally {setBusy(false);}
   };
-  return <form className="budget-inline-editor card form" aria-label={title} onSubmit={event=>{event.preventDefault();void save();}}>
+  return <form ref={validation.ref} className="budget-inline-editor card form" aria-label={title} onSubmit={event=>{event.preventDefault();void save();}}>
     <h4>{title}</h4>
     <p className="small">Changes apply to the current month and future months. Recorded spending is preserved.</p>
     {budget?.raisedBy && <p role="note">This month includes a manual raise. Its effective limit cannot fall below that raised amount; the recurring limit below may differ from the card.</p>}
     {budget && toMicros(limit)!==undefined && toMicros(limit)! < budget.chargedMicros+budget.reservedMicros && <p role="note">This limit is below current spending and reservations. New calls may be blocked and affected runs may pause.</p>}
     <fieldset disabled={disabled || busy}>
       {!removing && <div className="budget-editor-fields">
-        <HelpField label="Scope" help="Installation covers all usage. User, project and workflow budgets limit the specified ID; the tightest applicable budget wins.">
+        <HelpField error={scope==='installation'?validation.errors.id:undefined} label="Scope" help="Installation covers all usage. User, project and workflow budgets limit the specified ID; the tightest applicable budget wins.">
           <select value={scope} onChange={event=>{setScope(event.target.value as BudgetDefinition['scope']);setId(event.target.value==='installation'?'*':'');}}>
             <option value="installation">Installation</option><option value="user">User</option><option value="project">Project</option><option value="workflow">Workflow</option>
           </select>
         </HelpField>
-        {scope!=='installation' && <HelpField label="Applies to" help="Enter the user, project or workflow ID covered by this budget."><input value={id} onChange={event=>setId(event.target.value)}/></HelpField>}
-        <HelpField label={`Monthly limit (${currency})`} help="The recurring spending ceiling for a UTC calendar month. It also updates this month, subject to any manually raised floor."><input ref={input} value={limit} onChange={event=>setLimit(event.target.value)} inputMode="decimal"/></HelpField>
-        <HelpField label="Interrupt level (%)" help="Optional: 101–1000 percent of the monthly limit. Stops a running call that crosses the threshold and pauses affected work. Empty disables this threshold."><input value={interrupt} onChange={event=>setInterrupt(event.target.value)} placeholder="None" inputMode="numeric"/></HelpField>
+        {scope!=='installation' && <HelpField error={validation.errors.id} label="Applies to" help="Enter the user, project or workflow ID covered by this budget."><input value={id} onChange={event=>setId(event.target.value)}/></HelpField>}
+        <HelpField error={validation.errors.limit} label={`Monthly limit (${currency})`} help="The recurring spending ceiling for a UTC calendar month. It also updates this month, subject to any manually raised floor."><input ref={input} value={limit} onChange={event=>setLimit(event.target.value)} inputMode="decimal"/></HelpField>
+        <HelpField error={validation.errors.interrupt} label="Interrupt level (%)" help="Optional: 101–1000 percent of the monthly limit. Stops a running call that crosses the threshold and pauses affected work. Empty disables this threshold."><input value={interrupt} onChange={event=>setInterrupt(event.target.value)} placeholder="None" inputMode="numeric"/></HelpField>
       </div>}
       {removing && <p role="note">Remove this recurring limit? Other applicable budgets still apply. Recorded spending is retained.</p>}
       <div className="btn-row budget-editor-actions">
@@ -279,26 +282,29 @@ function DefaultTaskBudget({canEdit,currency}: {canEdit:boolean;currency:string}
   const [saved,setSaved]=useState<string>();
   const [busy,setBusy]=useState(false);
   useEffect(()=>{if(policy.data){setRunBudget(policy.data.taskRunBudgetMicros?fromMicros(policy.data.taskRunBudgetMicros):'');setWarning(String(policy.data.warningPercent));}},[policy.data]);
+  const run=runBudget.trim()===''?0:toMicros(runBudget);
+  const validation=useFieldValidation({
+    run: run===undefined || run>1_000_000_000_000_000 ? 'Enter the task run budget as an amount up to 1,000,000,000, or leave it empty for none.' : undefined,
+    warning: !/^\d+$/.test(warning) || Number(warning)<1 || Number(warning)>100 ? 'Warning level must be between 1 and 100.' : undefined,
+  });
   const save=async()=>{
     setError(undefined);setSaved(undefined);
-    const run=runBudget.trim()===''?0:toMicros(runBudget);
-    if(run===undefined || run>1_000_000_000_000_000) return setError('Enter the task run budget as an amount up to 1,000,000,000, or leave it empty for none.');
-    if(!/^\d+$/.test(warning) || Number(warning)<1 || Number(warning)>100) return setError('Warning level must be between 1 and 100.');
+    if(!validation.validate()) return;
     setBusy(true);
     try {
-      const result=await api.saveCostPolicy({taskRunBudgetMicros:run,warningPercent:Number(warning)});
+      const result=await api.saveCostPolicy({taskRunBudgetMicros:run!,warningPercent:Number(warning)});
       policy.setData(result);setSaved('Defaults saved. New task runs use this budget; existing run limits are unchanged.');
     } catch(e) {setError(errorMessage(e));} finally {setBusy(false);}
   };
-  return <form className="card form default-task-budget" aria-label="Default budget per task" onSubmit={event=>{event.preventDefault();void save();}}>
+  return <form ref={validation.ref} className="card form default-task-budget" aria-label="Default budget per task" onSubmit={event=>{event.preventDefault();void save();}}>
     <h3>Default budget per task</h3><p className="muted small">Suggested ceiling for new task runs. Changing it does not change existing run limits or monthly budgets.</p>
     {policy.loading && <p role="status">Loading task defaults…</p>}
     <ErrorBox error={policy.error}/>
     {policy.error && <Btn onClick={()=>void policy.reload()}>Retry task defaults</Btn>}
     <fieldset disabled={!canEdit || busy || policy.loading || !!policy.error || !policy.data}>
       <div className="budget-editor-fields">
-        <HelpField label={`Task run budget (${currency})`} help="Default ceiling for each new task run. Leave empty to use only applicable monthly limits. Existing runs keep their own limits."><input value={runBudget} onChange={event=>setRunBudget(event.target.value)} inputMode="decimal" placeholder="No per-task limit"/></HelpField>
-        <HelpField label="Default warning level (%)" help="Default warning threshold for budgets without their own override. Monthly budgets may also inherit this warning level; it does not change any spending ceiling."><input value={warning} onChange={event=>setWarning(event.target.value)} inputMode="numeric"/></HelpField>
+        <HelpField error={validation.errors.run} label={`Task run budget (${currency})`} help="Default ceiling for each new task run. Leave empty to use only applicable monthly limits. Existing runs keep their own limits."><input value={runBudget} onChange={event=>setRunBudget(event.target.value)} inputMode="decimal" placeholder="No per-task limit"/></HelpField>
+        <HelpField error={validation.errors.warning} label="Default warning level (%)" help="Default warning threshold for budgets without their own override. Monthly budgets may also inherit this warning level; it does not change any spending ceiling."><input value={warning} onChange={event=>setWarning(event.target.value)} inputMode="numeric"/></HelpField>
       </div><p className="muted small">Monthly budgets also inherit this warning level unless they define their own.</p>
       <div><Btn type="submit" tone="primary">{busy?'Saving…':'Save task defaults'}</Btn></div>
     </fieldset>
@@ -331,10 +337,15 @@ function PriceSettings({ canEdit, onSaved }: { canEdit: boolean; onSaved: () => 
       setRows(catalogue.data.prices.map(rowFrom));
     }
   }, [catalogue.data]);
-  const set = (i: number, patch: Partial<PriceRow>) => setRows((cur) => cur.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const set = (i: number, patch: Partial<PriceRow>) => {
+    setSaved(undefined);
+    setRows((cur) => cur.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  };
+  const validation=useFieldValidation(Object.fromEntries(rows.flatMap((row,index)=>(['input','output','cacheRead','cacheWrite'] as const).map(key=>[`${index}.${key}`, (key==='cacheRead'||key==='cacheWrite')&&!row[key] ? undefined : toMicros(row[key])===undefined ? 'Enter a valid nonnegative price per million tokens.' : undefined]))));
   const save = async () => {
     setError(undefined);
     setSaved(undefined);
+    if(!validation.validate()) return;
     const prices: Price[] = [];
     for (const r of rows) {
       const input = toMicros(r.input), output = toMicros(r.output);
@@ -355,7 +366,7 @@ function PriceSettings({ canEdit, onSaved }: { canEdit: boolean; onSaved: () => 
     } finally {setBusy(false);}
   };
   return (
-    <form className="card form" aria-label="Model prices" onSubmit={(e) => { e.preventDefault(); void save(); }}>
+    <form ref={validation.ref} className="card form" aria-label="Model prices" onSubmit={(e) => { e.preventDefault(); void save(); }}>
       <h3>Model prices</h3>
       {catalogue.data && (
         <p className="muted small">
@@ -391,16 +402,16 @@ function PriceSettings({ canEdit, onSaved }: { canEdit: boolean; onSaved: () => 
             <HelpField label={"Model"} help={"Enter an exact model ID or * as a fallback. An exact model price wins within the same provider scope."}>
               <input value={r.model} onChange={(e) => set(i, { model: e.target.value })} placeholder="*" />
             </HelpField>
-            <HelpField label={`Input (${currency}/M tokens)`} help="Price per million ordinary input tokens. Use the provider rate for this model and currency.">
+            <HelpField error={validation.errors[`${i}.input`]} label={`Input (${currency}/M tokens)`} help="Price per million ordinary input tokens. Use the provider rate for this model and currency.">
               <input value={r.input} onChange={(e) => set(i, { input: e.target.value })} inputMode="decimal" />
             </HelpField>
-            <HelpField label={`Output (${currency}/M tokens)`} help="Price per million tokens generated by the model. This can differ from the input price.">
+            <HelpField error={validation.errors[`${i}.output`]} label={`Output (${currency}/M tokens)`} help="Price per million tokens generated by the model. This can differ from the input price.">
               <input value={r.output} onChange={(e) => set(i, { output: e.target.value })} inputMode="decimal" />
             </HelpField>
-            <HelpField label={"Cache read"} help={"The price per million tokens read from the provider\u2019s token cache. Leave it empty to use the input rate."}>
+            <HelpField error={validation.errors[`${i}.cacheRead`]} label={"Cache read"} help={"The price per million tokens read from the provider\u2019s token cache. Leave it empty to use the input rate."}>
               <input value={r.cacheRead} onChange={(e) => set(i, { cacheRead: e.target.value })} placeholder="Input rate" inputMode="decimal" />
             </HelpField>
-            <HelpField label={"Cache write"} help={"The price per million tokens written to the provider\u2019s token cache. Leave it empty to use the input rate."}>
+            <HelpField error={validation.errors[`${i}.cacheWrite`]} label={"Cache write"} help={"The price per million tokens written to the provider\u2019s token cache. Leave it empty to use the input rate."}>
               <input value={r.cacheWrite} onChange={(e) => set(i, { cacheWrite: e.target.value })} placeholder="Input rate" inputMode="decimal" />
             </HelpField>
             <Btn type="button" small onClick={() => setRows((cur) => cur.filter((_, j) => j !== i))}>

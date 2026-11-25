@@ -1,3 +1,4 @@
+import {useFieldValidation} from './useFieldValidation';
 import {useEffect,useState,type MouseEvent,type ReactNode} from 'react';
 import {api,errorMessage} from '../api/client';
 import type {Skill,SkillInput} from '../api/instructions';
@@ -97,11 +98,18 @@ function SkillDetails({skill,copyFrom,initialDraft,create,tab,canEdit,navigate,o
   useEffect(()=>{onDirty(dirty);return()=>onDirty(false);},[dirty,onDirty]);
   useEffect(()=>{onBusy(busy);return()=>onBusy(false);},[busy,onBusy]);
   const update=(patch:Partial<SkillInput>)=>{setForm(value=>({...value,...patch}));setNotice(undefined);};
+  const validation=useFieldValidation({
+    id: !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(form.id) ? 'Use a lowercase ID with letters, numbers or hyphens, up to 63 characters; end with a letter or number.' : undefined,
+    title: !form.title.trim() ? 'Enter a title.' : undefined,
+    body: !form.body.trim() ? 'Enter Markdown instructions.' : new TextEncoder().encode(form.body).length>16*1024 ? 'Markdown instructions must fit within 16 KiB of UTF-8 text.' : undefined,
+  });
   const save=async()=>{
     setError(undefined);setNotice(undefined);
-    if(!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(form.id))return setError('Use a lowercase ID with letters, numbers or hyphens, up to 63 characters; end with a letter or number.');
-    if(!form.title.trim()||!form.body.trim())return setError('Enter a title and Markdown instructions.');
-    if(new TextEncoder().encode(form.body).length>16*1024)return setError('Markdown instructions must fit within 16 KiB of UTF-8 text.');
+    if(!validation.validate()){
+      setPreview(false);
+      if(!create && tab!=='content') navigate({skillId:saved?.id,tab:'content'});
+      return;
+    }
     setBusy(true);
     try{const result=await api.saveSkill(form,saved?.revision);setSaved(result);setForm(skillInput(result));onSaved(result);setNotice(`Skill saved as revision ${result.revision}.`);}catch(e){setError(errorMessage(e));}finally{setBusy(false);}
   };
@@ -110,7 +118,7 @@ function SkillDetails({skill,copyFrom,initialDraft,create,tab,canEdit,navigate,o
     setBusy(true);setError(undefined);
     try{const result=await api.deleteSkill(saved.id,saved.revision);setSaved(result);setForm(skillInput(result));onSaved(result);setNotice('Skill deleted. Revision history is retained.');}catch(e){setError(errorMessage(e));}finally{setBusy(false);}
   };
-  return <div className="skill-detail">
+  return <div ref={validation.ref} className="skill-detail">
     <SkillLink route={{}} navigate={navigate}>Back to skills</SkillLink>
     <header className="page-head"><div><h1>{create?'New skill':saved?.title||'Skill'}</h1>{saved&&<p className="muted">{saved.id} · Revision {saved.revision} · {skillStatus(saved)} {saved.builtin&&<Badge>Built-in · Read-only</Badge>}</p>}</div>
       <div className="btn-row">{dirty&&<Badge tone="warn">Unsaved changes</Badge>}{!readOnly&&<Btn tone="primary" disabled={busy||!dirty} onClick={()=>void save()}>{busy?'Saving…':'Save'}</Btn>}</div>
@@ -123,12 +131,12 @@ function SkillDetails({skill,copyFrom,initialDraft,create,tab,canEdit,navigate,o
     {!create&&<nav className="section-navigation" aria-label="Skill details sections">{Object.entries(tabs).map(([key,label])=><a key={key} href={skillsHash({skillId:saved?.id,tab:key as keyof typeof tabs})} aria-current={tab===key?'page':undefined} onClick={event=>{event.preventDefault();navigate({skillId:saved?.id,tab:key as keyof typeof tabs});}}>{label}</a>)}</nav>}
     {tab==='content'||create?<form className="card form skill-content-form" aria-label="Skill content" onSubmit={event=>{event.preventDefault();if(!readOnly&&!busy&&dirty)void save();}}>
       <fieldset disabled={readOnly||busy}>
-        <div className="skill-metadata-fields"><HelpField label="Skill ID" help="Stable reference used in workflows. Choose a lowercase identifier; the ID cannot change after creation."><input value={form.id} disabled={!!saved} onChange={event=>update({id:event.target.value})}/></HelpField>
-        <div><label htmlFor="skill-title">Title</label><input id="skill-title" value={form.title} maxLength={200} onChange={event=>update({title:event.target.value})}/></div></div>
+        <div className="skill-metadata-fields"><HelpField error={validation.errors.id} label="Skill ID" help="Stable reference used in workflows. Choose a lowercase identifier; the ID cannot change after creation."><input value={form.id} disabled={!!saved} onChange={event=>update({id:event.target.value})}/></HelpField>
+        <HelpField error={validation.errors.title} label="Title" help="A short name that identifies this skill in the catalogue."><input id="skill-title" value={form.title} maxLength={200} onChange={event=>update({title:event.target.value})}/></HelpField></div>
         <label htmlFor="skill-description">Description</label><textarea id="skill-description" rows={3} value={form.description} maxLength={1000} onChange={event=>update({description:event.target.value})}/>
       </fieldset>
       <div className="btn-row" role="group" aria-label="Markdown mode"><Btn aria-pressed={!preview} onClick={()=>setPreview(false)}>Write</Btn><Btn aria-pressed={preview} onClick={()=>setPreview(true)}>Preview</Btn></div>
-      {preview?<><p className="muted small">Preview supports headings, lists, code, emphasis and web links. Raw HTML and images stay as text.</p><SkillMarkdown body={form.body}/></>:<HelpField label="Markdown body" help="Describe when to use this skill, the steps to follow and decision criteria. Instructions cannot grant tools or override permissions."><textarea rows={14} value={form.body} disabled={readOnly||busy} onChange={event=>update({body:event.target.value})}/></HelpField>}
+      {preview?<><p className="muted small">Preview supports headings, lists, code, emphasis and web links. Raw HTML and images stay as text.</p><SkillMarkdown body={form.body}/></>:<HelpField error={validation.errors.body} label="Markdown body" help="Describe when to use this skill, the steps to follow and decision criteria. Instructions cannot grant tools or override permissions."><textarea rows={14} value={form.body} disabled={readOnly||busy} onChange={event=>update({body:event.target.value})}/></HelpField>}
       <p className="muted small">{new TextEncoder().encode(form.body).length.toLocaleString()} / 16,384 UTF-8 bytes · Saving creates an immutable revision. No files or scripts are executed.</p>
       <fieldset disabled={readOnly||busy} className="skill-options">
         <HelpField label="Enabled" help="An enabled skill may be loaded when selected by a workflow. Disabled skills keep their history but do not contribute instructions."><input type="checkbox" checked={form.enabled} onChange={event=>update({enabled:event.target.checked})}/></HelpField>

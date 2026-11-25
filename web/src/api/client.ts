@@ -195,6 +195,7 @@ export const api = {
   repositoryImports: () => request<import('./tasks').RepositoryImportRecord[]>(`${V1}/repository-imports`),
   importRepository: (input:{url:string;ref:string;confirmed:boolean;retry?:boolean;revision?:number;authentication?:{mode:string;username?:string;token?:string}}) => request<import('./tasks').RepositoryImportRecord>(`${V1}/repository-imports`, {method:'POST',body:input}),
   cancelRepositoryImport: (id:string,revision:number) => request<import('./tasks').RepositoryImportRecord>(`${V1}/repository-imports/${enc(id)}/cancel`, {method:'POST',headers:{'If-Match':String(revision)}}),
+  deleteTask: (id:string,revision:number) => request<void>(`${V1}/tasks/${enc(id)}`,{method:'DELETE',headers:{'If-Match':String(revision)},body:{confirm:true}}),
   saveTask: (input: TaskInput, id?: string, revision?: number) => request<TaskDraft>(`${V1}/tasks${id ? '/'+enc(id) : ''}`, {method:id?'PUT':'POST',body:input,headers:id?{'If-Match':String(revision)}:undefined}),
   taskProgress: (id: string) => request<TaskProgress>(`${V1}/tasks/${enc(id)}/progress`),
   startTask: (id: string, revision: number) => request<TaskDraft>(`${V1}/tasks/${enc(id)}/start`, {method:'POST',body:{confirm:true},headers:{'If-Match':String(revision)}}),

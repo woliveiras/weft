@@ -9,7 +9,7 @@ export function TaskAuthorization(props:Props) {
  if(props.configurationIssue)return <section className="card task-authorization" aria-label="Task authorization">
   <h2>Authorization</h2><p role="status">{props.configurationIssue}</p>
   <p>Authorization becomes available after you save a complete task configuration. No agents have started.</p>
-  {props.onConfigure&&<><p>In Review settings, select the workflow version and entry agent, and review the input delivery and result agent. Save draft, then Review requirements and confirm authorization before starting.</p><Btn onClick={props.onConfigure}>Review task settings</Btn></>}
+  {props.onConfigure&&<><p>In Workflow & repository and Input & delivery, select the workflow version and entry agent, and review the input delivery and result agent. Save draft, then Review requirements and confirm authorization before starting.</p><Btn onClick={props.onConfigure}>Review task settings</Btn></>}
  </section>;
  return <ReviewedTaskAuthorization {...props}/>;
 }

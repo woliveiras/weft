@@ -133,6 +133,14 @@ func TestPromptPersistenceResolutionAndRecovery(t *testing.T) {
 		if err != nil || d.Resolution.State != tc.state || strings.Contains(d.Resolution.Message, "sensitive") {
 			t.Fatal(d, err)
 		}
+		if strings.Contains(d.Resolution.Message, "Review settings") {
+			t.Fatal("manual recovery refers to unavailable configuration", d.Resolution.Message)
+		}
+		if tc.state == "invalid_proposal" || strings.Contains(tc.raw, `"clarification":true`) {
+			if !strings.Contains(d.Resolution.Message, "Workflow & repository and Input & delivery") {
+				t.Fatal("manual recovery does not name the visible sections", d.Resolution.Message)
+			}
+		}
 	}
 	if _, err = m.SavePrompt(t.Context(), PromptInput{ID: id, Revision: oldRevision, Request: "stale"}, "operator"); !errors.Is(err, storage.ErrConflict) {
 		t.Fatal(err)

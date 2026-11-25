@@ -433,6 +433,24 @@ remain visible. A failed read offers retry and does not invent an empty record.
 
 Task Overview shows the current state, actionable holds, live agent plans and recorded result before secondary configuration. Plan steps are agent reports, not independently verified test results or a percentage of total task completion. Earlier attempts remain expandable.
 
-Task links accept `?tab=changes`, `?tab=activity`, `?tab=request` and `?tab=settings`; the bare task URL opens Overview. Changes & checks contains workspace/Git inspection, declared checks, tool-call evidence and checkpoints. Request preserves the original text. Settings & access contains the pinned workflow, reviewed grants, environment, budget and retained-workspace cleanup. Pending decisions and preparation failures stay visible above these sections. Recorded SCM delivery is not a fresh remote-status query.
+Task links accept `?tab=environment`, `?tab=changes`, `?tab=activity`, `?tab=request` and `?tab=settings`; the bare task URL opens Overview. Environment & logs contains build state, preparation controls and bounded, keyboard-scrollable output. Follow latest output can be turned off to inspect earlier lines; task snapshots refresh every three seconds. The header keeps a short environment summary and a link to this section. Changes & checks contains workspace/Git inspection, declared checks, tool-call evidence and checkpoints. Request preserves the original text. Settings & access contains the pinned workflow, reviewed grants, budget and retained-workspace cleanup. Pending decisions and preparation failures stay visible above these sections. Recorded SCM delivery is not a fresh remote-status query.
+
+Refresh task acknowledges the request, disables repeated clicks while loading,
+and announces the completed snapshot check even when task state is unchanged.
+Failures keep the last snapshot, mark it stale and offer retry through the same
+control. Cost refresh failures are shown separately beside recorded spend.
+Section navigation follows normal document flow with theme-consistent spacing;
+it does not overlay long logs or grant data.
 
 Legacy execution-copy run/file links open task-owned evidence with no workflow editor. The owner task and execution-copy identity must match before evidence loads.
+
+### Configuration field feedback
+
+Required, format and range errors appear beside the affected control after an
+unsuccessful save/review attempt or interaction with that field. A danger border
+is paired with explanatory text and an accessible description. Corrected fields
+clear independently; optional empty fields remain neutral. Skills, budgets,
+prices and administration limits also use inline feedback for their existing
+local rules. Review steps, permissions and explicit consent still apply. A
+server or network failure remains a form-level error when no field can be
+identified reliably; edits are retained for recovery.

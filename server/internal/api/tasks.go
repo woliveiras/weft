@@ -288,3 +288,30 @@ func (s *Server) submitTaskPrompt(w http.ResponseWriter, r *http.Request) error 
 	}{d, review})
 	return nil
 }
+
+func (s *Server) deleteTaskDraft(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Confirm bool `json:"confirm"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1024)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil || !in.Confirm {
+		return badRequest("explicit draft deletion confirmation is required")
+	}
+	if dec.Decode(&struct{}{}) != io.EOF {
+		return badRequest("expected one JSON object")
+	}
+	revision, err := ifMatchRevision(r)
+	if err != nil {
+		return err
+	}
+	if revision < 1 {
+		return badRequest("If-Match is required")
+	}
+	if err := (taskconfig.Manager{Store: s.Store}).DeleteDraft(r.Context(), r.PathValue("tid"), revision, identityFrom(r.Context()).Name); err != nil {
+		return taskError(err)
+	}
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}

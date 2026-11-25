@@ -5,6 +5,7 @@ import {taskExecutionWindow, taskSection, taskSectionLink} from './taskDetailPre
 it('keeps task section links scoped, encoded and compatible with the bare route', () => {
   expect(taskSectionLink('tsk_1', 'overview')).toBe('#/tasks/tsk_1');
   expect(taskSection(taskSectionLink('tsk_/1', 'changes'), 'tsk_/1')).toBe('changes');
+  expect(taskSection(taskSectionLink('tsk_1', 'environment'), 'tsk_1')).toBe('environment');
   expect(taskSection('#/tasks/tsk_1?tab=activity&execution=e1', 'tsk_1')).toBe('activity');
   expect(taskSection('#/tasks/other?tab=settings', 'tsk_1')).toBe('overview');
   expect(taskSection('#/tasks/tsk_1?tab=constructor', 'tsk_1')).toBe('overview');

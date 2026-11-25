@@ -218,6 +218,18 @@ Kinds: `github` (REST API; `apiUrl` defaults to `https://api.github.com`,
 repository, or an OAuth token). The test reports the default branch and
 whether the token can push; 401/403/404 answers explain the likely cause.
 
+Task drafts also support `DELETE /api/v1/tasks/{id}` for operators and
+administrators. Send `If-Match` with the current task revision and the exact JSON
+body `{"confirm":true}`. Success returns 204. Missing confirmation or revision
+returns 400; a stale revision, non-draft lifecycle state, execution copy or
+environment preparation reference returns 409. Deleted task reads return 404 and
+both task listing orders omit them. A minimal deletion marker retains the task
+ID, lifecycle dates and actors to fence stale saves, model results, repeated
+submissions and competing admission; the discarded request is not retained in
+that marker. Existing audit events remain. This endpoint never deletes a
+workflow, execution history, repository, import or workspace. Tasks already
+prepared or executed remain available for inspection.
+
 A task draft may name one connection in `scmConnection`. Preparing its run
 grants the result agent (or the entry agent when none is set) `git.read`,
 `git.write`, and `git.push`/`scm.pull_request.create` for that connection

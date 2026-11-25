@@ -93,6 +93,7 @@ describe('SCMConnectionsSection', () => {
     const user = userEvent.setup();
     const view = render(<SCMConnectionCreate role="admin" />);
     await user.type(screen.getByLabelText('Name'), 'keep-draft');
+    await user.type(screen.getByLabelText('Repository'), 'invalid');
     await user.click(screen.getByRole('button', { name: 'Save connection' }));
     expect(await screen.findByText(/use owner\/name/)).toBeTruthy();
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('keep-draft');

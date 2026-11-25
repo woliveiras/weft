@@ -133,7 +133,7 @@ it('requires a fresh account restriction review after replacing the PAT in the s
   const form=await screen.findByRole('form',{name:'Edit issue tracker connection'});
   const user=userEvent.setup();
   const restriction=within(form).getByRole('checkbox',{name:/I verified/});
-  expect(restriction).toHaveProperty('checked',true);
+  await waitFor(()=>expect(restriction).toHaveProperty('checked',true));
   await user.type(within(form).getByLabelText('Personal access token'),'different-account-fixture');
   expect(restriction).toHaveProperty('checked',false);
   await user.click(within(form).getByRole('button',{name:'Save connection'}));

@@ -159,3 +159,63 @@ it('labels a failed cost refresh while retaining the last recorded amount', asyn
   expect(await screen.findByText(/Cost refresh failed/)).toBeTruthy();
   expect(screen.getByText(/\$0.11 spent of \$2.00/)).toBeTruthy();
 });
+
+it('acknowledges a manual refresh immediately and confirms even an unchanged snapshot', async () => {
+  let release: (() => void) | undefined;
+  let delayed = false;
+  const api = backend(async () => {if (delayed) await new Promise<void>(resolve => {release = resolve;}); return progress;});
+  render(<TasksPage id={task.id} graphs={[]} info={{identity:{role:'viewer'}} as Info}/>);
+  await screen.findByText('Task status: succeeded');
+  delayed = true;
+  await userEvent.click(screen.getByRole('button',{name:'Refresh task'}));
+  const refreshing = screen.getByRole('button',{name:'Refreshing…'});
+  expect(refreshing).toHaveProperty('disabled',true);
+  expect(refreshing.getAttribute('aria-busy')).toBe('true');
+  expect(screen.getByText('Refreshing the task snapshot…').getAttribute('role')).toBe('status');
+  expect(screen.getByRole('link',{name:'Open pull request'})).toBeTruthy();
+  await act(async () => {release!();});
+  expect(await screen.findByText(/Task snapshot refreshed at/)).toBeTruthy();
+  expect(screen.getByRole('button',{name:'Refresh task'})).toHaveProperty('disabled',false);
+  expect(api.calls.every(call => call.method === 'GET')).toBe(true);
+});
+
+it('keeps environment monitoring scoped to its own linked section and retains read-only viewers', async () => {
+  const api = backend(() => ({...progress, state:'environment_pending', task:{...task,status:'environment_pending'}, environment:{state:'building',phase:'building_image',log:'Build output <script>inert</script>',upToDate:false}}));
+  render(<TasksPage id={task.id} graphs={[]} info={{identity:{role:'viewer'}} as Info}/>);
+  await screen.findByText('Preparing the environment. Agents have not started.');
+  expect(screen.queryByRole('region',{name:'Build logs'})).toBeNull();
+  await userEvent.click(screen.getByRole('link',{name:'View environment & logs'}));
+  const logs = await screen.findByRole('region',{name:'Build logs'});
+  expect(within(logs).getByLabelText('Build output').textContent).toContain('<script>inert</script>');
+  expect(logs.querySelector('script')).toBeNull();
+  expect(screen.queryByRole('button',{name:'Start prepared task'})).toBeNull();
+  expect(screen.getByRole('link',{name:'Environment & logs'}).getAttribute('aria-current')).toBe('page');
+  expect(screen.queryByRole('region',{name:'Agent plans'})).toBeNull();
+  await userEvent.click(screen.getByRole('link',{name:'Request'}));
+  expect(await screen.findByRole('region',{name:'Request'})).toBeTruthy();
+  expect(screen.queryByRole('region',{name:'Build logs'})).toBeNull();
+  expect(api.calls.every(call => call.method === 'GET')).toBe(true);
+});
+
+it('waits for a valid snapshot before reporting an absent task environment', async () => {
+  history.replaceState(null,'','#/tasks/tsk_demo?tab=environment');
+  let release!:()=>void;
+  backend(async()=>{await new Promise<void>(resolve=>{release=resolve;});return progress;});
+  render(<TasksPage id={task.id} graphs={[]} info={{identity:{role:'viewer'}} as Info}/>);
+  await screen.findByText('Loading the task environment snapshot…');
+  expect(screen.queryByText(/No task environment has been prepared/)).toBeNull();
+  await act(async()=>{release();});
+  expect(await screen.findByText(/No task environment has been prepared/)).toBeTruthy();
+  expect(screen.queryByLabelText('Build output')).toBeNull();
+});
+
+it('reports an unavailable initial environment snapshot and recovers without claiming absence', async () => {
+  history.replaceState(null,'','#/tasks/tsk_demo?tab=environment');
+  let fail=true;
+  backend(()=>fail?apiError(503,'Progress unavailable','unavailable'):{...progress,environment:{state:'building',upToDate:false,log:'Build is running'}});
+  render(<TasksPage id={task.id} graphs={[]} info={{identity:{role:'viewer'}} as Info}/>);
+  expect(await screen.findByText('Environment snapshot unavailable. Use Refresh task to retry.')).toBeTruthy();
+  expect(screen.queryByText(/No task environment has been prepared/)).toBeNull();
+  fail=false;await userEvent.click(screen.getByRole('button',{name:'Refresh task'}));
+  expect(await screen.findByLabelText('Build output')).toHaveProperty('textContent','Build is running');
+});

@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {api, errorMessage} from '../api/client';
 import type {TaskDraft, TaskDelivery, TaskProgress} from '../api/tasks';
 import type {Execution} from '../api/types';
@@ -77,6 +77,9 @@ export function TaskTracking({task, canControl, canDecide, nativeProfile}: {task
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const manualRefresh = useRef(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshFeedback, setRefreshFeedback] = useState('');
   const [section, setSection] = useState<TaskSection>(() => taskSection(location.hash, task.id));
   useEffect(() => {
     const change = () => setSection(taskSection(location.hash, task.id));
@@ -85,15 +88,22 @@ export function TaskTracking({task, canControl, canDecide, nativeProfile}: {task
   }, [task.id]);
   useEffect(() => {
     let disposed = false; let timer: ReturnType<typeof setTimeout>;
-    const load = async () => {
+    const load = async (first = false) => {
+      const report = first && manualRefresh.current;
       try {
         const result = await api.taskProgress(task.id);
         if (result.task.id !== task.id) throw new Error('The progress response does not belong to this task.');
-        if (!disposed) {setProgress(result); setUpdated(new Date().toISOString()); setError(undefined);}
-      } catch (cause) {if (!disposed) setError(errorMessage(cause));}
+        if (!disposed) {
+          const checkedAt = new Date().toISOString();
+          setProgress(result); setUpdated(checkedAt); setError(undefined);
+          if (report) setRefreshFeedback(`Task snapshot refreshed at ${fmtDateTime(checkedAt)}.`);
+          else setRefreshFeedback(previous => previous.startsWith('Task refresh failed.') ? 'Task updates resumed.' : previous);
+        }
+      } catch (cause) {if (!disposed) {setError(errorMessage(cause)); if (report) setRefreshFeedback('Task refresh failed. The last recorded snapshot is still shown. Retry Refresh task.');}}
+      finally {if (!disposed && report) {manualRefresh.current = false; setRefreshing(false);}}
       if (!disposed) timer = setTimeout(() => void load(), 3000);
     };
-    void load(); return () => {disposed = true; clearTimeout(timer);};
+    void load(true); return () => {disposed = true; clearTimeout(timer);};
   }, [task.id, refresh]);
   const cancel = async () => {
     setBusy(true);
@@ -125,9 +135,10 @@ export function TaskTracking({task, canControl, canDecide, nativeProfile}: {task
       <div className="task-detail-heading">
         <div className="task-status-line"><Badge tone={error ? 'warn' : progress?.state === 'succeeded' ? 'ok' : progress?.state === 'failed' ? 'bad' : undefined}>{progress ? `Task status: ${progress.state}` : 'Loading progress…'}</Badge>
           <span className="muted small">{error ? 'Last recorded snapshot · refresh failed' : updated ? <>Updated <time dateTime={updated}>{fmtDateTime(updated)}</time></> : 'Waiting for the first snapshot'}</span></div>
-        <div className="btn-row"><Btn small onClick={() => {setRefresh(x => x + 1); void budget.reload();}}>Refresh task</Btn>
+        <div className="btn-row"><Btn small disabled={refreshing} aria-busy={refreshing} onClick={() => {manualRefresh.current = true; setRefreshing(true); setRefreshFeedback(''); setRefresh(x => x + 1); void budget.reload();}}>{refreshing ? 'Refreshing…' : 'Refresh task'}</Btn>
           {progress?.delivery?.pullRequestUrl && <a className="btn btn-primary" href={progress.delivery.pullRequestUrl} target="_blank" rel="noreferrer">Open pull request</a>}</div>
       </div>
+      <p className="task-refresh-feedback muted small" role="status" aria-atomic="true">{refreshing ? 'Refreshing the task snapshot…' : refreshFeedback}</p>
       <dl className="task-facts">
         <div><dt>Workflow</dt><dd>{task.graphId} · v{task.graphVersion}</dd></div>
         <div><dt>Started</dt><dd>{executionWindow ? <time dateTime={executionWindow.start}>{fmtDateTime(executionWindow.start)}</time> : 'No execution recorded'}</dd></div>
@@ -140,10 +151,11 @@ export function TaskTracking({task, canControl, canDecide, nativeProfile}: {task
       {!!progress?.blockers.length && <ul aria-label="Task blockers">{progress.blockers.map(blocker => <li key={blocker}>{blocker}</li>)}</ul>}
       {active && budget.data?.paused && <section aria-label="Budget attention"><p role="alert">This run is paused because it reached its budget. {canControl ? 'Raise the budget to continue, or stop the task.' : 'Ask an administrator to raise the budget, or stop the task.'}</p>{raisedBudget}</section>}
       {graph && (!progress || !!error || progress.pendingApprovals == null || progress.pendingApprovals.length > 0) && <TaskDecisions graphId={graph} approvals={error ? undefined : progress?.pendingApprovals} canDecide={canDecide && !error} canAdmin={canControl && !error} onChanged={() => setRefresh(x => x + 1)}/>}
-      {progress?.environment && ['environment_pending', 'environment_build_requested', 'preparing'].includes(progress.state) && <TaskEnvironment key={task.id} task={current} environment={progress.environment} canControl={canControl && !error} onChanged={() => setRefresh(x => x + 1)}/>}
+      {progress?.environment && <section className="task-environment-summary" aria-label="Environment summary"><div><h3>Task environment</h3><p>{progress.environment.state === 'ready' ? (current.status === 'environment_pending' ? 'Environment ready. Review it before starting agents.' : 'Environment ready.') : progress.environment.state === 'failed' ? 'Environment build failed. Inspect the logs before retrying.' : progress.environment.state === 'building' ? 'Preparing the environment. Agents have not started.' : 'No prepared environment is available.'}</p></div><a className="btn" href={href('environment')}>View environment &amp; logs</a></section>}
     </section>
     <nav className="section-navigation task-section-navigation" aria-label="Task sections">{Object.entries(taskSections).map(([key, label]) => <a key={key} href={href(key as TaskSection)} aria-current={section === key ? 'page' : undefined}>{label}</a>)}</nav>
     <div className="task-detail-content">
+      {section === 'environment' && (progress?.environment ? <TaskEnvironment key={task.id} task={current} environment={progress.environment} canControl={canControl && !error} onChanged={() => setRefresh(x => x + 1)}/> : <section className="card" aria-label="Task environment"><h2>Environment &amp; logs</h2>{!progress ? <p role={error ? undefined : 'status'}>{error ? 'Environment snapshot unavailable. Use Refresh task to retry.' : 'Loading the task environment snapshot…'}</p> : <p>No task environment has been prepared. Build logs will appear here when preparation starts.</p>}</section>)}
       {section === 'overview' && <>
         {graph ? <TaskPlan key={`plan-${graph}`} graphId={graph}/> : <section className="card" aria-label="Agent plans"><h2>Agent plans</h2><p>No execution has started yet.</p></section>}
         <TaskResult key={progress?.result?.id ?? 'no-result'} result={progress?.result} delivery={progress?.delivery} changesHref={href('changes')}/>
@@ -164,7 +176,6 @@ export function TaskTracking({task, canControl, canDecide, nativeProfile}: {task
         </section>
         <TaskAuthorization taskId={task.id} canEdit={canControl && !error && ['running', 'starting', 'environment_pending'].includes(current.status)} running={current.status !== 'environment_pending'} onChanged={() => setRefresh(x => x + 1)}/>
         {graph && <section className="card" aria-label="Task run budget"><h2>Budget</h2><ErrorBox error={budget.error}/>{budget.loading && !budget.data && <p>Loading budget…</p>}{raisedBudget}{!budget.data && !budget.loading && <p>Budget unavailable. <Btn onClick={() => void budget.reload()}>Retry budget</Btn></p>}</section>}
-        {progress?.environment && !['environment_pending', 'environment_build_requested', 'preparing'].includes(progress.state) && <TaskEnvironment key={task.id} task={current} environment={progress.environment} canControl={canControl && !error} onChanged={() => setRefresh(x => x + 1)}/>}
         {canControl && progress?.state === 'cancelled' && current.projectId && <TaskCleanup taskId={task.id} workspaces={progress.workspaces ?? []} onChanged={() => setRefresh(x => x + 1)}/>}
       </>}
     </div>

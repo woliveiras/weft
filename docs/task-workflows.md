@@ -7,14 +7,23 @@ The current wire contract remains [OpenAPI](../api/openapi.yaml).
 
 **Decision (2026-10-19).** The prompt-first editor (PROMPT-01), interpretation
 (PROMPT-02), public URL import (PROMPT-03), Git authentication (PROMPT-04) and
-conditional submission (PROMPT-05) are implemented. New task starts with
-the Request field, visible workflow/environment selectors and collapsed Review
-settings. A new draft derives an editable display title from the first prompt
+conditional submission (PROMPT-05) are implemented.
+
+**Layout update (2026-11-24).** New task starts with three visible sections:
+Describe the work, Workflow & repository, and Input & delivery. Workflow version,
+repository and execution environment are visible without expanding a disclosure.
+A new draft derives an editable display title from the first prompt
 line, bounded to 200 UTF-8 bytes; explicit and loaded titles are preserved.
-Ambiguous required fields open the settings disclosure on validation failure.
+Repository choices include the URL or server path, reference and short commit
+to distinguish registered snapshots. Missing settings offer a focused return to
+configuration; project discovery failures offer Retry projects without clearing
+the saved selection.
 Saving still only persists a draft. Resolve request explicitly invokes the default
 model; URLs are identified but never fetched. Run task can resolve and start after server review using the existing admission path.
 The separate review/confirmation/start API remains available.
+Run/Continue reports pending submission beside its action and explains a returned
+draft as not started, naming missing settings or server blockers. Configuration
+repairs can be focused directly from that feedback; edits clear stale feedback.
 New tasks default to Ask for approval at admission. Save or resolve the draft to
 review capabilities and explicitly confirm another mode before starting. Task
 consent leaves installation permissions and shared workflows unchanged. See
@@ -33,12 +42,12 @@ The visible workflow selector takes precedence. Otherwise a named existing workf
 is used, or `software-factory` when no workflow is named. There is no arbitrary
 first-workflow fallback. Entry/result agents and exact channel message bindings
 are derived from the actual graph structure, not model-supplied agent IDs. Multiple
-entries/results or missing exact message types require Review settings. A resolved
+entries/results or missing exact message types require explicit review in the visible **Input & delivery** section. A resolved
 snapshot pins the graph version; normal pre-start validation catches later changes.
 
 Pending interpretation, missing/unavailable models, invalid proposals, ambiguity
 and repository prerequisites are persisted on the same task draft. Reload Tasks
-and resolve again, or repair and save through Review settings. Compare-and-swap
+and resolve again, or repair and save through **Workflow & repository** and **Input & delivery**. Compare-and-swap
 revisions prevent a slow response from overwriting a newer edit. A process/network
 failure can leave a pending draft; inspect Tasks before submitting a new task.
 The API may return a storage failure after the initial draft was persisted.
@@ -209,7 +218,7 @@ and browser evidence does not qualify live model interpretation or external acco
 
 ### Primary experience
 
-New task starts with one prompt field. The user can include a repository URL,
+New task starts with a request and visible configuration sections. The user can include a repository URL,
 the requested change, a workflow name and constraints, for example:
 
 > In https://github.com/example/project, implement GitHub authentication using
@@ -222,7 +231,7 @@ or a configured default (initially Software Factory when available and compatibl
 Do not select an arbitrary graph or fabricate missing model/access configuration.
 The workflow's agents and channels coordinate the work; the user does not need
 to manually fill entry agents, message types or payload JSON for an unambiguous,
-supported workflow. Keep those bindings inspectable under **Review settings**.
+supported workflow. Keep those bindings inspectable in the visible **Input & delivery** section.
 
 Submitting the prompt can start work when all prerequisites and applicable
 permissions are already satisfied. Save the original request and resolved task
@@ -247,7 +256,21 @@ cannot grant authority merely by appearing in an agent's input.
 
 ### Configuration and approvals
 
-**Review settings** is collapsed by default. Workflows, models, connections,
+**Workflow & repository** and **Input & delivery** are visible immediately.
+Repository selection and the pinned workflow version are prerequisites, not hidden
+advanced options. The version dropdown defaults to the current saved workflow
+version when no version is selected. Saving pins its numeric version; publishing
+a workflow never silently replaces an existing selection. Stale saved selections
+remain visible until the operator chooses the current version and reviews again.
+Optional repository import opens beside project selection.
+When environment preparation is available, the task actions show the preparation,
+approval and separate start steps. **Review environment preparation** focuses the
+build definition, consequences and confirmation in the task requirements. It does
+not create an execution copy or start a build. **Prepare task environment** is the
+separate administrator action after confirmation; any required approval remains
+in Approvals. Original validation messages remain in technical details, while
+other blockers stay visible.
+Save, review and execution actions follow the configuration. Workflows, models, connections,
 skills/instructions and installation policies stay under Configuration. This is
 an interface organization for the same user, not a new role model; existing
 backend role checks remain authoritative. Do not restore the global onboarding.
@@ -910,7 +933,10 @@ unavailable daemon blocks sandbox admission without affecting local tasks.
 Selection does not rewrite the workflow or grant tools; review agent environment
 settings when a workflow is incompatible. For a workflow with an explicit environment definition, review it and choose
 **Prepare task environment**. The task keeps a stopped copy while the existing
-environment manager builds it. After readiness, select **Review prepared task
+environment manager builds it. Open **Environment & logs** to follow the bounded
+build output, pause following its last line, and inspect errors. The task header
+links to that section and keeps the current environment summary visible.
+After readiness, select **Review prepared task
 requirements**, confirm, and **Start prepared task**. Builds never start agents
 automatically. Failed builds retain diagnostics and require an explicit retry;
 stopping preparation retains environment state, images and caches. An approval
@@ -998,3 +1024,18 @@ these admission fences and readiness limits instead of guessing a site and
 starting work again. Global admission records remain intact. Jira Data Center
 operational adoption and instance-scoped admission are not established by this
 compatibility change.
+
+### Delete an unstarted draft
+
+Operators and administrators can use **Delete draft** on a saved, unstarted request,
+then confirm the named draft. This removes it from Tasks and direct task reads. The
+current revision is required; concurrent edits or execution preparation cause a
+conflict rather than deleting an admitted task. Cancel leaves the draft unchanged.
+No executed, cancelled, failed or partially prepared task can be deleted.
+Repositories, imports, workspaces and execution history are retained. A minimal
+deletion marker and audit intent prevent stale saves, interpretation results and
+idempotency replays from restoring the task.
+
+The API is `DELETE /api/v1/tasks/{id}` with `If-Match` and `{"confirm":true}`;
+success is HTTP 204. Missing confirmation or revision is refused. A stale revision
+or prepared task returns conflict; deleted or unknown IDs return not found.

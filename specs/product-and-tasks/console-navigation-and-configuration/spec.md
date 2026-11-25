@@ -39,6 +39,16 @@ dependencies or value format. Opening it leaves the field values unchanged.
 The popup supports keyboard access, closing with Escape and returning focus
 to the help control, including when the field is read-only.
 
+Configuration forms identify invalid fields with a danger border, an adjacent
+explanation and an accessible description. New forms remain neutral until a
+save/review attempt or interaction with a constrained field. Correcting a field
+clears its indication independently of other errors. Domain validation and
+native required/format/range constraints retain their existing meanings; optional
+empty fields remain valid. Custom validation focuses the first invalid field and
+opens its containing disclosure when needed. Role restrictions, pending states,
+explicit consent and policy confirmation remain independent gates. Filters and
+read-only inspection do not gain save-validation state.
+
 ### AC-004 — Responsive presentation
 
 Common forms and controls remain usable at narrow widths and in the supported themes. Long event labels remain readable alongside actors.
@@ -76,6 +86,15 @@ Common forms and controls remain usable at narrow widths and in the supported th
 - 2026-11-20. Maintainer responsive-layout refinement: all main destinations use the available width and shared inline padding (32 px desktop, 16 px narrow), including loading, empty and error states. Reading-width limits remain local to explanatory text. Canvas/log workspace layouts remain intact.
 
 - 2026-11-23. Maintainer task-detail refinement: Overview places live agent plans before the result, with agent/replica identity, current step, earlier-attempt disclosure and explicit empty/loading/error states. Stable task-scoped query links separate Overview, Changes & checks, Activity, Request and Settings & access, preserve browser back/forward and leave approvals/environment/budget holds visible across sections. A compact header identifies workflow/version, recorded execution timing, snapshot freshness and recorded spend; plan completion is not a verified task percentage. Full results remain readable on demand, delivery records are distinguished from fresh remote verification, and raw grants are secondary to readable permissions. Evidence inspection, checkpoints and task controls preserve their existing roles, confirmations and ownership. Completed tasks do not show an active Stop action. The existing TASK-007 AC-005 task-owned execution link contract remains applicable after settlement.
+
+- 2026-11-25. Maintainer task-monitoring refinement under AC-001/AC-004:
+  Environment & logs is a stable task section with a compact header summary,
+  bounded keyboard-scrollable logs and optional follow-latest behavior. Build
+  review, consent and start controls remain separate from viewing output. Task
+  navigation stays in document flow without covering content. Manual Refresh
+  task exposes loading, completion even for unchanged state, and failure with
+  the retained snapshot and retry. Cost failures remain separately identified.
+  No task mutation, build or execution is implied by refresh or section changes.
 
 ## Reconciliation
 

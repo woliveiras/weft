@@ -158,7 +158,7 @@ func (m Manager) ResolvePrompt(ctx context.Context, d *Draft, models *llm.Regist
 		candidates = append(candidates, map[string]string{"id": g.Metadata.ID, "name": g.Metadata.Name})
 	}
 	if len(candidates) > 100 {
-		return finish("needs_input", "Select and configure a workflow manually in Review settings; the workflow catalogue exceeds the interpretation limit.")
+		return finish("needs_input", "Select and configure a workflow manually in Workflow & repository and Input & delivery; the workflow catalogue exceeds the interpretation limit.")
 	}
 	if d.GraphID != "" && available[d.GraphID] == nil {
 		return finish("needs_input", "The selected workflow is unavailable. Choose an existing workflow and resolve again.")
@@ -177,7 +177,7 @@ func (m Manager) ResolvePrompt(ctx context.Context, d *Draft, models *llm.Regist
 	}
 	body, _ := json.Marshal(map[string]any{"request": d.Request, "selectedWorkflow": d.GraphID, "workflows": candidates})
 	if len(body) > 64<<10 {
-		return finish("needs_input", "The workflow catalogue is too large to interpret. Configure this task manually in Review settings.")
+		return finish("needs_input", "The workflow catalogue is too large to interpret. Configure this task manually in Workflow & repository and Input & delivery.")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
@@ -186,16 +186,16 @@ func (m Manager) ResolvePrompt(ctx context.Context, d *Draft, models *llm.Regist
 		return finish("model_error", "The default model could not interpret this request. Check Configuration → Models and resolve again; the request is saved.")
 	}
 	if response == nil || len(response.Message.ToolCalls) > 0 {
-		return finish("invalid_proposal", "The model returned an invalid proposal. Resolve again or configure the task manually in Review settings.")
+		return finish("invalid_proposal", "The model returned an invalid proposal. Resolve again or configure the task manually in Workflow & repository and Input & delivery.")
 	}
 	proposal, err := parseProposal(response.Message.Content, d.Request)
 	if err != nil {
-		return finish("invalid_proposal", "The model returned an invalid proposal. Resolve again or configure the task manually in Review settings.")
+		return finish("invalid_proposal", "The model returned an invalid proposal. Resolve again or configure the task manually in Workflow & repository and Input & delivery.")
 	}
 	d.Outcome = proposal.Outcome
 	d.Resolution.Repository = proposal.Repository
 	if proposal.Clarification {
-		return finish("needs_input", "Clarify the objective or choose one workflow and repository in the request, then resolve again. Review settings also supports manual configuration.")
+		return finish("needs_input", "Clarify the objective or choose one workflow and repository in the request, then resolve again. Workflow & repository and Input & delivery also supports manual configuration.")
 	}
 	selected := d.GraphID
 	if selected == "" {
@@ -217,10 +217,10 @@ func (m Manager) ResolvePrompt(ctx context.Context, d *Draft, models *llm.Regist
 	}
 	bindPrompt(d, g)
 	if d.NodeID == "" || d.ResultNodeID == "" || (d.ChannelID != "" && d.MessageType == "") {
-		return finish("needs_input", "This workflow has ambiguous entry, result or message bindings. Choose them in Review settings and save the draft.")
+		return finish("needs_input", "This workflow has ambiguous entry, result or message bindings. Choose them in Workflow & repository and Input & delivery and save the draft.")
 	}
 	if err := Validate(d.Input); err != nil {
-		return finish("needs_input", "The proposed input needs manual review. Check Review settings and save the draft.")
+		return finish("needs_input", "The proposed input needs manual review. Check Workflow & repository and Input & delivery and save the draft.")
 	}
 	if proposal.Repository != "" && d.ProjectID == "" {
 		return finish("needs_repository", "Repository URL identified. Import the repository or select a registered project, then continue the task or save the draft.")

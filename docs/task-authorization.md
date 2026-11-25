@@ -74,10 +74,16 @@ This delivery does not activate or migrate the user's running installation.
 A failed request interpretation can retain a draft without a workflow version or
 entry agent. This is incomplete setup, not evidence that a previously selected
 version changed. Use **Configure task manually** (or **Review task settings**)
-to open Review settings. Choose the workflow/version and entry agent, check input
+to focus the visible Workflow & repository section. Choose the workflow/version and entry agent, check input
 delivery and the result agent, then **Save draft**. Review requirements and
 explicitly confirm authorization before starting. **Review and run** reviews a
 manually saved configuration without sending it through interpretation again.
+**Continue task** saves complete manual corrections before reviewing them; it
+never reinterprets an existing draft. Incomplete corrections stay in the editor
+with guidance about the remaining fields. Save failures retain unsaved edits;
+review failures after a successful save retain the new draft revision for retry.
+Neither path starts agents or grants authorization. **Resolve request** remains
+the explicit way to ask the model to interpret the request again.
 
 Authorization controls are withheld while setup is incomplete, edits are unsaved,
 or the review is loading or failed. Refresh authorization retries the saved scope;

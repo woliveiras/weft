@@ -424,7 +424,11 @@ function ProviderForm({
   const type = settings.types.find((t) => t.type === draft.type);
   const stored = provider?.credential?.source === 'stored' && provider.credential.configured;
   const set = (patch: Partial<ProviderDraft>) => {
-    setDraft((d) => ({ ...d, ...patch }));
+    const next = {...draft, ...patch};
+    const local = localErrors(inputFromDraft(next, mode, settings.types.find(t => t.type === next.type)?.settings), mode);
+    setDraft(next);
+    setErrors(current => Object.fromEntries(Object.entries(current).flatMap(([key, message]) =>
+      Object.hasOwn(patch, key) ? (local[key] ? [[key, local[key]]] : []) : [[key, message]])));
     setTest(undefined);
   };
 
@@ -638,13 +642,9 @@ function Field({ label, error, hint, children }: { label: string; error?: string
   const descriptionId = useId();
   return (
     <HelpField label={label} help={providerFieldHelp[label]} className={error ? 'has-error' : undefined}
-      descriptionId={error || hint ? descriptionId : undefined}>
+      error={error} descriptionId={hint ? descriptionId : undefined}>
       {children}
-      {error ? (
-        <span id={descriptionId} className="field-error" role="alert">
-          {error}
-        </span>
-      ) : hint ? (
+      {hint ? (
         <span id={descriptionId} className="field-hint">{hint}</span>
       ) : null}
     </HelpField>

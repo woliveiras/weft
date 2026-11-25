@@ -1,5 +1,5 @@
 import type {Graph} from '../api/types';
-import type {TaskInput} from '../api/tasks';
+import type {Project,TaskDraft,TaskInput,TaskReview} from '../api/tasks';
 
 export const requestPayload=(title:string,request:string)=>JSON.stringify({title,description:request},null,2);
 
@@ -55,10 +55,49 @@ export function promptTitle(request:string):string {
 
 /** Missing saved bindings prevent a meaningful authorization review. Server admission remains authoritative. */
 export function missingTaskConfiguration(input:TaskInput):string[] {
+ const errors=taskConfigurationFieldErrors(input);
  const missing:string[]=[];
- if(!input.graphId)missing.push('workflow');
- if(!Number.isInteger(input.graphVersion)||input.graphVersion<1)missing.push('workflow version');
- if(!input.nodeId)missing.push('entry agent');
- if(input.channelId&&(!input.messageType||!input.payloadJson))missing.push('channel message type and payload');
+ if(errors.graphId)missing.push('workflow');
+ if(errors.graphVersion)missing.push('workflow version');
+ if(errors.nodeId)missing.push('entry agent');
+ if(errors.messageType||errors.payloadJson)missing.push('channel message type and payload');
  return missing;
+}
+
+export function taskConfigurationFieldErrors(input:TaskInput):Partial<Record<'graphId'|'graphVersion'|'nodeId'|'messageType'|'payloadJson',string>> {
+ return {
+  ...(!input.graphId?{graphId:'Choose a workflow.'}:{}),
+  ...(!Number.isInteger(input.graphVersion)||input.graphVersion<1?{graphVersion:input.graphId?'Choose a saved workflow version.':'Choose a workflow to select its version.'}:{}),
+  ...(!input.nodeId?{nodeId:'Choose the entry agent that will receive this task.'}:{}),
+  ...(input.channelId&&!input.messageType?{messageType:'Enter the message type expected by the selected channel.'}:{}),
+  ...(input.channelId&&!input.payloadJson?{payloadJson:'Enter the JSON payload sent to the selected channel.'}:{}),
+ };
+}
+
+/** A returned draft is a blocked or reviewable outcome, never evidence of execution. */
+export function submissionDraftFeedback(task:TaskDraft,review?:TaskReview):{message:string;configure:boolean}|undefined {
+ if(task.status!=='draft')return undefined;
+ const missing=missingTaskConfiguration(task);
+ if(missing.length)return {message:`Task has not started. Complete ${missing.join(', ')} in Workflow & repository and Input & delivery, then save the draft and review requirements.`,configure:true};
+ if(review?.canPrepareEnvironment)return {message:'Task has not started. Review and prepare its Docker environment here, then review again before starting agents.',configure:false};
+ const blockers=review?.blockers?.filter(Boolean)??[];
+ if(blockers.length)return {message:`Task has not started. ${blockers.join(' ')} Review requirements below for the next step.`,configure:false};
+ if(task.resolution&&task.resolution.state!=='resolved')return {message:`Task has not started. ${task.resolution.message} Review the request and settings before continuing.`,configure:true};
+ return {message:'Task has not started. Review requirements below and confirm authorization before starting.',configure:false};
+}
+
+/** Disambiguate registered snapshots without depending on unique display names. */
+export function projectChoiceLabel(project:Project):string {
+ return `${project.name} · ${project.repositoryUrl||project.path||project.id} · ${project.repositoryRef||'registered commit'} · ${project.head.slice(0,12)||project.id}`;
+}
+
+/** Default an unselected version once a workflow is available; retain every existing pin. */
+export function defaultTaskWorkflowVersion(input:TaskInput,graph:Graph|undefined):TaskInput {
+ if(input.graphVersion || !graph || graph.metadata.id!==input.graphId || !graph.metadata.version)return input;
+ return {...input,graphVersion:graph.metadata.version};
+}
+
+/** Replace only the known graph-oriented preparation notice; retain other admission failures. */
+export function isTaskEnvironmentPreparationNotice(message:string):boolean {
+ return message.startsWith('spec.environment: environment not ready:') || message.startsWith('environment not ready:') || message==='Prepare and review the task environment before starting agents.';
 }

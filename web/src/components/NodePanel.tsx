@@ -814,7 +814,7 @@ export function AgentEditor({
       <FieldIssues issues={issues} field="id" />
       </>}
       <HelpField label={"Name"} help={"The name is shown in the workflow and run history. Choose a label that describes the role, such as Release reviewer."}>
-        <input value={node.name ?? ''} onChange={(event) => update({ name: event.target.value || undefined })} />
+        <input required={definitionOnly} value={node.name ?? ''} onChange={(event) => update({ name: event.target.value || undefined })} />
         <FieldIssues issues={issues} field="name" />
       </HelpField>
       <HelpField label={"Description"} help={"Describe what this agent is responsible for. This summary helps people choose the right agent from the catalog."}>

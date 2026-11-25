@@ -34,7 +34,10 @@ it('creates a reviewed profile and handles a stale revision without retry',async
  const backend=fakeApi({'GET /api/v1/delegation-policy':()=>current,'GET /api/v1/delegation-profiles':()=>profiles,'POST /api/v1/delegation-profiles':()=>apiError(409,'revision conflict','conflict')});
  render(<DelegationSection canManage/>);await screen.findByText('Analysis');
  await userEvent.click(screen.getByRole('button',{name:'New delegation profile'}));
- expect((screen.getByRole('button',{name:'Review delegation profile'}) as HTMLButtonElement).disabled).toBe(true);
+ await userEvent.click(screen.getByRole('button',{name:'Review delegation profile'}));
+ expect(screen.getByLabelText('Profile ID').getAttribute('aria-invalid')).toBe('true');
+ expect(screen.queryByRole('button',{name:'Confirm delegation profile'})).toBeNull();
+ expect(backend.calls.filter(c=>c.method==='POST')).toHaveLength(0);
  await userEvent.type(screen.getByLabelText('Profile ID'),'review');await userEvent.type(screen.getByLabelText('Profile name'),'Review');await userEvent.type(screen.getByLabelText('Profile instructions'),'Review the provided design');
  await userEvent.click(screen.getByRole('button',{name:'Review delegation profile'}));
  await userEvent.click(screen.getByRole('button',{name:'Confirm delegation profile'}));
@@ -49,7 +52,9 @@ it('keeps failed reads unavailable and rejects invalid policy limits',async()=>{
  fakeApi({'GET /api/v1/delegation-policy':()=>fail?apiError(500,'storage unavailable','internal'):current,'GET /api/v1/delegation-profiles':()=>profiles});
  render(<DelegationSection canManage/>);expect(await screen.findByText('storage unavailable')).toBeTruthy();expect(screen.queryByLabelText('Approval mode')).toBeNull();
  fail=false;await userEvent.click(screen.getByRole('button',{name:'Reload delegation policy'}));const input=await screen.findByLabelText('Concurrent children');
- await userEvent.clear(input);await userEvent.type(input,'33');expect((screen.getByRole('button',{name:'Review delegation policy'}) as HTMLButtonElement).disabled).toBe(true);
+ await userEvent.clear(input);await userEvent.type(input,'33');await userEvent.click(screen.getByRole('button',{name:'Review delegation policy'}));
+ expect(input.getAttribute('aria-invalid')).toBe('true');
+ expect(screen.queryByRole('button',{name:'Confirm delegation policy'})).toBeNull();
 });
 
 it('reviews and persists the tree token ceiling through the configuration API',async()=>{

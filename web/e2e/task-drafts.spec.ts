@@ -1,4 +1,4 @@
-import {openTaskSettings} from './task-settings';
+import {openTaskSettings,openTaskSection,openTaskStopControls} from './task-settings';
 import {test,expect} from '@playwright/test';
 const headers={Authorization:'Bearer e2e-admin-token'};
 test('saves and resumes a reviewed request without starting or changing the workflow',async({page})=>{
@@ -20,7 +20,7 @@ test('saves and resumes a reviewed request without starting or changing the work
  await page.getByRole('combobox',{name:'Result agent',exact:true}).selectOption('');
  await page.getByRole('button',{name:'Save draft',exact:true}).click();
  await expect(page).toHaveURL(/#\/tasks\/tsk_/);
- await expect(page.getByRole('status')).toHaveText('Draft saved. No agents have been started.');
+ await expect(page.getByRole('region',{name:'Save and review task'}).getByRole('status')).toHaveText('Draft saved. No agents have been started.');
  await page.reload();
  await expect(page.getByRole('textbox',{name:'Request',exact:true})).toHaveValue('Explain why the parser rejects this input.');
  await page.getByRole('button',{name:'Review requirements'}).click();
@@ -34,11 +34,25 @@ test('saves and resumes a reviewed request without starting or changing the work
  await openTaskSettings(page);
  await page.getByRole('textbox',{name:'Title',exact:true}).fill('Updated request');
  await page.getByRole('button',{name:'Save draft',exact:true}).click();
- await expect(page.getByRole('status')).toHaveText('Draft saved. No agents have been started.');
+ await expect(page.getByRole('region',{name:'Save and review task'}).getByRole('status')).toHaveText('Draft saved. No agents have been started.');
  await page.reload();await openTaskSettings(page);
  await expect(page.getByRole('textbox',{name:'Title',exact:true})).toHaveValue('Updated request');
  await page.getByRole('link',{name:'Back to tasks',exact:true}).click();
  await page.getByRole('link',{name:'Updated request',exact:true}).click();await expect(page).toHaveURL(url);
+ // Publishing the workflow leaves this task pinned until an explicit dropdown choice.
+ expect((await page.request.put('/api/v1/graphs/task-draft-flow',{headers:{...headers,'If-Match':'1'},data:saved.graph})).ok()).toBe(true);
+ await page.reload();
+ const version=page.getByRole('combobox',{name:'Workflow version',exact:true});
+ await expect(version).toHaveValue('1');
+ await expect(version.getByRole('option',{name:'Current workflow version (Version 2)'})).toHaveCount(1);
+ await version.selectOption('2');
+ await page.getByRole('button',{name:'Review and run',exact:true}).click();
+ await expect(page.getByRole('article',{name:'Task requirements'})).toContainText('Current workflow version: 2');
+ const taskId=url.split('/').pop()!;
+ const updated=await(await page.request.get(`/api/v1/tasks/${taskId}`,{headers})).json();
+ expect(updated).toMatchObject({status:'draft',graphVersion:2,title:'Updated request',nodeId:'worker'});
+ expect(updated.executionGraphId).toBeUndefined();
+ expect(await(await page.request.get('/api/v1/graphs/task-draft-flow/executions',{headers})).json()).toEqual([]);
 });
 
 test('viewer cannot save a task through the UI or API',async({page})=>{
@@ -50,7 +64,7 @@ test('viewer cannot save a task through the UI or API',async({page})=>{
  expect((await page.request.post('/api/v1/tasks',{headers:{Authorization:'Bearer e2e-viewer-token'},data:{}})).status()).toBe(403);
 });
 
-test('reviews and starts an owned task, retains its result after reload and stops only its copy',async({page})=>{
+test('reviews and starts an owned task, retains its result and confirms the completed copy stopped',async({page})=>{
  const graph={metadata:{id:'task-start-flow',name:'Task start flow'},spec:{nodes:[{id:'worker',name:'Worker',runtime:{kind:'echo'},loop:{mode:'once'},tools:[]}]}};
  expect((await page.request.post('/api/v1/graphs',{headers,data:graph})).status()).toBe(201);
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
@@ -69,10 +83,11 @@ test('reviews and starts an owned task, retains its result after reload and stop
  await expect(page.getByRole('button',{name:'Start task',exact:true})).toBeDisabled();
  await page.getByRole('checkbox',{name:'I reviewed the workflow and authorize a separate execution copy.'}).check();
  await page.getByRole('button',{name:'Start task',exact:true}).click();
- await expect(page.getByRole('status')).toHaveText('Task status: succeeded');
- await page.reload();await expect(page.getByRole('status')).toHaveText('Task status: succeeded');
+ await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
+ await page.reload();await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
  const taskId=page.url().split('/').pop()!;
  const progress=await(await page.request.get(`/api/v1/tasks/${taskId}/progress`,{headers})).json();
+ await openTaskSection(page,'Changes & checks');
  await page.getByLabel('Inspect execution evidence').selectOption(progress.executions[0].id);
  await expect(page.getByRole('region',{name:'Run tool calls',exact:true})).toContainText('0 tool invocations observed');
  await page.getByText('Execution tree and interruption',{exact:true}).click();
@@ -81,9 +96,45 @@ test('reviews and starts an owned task, retains its result after reload and stop
  await page.getByText('Execution tree and interruption',{exact:true}).click();
  await expect(page.getByRole('link',{name:'Execution details'})).toHaveAttribute('href',/#\/g\/task-run-/);
  expect(await(await page.request.get('/api/v1/graphs/task-start-flow/executions',{headers})).json()).toEqual([]);
+ await expect.poll(async()=>{
+  const copy=await(await page.request.get(`/api/v1/graphs/${progress.task.executionGraphId}/status`,{headers})).json();
+  return [copy.state,copy.desiredState];
+ }).toEqual(['stopped','stopped']);
+ const source=await(await page.request.get('/api/v1/graphs/task-start-flow/status',{headers})).json();
+ expect(source.state).toBe('stopped');
+ await page.reload();
+ await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
+ await expect(page.locator('summary').filter({hasText:/^Stop task$/})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Delete draft',exact:true})).toHaveCount(0);
+});
+
+test('cancels an active task waiting for approval and stops only its execution copy',async({page})=>{
+ const graphId='task-stop-pending-flow';
+ const graph={metadata:{id:graphId,name:'Task stop pending flow'},spec:{nodes:[{id:'worker',runtime:{kind:'echo'},loop:{mode:'event'},tools:[]}],channels:[{id:'requests',to:['worker'],approval:true,types:['feature.request']}]}};
+ expect((await page.request.post('/api/v1/graphs',{headers,data:graph})).status()).toBe(201);
+ const response=await page.request.post('/api/v1/tasks',{headers,data:{title:'Cancel pending task',request:'Wait for approval before executing',outcome:'freeform',graphId,graphVersion:1,nodeId:'worker',resultNodeId:'worker',channelId:'requests',messageType:'feature.request',payloadJson:'{}'}});
+ expect(response.status()).toBe(201);
+ const draft=await response.json();
+ expect((await page.request.post(`/api/v1/tasks/${draft.id}/start`,{headers:{...headers,'If-Match':String(draft.revision)},data:{confirm:true}})).status()).toBe(202);
+ await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+ await page.goto(`/#/tasks/${draft.id}`);
+ await expect(page.getByRole('region',{name:'Task decisions',exact:true}).getByRole('heading',{name:'Your decision is needed'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Delete draft',exact:true})).toHaveCount(0);
+ const progress=await(await page.request.get(`/api/v1/tasks/${draft.id}/progress`,{headers})).json();
+ expect(progress.task.executionGraphId).toBeTruthy();
+ expect(progress.executions).toEqual([]);
+ await openTaskStopControls(page);
  await page.getByRole('checkbox',{name:"Stop this task's execution copy and retain its data."}).check();
  await page.getByRole('button',{name:'Stop task',exact:true}).click();
- await expect(page.getByRole('status')).toHaveText('Task status: cancelled');
+ await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: cancelled');
+ await expect.poll(async()=>{
+  const copy=await(await page.request.get(`/api/v1/graphs/${progress.task.executionGraphId}/status`,{headers})).json();
+  return [copy.state,copy.desiredState];
+ }).toEqual(['stopped','stopped']);
+ const source=await(await page.request.get(`/api/v1/graphs/${graphId}/status`,{headers})).json();
+ expect(source.state).toBe('stopped');
+ expect(await(await page.request.get(`/api/v1/graphs/${graphId}/executions`,{headers})).json()).toEqual([]);
+ expect(await(await page.request.get(`/api/v1/graphs/${progress.task.executionGraphId}/executions`,{headers})).json()).toEqual([]);
 });
 
 test('reviews structured channel input and reports the declared result with retained output',async({page})=>{
@@ -103,7 +154,7 @@ test('reviews structured channel input and reports the declared result with reta
  await page.getByRole('combobox',{name:'Result agent',exact:true}).selectOption('worker');
  await page.getByRole('button',{name:'Save draft',exact:true}).click();await page.getByRole('button',{name:'Review requirements'}).click();
  await page.getByRole('checkbox',{name:'I reviewed the workflow and authorize a separate execution copy.'}).check();await page.getByRole('button',{name:'Start task',exact:true}).click();
- await expect(page.getByRole('status')).toHaveText('Task status: succeeded');
+ await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
  await expect(page.getByText('echoed 1 message(s)',{exact:true})).toBeVisible();
 });
 
@@ -126,7 +177,7 @@ test('opens a previously saved echo example and runs it only after explicit revi
  await expect(page.getByRole('heading',{name:'Try the task flow'})).toHaveCount(0);
  await page.getByRole('link',{name:'Previously saved echo example',exact:true}).click();
  await expect(page).toHaveURL(new RegExp(`#/tasks/${id}$`));
- await expect(page.getByRole('status')).toHaveText('Draft saved. No agents have been started.');
+ await expect(page.getByRole('region',{name:'Save and review task'}).getByRole('status')).toHaveText('Draft saved. No agents have been started.');
  const draft=await(await page.request.get(`/api/v1/tasks/${id}`,{headers})).json();
  expect(draft.status).toBe('draft');
  expect(await(await page.request.get(`/api/v1/graphs/${draft.graphId}/executions`,{headers})).json()).toEqual([]);
@@ -135,8 +186,9 @@ test('opens a previously saved echo example and runs it only after explicit revi
  await page.getByRole('button',{name:'Review requirements'}).click();
  await page.getByRole('checkbox',{name:'I reviewed the workflow and authorize a separate execution copy.'}).check();
  await page.getByRole('button',{name:'Start task',exact:true}).click();
- await expect(page.getByRole('status')).toHaveText('Task status: succeeded');
- await page.reload();await expect(page.getByRole('status')).toHaveText('Task status: succeeded');
+ await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
+ await page.reload();await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
+ await openTaskSection(page,'Request');
  const request=page.getByRole('region',{name:'Request',exact:true});
  await expect(request).toContainText('Echo this example.');
  await expect(request).not.toContainText('Internal task context');
@@ -158,10 +210,12 @@ test('keeps task approvals contextual and preserves viewer restrictions and deci
   await expect(decisions.getByRole('heading',{name:'Your decision is needed'})).toBeVisible();
   await decisions.getByRole('button',{name:decision==='approve'?'Approve':'Reject',exact:true}).click();
   await expect(page).toHaveURL(taskURL);
-  await expect(page.getByRole('status')).toHaveText(`Task status: ${decision==='approve'?'succeeded':'failed'}`);
-  await expect(decisions).toContainText('No pending approvals in the latest task snapshot.');
-  await page.reload();await expect(page.getByRole('status')).toHaveText(`Task status: ${decision==='approve'?'succeeded':'failed'}`);
-  await page.getByText('Activity and diagnostics',{exact:true}).click();
+  await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText(`Task status: ${decision==='approve'?'succeeded':'failed'}`);
+  await expect(decisions).toHaveCount(0);
+  await page.getByText('Decision history',{exact:true}).click();
+  await expect(page.getByRole('region',{name:'Task journey'})).toContainText(decision==='approve'?'approved':'rejected');
+  await page.reload();await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText(`Task status: ${decision==='approve'?'succeeded':'failed'}`);
+  await openTaskSection(page,'Activity');
   await expect(page.getByRole('heading',{name:'Task activity',exact:true})).toBeVisible();
   await page.getByRole('group',{name:'Activity views'}).getByRole('button',{name:/^Events/}).click();
   await expect(page.getByRole('region',{name:'Task events'})).toBeVisible();
@@ -196,12 +250,43 @@ test('prepares a task sandbox then requires a separate reviewed start',async({pa
  await openTaskSettings(page);
  await page.getByRole('textbox',{name:'Title',exact:true}).fill('Prepared sandbox task');await page.getByRole('textbox',{name:'Request',exact:true}).fill('Synthetic build and execution boundary');await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption(graph.metadata.id);await page.getByRole('combobox',{name:'Execution environment',exact:true}).selectOption('sandbox');
  await page.getByRole('button',{name:'Save draft',exact:true}).click();await expect(page).toHaveURL(/#\/tasks\/tsk_/);await page.getByRole('button',{name:'Review requirements'}).click();await expect(page.getByRole('region',{name:'Task environment definition'})).toContainText('alpine:3.22');await expect(page.getByRole('button',{name:'Start task',exact:true})).toBeDisabled();
- await page.getByRole('checkbox',{name:'I reviewed the workflow and authorize a separate execution copy.'}).check();await page.getByRole('button',{name:'Prepare task environment'}).click();
- await expect(page.getByRole('status')).toHaveText('Task status: environment_pending');await expect(page.getByRole('region',{name:'Task environment preparation'})).toContainText('Environment: ready');
- const id=page.url().split('/').at(-1)!;const progress=await(await page.request.get(`/api/v1/tasks/${id}/progress`,{headers})).json();
+ const notice=page.getByRole('complementary',{name:'Environment preparation required'});
+ await expect(notice).toContainText('You can prepare it from this page');
+ await expect(notice).toContainText('After the build, review the prepared environment and start the task');
+ await expect(notice).not.toContainText('Graph settings');
+ const prepare=page.getByRole('button',{name:'Prepare task environment',exact:true});
+ await expect(prepare).toBeDisabled();
+ const writes:string[]=[];
+ page.on('request',request=>{if(request.method()==='POST'&&request.url().includes('/prepare-environment'))writes.push(request.url());});
+ const shortcut=notice.getByRole('button',{name:'Review environment preparation'});
+ await shortcut.focus();await shortcut.press('Enter');
+ const preparation=page.getByRole('region',{name:'Review task environment preparation'});
+ await expect(preparation).toBeFocused();
+ await expect(preparation).toContainText('Preparation does not start agents');
+ await expect(page.getByText(/build it in Graph settings/).first()).not.toBeVisible();
+ expect(writes).toEqual([]);
+ await notice.screenshot({path:test.info().outputPath('environment-next-step.png')});
+ await preparation.screenshot({path:test.info().outputPath('environment-build-review.png')});
+ await preparation.getByText('Build definition and network settings',{exact:true}).click();
+ await expect(preparation.locator('pre')).toContainText('alpine:3.22');
+ const regionBox=await preparation.boundingBox();const buttonBox=await prepare.boundingBox();
+ expect(buttonBox!.x).toBeGreaterThanOrEqual(regionBox!.x);expect(buttonBox!.x+buttonBox!.width).toBeLessThanOrEqual(regionBox!.x+regionBox!.width);
+ await preparation.getByRole('checkbox',{name:'I reviewed the workflow and authorize a separate execution copy.'}).check();
+ let release!:()=>void;
+ const pending=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/prepare-environment',async route=>{await pending;await route.continue();});
+ await prepare.click();
+ await expect(page.getByRole('button',{name:'Preparing environment…',exact:true})).toHaveAttribute('aria-busy','true');
+ await expect(preparation.getByRole('status')).toContainText('No agents are starting');
+ release();
+ await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: environment_pending');
+ const taskUrl=page.url();
+ await openTaskSection(page,'Environment & logs');
+ await expect(page.getByRole('region',{name:'Task environment preparation'})).toContainText('Environment: ready');
+ const id=taskUrl.split('/').at(-1)!;const progress=await(await page.request.get(`/api/v1/tasks/${id}/progress`,{headers})).json();
  expect(await(await page.request.get(`/api/v1/graphs/${progress.task.executionGraphId}/executions`,{headers})).json()).toEqual([]);
  await page.reload();await expect(page.getByRole('button',{name:'Start prepared task'})).toBeDisabled();await page.getByRole('button',{name:'Review prepared task requirements'}).click();await expect(page.getByText('Workflow version 1. Agent permissions remain unchanged.')).toBeVisible();
- await page.getByRole('checkbox',{name:'I reviewed this task environment and authorize the selected build or start action.'}).check();await page.getByRole('button',{name:'Start prepared task'}).click();await expect(page.getByRole('status')).toHaveText('Task status: succeeded');
+ await page.getByRole('checkbox',{name:'I reviewed this task environment and authorize the selected build or start action.'}).check();await page.getByRole('button',{name:'Start prepared task'}).click();await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
  const source=await(await page.request.get(`/api/v1/graphs/${graph.metadata.id}/environment`,{headers})).json();expect(source.state).toBe('absent');
 });
 
@@ -210,9 +295,10 @@ test('failed task environment remains inspectable and can be stopped without exe
  expect((await page.request.post('/api/v1/graphs',{headers,data:graph})).status()).toBe(201);
  const res=await page.request.post('/api/v1/tasks',{headers,data:{title:'Failed build',request:'Synthetic failure',outcome:'freeform',graphId:graph.metadata.id,graphVersion:1,nodeId:'worker',resultNodeId:'worker',executionMode:'sandbox'}});expect(res.status()).toBe(201);const task=await res.json();
  expect((await page.request.post(`/api/v1/tasks/${task.id}/prepare-environment`,{headers:{...headers,'If-Match':String(task.revision)},data:{confirm:true}})).status()).toBe(202);
- await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));await page.goto(`/#/tasks/${task.id}`);await expect(page.getByRole('region',{name:'Task environment preparation'})).toContainText('Environment: failed');await expect(page.getByRole('button',{name:'Start prepared task'})).toBeDisabled();await expect(page.getByRole('button',{name:'Retry environment build'})).toBeDisabled();
+ await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));await page.goto(`/#/tasks/${task.id}`);await openTaskSection(page,'Environment & logs');await expect(page.getByRole('region',{name:'Task environment preparation'})).toContainText('Environment: failed');await expect(page.getByRole('button',{name:'Start prepared task'})).toBeDisabled();await expect(page.getByRole('button',{name:'Retry environment build'})).toBeDisabled();
  await page.reload();await expect(page.getByRole('region',{name:'Task environment preparation'})).toContainText('Environment: failed');
- await page.getByRole('checkbox',{name:"Stop this task's execution copy and retain its data."}).check();await page.getByRole('button',{name:'Stop task',exact:true}).click();await expect(page.getByRole('status')).toHaveText('Task status: cancelled');
+ await openTaskStopControls(page);
+ await page.getByRole('checkbox',{name:"Stop this task's execution copy and retain its data."}).check();await page.getByRole('button',{name:'Stop task',exact:true}).click();await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: cancelled');
  const progress=await(await page.request.get(`/api/v1/tasks/${task.id}/progress`,{headers})).json();expect(await(await page.request.get(`/api/v1/graphs/${progress.task.executionGraphId}/executions`,{headers})).json()).toEqual([]);
 });
 
@@ -254,7 +340,7 @@ for(const kind of ['github','jira'] as const) test(`reads a selected ${kind} iss
  await page.getByRole('button',{name:'Start task',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Needs your decision',exact:true})).toBeVisible();
  await page.getByRole('region',{name:'Task decisions'}).getByRole('button',{name:'Approve',exact:true}).click();
- await expect(page.getByRole('status')).toHaveText('Task status: succeeded');
+ await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
  await expect(page.getByText(/Issue result:.*Issue fixture read completed/)).toBeVisible();
  const taskId=page.url().split('/').pop()!;
  const progress=await(await page.request.get(`/api/v1/tasks/${taskId}/progress`,{headers})).json();
@@ -262,35 +348,34 @@ for(const kind of ['github','jira'] as const) test(`reads a selected ${kind} iss
  expect(events.some((e:{type:string;data:{tool?:string;outcome?:string}})=>e.type==='tool.completed'&&e.data.tool===`mcp.${id}.${tool}`&&e.data.outcome==='ok')).toBeTruthy();
 });
 
-test('prompt-first draft keeps settings collapsed and never starts or interprets a URL automatically',async({page})=>{
+test('prompt-first draft keeps settings visible and never starts or interprets a URL automatically',async({page})=>{
  const id='prompt-draft';
  expect((await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id,name:id},spec:{nodes:[{id:'worker',runtime:{kind:'echo'},loop:{mode:'once'},tools:[]}]}}})).status()).toBe(201);
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
  await page.goto('/#/tasks/new');
- const summary=page.getByText('Review settings',{exact:true});
- await expect(summary.locator('..')).not.toHaveAttribute('open','');
- await expect(page.getByRole('textbox',{name:'Title',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('combobox',{name:'Project',exact:true})).toBeVisible();
+ await expect(page.getByRole('textbox',{name:'Title',exact:true})).toBeVisible();
  await page.getByRole('textbox',{name:'Request',exact:true}).fill('Inspect https://example.com/repository\nDo not commit or push.');
  await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption(id);
  await page.getByRole('button',{name:'Save draft',exact:true}).click();
  await expect(page).toHaveURL(/#\/tasks\/tsk_/);
  await page.reload();
- await expect(summary.locator('..')).not.toHaveAttribute('open','');
+ await expect(page.getByRole('combobox',{name:'Project',exact:true})).toBeVisible();
  await expect(page.getByRole('textbox',{name:'Request',exact:true})).toHaveValue('Inspect https://example.com/repository\nDo not commit or push.');
  const task=await(await page.request.get('/api/v1/tasks/'+page.url().split('/').pop(),{headers})).json();
  expect(task.title).toBe('Inspect https://example.com/repository');expect(task.status).toBe('draft');expect(task.projectId).toBeUndefined();
  expect(await(await page.request.get(`/api/v1/graphs/${id}/executions`,{headers})).json()).toEqual([]);
- await summary.focus();await page.keyboard.press('Enter');
+ await page.getByRole('textbox',{name:'Title',exact:true}).focus();
  await expect(page.getByRole('textbox',{name:'Title',exact:true})).toHaveValue(task.title);
  await page.getByRole('textbox',{name:'Title',exact:true}).fill('Custom title');
- await summary.click();await page.getByRole('textbox',{name:'Request',exact:true}).fill('Revised request');
+ await openTaskSettings(page);await page.getByRole('textbox',{name:'Request',exact:true}).fill('Revised request');
  await page.getByRole('button',{name:'Save draft',exact:true}).click();
- await expect(page.getByRole('status')).toHaveText('Draft saved. No agents have been started.');
+ await expect(page.getByRole('region',{name:'Save and review task'}).getByRole('status')).toHaveText('Draft saved. No agents have been started.');
  await page.reload();await openTaskSettings(page);
  await expect(page.getByRole('textbox',{name:'Title',exact:true})).toHaveValue('Custom title');
 });
 
-test('reveals invalid advanced fields instead of trapping validation behind collapsed settings',async({page})=>{
+test('keeps required agent selection visible and prevents saving incomplete configuration',async({page})=>{
  const id='prompt-ambiguous';
  expect((await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id,name:id},spec:{nodes:[{id:'one',runtime:{kind:'echo'}},{id:'two',runtime:{kind:'echo'}}]}}})).status()).toBe(201);
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
@@ -298,10 +383,101 @@ test('reveals invalid advanced fields instead of trapping validation behind coll
  await page.setViewportSize({width:390,height:844});
  await page.getByRole('textbox',{name:'Request',exact:true}).fill('Explain the project');
  await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption(id);
- await expect(page.getByRole('combobox',{name:'Entry agent',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('combobox',{name:'Entry agent',exact:true})).toBeVisible();
+ await expect(page.getByRole('combobox',{name:'Entry agent',exact:true})).toHaveValue('');
  await page.getByRole('button',{name:'Save draft',exact:true}).click();
  await expect(page.getByRole('combobox',{name:'Entry agent',exact:true})).toBeVisible();
  await expect(page).toHaveURL(/#\/tasks\/new$/);
  await expect(page.getByRole('textbox',{name:'Request',exact:true})).toHaveValue('Explain the project');
  expect(await(await page.request.get(`/api/v1/graphs/${id}/executions`,{headers})).json()).toEqual([]);
+});
+
+test('confirms draft deletion without deleting its workflow or starting agents',async({page})=>{
+ const graphId='draft-delete-browser';
+ expect((await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id:graphId,name:'Delete draft fixture'},spec:{nodes:[{id:'worker',runtime:{kind:'echo'},loop:{mode:'once'}}]}}})).status()).toBe(201);
+ const response=await page.request.post('/api/v1/tasks',{headers,data:{title:'Disposable deletion fixture',request:'Do not start this fixture',outcome:'freeform',graphId,graphVersion:1,nodeId:'worker'}});
+ expect(response.status()).toBe(201);
+ const task=await response.json();
+ await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+ await page.goto(`/#/tasks/${task.id}`);
+ await page.getByRole('button',{name:'Delete draft',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'Delete task draft?'});
+ await expect(dialog).toContainText(task.title);
+ await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+ expect((await page.request.get(`/api/v1/tasks/${task.id}`,{headers})).status()).toBe(200);
+ await page.getByRole('button',{name:'Delete draft',exact:true}).click();
+ await dialog.getByRole('button',{name:'Delete draft permanently',exact:true}).click();
+ await expect(page).toHaveURL(/#\/tasks$/);
+ expect((await page.request.get(`/api/v1/tasks/${task.id}`,{headers})).status()).toBe(404);
+ expect((await page.request.get(`/api/v1/graphs/${graphId}`,{headers})).status()).toBe(200);
+ expect(await(await page.request.get(`/api/v1/graphs/${graphId}/executions`,{headers})).json()).toEqual([]);
+});
+
+test('monitors build logs in their own section and reports manual refresh outcomes',async({page})=>{
+ const graph={metadata:{id:'task-environment-monitor'},spec:{environment:{dockerfile:'FROM alpine:3.22\nRUN echo E2E_BUILD_FAIL'},nodes:[{id:'worker',runtime:{kind:'echo'},loop:{mode:'once'},isolation:{mode:'docker'},tools:[]}]}};
+ expect((await page.request.post('/api/v1/graphs',{headers,data:graph})).status()).toBe(201);
+ const response=await page.request.post('/api/v1/tasks',{headers,data:{title:'Monitor build',request:'Inspect an environment without executing',outcome:'freeform',graphId:graph.metadata.id,graphVersion:1,nodeId:'worker',resultNodeId:'worker',executionMode:'sandbox'}});
+ expect(response.status()).toBe(201);const task=await response.json();
+ expect((await page.request.post(`/api/v1/tasks/${task.id}/prepare-environment`,{headers:{...headers,'If-Match':String(task.revision)},data:{confirm:true}})).status()).toBe(202);
+ await page.addInitScript(()=>{localStorage.setItem('weftToken','e2e-admin-token');localStorage.setItem('weftTheme','dark');});
+ await page.setViewportSize({width:1440,height:900});
+ await page.goto(`/#/tasks/${task.id}`);
+ const status=page.getByRole('region',{name:'Task status',exact:true});
+ await expect(status).toContainText('Environment build failed');
+ await expect(page.getByRole('region',{name:'Build logs'})).toHaveCount(0);
+ await page.getByRole('link',{name:'View environment & logs'}).focus();
+ await page.keyboard.press('Enter');
+ await expect(page).toHaveURL(/tab=environment/);
+ const log=page.getByLabel('Build output');
+ await expect(log).toContainText('E2E controlled build failure');
+ await expect(page.getByRole('button',{name:'Start prepared task'})).toBeDisabled();
+ await log.focus();await expect(log).toBeFocused();
+ await page.getByRole('checkbox',{name:'Follow latest output'}).uncheck();
+ const nav=page.getByRole('navigation',{name:'Task sections'});
+ expect(await nav.evaluate(element=>getComputedStyle(element).position)).toBe('static');
+ expect(await nav.evaluate(element=>getComputedStyle(element).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+ const logStyle=await log.evaluate(element=>({height:element.getBoundingClientRect().height,maxHeight:parseFloat(getComputedStyle(element).maxHeight),overflow:getComputedStyle(element).overflowY}));
+ expect(logStyle.height).toBeLessThanOrEqual(logStyle.maxHeight+2);expect(logStyle.overflow).toBe('auto');
+ const controls=page.getByRole('region',{name:'Task environment preparation'});
+ const confirmation=controls.getByRole('checkbox');
+ const reviewButton=controls.getByRole('button',{name:'Review prepared task requirements'});
+ const confirmationBox=(await confirmation.boundingBox())!;const reviewBox=(await reviewButton.boundingBox())!;
+ expect(confirmationBox.y-reviewBox.y-reviewBox.height).toBeGreaterThanOrEqual(16);
+ await page.screenshot({path:test.info().outputPath('task-environment-dark.png'),fullPage:true});
+ await page.getByRole('link',{name:'Back to tasks',exact:true}).scrollIntoViewIfNeeded();
+ await page.screenshot({path:test.info().outputPath('task-monitor-header-dark.png'),fullPage:true});
+ // Delay the progress boundary while allowing its successful response to come from the real API.
+ let release!:()=>void;const pending=new Promise<void>(resolve=>{release=resolve;});
+ await page.route(`**/tasks/${task.id}/progress`,async route=>{await pending;await route.continue();});
+ await page.getByRole('button',{name:'Refresh task',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Refreshing…',exact:true})).toBeDisabled();
+ await expect(status.getByRole('status')).toContainText('Refreshing the task snapshot');
+ release();await expect(status.getByRole('status')).toContainText('Task snapshot refreshed at');
+ await page.unroute(`**/tasks/${task.id}/progress`);
+ await page.route(`**/tasks/${task.id}/progress`,route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Progress temporarily unavailable',code:'unavailable'})}));
+ await page.getByRole('button',{name:'Refresh task',exact:true}).click();
+ await expect(status.getByRole('status')).toContainText('Task refresh failed');
+ await expect(status).toContainText('Last recorded snapshot');
+ await expect(log).toContainText('E2E controlled build failure');
+ await page.unroute(`**/tasks/${task.id}/progress`);
+ await page.getByRole('button',{name:'Refresh task',exact:true}).click();
+ await expect(status.getByRole('status')).toContainText('Task snapshot refreshed at');
+ let releaseInitial!:()=>void;const initialPending=new Promise<void>(resolve=>{releaseInitial=resolve;});
+ await page.route(`**/tasks/${task.id}/progress`,async route=>{await initialPending;await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Initial snapshot unavailable',code:'unavailable'})});});
+ await page.reload();await expect(page.getByRole('link',{name:'Environment & logs',exact:true})).toHaveAttribute('aria-current','page');
+ await expect(page.getByText('Loading the task environment snapshot…')).toBeVisible();
+ await expect(page.getByText(/No task environment has been prepared/)).toHaveCount(0);
+ releaseInitial();await expect(page.getByText('Environment snapshot unavailable. Use Refresh task to retry.')).toBeVisible();
+ await expect(page.getByText(/No task environment has been prepared/)).toHaveCount(0);
+ await page.unroute(`**/tasks/${task.id}/progress`);
+ await page.getByRole('button',{name:'Refresh task',exact:true}).click();
+ await expect(log).toContainText('E2E controlled build failure');
+ await page.setViewportSize({width:390,height:844});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+ await page.getByRole('link',{name:'Settings & access',exact:true}).click();
+ await expect(page.getByRole('region',{name:'Task authorization'})).toBeVisible();
+ await expect(page.getByRole('region',{name:'Build logs'})).toHaveCount(0);
+ await page.goBack();await expect(page.getByRole('region',{name:'Build logs'})).toBeVisible();
+ const saved=await(await page.request.get(`/api/v1/tasks/${task.id}/progress`,{headers})).json();
+ expect(await(await page.request.get(`/api/v1/graphs/${saved.task.executionGraphId}/executions`,{headers})).json()).toEqual([]);
 });

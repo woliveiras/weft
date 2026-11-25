@@ -128,6 +128,13 @@ describe('CostsSection', () => {
         { type: 'ollama', model: '*', inputMicrosPerMTok: 0, outputMicrosPerMTok: 500_000 },
       ],
     });
+    const savedRow=within(prices).getByRole('group',{name:'Price 1'});
+    await user.clear(within(savedRow).getByLabelText(/^Input/));
+    expect(within(prices).queryByText('Prices saved as version 3.')).toBeNull();
+    await user.click(within(prices).getByRole('button',{name:'Save prices'}));
+    expect(within(savedRow).getByLabelText(/^Input/).getAttribute('aria-invalid')).toBe('true');
+    expect(api.find('PUT','/api/v1/cost/prices')).toHaveLength(2);
+    await user.type(within(savedRow).getByLabelText(/^Input/),'2.5');
 
     await user.click(screen.getByRole('button', { name: 'Add monthly budget' }));
     const budgets = screen.getByRole('form', { name: 'Add monthly budget' });
@@ -310,4 +317,42 @@ it('does not claim zero spending or allow edits when monthly balances are unavai
   expect(screen.queryByText('No spending recorded for this budget this month.')).toBeNull();
   expect(screen.getByRole('button',{name:'Edit budget'}).matches(':disabled')).toBe(true);
   expect(screen.getByRole('button',{name:'Add monthly budget'}).matches(':disabled')).toBe(true);
+});
+
+it('marks only invalid budget fields and clears the corrected field before retrying',async()=>{
+ const user=userEvent.setup();const fixture=routes();
+ render(<CostsSection canEdit section="budgets"/>);
+ const form=await screen.findByRole('form',{name:'Default budget per task'});
+ const amount=within(form).getByLabelText(/^Task run budget/);
+ const warning=within(form).getByLabelText(/^Default warning/);
+ await waitFor(()=>expect(amount.matches(':disabled')).toBe(false));
+ expect(amount.getAttribute('aria-invalid')).toBeNull();
+ await user.clear(amount);await user.type(amount,'invalid');
+ await user.clear(warning);await user.type(warning,'101');
+ await user.click(within(form).getByRole('button',{name:'Save task defaults'}));
+ expect(fixture.find('PUT','/api/v1/cost/policy')).toHaveLength(0);
+ expect(amount.getAttribute('aria-invalid')).toBe('true');
+ expect(warning.getAttribute('aria-invalid')).toBe('true');
+ expect(document.activeElement).toBe(amount);
+ await user.clear(amount);await user.type(amount,'2');
+ expect(amount.getAttribute('aria-invalid')).toBeNull();
+ expect(warning.getAttribute('aria-invalid')).toBe('true');
+});
+
+it('points duplicate installation budgets to the visible scope field',async()=>{
+ const user=userEvent.setup();
+ const fixture=routes({'GET /api/v1/cost/budgets':()=>({budgets:[{scope:'installation',id:'*',limitMicros:10_000_000}],period:'2026-11'})});
+ render(<CostsSection canEdit section="budgets"/>);
+ await user.click(await screen.findByRole('button',{name:'Add monthly budget'}));
+ const form=screen.getByRole('form',{name:'Add monthly budget'});
+ await user.type(within(form).getByLabelText(/^Monthly limit/),'2');
+ await user.click(within(form).getByRole('button',{name:'Save monthly budget'}));
+ const scope=within(form).getByLabelText('Scope');
+ expect(scope.getAttribute('aria-invalid')).toBe('true');
+ expect(document.activeElement).toBe(scope);
+ expect(within(form).getByRole('alert').textContent).toContain('already exists');
+ expect(fixture.find('PUT','/api/v1/cost/budgets')).toHaveLength(0);
+ await user.selectOptions(scope,'project');
+ expect(scope.getAttribute('aria-invalid')).toBeNull();
+ expect(within(form).getByLabelText('Applies to').getAttribute('aria-invalid')).toBe('true');
 });

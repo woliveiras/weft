@@ -394,6 +394,35 @@ paths:
         '404': {description: Draft or workflow not found}
         '409': {description: Stale draft or workflow version}
         '422': {description: Invalid draft}
+    delete:
+      summary: Delete an unstarted draft with explicit confirmation and revision protection
+      description: |
+        Only a task still in draft without an execution copy or environment
+        preparation reference can be deleted. A minimal deletion marker fences
+        stale edits, model results, repeated submissions and competing admission.
+        Deleted IDs return 404 and are omitted from task listings. Repositories,
+        imports, workspaces, approvals, audit events and execution history remain.
+      x-weft-role: operator
+      parameters:
+        - {in: header, name: If-Match, required: true, schema: {type: string}, description: Current positive task revision from its ETag}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [confirm]
+              properties:
+                confirm: {type: boolean, const: true}
+      responses:
+        '204': {description: Draft deleted; no response body}
+        '400': {description: Missing confirmation or positive revision; malformed JSON or unexpected fields}
+        '401': {description: Authentication required}
+        '403': {description: Operator role required}
+        '404': {description: Draft not found or already deleted}
+        '409': {description: Stale revision or task already prepared or executed}
+        '500': {description: Storage or audit failure; reload the task before retrying}
   /api/v1/tasks/{tid}/review:
     get:
       summary: Preview current workflow requirements without admitting execution

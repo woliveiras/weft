@@ -148,7 +148,11 @@ describe('ProvidersSection', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Add provider' }));
     const alert = await within(dialog).findByRole('alert');
     expect(alert.textContent).toBe('an API key is required');
-    expect(within(dialog).getByLabelText('API key').getAttribute('aria-describedby')).toBe(alert.id);
+    expect(within(dialog).getByLabelText('API key').getAttribute('aria-describedby')?.split(' ')).toContain(alert.id);
+    expect(within(dialog).getByLabelText('API key').getAttribute('aria-invalid')).toBe('true');
+    await user.type(within(dialog).getByLabelText('API key'), 'replacement');
+    expect(within(dialog).getByLabelText('API key').getAttribute('aria-invalid')).toBeNull();
+    expect(within(dialog).queryByRole('alert')).toBeNull();
   });
 
   it('validates locally before sending', async () => {
