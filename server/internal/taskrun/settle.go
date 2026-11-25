@@ -42,9 +42,7 @@ func (m Manager) Settle(ctx context.Context, graphID string) error {
 	case "draft", "preparing", "starting", "environment_pending", "environment_build_requested":
 		return nil
 	}
-	switch v.State {
-	case "succeeded", "failed", "blocked", "interrupted", "cancelled":
-	default:
+	if !terminalOutcomeRecorded(v) {
 		return nil
 	}
 	rec, err := m.Store.GetGraphRecord(ctx, graphID)
@@ -52,11 +50,6 @@ func (m Manager) Settle(ctx context.Context, graphID string) error {
 		return err
 	}
 	if v.State == "cancelled" && !cancellationConfirmed(rec, v) {
-		return nil
-	}
-	// A preparation block has no terminal execution and still requires an
-	// explicit operator stop. A pending approval or budget pause is not done.
-	if len(v.Executions) == 0 && v.State != "cancelled" {
 		return nil
 	}
 	if rec.DesiredState != domain.GraphStopped {
@@ -70,6 +63,18 @@ func (m Manager) Settle(ctx context.Context, graphID string) error {
 		return nil
 	} // recompute next cycle
 	return err
+}
+
+// View only reports failed after pending approvals and active work are settled.
+// A failed message gate may prevent every execution from starting. Preparation
+// blocks still require an explicit operator stop when no execution was recorded.
+func terminalOutcomeRecorded(v *View) bool {
+	switch v.State {
+	case "succeeded", "failed", "blocked", "interrupted", "cancelled":
+		return len(v.Executions) > 0 || v.State == "failed" || v.State == "cancelled"
+	default:
+		return false
+	}
 }
 
 // Cancellation is final only after both control and execution state agree.

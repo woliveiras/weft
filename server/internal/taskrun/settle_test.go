@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/woliveiras/weft/server/internal/domain"
@@ -78,6 +79,34 @@ func TestCancellationRequiresConfirmedStopAndCompleteHistory(t *testing.T) {
 			}
 			if got, want := cancellationConfirmed(rec, v), scenario == "settled" || scenario == "no-executions"; got != want {
 				t.Fatalf("confirmed=%t, want %t", got, want)
+			}
+		})
+	}
+}
+
+func TestSettlementRequiresTerminalOutcomeEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		state      string
+		executions int
+		want       bool
+	}{
+		{"failed", 0, true}, // A rejected or expired message gate never dispatched an execution.
+		{"cancelled", 0, true},
+		{"succeeded", 0, false},
+		{"blocked", 0, false}, // Preparation failures still require explicit operator cancellation.
+		{"interrupted", 0, false},
+		{"running", 0, false},
+		{"draft", 0, false},
+		{"succeeded", 1, true},
+		{"failed", 1, true},
+		{"blocked", 1, true},
+		{"interrupted", 1, true},
+		{"running", 1, false},
+	} {
+		t.Run(fmt.Sprintf("%s/%d", tc.state, tc.executions), func(t *testing.T) {
+			v := &View{State: tc.state, Executions: make([]*domain.Execution, tc.executions)}
+			if got := terminalOutcomeRecorded(v); got != tc.want {
+				t.Fatalf("settlement evidence = %t, want %t", got, tc.want)
 			}
 		})
 	}
