@@ -32,6 +32,8 @@ export interface GraphMetadata {
 }
 
 export interface GraphSpec {
+  /** Versioned editor suggestions, never grants or authorization. */
+  task?: WorkflowTaskDefaults;
   instructions?: import("./instructions").InstructionRefs;
   parameters?: Parameter[];
   workspace?: { path?: string; git?: boolean; repo?: string };
@@ -42,6 +44,15 @@ export interface GraphSpec {
   /** Declared verification commands run by the check.run tool. */
   checks?: DeclaredCheck[];
   maxHops?: number;
+}
+
+export interface WorkflowTaskDefaults {
+  nodeId?: string;
+  resultNodeId?: string;
+  channelId?: string;
+  messageType?: string;
+  projectId?: string;
+  scmConnection?: string;
 }
 
 /** A declared check: a name (test, lint, build, custom) plus a command. */

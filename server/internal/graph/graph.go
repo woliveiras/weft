@@ -444,6 +444,7 @@ func Validate(g *domain.Graph, knownRuntimes map[domain.RuntimeKind]bool) *Repor
 			}
 		}
 	}
+	validateTaskDefaults(g, r)
 	validateInstructions(g, r)
 	r.Valid = len(r.Errors) == 0
 	if r.Errors == nil {

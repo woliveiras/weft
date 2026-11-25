@@ -31,6 +31,7 @@
       "additionalProperties": false,
       "properties": {
         "instructions": {"$ref": "#/$defs/Instructions"},
+        "task": {"$ref": "#/$defs/TaskDefaults"},
         "parameters": {"type": "array", "items": {"$ref": "#/$defs/Parameter"}},
         "workspace": {"$ref": "#/$defs/Workspace"},
         "environment": {"$ref": "#/$defs/Environment"},
@@ -43,6 +44,18 @@
     }
   },
   "$defs": {
+    "TaskDefaults": {
+      "type": "object", "additionalProperties": false,
+      "description": "Versioned suggestions for new task editors. No grants, consent, payload or moving version aliases. External project/SCM names are revalidated at task admission.",
+      "properties": {
+        "nodeId": {"type": "string", "maxLength": 128},
+        "resultNodeId": {"type": "string", "maxLength": 128},
+        "channelId": {"type": "string", "maxLength": 128},
+        "messageType": {"type": "string", "maxLength": 128},
+        "projectId": {"type": "string", "maxLength": 128},
+        "scmConnection": {"type": "string", "maxLength": 128}
+      }
+    },
     "Check": {
       "type": "object", "additionalProperties": false, "required": ["name", "command"],
       "properties": {

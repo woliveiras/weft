@@ -56,6 +56,9 @@ type InstructionRefs struct {
 
 type GraphSpec struct {
 	Instructions InstructionRefs `json:"instructions,omitempty" yaml:"instructions,omitempty"`
+	// Task contains reusable editor suggestions. Admission still validates the
+	// task's concrete version, resources and reviewed permissions independently.
+	Task *TaskDefaults `json:"task,omitempty" yaml:"task,omitempty"`
 
 	Parameters []Parameter   `json:"parameters,omitempty" yaml:"parameters,omitempty"`
 	Workspace  WorkspaceSpec `json:"workspace,omitempty" yaml:"workspace,omitempty"`
@@ -73,6 +76,17 @@ type GraphSpec struct {
 	// MaxHops bounds how many agent hops a message chain may take. Cycles are
 	// legal; unbounded cycles are not. 0 means the platform default (64).
 	MaxHops int `json:"maxHops,omitempty" yaml:"maxHops,omitempty"`
+}
+
+// TaskDefaults contains no authorization, secret, moving version or payload.
+// External references are selected and revalidated when a task is saved/reviewed.
+type TaskDefaults struct {
+	NodeID        string `json:"nodeId,omitempty" yaml:"nodeId,omitempty"`
+	ResultNodeID  string `json:"resultNodeId,omitempty" yaml:"resultNodeId,omitempty"`
+	ChannelID     string `json:"channelId,omitempty" yaml:"channelId,omitempty"`
+	MessageType   string `json:"messageType,omitempty" yaml:"messageType,omitempty"`
+	ProjectID     string `json:"projectId,omitempty" yaml:"projectId,omitempty"`
+	SCMConnection string `json:"scmConnection,omitempty" yaml:"scmConnection,omitempty"`
 }
 
 // EnvironmentOrigin identifies the repository snapshot accepted by the operator.

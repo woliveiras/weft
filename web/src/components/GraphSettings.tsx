@@ -6,6 +6,7 @@ import { Badge, Btn } from './common';
 import { EnvironmentNetwork, EnvironmentSection } from './EnvironmentSection';
 import { TriggersSection } from './TriggersSection';
 import { ElementIssues, FieldIssues } from './GraphIssues';
+import {WorkflowTaskDefaults} from './WorkflowTaskDefaults';
 import {
   settingsPath,
   settingsSectionForIssue,
@@ -71,6 +72,7 @@ export function GraphSettings({
     parameters: String(parameters.length),
   };
   const contents = {
+    task: section==='task'?<WorkflowTaskDefaults graph={graph} onChange={onChange} editable={role==='admin'}/>:null,
     general: (
       <fieldset aria-label="Graph configuration">
         <HelpField label={"ID"} help={"The stable workflow identifier used in URLs and integrations. Changing a reference elsewhere does not rename a saved workflow."}>

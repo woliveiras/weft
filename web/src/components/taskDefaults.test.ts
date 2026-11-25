@@ -3,6 +3,13 @@ import type {Graph} from '../api/types';
 import type {TaskInput,TaskDraft,TaskReview} from '../api/tasks';
 import {requestPayload,updateTaskInput,workflowTaskDefaults,outcomeRequest,outcomeRequests,promptTitle,submissionDraftFeedback,taskConfigurationFieldErrors} from './taskDefaults';
 const graph={metadata:{id:'factory'},spec:{nodes:[{id:'planner'},{id:'integrator'}],channels:[{id:'requests',to:['planner'],types:['feature.request']},{id:'handoff',from:'planner',to:['integrator']}]}} as Graph;
+it('uses authored task bindings and resource names before topology inference without granting capabilities',()=>{
+ const configured={...graph,spec:{...graph.spec,task:{nodeId:'integrator',resultNodeId:'planner',projectId:'project-a',scmConnection:'team-scm'}}};
+ expect(workflowTaskDefaults(configured,'Title','Request')).toEqual({nodeId:'integrator',resultNodeId:'planner',channelId:undefined,messageType:undefined,payloadJson:undefined,projectId:'project-a',scmConnection:'team-scm'});
+ const channel={...configured,spec:{...configured.spec,task:{nodeId:'planner',channelId:'requests',messageType:'feature.request'}}};
+ expect(workflowTaskDefaults(channel,'Title','Request')).toEqual({nodeId:'planner',resultNodeId:'integrator',channelId:'requests',messageType:'feature.request',payloadJson:requestPayload('Title','Request')});
+ expect(workflowTaskDefaults(configured,'','')).not.toHaveProperty('authorization');
+});
 it('explains draft submission outcomes without claiming execution or hiding missing configuration',()=>{
  const draft={status:'draft',graphId:'flow',graphVersion:1,nodeId:'worker',resolution:{state:'resolved',message:'Interpreted'}} as TaskDraft;
  expect(submissionDraftFeedback({...draft,graphVersion:0,nodeId:''})).toEqual({message:expect.stringContaining('Complete workflow version, entry agent'),configure:true});

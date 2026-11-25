@@ -19,6 +19,16 @@ export function workflowTaskDefaults(graph:Graph|undefined,title:string,request:
  }else if(nodes.length===1&&inputs.length===0){result.nodeId=nodes[0].id;}
  const terminals=nodes.filter(n=>!channels.some(c=>c.from===n.id&&(c.to?.length??0)>0));
  if(terminals.length===1)result.resultNodeId=terminals[0].id;
+ const authored=graph.spec.task;
+ if(authored){
+  // Explicit entry without a channel means direct delivery; never retain an
+  // inferred ingress addressed to a different node.
+  if(authored.nodeId){result.nodeId=authored.nodeId;result.channelId=undefined;result.messageType=undefined;result.payloadJson=undefined;}
+  if(authored.resultNodeId)result.resultNodeId=authored.resultNodeId;
+  if(authored.channelId){result.channelId=authored.channelId;result.messageType=authored.messageType??'';result.payloadJson=requestPayload(title,request);}
+  if(authored.projectId)result.projectId=authored.projectId;
+  if(authored.scmConnection)result.scmConnection=authored.scmConnection;
+ }
  return result;
 }
 

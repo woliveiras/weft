@@ -1,5 +1,6 @@
 export const settingsSections = {
   general: 'General',
+  task: 'Task defaults',
   workspace: 'Workspace',
   environment: 'Environment',
   network: 'Network',
@@ -28,6 +29,7 @@ export function settingsSectionForIssue(path: string): SettingsSection {
   if (matches('spec.workspace')) return 'workspace';
   if (matches('spec.triggers') || matches('spec.issueTriggers') || matches('triggers')) return 'triggers';
   if (matches('spec.parameters')) return 'parameters';
+  if (matches('spec.task')) return 'task';
   if (matches('spec.safety') || matches('spec.defaults')) return 'safety';
   return 'general';
 }
