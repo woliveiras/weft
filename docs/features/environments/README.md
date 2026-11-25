@@ -35,7 +35,7 @@ Weft executes inside the server container; it is not a dedicated task sandbox.
 
 When task admission finds that preparation is needed:
 
-1. Use **Review task** to save current choices and inspect that exact saved
+1. Use **Run task** to save current choices and inspect that exact saved
    configuration. This does not interpret the request or start a build/agent.
    The setup summary's environment description is configuration guidance; the
    saved task review establishes whether preparation is needed and allowed.
@@ -48,7 +48,10 @@ When task admission finds that preparation is needed:
 5. If a build fails, inspect the failing phase before explicitly retrying. A
    policy rejection may need an installation change; a toolchain failure may
    need a corrected definition. Repeated refresh cannot fix either.
-6. On ready, review prepared requirements again and explicitly start the task.
+6. On ready, the task automatically inspects its saved requirements and shows
+   access, grants and limits. Select **Run task** to start after inspection.
+   A changed scope is shown for a new explicit Run decision; inspection failure
+   blocks start and offers retry.
    Interactive preparation does not auto-start agents on build completion.
 
 After start, command isolation and network policy remain enforced independently

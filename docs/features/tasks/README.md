@@ -30,14 +30,13 @@ remain visible for correction rather than selecting a replacement resource.
 
 ## 1. Describe and configure the draft
 
-All three setup sections are visible; repository and receiving-agent choices
-are not hidden inside a Review settings disclosure.
-
-| Section | Inputs and decisions |
-| --- | --- |
-| **1. Describe the work** | Request, goal and title. Title initially follows the request's first line until edited. **Resolve request** optionally asks the default model to interpret the request and save a proposal. |
-| **2. Workflow & repository** | Workflow, version dropdown, project/registered commit and execution environment. **Import repository from URL** exposes the import flow when no registered project is suitable. |
-| **3. Input & delivery** | Entry agent, result agent, direct instruction or channel delivery, message type/payload for channels, optional issue source and source-control hand-off. |
+The ordinary editor keeps **Request**, **Workflow** and **Project** visible.
+The summary explains the selected version, repository/base, execution environment,
+delivery, access and budget. **Advanced settings** contains title/goal, optional
+model interpretation, environment overrides, entry/result agents, channels,
+message type/JSON, issue source and SCM hand-off. Missing or invalid required
+advanced configuration opens that section automatically; it is never hidden
+behind a closed disclosure while it blocks launch.
 
 The workflow version defaults to the current version when no positive version
 was selected. An existing pinned version is retained until explicitly changed.
@@ -68,45 +67,38 @@ Execution environment is a task compatibility choice:
 - **Local worktree** requires native Weft and separates files, not process or
   network permissions.
 
-## 2. Save, optionally interpret, then review
+## 2. Run the task or save a draft
 
-**Save draft** persists an editable request revision; it does not start agents.
-Edits are local until saved. Leaving an unsaved task form triggers the existing
-dirty-form protection. Saving configuration invalidates earlier review consent.
+**Run task** is the primary action for new tasks, saved drafts and retries. It
+validates required fields, saves outstanding edits and checks the acknowledged
+revision automatically. It never calls the request interpreter. **Save draft**
+is the alternative when the operator wants to return later; saving does not
+start work. Unsaved edits retain the browser navigation guard.
 
-**Resolve request** is optional and may call a model. It preserves selected
-title, project and environment choices while rebuilding input bindings. Invalid
-proposals retain the original request and explain which setup needs repair.
-Use **Configure task manually** to move to the relevant visible sections.
-Interpretation never grants tools or execution consent.
+Saved drafts load a read-only launch review automatically. Before execution,
+the screen shows workflow/version, input, repository/base, environment, grants,
+access mode and applicable budget. Run checks these facts again. If they still
+match the displayed review and admission permits it, the explicit click starts
+the task. Newly discovered scope is shown inline for another explicit **Run
+task** click. There is no separate Save → Review requirements → Start checklist.
+A changed authorization scope, unavailable dependency or stale workflow version
+blocks execution with its correction beside the task. Scope changes never
+silently choose Full access or replace a pinned version.
 
-**Review task** has the same meaning for a new request and an existing draft:
-validate visible required fields, save changes if needed, then call the review
-endpoint for the acknowledged saved task. It never interprets the request or
-starts work. An unchanged saved draft can be reviewed without another write.
-While pending, it shows **Reviewing task…**. Missing fields receive inline
-guidance, an invalid-state border and an actionable setup message.
+A failed save retains local edits and prevents review/start. If saving succeeds
+but review fails, the acknowledged revision is retained; retry does not create
+another task. Start errors are shown without replacing manual input. Repeated
+clicks cannot dispatch concurrent starts. Loading and successful/failed checks
+have explicit feedback. Server revision fencing and one-time admission remain
+authoritative even if configuration changes between inspection and start.
 
-A failed save preserves edits and prevents review. If saving succeeds but review
-fails, the acknowledged saved revision remains available and the error is
-shown; retry reviews that revision without creating another task. A successful
-review reports blockers or the next explicit decision. The normal console flow
-does not use the combined `/tasks/submit` API as its primary action.
+**Resolve request**, inside Advanced settings, is optional and may call a model.
+It preserves selected title, project and environment while rebuilding bindings.
+Invalid proposals retain the request and explain the missing configuration.
+Interpretation never grants tools or execution consent. The console continues
+to use save/review/start endpoints; `/tasks/submit` keeps its existing API contract.
 
-The **Task setup summary** gathers workflow/input, repository/base, provider,
-isolation/environment, delivery, access and budget facts. It distinguishes
-configuration from verified readiness. Its goal-specific setup guidance and
-save-before-repair links are documented in
-[setup and readiness](../setup-and-readiness/README.md).
-
-## 3. Review requirements and authorize access
-
-**Review requirements** checks an already saved configuration; **Review task**
-also saves current edits before that check. Review checks the model, workflow
-version, agents, bindings, repository, environment and permissions. Review
-results are usable only for that task revision; dirty fields require saving and
-reviewing again. A version conflict requires an explicit current-version choice
-and renewed review, not repeated authorization refreshes.
+## 3. Access modes and mandatory approvals
 
 The access review describes the receiving agents, tool grants and execution
 boundaries. Task modes are:
@@ -135,8 +127,9 @@ The task enters `environment_pending`. **Environment & logs** contains the build
 state, bounded logs and a Follow control. Loading, unavailable snapshots and
 confirmed absence are distinct states. A failed build can be inspected and
 explicitly retried. Preparation finishing does **not** automatically start
-agents: review prepared requirements again, confirm the selected action and
-use **Start prepared task**. See [environments](../environments/README.md).
+agents: readiness automatically refreshes the launch review, then the operator
+uses **Run task** after inspecting the visible scope. Failed inspection blocks
+start and offers retry; no extra inspection button is required. See [environments](../environments/README.md).
 
 ## 5. Start, monitor and review delivery
 
@@ -176,7 +169,8 @@ source-control connection. It does not start agents. The new attempt links to
 the original; its approvals, environment, workspace and cost belong to it.
 The original history, plans, files and costs remain available.
 
-Review the new draft and use **Review task** before authorizing execution.
+Review the new draft and use **Run task**. Its launch review and admission checks
+are the same as for an ordinary task; source-task consent is not inherited.
 If the workflow changed, explicitly select the desired version and repair any
 incompatible bindings; retry does not silently upgrade it. Inspect external
 state and existing PRs before repeating work that may already have produced
@@ -228,7 +222,7 @@ precondition details remain in OpenAPI.
 | --- | --- | --- |
 | Save/create draft | `POST /api/v1/tasks`, `PUT /api/v1/tasks/<id>` | Operator/admin |
 | Interpret request | `POST /api/v1/tasks/prompt` | Operator/admin |
-| Combined API submission, separate from the normal console review flow | `POST /api/v1/tasks/submit` | Admin |
+| Combined API submission, separate from the normal console launch flow | `POST /api/v1/tasks/submit` | Admin |
 | Inspect admission | `GET /api/v1/tasks/<id>/review` | Viewer or higher |
 | Confirm task mode | `PUT /api/v1/tasks/<id>/authorization` | Admin |
 | Prepare/start/stop | `POST /api/v1/tasks/<id>/prepare-environment`, `/start`, `/cancel` | Admin |
@@ -239,7 +233,7 @@ precondition details remain in OpenAPI.
 
 | Boundary | Source |
 | --- | --- |
-| Form, exact-save review and contextual entry | [TasksPage](../../../web/src/components/TasksPage.tsx), [task defaults](../../../web/src/components/taskDefaults.ts), [entry context](../../../web/src/components/taskEntryContext.ts), [task types](../../../web/src/api/tasks.ts), [HTTP client](../../../web/src/api/client.ts) |
+| Form, coordinated launch and contextual entry | [TasksPage](../../../web/src/components/TasksPage.tsx), [launch scope](../../../web/src/components/taskLaunch.ts), [task defaults](../../../web/src/components/taskDefaults.ts), [entry context](../../../web/src/components/taskEntryContext.ts), [task types](../../../web/src/api/tasks.ts), [HTTP client](../../../web/src/api/client.ts) |
 | Tracking, plans and preparation | [TaskDetails](../../../web/src/components/TaskDetails.tsx), [TaskPlan](../../../web/src/components/TaskPlan.tsx), [TaskEnvironment](../../../web/src/components/TaskEnvironment.tsx) |
 | Access and evidence | [TaskAuthorization](../../../web/src/components/TaskAuthorization.tsx), [TaskEvidence](../../../web/src/components/TaskEvidence.tsx), [TaskCheckpoints](../../../web/src/components/TaskCheckpoints.tsx) |
 | Draft persistence and execution | [taskconfig](../../../server/internal/taskconfig), [taskrun](../../../server/internal/taskrun), [task API](../../../server/internal/api/tasks.go) |

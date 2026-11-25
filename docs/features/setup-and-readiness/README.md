@@ -7,9 +7,9 @@ new draft. See [tasks](../tasks/README.md) for the complete draft-to-delivery fl
 
 ## Read the setup summary
 
-After the visible work, workflow/repository and input/delivery sections,
+After the request and workflow/repository choices,
 **Task setup summary** shows the following facts. A configured resource is not
-proof that the saved task can start; **Review task** makes that admission check.
+proof that the saved task can start; **Run task** automatically saves and checks admission.
 
 | Fact | What to inspect or correct |
 | --- | --- |
@@ -18,7 +18,7 @@ proof that the saved task can start; **Review task** makes that admission check.
 | Model | Discovery loading/unavailable, no provider configured, or a configured provider whose per-agent model still needs review; echo agents do not need inference |
 | Environment | Selected execution mode and configured agent isolation; review determines compatibility and whether preparation is allowed |
 | Delivery | Named source-control hand-off or absence of one; existing workflow grants remain separate |
-| Access | Review-required or reviewed requirements; explicit consent and Start remain separate |
+| Access | Read-only launch review, Ask default and any explicitly confirmed mode; Run authorizes the displayed scope |
 | Budget | Applicable limits must be reviewed before start; recorded spend/admission remain authoritative |
 
 Repository/provider discovery failures do not mean that no resources exist.
@@ -67,9 +67,9 @@ broaden an agent's authority.
 4. The configuration page offers **Return to saved task**. Perform any separate
    resource save required by that editor, then return. The return link itself
    changes neither authorization nor execution state.
-5. Use **Review task** again against the saved configuration. Any authorization,
-   environment preparation or Start decision still needs its own current review
-   and explicit consent.
+5. Use **Run task** against the saved configuration. It inspects the latest
+   requirements and presents newly discovered scope before execution. Environment
+   preparation remains a separate explicit action.
 
 Requirement-repair links also retain the saved task destination. They identify
 model configuration and the MCP authorities referenced by reviewed grants.
@@ -88,12 +88,13 @@ and preserves later explicit choices. Saving captures a concrete workflow
 version and selected project base. A future workflow publication does not
 silently update that pin.
 
-**Review task** means save the exact edits, then inspect that saved revision.
-It does not call `/tasks/prompt`, the combined `/tasks/submit`, environment
-preparation or Start. Optional **Resolve request** remains the interpretation
-action. **Prepare task environment** and **Start task** retain their independent
-fresh-review and consent boundaries. See [environments](../environments/README.md)
-and [approvals](../approvals/README.md) for those handoffs.
+**Run task** saves exact edits, checks the acknowledged revision and starts only
+when the refreshed scope matches facts already displayed to the operator. New
+scope is shown for another explicit Run decision. It never calls `/tasks/prompt`
+or the combined `/tasks/submit`. Optional **Resolve request** remains the model
+interpretation action in Advanced settings. **Prepare task environment** remains
+a separate operation and never starts agents on completion. See
+[environments](../environments/README.md) and [approvals](../approvals/README.md).
 
 ## Implementation and verification map
 

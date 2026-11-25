@@ -126,3 +126,99 @@ silently combine integrations. Historical inline origins are not migrated into
 live-linked definitions. Live broker, kernel, sandbox-hardening and paid-model
 qualification targets were not rerun: their implementation boundaries did not
 change. Existing admission, required approvals and gateway policies still apply.
+
+## General task launch follow-up — 2026-11-25
+
+### Intent and review provenance
+
+The maintainer clarified that starting tasks is confusing in general, including
+new tasks, saved drafts and retries. Specification commit `0120f45` changed
+AC-002/004 and rows J03–J04/J16–J18 before implementation. The normal editor now
+keeps request, workflow and repository visible, with one primary **Run task** and
+an alternative **Save draft**. Advanced configuration remains available and opens
+when required settings are missing. Optional model interpretation is separate.
+
+Run saves exact input, checks the acknowledged revision and compares fresh
+requirements with previously displayed scope. Newly discovered scope requires
+another explicit Run click. Saved complete drafts inspect readiness using GETs;
+loading a page, saving a draft or completing an environment build never starts
+agents. Ask remains the default without manufacturing an authorization record;
+Full/Workspace still require separate current consent, and mandatory approvals
+are unchanged. Preparing or retrying a build retains an explicit build decision.
+
+Independent editor/environment reviews found and corrected: mismatched task
+identity/input in inspection or save acknowledgements; empty authorization scope
+without actionable feedback; budget holds that left an inert enabled Run button;
+prepared build retries incorrectly gated on the draft-only preparation flag;
+and an inherited repository URL missing from the prepared-task review. The last
+case now reads and verifies the pinned workflow version before offering Run,
+and workspace changes invalidate the displayed launch identity. Authorization
+editing is unavailable during a launch operation. No reviewer found an
+outstanding authorization bypass after these corrections.
+
+Helper unit tests cover input/scope/budget/environment/workspace identity.
+React/API-client integration covers saves, failures, stale revisions and scopes,
+late responses/edits, duplicate clicks, budget failures and read-only build-ready
+inspection. Browser oracles exercise a disposable backend through real HTTP,
+including mandatory approvals, all three authorization modes, fresh retry drafts,
+imports, prompt recovery and explicit build/start separation. These tests were
+written with implementation awareness against the previously recorded criteria.
+
+### Verification observations
+
+An initial browser pass ran concurrently with another Vite build targeting the
+same generated directory; one page loaded without its generated assets. The
+serialized 33-test browser pack subsequently passed. A full web suite started
+while final source/test edits were still being applied reported two transient
+assertion mismatches and one unrelated 5-second shared-resource test timeout
+under simultaneous browser load. Final checks use a frozen tree and bounded
+workers; test expectations, timeouts and security checks were not weakened to
+hide those observations.
+
+Before the local build, unused Docker build cache was pruned under the operator's
+existing cleanup authorization (703.2 MB, then 49.16 GB reported). About 49.5 GB
+was available afterward. Volumes, databases and task/workspace data were not
+removed. `/readyz` reported storage, queue and sandbox ready before deployment.
+
+The operator's dependency-security task is outside this UI validation: no
+prepare/start or external repository action was dispatched for it. No new human
+usability study or measured reduction in task completion time is claimed.
+
+### Final checks and implementation
+
+- Implementation commit: `1d4000a` (`feat(console): coordinate task launch
+  through a single run action`).
+- Docker Node 22: `pnpm exec tsc --noEmit` and `pnpm test --maxWorkers=1`
+  passed, 130 files / 817 tests. A preceding two-worker attempt reported an
+  intermittent SkillsView assertion and a task-authorization copy assertion;
+  the latter was corrected to preserve actionable field guidance. The serial
+  run passed without changing SkillsView or its checks.
+- The final channel-JSON validation refinement and guidance copy were checked
+  with `tsc --noEmit` and the `taskDefaults`, `TaskLaunchFlow` and `TasksPage`
+  suites: 56 tests passed. Invalid channel JSON opens Advanced settings,
+  preserves input and dispatches neither save nor start; direct instruction
+  does not require a residual payload to parse.
+- Docker Chromium / real disposable backend: `tsc --project tsconfig.e2e.json`
+  and Playwright's `task-launch`, `task-retry`, `task-authorization`,
+  `task-request-layout`, `task-drafts`, `task-prompts`, `repository-imports`
+  and `projects` pack passed, 33 tests. This run preceded the final local JSON
+  validation refinement, which has focused helper and React/API-client coverage.
+- The 1440 px and 390 px launch review captures were inspected. Scope, budget,
+  permissions and access controls remain readable without horizontal overflow.
+- Independent final read-only review approved the changes, including the JSON
+  refinement, with no outstanding findings; it did not claim additional runs.
+- Documentation relative links and `git diff --check` passed.
+
+No Go source or server contract changed in this follow-up. Full Go/Python and
+live sandbox qualification suites were not rerun; the real-HTTP browser fixture
+and standard local deployment compile the server. The standard Docker build also
+type-checks and bundles the console. Vite reports the existing main-chunk size
+warning (over 1200 kB); this is not a build failure or a measured UX performance
+claim.
+
+Local deployment completed using `docker compose up -d --build --no-deps weftd`
+with the standard Dockerfile and no override or copied binary. `/healthz`
+returned `status: ok`; `/readyz` returned storage, queue and sandbox `ok`.
+The generated JS/CSS assets returned HTTP 200, and the served main bundle
+contains the coordinated launch UI. Deployment replaced only `weftd` and did
+not submit the operator's task.
