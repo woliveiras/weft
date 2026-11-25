@@ -1098,3 +1098,11 @@ main > .page:not(.fill) {
 .task-details .task-authorization { display: grid; gap: var(--space-4); }
 .task-details .task-authorization > button { justify-self: start; }
 .task-details .task-authorization pre { max-height: 24rem; overflow: auto; }
+
+.task-retry-controls { border-block-start: 1px solid var(--border); padding-block-start: var(--space-4); }
+.task-retry-controls .btn-row { justify-content: flex-start; }
+.task-retry-controls > [role="status"]:empty { display: none; }
+.task-retry-origin { overflow-wrap: anywhere; color: var(--text); border-inline-start: 3px solid var(--primary); padding: var(--space-4); }
+.task-retry-origin:focus { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
+.task-request-page .task-retry-origin { margin-block-end: var(--space-5); }
+.task-retry-origin p + p { margin-block-start: var(--space-2); }

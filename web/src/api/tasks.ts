@@ -19,6 +19,9 @@ export interface TaskInput {
   scmConnection?: string;
 }
 export interface TaskDraft extends TaskInput {
+  retryOfTaskId?: string;
+  retryOfRevision?: number;
+  triggerIssueOrigin?: {kind: string};
   triggerGitHubIssue?: string;
  submitted?:boolean;
  resolution?: {state:string;message:string;repository?:string};

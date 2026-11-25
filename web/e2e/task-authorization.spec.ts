@@ -15,10 +15,11 @@ test('reviews task scope, confirms modes and preserves consent across reload',as
  await page.getByRole('button',{name:'Review requirements'}).click();
  await page.getByLabel('I reviewed the workflow and authorize a separate execution copy.').check();await page.getByRole('button',{name:'Start task',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Needs your decision',exact:true})).toBeVisible();
+ await page.getByRole('link',{name:'Settings & access',exact:true}).click();
  await section.getByLabel('Authorization mode',{exact:true}).selectOption('ask');await section.getByRole('checkbox').check();await section.getByRole('button',{name:'Confirm authorization'}).click();await expect(section).toContainText('Current mode: ask');
  await page.reload();await expect(section).toContainText('Current mode: ask');
  await page.getByRole('region',{name:'Task decisions'}).getByRole('button',{name:'Approve',exact:true}).click();
- await expect(page.getByRole('status')).toHaveText('Task status: succeeded');
+ await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
  const auth=await (await page.request.get(`/api/v1/tasks/${task.id}/authorization`,{headers})).json();
  expect((await page.request.put(`/api/v1/tasks/${task.id}/authorization`,{headers:{...headers,'If-Match':String(auth.record.revision)},data:{mode:'full',scope:auth.scope,confirm:true}})).status()).toBe(409);
 });

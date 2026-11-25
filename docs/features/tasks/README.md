@@ -167,6 +167,31 @@ before opening the PR. A configured review route is another execution; task
 success does not imply merge. Historical execution links open the task-owned
 inspection experience, not an editable reusable graph.
 
+## Retry a failed manual task
+
+Open the failed task, review the explanation beside **Try again**, then select
+the button. This prepares a separate editable attempt with the same
+request, workflow/version, agent/input bindings, repository/base commit and
+source-control connection. It does not start agents. The new attempt links to
+the original; its approvals, environment, workspace and cost belong to it.
+The original history, plans, files and costs remain available.
+
+Review the new draft and use **Review task** before authorizing execution.
+If the workflow changed, explicitly select the desired version and repair any
+incompatible bindings; retry does not silently upgrade it. Inspect external
+state and existing PRs before repeating work that may already have produced
+side effects. This is a new attempt, not resume at a specific tool call.
+
+When an approval has status **expired**, the task explains that the old decision
+can no longer be approved. A new attempt needs its own approvals. Other failures
+may coexist; expiry is not automatically diagnosed as the only cause.
+
+Creation shows progress and errors. Repeating a request after a lost response
+opens the same attempt, including later edits or execution. Deleting that retry
+draft does not permit the original request to recreate it. Operators/admins can
+prepare retries; readers cannot. Issue-trigger tasks use trigger recovery;
+nonfailed tasks do not offer this action.
+
 ## Stop, delete and recover
 
 - **Delete draft** requires confirmation and the matching revision. It is
@@ -201,6 +226,7 @@ precondition details remain in OpenAPI.
 | Confirm task mode | `PUT /api/v1/tasks/<id>/authorization` | Admin |
 | Prepare/start/stop | `POST /api/v1/tasks/<id>/prepare-environment`, `/start`, `/cancel` | Admin |
 | Follow execution | `GET /api/v1/tasks/<id>/progress` | Viewer or higher |
+| Retry failed manual task | `POST /api/v1/tasks/<id>/retry` with revision/confirmation | Operator/admin |
 | Delete eligible draft | `DELETE /api/v1/tasks/<id>` with revision/confirmation | Operator/admin |
 | Preview/confirm cleanup | `GET` / `POST /api/v1/tasks/<id>/cleanup` | Admin |
 

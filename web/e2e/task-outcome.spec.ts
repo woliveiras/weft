@@ -32,6 +32,8 @@ test('a blocked task stops its execution copy and stays outside editable workflo
  await page.goto(`/#/g/${gid}/canvas`);
  await expect(page.getByRole('heading',{name:'Task execution',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:/^(Stop|Pause|Delete)$/})).toHaveCount(0);
- await page.getByRole('link',{name:`Open task ${task.id}`}).click();
+ const back=page.getByRole('link',{name:'Back to task',exact:true});
+ await expect(back).toHaveAttribute('href',`#/tasks/${task.id}`);
+ await back.click();
  await expect(page.getByRole('heading',{name:'Work needs attention',exact:true})).toBeVisible();
 });

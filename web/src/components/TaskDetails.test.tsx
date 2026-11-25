@@ -219,3 +219,32 @@ it('reports an unavailable initial environment snapshot and recovers without cla
   fail=false;await userEvent.click(screen.getByRole('button',{name:'Refresh task'}));
   expect(await screen.findByLabelText('Build output')).toHaveProperty('textContent','Build is running');
 });
+
+it('offers operator retry only after a fresh failed manual-task snapshot and hides it after refresh failure', async () => {
+  const failed={...task,status:'failed'};
+  let release!:()=>void;let wait=true;let fail=false;
+  backend(async()=>{if(wait)await new Promise<void>(resolve=>{release=resolve;});return fail?apiError(503,'Progress offline','unavailable'):{...progress,state:'failed',task:failed};});
+  render(<TasksPage id={task.id} graphs={[]} info={{identity:{role:'operator'}} as Info}/>);
+  await screen.findByText('Loading progress…');
+  expect(screen.queryByRole('button',{name:'Try again'})).toBeNull();
+  wait=false;await act(async()=>release());
+  expect(await screen.findByRole('button',{name:'Try again'})).toBeTruthy();
+  fail=true;await userEvent.click(screen.getByRole('button',{name:'Refresh task'}));
+  await screen.findByText('Progress offline');
+  expect(screen.queryByRole('button',{name:'Try again'})).toBeNull();
+});
+
+it('shows retry provenance on a running attempt without showing Try again', async () => {
+  backend(()=>({...progress,state:'running',task:{...task,status:'running',retryOfTaskId:'tsk_original',retryOfRevision:5}}));
+  render(<TasksPage id={task.id} graphs={[]} info={{identity:{role:'operator'}} as Info}/>);
+  expect(await screen.findByRole('link',{name:'Original failed task'})).toHaveProperty('hash','#/tasks/tsk_original');
+  expect(screen.queryByRole('button',{name:'Try again'})).toBeNull();
+});
+
+it('explains trigger recovery for expired approvals without offering manual retry', async()=>{
+ backend(()=>({...progress,state:'failed',task:{...task,status:'failed',triggerIssueOrigin:{kind:'jira'}},decisions:[{id:'a',title:'Read issue',status:'expired'}]}));
+ render(<TasksPage id={task.id} graphs={[]} info={{identity:{role:'operator'}} as Info}/>);
+ expect(await screen.findByText(/Recover this issue through its issue trigger/)).toBeTruthy();
+ expect(screen.queryByRole('button',{name:'Try again'})).toBeNull();
+ expect(screen.queryByRole('navigation',{name:'Resolve task requirements'})).toBeNull();
+});

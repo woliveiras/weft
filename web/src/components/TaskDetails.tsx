@@ -5,6 +5,7 @@ import type {Execution} from '../api/types';
 import {useAsync, useThrottled} from '../hooks/useData';
 import {useOptionalEventStream} from '../hooks/useEventStream';
 import {Badge, Btn, ErrorBox, fmtDateTime, since} from './common';
+import {TaskRetry, TaskRetryOrigin} from './TaskRetry';
 import {TaskJourney} from './TaskJourney';
 import {TaskAuthorization} from './TaskAuthorization';
 import {TaskDecisions} from './TaskDecisions';
@@ -70,7 +71,7 @@ function TaskResult({result, delivery, changesHref}: {result?: Execution; delive
   </section>;
 }
 
-export function TaskTracking({task, canControl, canDecide, nativeProfile}: {task: TaskDraft; canControl: boolean; canDecide: boolean; nativeProfile: boolean}) {
+export function TaskTracking({task, canControl, canDecide, canRetry = false, nativeProfile}: {task: TaskDraft; canControl: boolean; canDecide: boolean; canRetry?: boolean; nativeProfile: boolean}) {
   const [progress, setProgress] = useState<TaskProgress>();
   const [updated, setUpdated] = useState<string>();
   const [error, setError] = useState<string>();
@@ -131,6 +132,7 @@ export function TaskTracking({task, canControl, canDecide, nativeProfile}: {task
   const raisedBudget = budget.data && <ul className="integration-grid"><BudgetBar budget={budget.data} currency={budget.data.currency || 'USD'} canRaise={canControl && !error} showPause={active} onRaised={() => budget.reload()}/></ul>;
   return <div className="task-details">
     <a className="task-back-link" href="#/tasks">Back to tasks</a>
+    <TaskRetryOrigin task={current}/>
     <section className="card task-overview-header" aria-label="Task status">
       <div className="task-detail-heading">
         <div className="task-status-line"><Badge tone={error ? 'warn' : progress?.state === 'succeeded' ? 'ok' : progress?.state === 'failed' ? 'bad' : undefined}>{progress ? `Task status: ${progress.state}` : 'Loading progress…'}</Badge>
@@ -145,7 +147,8 @@ export function TaskTracking({task, canControl, canDecide, nativeProfile}: {task
         <div><dt>Execution duration</dt><dd>{executionWindow && (executionWindow.end || active) ? since(executionWindow.start, executionWindow.end) : 'Not recorded'}</dd></div>
         <div><dt>Recorded cost</dt><dd>{budget.data ? <>{money(budget.data.chargedMicros, budget.data.currency || 'USD')} spent of {money(budget.data.limitMicros, budget.data.currency || 'USD')}{budget.data.estimatedMicros > 0 && ' · includes estimated usage'}</> : budget.loading ? 'Loading cost…' : 'Unavailable'}{budget.error && <span className="muted small"> · Cost refresh failed</span>} <a href={href('settings')}>Budget details</a></dd></div>
       </dl>
-      <TaskJourney progress={progress} error={error}/>
+      <TaskJourney progress={progress} error={error} task={current}/>
+      {progress && !error && <TaskRetry key={`${current.id}:${current.revision}`} task={current} canEdit={canRetry}/>}
       <ErrorBox error={error}/>
       {current.launchError && <p role="alert">{current.launchError}</p>}
       {!!progress?.blockers.length && <ul aria-label="Task blockers">{progress.blockers.map(blocker => <li key={blocker}>{blocker}</li>)}</ul>}

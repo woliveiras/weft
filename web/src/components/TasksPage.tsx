@@ -1,6 +1,7 @@
 import {TaskReadiness} from './TaskReadiness';
 import {applyTaskEntryContext,taskRepairLink,type TaskEntryContext} from './taskEntryContext';
 import {TaskDraftDelete} from './TaskDraftDelete';
+import {TaskRetryOrigin} from './TaskRetry';
 import {TaskTracking} from './TaskDetails';
 import { HelpField } from './FieldHelp';
 import {TaskAuthorization} from "./TaskAuthorization";
@@ -194,9 +195,10 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin,e
     try{setSaved(await api.startTask(saved.id,review.task.revision));setReview(undefined);}
     catch(e){setError(errorMessage(e));}finally{setBusy(false);}
   };
-  if(saved&&saved.status!=='draft')return <TaskTracking task={saved} canControl={canStart} canDecide={canEdit} nativeProfile={nativeProfile}/>;
+  if(saved&&saved.status!=='draft')return <TaskTracking task={saved} canControl={canStart} canDecide={canEdit} canRetry={canEdit} nativeProfile={nativeProfile}/>;
   return <>
     <a className="task-back-link" href="#/tasks">Back to tasks</a>
+    {saved && <TaskRetryOrigin task={saved}/>}
     {saved?.environmentApprovalId&&<p>Environment preparation requires a decision in <a href="#/approvals">Approvals</a>. The issue remains in progress.</p>}
     {saved?.launchError&&<p role="alert">{saved.launchError}</p>}
     {modelBlocked&&<NoModelProvider admin={admin} busy={busy} onRepair={()=>void repair('#/models')}/>}

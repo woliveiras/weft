@@ -2,7 +2,7 @@
 id: TASK-011
 title: "Failed Task Retry"
 summary: "Prepare a fresh linked draft from a failed manual task without replaying execution or consent."
-status: in-progress
+status: implemented
 scope: [manual task recovery, expired approval guidance]
 risk_domains: [persistence, authorization, duplicate execution]
 change_surfaces: [task API, task configuration, console]

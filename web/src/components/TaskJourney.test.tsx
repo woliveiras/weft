@@ -14,3 +14,10 @@ it('renders the same approval identity in the task decision component',()=>{
  render(<><TaskJourney progress={progress}/><TaskDecisions graphId="g" approvals={progress.pendingApprovals} canDecide={false} canAdmin={false} onChanged={()=>{}}/></>);
  expect(screen.getByText('Needs your decision')).toBeTruthy();expect(screen.getByText('Read repository')).toBeTruthy();expect(screen.queryByRole('button',{name:/^Approve$/})).toBeNull();
 });
+it('guides expired approval recovery without suggesting unrelated configuration changes',()=>{
+ const progress={state:'failed',executions:[],decisions:[{id:'a',title:'Read alerts',status:'expired'}]} as unknown as TaskProgress;
+ render(<TaskJourney progress={progress}/>);
+ expect(screen.getByText('An approval expired')).toBeTruthy();
+ expect(screen.queryByRole('navigation',{name:'Resolve task requirements'})).toBeNull();
+ expect(screen.getByText(/Read alerts — expired/)).toBeTruthy();
+});
