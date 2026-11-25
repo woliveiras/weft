@@ -43,6 +43,32 @@ study or real-account retry is asserted.
 
 ## Documentation decision
 
+### Follow-up: long retry identity regression
+
+The operator's retry exposed an execution graph name exceeding the 63-byte DNS
+label limit. Retry task IDs and replay keys remain unchanged; execution graph
+names now use a bounded, full-digest mapping for long IDs. Authorization, SCM
+issue attribution, project checkout and console navigation verify the recorded
+owner and execution binding. No real remediation attempt was started by this
+verification.
+
+- Identity units cover the 54/55-character boundary, maximum task IDs and suffix
+  differences beyond that boundary. API integration reviews, prepares and starts
+  a retry against a real Git project, SQLite and the test daemon boundary.
+- Complete affected Go suites passed: `./scripts/go.sh test ./internal/domain
+  ./internal/taskauth ./internal/scm ./internal/projectconfig ./internal/trigger
+  ./internal/taskrun ./internal/api -count=1`.
+- Docker Node 22 TypeScript and 24 focused component/router integration tests
+  passed. The earlier complete console run passed 787 tests; the final router
+  change was verified by its focused integration test and Chromium journey.
+- Docker Chromium retry, outcome and authorization journeys passed all four
+  cases. The expanded retry journey explicitly starts a fresh attempt and opens
+  its hashed execution route. Its first run exposed the outer App router still
+  depending on reversible IDs; that routing regression was corrected.
+- `make lint`, `make build` and `git diff --check` passed. Independent code review
+  found the project checkout naming boundary, verified its regression coverage
+  and reported no remaining blockers after the router correction.
+
 - Decision: `required`.
 - The endpoint, server-owned provenance, replay semantics, actor boundaries and
   recovery journey are new contracts.

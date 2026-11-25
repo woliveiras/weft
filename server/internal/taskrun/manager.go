@@ -58,7 +58,7 @@ type Review struct {
 	Isolation             domain.IsolationMode    `json:"isolation"`
 }
 
-func ExecutionID(id string) string { return GraphPrefix + strings.TrimPrefix(id, "tsk_") }
+func ExecutionID(id string) string { return domain.TaskExecutionID(id) }
 
 // Prepare returns a deep snapshot with a fresh managed workspace. It never
 // attaches the source graph's mutable workspace to a task.

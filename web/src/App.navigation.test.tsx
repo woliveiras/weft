@@ -45,6 +45,28 @@ it('opens a task-owned run directly even when workflow inventory excludes execut
  expect(backend.calls.every(c=>c.method==='GET')).toBe(true);
 });
 
+it('routes hashed task copies through their recorded owner instead of the workflow editor', async () => {
+ const graphId = `task-run-h-${'a'.repeat(52)}`;
+ const taskId = `tsk_${'b'.repeat(64)}`;
+ localStorage.setItem('weftToken','test-token');location.hash=`#/g/${graphId}/runs`;
+ const backend = fakeApi({
+  'GET /api/v1/info':()=>({identity:{name:'admin',role:'admin'}}),
+  'GET /api/v1/graphs':()=>[],
+  'GET /api/v1/approvals':()=>[],
+  [`GET /api/v1/graphs/${graphId}`]:()=>({graph:{metadata:{id:graphId,labels:{'weft.task':taskId}}}}),
+  [`GET /api/v1/tasks/${taskId}`]:()=>({id:taskId,title:'Retried task',executionGraphId:graphId}),
+  [`GET /api/v1/graphs/${graphId}/executions`]:()=>[],
+ });
+ render(<App/>);
+ expect(await screen.findByText('No executions recorded yet.')).toBeTruthy();
+ expect(screen.getByRole('heading',{name:'Task execution'})).toBeTruthy();
+ expect(screen.getByRole('link',{name:'Back to task'}).getAttribute('href')).toBe(`#/tasks/${taskId}`);
+ expect(screen.getByRole('button',{name:'Tasks'}).getAttribute('aria-current')).toBe('page');
+ expect(screen.queryByText(/Graph .*not found/)).toBeNull();
+ expect(screen.queryByRole('button',{name:'Save graph'})).toBeNull();
+ expect(backend.calls.every(c=>c.method==='GET')).toBe(true);
+});
+
 it('retains the reviewed new task across its saved-task route transition without model or execution writes',async()=>{
  localStorage.setItem('weftToken','test-token');location.hash='#/tasks/new?workflow=echo';
  let draft:any;

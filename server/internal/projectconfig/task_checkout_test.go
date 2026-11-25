@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/storage/sqlstore"
 	"github.com/woliveiras/weft/server/internal/workspace"
@@ -30,6 +31,50 @@ func TestTaskCheckoutBindingValidation(t *testing.T) {
 	}
 	if b.valid(nil, b.GraphID, b.Path) || b.valid(p, "../fixture", b.Path) || b.valid(p, b.GraphID, "/other/task-run-fixture") {
 		t.Fatal("invalid binding accepted")
+	}
+}
+
+func TestTaskCheckoutIdentityValidation(t *testing.T) {
+	for _, id := range []string{"task-run-fixture", domain.TaskExecutionID("tsk_" + strings.Repeat("a", 64))} {
+		if !taskCheckoutID.MatchString(id) {
+			t.Fatalf("valid task identity rejected: %s", id)
+		}
+	}
+	for _, id := range []string{"task-run-h-short", "task-run-h-" + strings.Repeat("a", 51), "task-run-h-" + strings.Repeat("a", 53), "task-run-h-" + strings.Repeat("0", 52), "task-run-../escape", "task-run-"} {
+		if taskCheckoutID.MatchString(id) {
+			t.Fatalf("invalid task identity accepted: %s", id)
+		}
+	}
+}
+
+func TestLongTaskIdentitySupportsIndependentCheckoutAndCleanup(t *testing.T) {
+	m, p, root, run := checkoutFixture(t)
+	graphID := domain.TaskExecutionID("tsk_" + strings.Repeat("a", 64))
+	dir, err := m.CreateTaskCheckout(t.Context(), p, p.Head, root, graphID, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, err := m.TaskInspectionBase(t.Context(), p, graphID, dir)
+	if err != nil || base != dir || run(dir, "rev-parse", "HEAD") != p.Head {
+		t.Fatal("checkout lost its reviewed identity", base, err)
+	}
+	preview, err := m.PreviewTaskCleanup(t.Context(), p, graphID, dir)
+	if err != nil || !preview.Clean {
+		t.Fatal(preview, err)
+	}
+	if err = m.RemoveReviewedTaskCheckout(t.Context(), p, graphID, dir, preview.Fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatal("checkout remains", err)
+	}
+	if run(root, "--git-dir="+preview.RetainedRepository, "rev-parse", "HEAD") != p.Head || run(p.Path, "rev-parse", "HEAD") != p.Head {
+		t.Fatal("retained or source repository changed")
+	}
+	localID := domain.TaskExecutionID("tsk_" + strings.Repeat("b", 64))
+	local, err := CreateWorktree(t.Context(), p, p.Head, root, localID)
+	if err != nil || run(local, "rev-parse", "HEAD") != p.Head {
+		t.Fatal("local worktree rejected long task identity", local, err)
 	}
 }
 

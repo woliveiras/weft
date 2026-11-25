@@ -169,8 +169,24 @@ func (t pullRequestTool) Invoke(ctx context.Context, inv *tools.Invocation) (*to
 	}
 	if strings.HasPrefix(inv.Principal.GraphID, domain.TaskRunGraphPrefix) {
 		taskID := "tsk_" + strings.TrimPrefix(inv.Principal.GraphID, domain.TaskRunGraphPrefix)
+		hashed := strings.HasPrefix(inv.Principal.GraphID, domain.TaskRunHashedGraphPrefix)
+		if hashed {
+			// Long task IDs cannot be reconstructed from a bounded graph ID.
+			// Verify both persisted directions before using trusted issue metadata.
+			g, err := t.m.Store.GetGraph(ctx, inv.Principal.GraphID, 0)
+			if err != nil || g.Metadata.ID != inv.Principal.GraphID {
+				return &tools.Result{Content: "the admitted issue identity could not be verified", IsError: true}, nil
+			}
+			taskID = g.Metadata.Labels[domain.LabelTask]
+			if taskID == "" || domain.TaskExecutionID(taskID) != inv.Principal.GraphID {
+				return &tools.Result{Content: "the admitted issue identity could not be verified", IsError: true}, nil
+			}
+		}
 		draft, err := (taskconfig.Manager{Store: t.m.Store}).Get(ctx, taskID)
-		if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		if err != nil && (hashed || !errors.Is(err, storage.ErrNotFound)) {
+			return &tools.Result{Content: "the admitted issue identity could not be verified", IsError: true}, nil
+		}
+		if hashed && draft.ExecutionGraphID != inv.Principal.GraphID {
 			return &tools.Result{Content: "the admitted issue identity could not be verified", IsError: true}, nil
 		}
 		if err == nil && draft.ExecutionGraphID == inv.Principal.GraphID {

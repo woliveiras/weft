@@ -7,13 +7,30 @@ import {RunsView} from './RunsView';
 import type {RunSection} from './runPresentation';
 
 /** A task copy is inspected through its owning task, never opened as an editable workflow. */
-export function taskOwnerId(graphId: string): string | undefined {
-  const prefix = 'task-run-';
-  return graphId.startsWith(prefix) && graphId.length > prefix.length ? `tsk_${graphId.slice(prefix.length)}` : undefined;
+export function isTaskExecutionGraphId(graphId: string): boolean {
+  return /^task-run-[a-z0-9]+$/.test(graphId) || /^task-run-h-[a-z2-7]{52}$/.test(graphId);
 }
 
-export function ownsTaskExecution(task: TaskDraft, graphId: string): boolean {
-  return task.id === taskOwnerId(graphId) && task.executionGraphId === graphId;
+export function taskOwnerId(graphId: string): string | undefined {
+  const prefix = 'task-run-';
+  return /^task-run-[a-z0-9]+$/.test(graphId) ? `tsk_${graphId.slice(prefix.length)}` : undefined;
+}
+
+export function ownsTaskExecution(task: TaskDraft, graphId: string, ownerId = taskOwnerId(graphId)): boolean {
+  return !!ownerId && /^tsk_[a-z0-9]{1,80}$/.test(ownerId) && task.id === ownerId && task.executionGraphId === graphId;
+}
+
+/** Long task IDs use a non-reversible execution name; resolve the recorded owner. */
+export async function loadTaskExecutionOwner(graphId: string) {
+  let taskId = taskOwnerId(graphId);
+  if (/^task-run-h-[a-z2-7]{52}$/.test(graphId)) {
+    const summary = await api.getGraph(graphId);
+    if (summary.graph.metadata.id !== graphId) throw new Error('The workflow response does not match this execution copy.');
+    taskId = summary.graph.metadata.labels?.['weft.task'];
+  }
+  if (!taskId || !/^tsk_[a-z0-9]{1,80}$/.test(taskId)) return {graphId};
+  const task = await api.task(taskId);
+  return {graphId, taskId, task};
 }
 
 export function TaskExecutionPage({graphId, tab, executionId, section}: {
@@ -22,10 +39,11 @@ export function TaskExecutionPage({graphId, tab, executionId, section}: {
   executionId?: string;
   section?: RunSection;
 }) {
-  const taskId = taskOwnerId(graphId);
-  const owner = useAsync(() => taskId ? api.task(taskId) : Promise.resolve(undefined), [taskId]);
-  const task = owner.data;
-  const valid = !!task && ownsTaskExecution(task, graphId);
+  const owner = useAsync(() => loadTaskExecutionOwner(graphId), [graphId]);
+  const resolved = owner.data?.graphId === graphId ? owner.data : undefined;
+  const taskId = resolved?.taskId;
+  const task = resolved?.task;
+  const valid = !!task && ownsTaskExecution(task, graphId, taskId);
   return <section className="page installation-page" aria-label="Task execution">
     <a className="task-back-link" href={taskId ? `#/tasks/${encodeURIComponent(taskId)}` : '#/tasks'}>Back to task</a>
     <header className="page-head"><div><h1>Task execution</h1><p className="muted">{valid ? task.title : 'Inspect recorded execution evidence for this task.'}</p></div></header>

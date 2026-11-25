@@ -16,3 +16,4 @@ must disclose implementation awareness separately in evidence.
 | R08 | AC-004 replay with edited/started child | Navigate to actual returned attempt without recreating/resetting it | Component integration |
 | R09 | AC-005 approval status | Exact expired status gives specific guidance; nonexpiry retains appropriate diagnostics | Presentation unit; tracking integration |
 | R10 | AC-004/005 roles/keyboard/narrow layout | Reader lacks creation; semantic labels/status; keyboard route works, controls wrap | Component and browser verification |
+| R11 | AC-003 retry identity at the graph DNS boundary | Existing retry task IDs and replay remain stable; review, environment preparation, start, task authorization and evidence ownership accept bounded execution IDs; mismatched owners fail closed | Identity unit; task/API/SCM integration; explicit-start browser regression |

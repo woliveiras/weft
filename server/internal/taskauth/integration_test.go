@@ -116,6 +116,55 @@ func TestGatewayConsentAndMandatoryGrants(t *testing.T) {
 	}
 }
 
+func TestLongTaskExecutionAuthorizationUsesVerifiedOwner(t *testing.T) {
+	for _, invalid := range []string{"", "owner", "binding", "graph-version"} {
+		t.Run(invalid, func(t *testing.T) {
+			m, original, _ := setup(t)
+			tasks := taskconfig.Manager{Store: m.Store}
+			failed, err := tasks.Transition(t.Context(), original, "failed", "fixture")
+			if err != nil {
+				t.Fatal(err)
+			}
+			d, _, err := tasks.RetryFailed(t.Context(), failed.ID, failed.Revision, "operator")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = m.Ensure(t.Context(), d.ID, "admin"); err != nil {
+				t.Fatal(err)
+			}
+			p := &tools.Principal{GraphID: domain.TaskExecutionID(d.ID), GraphVersion: 1, NodeID: "worker", Grants: []domain.ToolGrant{{Name: "test.call"}}}
+			launch(t, m, d, p)
+			switch invalid {
+			case "owner":
+				g, err := m.Store.GetGraph(t.Context(), p.GraphID, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				g.Metadata.Labels[domain.LabelTask] = original.ID
+				if _, err = m.Store.SaveGraph(t.Context(), g, g.Metadata.Version); err != nil {
+					t.Fatal(err)
+				}
+				p.GraphVersion = g.Metadata.Version
+			case "binding":
+				d, err = tasks.Get(t.Context(), d.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				d.ExecutionGraphID = "task-run-other"
+				if _, err = tasks.Transition(t.Context(), d, "running", "fixture"); err != nil {
+					t.Fatal(err)
+				}
+			case "graph-version":
+				p.GraphVersion++
+			}
+			_, _, err = m.Check(t.Context(), p, &sampleTool{}, false)
+			if (err == nil) != (invalid == "") {
+				t.Fatalf("verified owner %q: %v", invalid, err)
+			}
+		})
+	}
+}
+
 func TestRunningLegacyTaskWithoutConsent(t *testing.T) {
 	ctx := t.Context()
 	m, draft, principal := setup(t)

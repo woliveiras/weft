@@ -2,13 +2,81 @@ import {cleanup, render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach, expect, it, vi} from 'vitest';
 import {fakeApi, apiError} from '../test/fakeApi';
-import {TaskExecutionPage} from './TaskExecutionPage';
+import type {TaskDraft} from '../api/tasks';
+import {TaskExecutionPage, isTaskExecutionGraphId, ownsTaskExecution, taskOwnerId} from './TaskExecutionPage';
 
 afterEach(() => {cleanup();vi.unstubAllGlobals();});
 const task = {id:'tsk_example', title:'Inspect the demo', executionGraphId:'task-run-example'};
 const execution = {id:'exe_example', graphId:'task-run-example', nodeId:'implementer', graphVersion:2, status:'succeeded', summary:'Greeting implemented', toolCalls:1, startedAt:'2026-11-23T12:35:11Z'};
 const tool = {id:'tool', graphId:'task-run-example', nodeId:'implementer', executionId:'exe_example', type:'tool.completed', time:'2026-11-23T12:35:12Z', seq:1, data:{tool:'shell.exec', outcome:'ok'}};
 const workspaceStatus = {graphId:'task-run-example',state:'stopped',desiredState:'stopped',nodes:[],channels:[]};
+
+const longGraphId = `task-run-h-${'a'.repeat(52)}`;
+const longTask = {...task, id:`tsk_${'b'.repeat(64)}`, executionGraphId:longGraphId};
+
+it('does not reverse hashed execution names or accept an unbound owner', () => {
+  expect(isTaskExecutionGraphId(longGraphId)).toBe(true);
+  expect(isTaskExecutionGraphId('task-run-example')).toBe(true);
+  expect(isTaskExecutionGraphId('task-run-h-invalid')).toBe(false);
+  expect(isTaskExecutionGraphId('workflow')).toBe(false);
+  expect(taskOwnerId(longGraphId)).toBeUndefined();
+  expect(taskOwnerId('task-run-example')).toBe('tsk_example');
+  expect(ownsTaskExecution(longTask as TaskDraft,longGraphId)).toBe(false);
+  expect(ownsTaskExecution(longTask as TaskDraft,longGraphId,longTask.id)).toBe(true);
+  expect(ownsTaskExecution({...longTask,executionGraphId:'other'} as TaskDraft,longGraphId,longTask.id)).toBe(false);
+  expect(ownsTaskExecution(longTask as TaskDraft,longGraphId,'tsk_other')).toBe(false);
+});
+
+it('resolves long task execution owners through graph labels before loading evidence', async () => {
+  const backend = fakeApi({
+    [`GET /api/v1/graphs/${longGraphId}`]:() => ({graph:{metadata:{id:longGraphId,labels:{'weft.task':longTask.id}}}}),
+    [`GET /api/v1/tasks/${longTask.id}`]:() => longTask,
+    [`GET /api/v1/graphs/${longGraphId}/executions`]:() => [],
+  });
+  render(<TaskExecutionPage graphId={longGraphId} tab="runs"/>);
+  expect(await screen.findByText('No executions recorded yet.')).toBeTruthy();
+  expect(screen.getByRole('link',{name:'Back to task'}).getAttribute('href')).toBe(`#/tasks/${longTask.id}`);
+  expect(backend.calls.map(c=>c.path)).toEqual([`/api/v1/graphs/${longGraphId}`,`/api/v1/tasks/${longTask.id}`,`/api/v1/graphs/${longGraphId}/executions`]);
+});
+
+it.each([
+  {name:'foreign graph',metadata:{id:'other',labels:{'weft.task':longTask.id}},error:'The workflow response does not match this execution copy.'},
+  {name:'missing owner',metadata:{id:longGraphId},error:'This execution copy does not belong to the selected task.'},
+  {name:'invalid owner',metadata:{id:longGraphId,labels:{'weft.task':'../other'}},error:'This execution copy does not belong to the selected task.'},
+])('rejects $name without fetching a task or its evidence', async ({metadata,error}) => {
+  const backend = fakeApi({[`GET /api/v1/graphs/${longGraphId}`]:()=>({graph:{metadata}})});
+  render(<TaskExecutionPage graphId={longGraphId} tab="runs"/>);
+  expect(await screen.findByText(error)).toBeTruthy();
+  expect(backend.calls).toHaveLength(1);
+});
+
+it.each([
+  {...longTask,id:'tsk_other'},
+  {...longTask,executionGraphId:'task-run-other'},
+])('rejects mismatched long task ownership before loading evidence', async returnedTask => {
+  const backend = fakeApi({
+    [`GET /api/v1/graphs/${longGraphId}`]:()=>({graph:{metadata:{id:longGraphId,labels:{'weft.task':longTask.id}}}}),
+    [`GET /api/v1/tasks/${longTask.id}`]:()=>returnedTask,
+  });
+  render(<TaskExecutionPage graphId={longGraphId} tab="runs"/>);
+  expect(await screen.findByText('This execution copy does not belong to the selected task.')).toBeTruthy();
+  expect(backend.calls).toHaveLength(2);
+});
+
+it('recovers failed long owner discovery without loading evidence early', async () => {
+  let failed = true;
+  const backend = fakeApi({
+    [`GET /api/v1/graphs/${longGraphId}`]:()=>failed?apiError(503,'Owner lookup unavailable','unavailable'):{graph:{metadata:{id:longGraphId,labels:{'weft.task':longTask.id}}}},
+    [`GET /api/v1/tasks/${longTask.id}`]:()=>longTask,
+    [`GET /api/v1/graphs/${longGraphId}/executions`]:()=>[],
+  });
+  render(<TaskExecutionPage graphId={longGraphId} tab="runs"/>);
+  expect(await screen.findByText('Owner lookup unavailable')).toBeTruthy();
+  expect(backend.calls).toHaveLength(1);
+  failed=false;
+  await userEvent.click(screen.getByRole('button',{name:'Retry task execution'}));
+  expect(await screen.findByText('No executions recorded yet.')).toBeTruthy();
+});
 
 it('opens retained task execution evidence without loading an editable workflow', async () => {
   const backend = fakeApi({

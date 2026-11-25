@@ -17,7 +17,7 @@ import (
 
 const checkoutPrefix = "project-checkouts/"
 
-var taskCheckoutID = regexp.MustCompile(`^task-run-[a-z0-9]+$`)
+var taskCheckoutID = regexp.MustCompile(`^task-run-([a-z0-9]+|h-[a-z2-7]{52})$`)
 
 // TaskCheckout is platform-owned admission provenance, outside the repository
 // an agent can edit. A repository marker never authorizes cleanup or inspection.

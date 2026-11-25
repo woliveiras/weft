@@ -212,6 +212,13 @@ do not change it. Stale revisions, malformed JSON, incompatible environments,
 missing source bindings and budget limits are actionable blockers, not a reason
 to silently substitute settings or start a different workflow.
 
+Task IDs and execution graph IDs are distinct. Short task IDs retain the legacy
+`task-run-<suffix>` mapping. Long IDs (including deterministic retry IDs) use a
+bounded `task-run-h-<digest>` graph name. The original task ID remains in the
+graph's `weft.task` label and the task's `executionGraphId` binding. Authorization,
+delivery and execution-evidence navigation verify that ownership rather than
+reconstructing a long task ID from its graph name.
+
 ## Implementation and verification map
 
 The main HTTP handoffs are below. The table locates operations; payload and

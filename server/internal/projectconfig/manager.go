@@ -180,7 +180,7 @@ func CreateWorktree(ctx context.Context, p *Project, commit, root, taskGraphID s
 	if err := Verify(ctx, p, commit); err != nil {
 		return "", err
 	}
-	if !regexp.MustCompile(`^task-run-[a-z0-9]+$`).MatchString(taskGraphID) {
+	if !taskCheckoutID.MatchString(taskGraphID) {
 		return "", ErrInvalid
 	}
 	dir := filepath.Join(root, taskGraphID)

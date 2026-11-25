@@ -7,7 +7,7 @@ import { activityHash, parseActivityState, type ActivityRouteState } from './com
 import { TasksPage } from './components/TasksPage';
 import {taskCreateLink,taskReturnLink,type TaskEntryContext} from './components/taskEntryContext';
 import {WorkflowCreate} from './components/WorkflowCreate';
-import { TaskExecutionPage, taskOwnerId } from './components/TaskExecutionPage';
+import { TaskExecutionPage, isTaskExecutionGraphId } from './components/TaskExecutionPage';
 import { PrimaryNavigation } from './components/PrimaryNavigation';
 import { runSection, type RunSection } from './components/runPresentation';
 import { agentSection, type AgentSection } from './components/agentSettingsModel';
@@ -202,7 +202,7 @@ function Shell() {
   );
 
   const list = graphs.data ?? [];
-  const ownedTask = route.view === 'graph' ? taskOwnerId(route.id) : undefined;
+  const ownedTask = route.view === 'graph' && isTaskExecutionGraphId(route.id);
   const workflows = list.filter(g => !g.graph.metadata.id.startsWith('task-run-') && !g.graph.metadata.labels?.['weft.task']);
   const current = route.view === 'graph' ? workflows.find((g) => g.graph.metadata.id === route.id) : undefined;
   const pending = approvals.data?.length ?? 0;

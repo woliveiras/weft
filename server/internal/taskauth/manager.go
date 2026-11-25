@@ -167,19 +167,19 @@ func (m Manager) Check(ctx context.Context, p *tools.Principal, t tools.Tool, ma
 	if !strings.HasPrefix(p.GraphID, "task-run-") {
 		return mandatory, "", nil
 	}
-	id := "tsk_" + strings.TrimPrefix(p.GraphID, "task-run-")
+	g, err := m.Store.GetGraph(ctx, p.GraphID, 0)
+	if err != nil {
+		return false, "", err
+	}
+	id := g.Metadata.Labels[domain.LabelTask]
+	if id == "" || domain.TaskExecutionID(id) != p.GraphID || g.Metadata.ID != p.GraphID || g.Metadata.Version != p.GraphVersion {
+		return false, "", ErrDenied
+	}
 	d, err := (taskconfig.Manager{Store: m.Store}).Get(ctx, id)
 	if err != nil {
 		return false, "", err
 	}
 	if d.ExecutionGraphID != p.GraphID || (d.Status != "starting" && d.Status != "running") {
-		return false, "", ErrDenied
-	}
-	g, err := m.Store.GetGraph(ctx, p.GraphID, 0)
-	if err != nil {
-		return false, "", err
-	}
-	if g.Metadata.Labels["weft.task"] != id || g.Metadata.Version != p.GraphVersion {
 		return false, "", ErrDenied
 	}
 	review, err := m.Review(ctx, id)

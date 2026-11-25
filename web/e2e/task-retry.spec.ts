@@ -42,6 +42,11 @@ test('creates a reviewed linked draft from a failed manual task without replayin
  await expect(page.getByRole('combobox',{name:'Workflow version',exact:true})).toHaveValue('1');
  await page.getByRole('button',{name:'Review task',exact:true}).click();
  await expect(page.getByRole('article',{name:'Task requirements',exact:true})).toBeVisible();
+ const requirements=await(await page.request.get(`/api/v1/tasks/${newID}/review`,{headers})).json();
+ expect(requirements.canStart).toBe(true);
+ expect(requirements.validation.errors??[]).toEqual([]);
+ expect(requirements.executionGraphId).toMatch(/^task-run-h-[a-z2-7]{52}$/);
+ expect(requirements.executionGraphId.length).toBe(63);
  const reviewed=await(await page.request.get(`/api/v1/tasks/${newID}`,{headers})).json();
  expect(reviewed.status).toBe('draft');expect(reviewed.executionGraphId).toBeUndefined();
  expect(await(await page.request.get(`/api/v1/tasks/${draft.id}`,{headers})).json()).toEqual(original);
@@ -51,4 +56,16 @@ test('creates a reviewed linked draft from a failed manual task without replayin
  await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: failed');
  await page.getByRole('button',{name:'Try again',exact:true}).click();
  await expect(page).toHaveURL(new RegExp(`#/tasks/${newID}$`));
+ // An explicit new start must pass admission and keep evidence linked to the long task ID.
+ await page.getByRole('button',{name:'Review task',exact:true}).click();
+ const ready=page.getByRole('article',{name:'Task requirements',exact:true});
+ await ready.getByRole('checkbox',{name:'I reviewed the workflow and authorize a separate execution copy.'}).check();
+ await ready.getByRole('button',{name:'Start task',exact:true}).click();
+ await expect(page.getByRole('region',{name:'Task decisions',exact:true})).toBeVisible();
+ const started=await(await page.request.get(`/api/v1/tasks/${newID}`,{headers})).json();
+ expect(started.executionGraphId).toBe(requirements.executionGraphId);
+ await page.goto(`/#/g/${started.executionGraphId}/runs`);
+ await expect(page.getByRole('heading',{name:'Task execution',exact:true})).toBeVisible();
+ await expect(page.getByRole('link',{name:'Back to task',exact:true})).toHaveAttribute('href',`#/tasks/${newID}`);
+ await expect(page.getByText('No executions recorded yet.',{exact:true})).toBeVisible();
 });

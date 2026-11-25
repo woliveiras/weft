@@ -66,7 +66,7 @@ func (m Manager) RetryFailed(ctx context.Context, id, issue, taskID, actor strin
 		if t.Processed[key] != "failed" || (d.Status != "draft" && !(d.Status == "cancelled" && d.UpdatedBy == actor)) {
 			return nil, storage.ErrConflict
 		}
-		graphID := domain.TaskRunGraphPrefix + strings.TrimPrefix(taskID, "tsk_")
+		graphID := domain.TaskExecutionID(taskID)
 		if _, err := m.Store.GetGraph(ctx, graphID, 0); !errors.Is(err, storage.ErrNotFound) {
 			if err != nil {
 				return nil, err
@@ -134,7 +134,7 @@ func retryMatchesOrigin(t *Trigger, d *taskconfig.Draft, issue string) bool {
 // A stopped graph is the fence against redispatch and pending external effects.
 // Historical successful turns without a PR are eligible after explicit task stop.
 func (m Manager) checkUndeliveredTask(ctx context.Context, d *taskconfig.Draft) error {
-	if d.ExecutionGraphID != domain.TaskRunGraphPrefix+strings.TrimPrefix(d.ID, "tsk_") {
+	if d.ExecutionGraphID != domain.TaskExecutionID(d.ID) {
 		return storage.ErrConflict
 	}
 	switch d.Status {
