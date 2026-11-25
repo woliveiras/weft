@@ -35,16 +35,20 @@ Weft executes inside the server container; it is not a dedicated task sandbox.
 
 When task admission finds that preparation is needed:
 
-1. Review the proposed task environment and explicitly prepare it.
-2. The task creates its execution copy and may request `task_environment`
+1. Use **Review task** to save current choices and inspect that exact saved
+   configuration. This does not interpret the request or start a build/agent.
+   The setup summary's environment description is configuration guidance; the
+   saved task review establishes whether preparation is needed and allowed.
+2. Review the proposed task environment and explicitly prepare it.
+3. The task creates its execution copy and may request `task_environment`
    approval. Inspect the actual build/setup scope before approval.
-3. Follow **Environment & logs** on the task. Loading, failed snapshot, pending,
+4. Follow **Environment & logs** on the task. Loading, failed snapshot, pending,
    building, failed build and ready are distinguishable. The bounded log panel
    can follow the latest output without expanding the whole page indefinitely.
-4. If a build fails, inspect the failing phase before explicitly retrying. A
+5. If a build fails, inspect the failing phase before explicitly retrying. A
    policy rejection may need an installation change; a toolchain failure may
    need a corrected definition. Repeated refresh cannot fix either.
-5. On ready, review prepared requirements again and explicitly start the task.
+6. On ready, review prepared requirements again and explicitly start the task.
    Interactive preparation does not auto-start agents on build completion.
 
 After start, command isolation and network policy remain enforced independently

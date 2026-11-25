@@ -8,14 +8,17 @@ test('creates, reuses and configures an agent through workflow creation and the 
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
   await page.goto('/#/graphs');
   await page.getByRole('button', {name:'New workflow', exact:true}).click();
-  const dialog = page.getByRole('dialog', {name:'New workflow'});
+  await page.getByRole('button', {name:'Advanced YAML / JSON',exact:true}).click();
+  const dialog = page.getByRole('region', {name:'Advanced workflow definition'});
   await dialog.getByRole('textbox', {name:'Workflow document'}).fill(JSON.stringify({
     metadata:{id:'catalog-review-source',name:'Catalog review source'},
     spec:{nodes:[{id:'reviewer',name:'Catalog reviewer',description:'Reviews incoming changes.',
       runtime:{kind:'native'},model:{provider:'e2e'},prompt:'Review @repository.',loop:{mode:'event'}}],
       parameters:[{name:'repository',value:'woliveiras/weft'}],channels:[{id:'requests',to:['reviewer']}]},
   }));
-  await dialog.getByRole('button', {name:'Create', exact:true}).click();
+  await page.getByRole('button', {name:'Review workflow',exact:true}).click();
+  await page.getByRole('button', {name:'Save workflow',exact:true}).click();
+  await expect(page).toHaveURL(/g\/catalog-review-source\//);
   await expect(dialog).not.toBeVisible();
 
   const agents = page.getByRole('navigation', {name:'Main navigation'}).getByRole('button', {name:'Agents', exact:true});
@@ -56,7 +59,7 @@ test('creates, reuses and configures an agent through workflow creation and the 
   expect(geometry?.gap).toBeGreaterThanOrEqual(0);
   expect(geometry?.gap).toBeLessThan(16);
   expect(geometry?.offset).toBeLessThan(2);
-  const sandboxTitle = page.getByText('Command sandbox', {exact:true});
+  const sandboxTitle = page.getByRole('region',{name:'Agent catalog'}).getByText('Command sandbox', {exact:true});
   const isolation = page.getByRole('combobox', {name:'Isolation', exact:true});
   const titleEdge = await sandboxTitle.evaluate(title => title.getBoundingClientRect().left);
   expect(Math.abs(titleEdge - await isolation.evaluate(input => input.getBoundingClientRect().left))).toBeLessThanOrEqual(1);
@@ -86,6 +89,7 @@ test('creates, reuses and configures an agent through workflow creation and the 
 
   await page.goto('/#/graphs');
   await page.getByRole('button', {name:'New workflow', exact:true}).click();
+  await page.getByRole('button', {name:'Advanced YAML / JSON',exact:true}).click();
   const document = dialog.getByRole('textbox', {name:'Workflow document'});
   await document.fill(`# Target workflow
 metadata:
@@ -95,7 +99,7 @@ spec:
   nodes: []
 `);
   await dialog.getByRole('button', {name:'Add existing agent'}).click();
-  const picker = page.getByRole('dialog', {name:'Select a reusable agent'});
+  const picker = page.getByRole('region', {name:'Agent selection'});
   await picker.getByRole('searchbox', {name:'Search agents'}).fill('Reviews incoming');
   await picker.getByRole('combobox', {name:'Reusable agent'}).selectOption(agent!.id);
   await expect(picker.getByRole('button', {name:'Add to workflow'})).toBeDisabled();
@@ -103,7 +107,9 @@ spec:
   await picker.getByRole('textbox', {name:/repository/}).fill('other/project');
   await picker.getByRole('button', {name:'Add to workflow'}).click();
   await expect(document).toHaveValue(/# Target workflow/);
-  await dialog.getByRole('button', {name:'Create', exact:true}).click();
+  await page.getByRole('button', {name:'Review workflow',exact:true}).click();
+  await page.getByRole('button', {name:'Save workflow',exact:true}).click();
+  await expect(page).toHaveURL(/g\/catalog-review-target\//);
   await expect(dialog).not.toBeVisible();
 
   await page.goto(`/#/agents/${agent!.id}`);
@@ -134,6 +140,10 @@ spec:
   const agentName = page.getByRole('textbox', {name:'Name', exact:true});
   await agentName.fill('Release reviewer');
   await expect(pending).toBeVisible();
+  page.once('dialog', dialog=>dialog.dismiss());
+  await page.getByRole('navigation', {name:'Main navigation'}).getByRole('button', {name:'Tasks',exact:true}).click();
+  await expect(page).toHaveURL(new RegExp(`/agents/${agent!.id}$`));
+  await expect(agentName).toHaveValue('Release reviewer');
   await agentName.fill('Catalog reviewer');
   await expect(pending).toHaveCount(0);
   await expect(publish).toBeDisabled();
@@ -167,6 +177,12 @@ spec:
   await agentVersion.selectOption('2');
   await expect(agentVersion).toHaveValue('2');
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(binding.getByRole('region', {name:'Version adoption review'})).toBeVisible();
+  await binding.getByRole('button', {name:'Cancel version change',exact:true}).click();
+  await expect(agentVersion).toHaveValue('1');
+  await agentVersion.selectOption('2');
+  await binding.getByRole('button', {name:'Use this version',exact:true}).click();
+  await expect(binding.getByRole('region', {name:'Version adoption review'})).toHaveCount(0);
   await expect(binding.getByRole('textbox', {name:/repository/})).toHaveValue('other/project');
   const beforeSave = await (await page.request.get('/api/v1/graphs/catalog-review-target', {headers})).json() as GraphSummary;
   expect(beforeSave.graph.spec.nodes[0].agent?.version).toBe(1);

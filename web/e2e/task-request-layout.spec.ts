@@ -16,7 +16,7 @@ test('uses the available task form width and aligns visible fields and import co
   expect(card.y - link.y - link.height).toBeGreaterThanOrEqual(12);
 
   const save = (await form.getByRole('button', { name: 'Save draft', exact: true }).boundingBox())!;
-  const run = (await form.getByRole('button', { name: 'Run task', exact: true }).boundingBox())!;
+  const run = (await form.getByRole('button', { name: 'Review task', exact: true }).boundingBox())!;
   const review = (await form.getByRole('button', { name: 'Review requirements', exact: true }).boundingBox())!;
   expect(run.x - save.x - save.width).toBeGreaterThanOrEqual(12);
   expect(review.x - run.x - run.width).toBeGreaterThanOrEqual(12);
@@ -59,7 +59,7 @@ test('uses the available task form width and aligns visible fields and import co
   await page.setViewportSize({ width: 390, height: 844 });
   await checkIssueAlignment();
   const narrowSave = (await form.getByRole('button', { name: 'Save draft', exact: true }).boundingBox())!;
-  const narrowRun = (await form.getByRole('button', { name: 'Run task', exact: true }).boundingBox())!;
+  const narrowRun = (await form.getByRole('button', { name: 'Review task', exact: true }).boundingBox())!;
   const narrowReview = (await form.getByRole('button', { name: 'Review requirements', exact: true }).boundingBox())!;
   for (const [before, after] of [[narrowSave, narrowRun], [narrowRun, narrowReview]]) {
     const gap = after.y === before.y ? after.x - before.x - before.width : after.y - before.y - before.height;

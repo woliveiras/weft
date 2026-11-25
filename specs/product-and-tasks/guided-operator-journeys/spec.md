@@ -2,7 +2,7 @@
 id: TASK-009
 title: Guided Operator Journeys
 summary: Reduce repeated task, workflow and agent configuration while retaining explicit review and authority.
-status: in-progress
+status: implemented
 scope: [task entry, workflow task defaults, guided workflow creation, shared agent editing, contextual setup]
 risk: high
 risk_domains: [consent, configuration persistence, unpublished changes]

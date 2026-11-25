@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test';
 
-test('opens workflow help inside a dialog and preserves a draft', async ({ page }) => {
+test('opens help on the workflow creation page and preserves a draft', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
   await page.setViewportSize({ width: 580, height: 850 });
   await page.goto('/#/graphs');
   await page.getByRole('button', { name: 'New workflow', exact: true }).click();
-  const workflow = page.getByRole('dialog', { name: 'New workflow', exact: true });
+  await page.getByRole('button', { name: 'Advanced YAML / JSON',exact:true }).click();
+  const workflow = page.getByRole('region', { name: 'Advanced workflow definition', exact: true });
   const document = workflow.getByRole('textbox', { name: 'Workflow document', exact: true });
   await document.fill('metadata: {name: draft}');
   const help = workflow.getByRole('button', { name: 'Help for Workflow document', exact: true });

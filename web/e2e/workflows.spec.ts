@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { GraphSummary } from '../src/api/types';
 const headers = { Authorization: 'Bearer e2e-admin-token' };
 async function create(page: Page, id: string) {
   expect((await page.request.post('/api/v1/graphs', { headers, data: { metadata: { id, name: id, description: 'Reusable event workflow' }, spec: {
@@ -83,4 +84,49 @@ test('viewer uses narrow table and agents without mutation controls or page over
   await row.getByRole('button', { name: 'Configure Reader', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Agent configuration', exact: true }).getByLabel('Name', { exact: true })).toBeDisabled();
   expect((await page.request.post(`/api/v1/graphs/${id}/start`, { headers: { Authorization: 'Bearer e2e-viewer-token' } })).status()).toBe(403);
+});
+
+test('creates a guided workflow after review without starting it and carries context into a new task',async({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+  await page.setViewportSize({width:390,height:850});
+  await page.goto('/#/graphs');
+  await page.getByRole('button',{name:'New workflow',exact:true}).click();
+  await page.getByRole('textbox',{name:'Workflow name',exact:true}).fill('Guided review journey');
+  await page.getByRole('button',{name:'Create new agent',exact:true}).click();
+  await page.getByRole('textbox',{name:'New agent name',exact:true}).fill('Guided reviewer');
+  await page.getByRole('textbox',{name:'New agent instructions',exact:true}).fill('Review the request and report the findings.');
+  await page.getByRole('button',{name:'Add new agent',exact:true}).click();
+  await page.getByRole('button',{name:'Propose connections',exact:true}).click();
+  for(const width of [1440,390]) {
+    await page.setViewportSize({width,height:850});
+    await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  }
+  page.once('dialog',dialog=>dialog.dismiss());
+  await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Tasks',exact:true}).click();
+  await expect(page).toHaveURL(/#\/graphs\/new$/);
+  await expect(page.getByRole('textbox',{name:'Workflow name',exact:true})).toHaveValue('Guided review journey');
+  const reviewAction=page.getByRole('button',{name:'Review workflow',exact:true});
+  await reviewAction.focus();await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading',{name:'Review before saving',exact:true})).toBeFocused();
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  const editAction=page.getByRole('button',{name:'Edit definition',exact:true});
+  await editAction.focus();await page.keyboard.press('Enter');
+  await expect(page.getByRole('textbox',{name:'Workflow name',exact:true})).toHaveValue('Guided review journey');
+  page.once('dialog',dialog=>dialog.dismiss());
+  await page.getByRole('button',{name:'Cancel',exact:true}).focus();await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/#\/graphs\/new$/);
+  await reviewAction.focus();await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading',{name:'Review before saving',exact:true})).toBeFocused();
+  const absent=await page.request.get('/api/v1/graphs/guided-review-journey',{headers});
+  expect(absent.status()).toBe(404);
+  await page.getByRole('button',{name:'Save workflow',exact:true}).click();
+  await expect(page).toHaveURL(/g\/guided-review-journey/);
+  const saved=await(await page.request.get('/api/v1/graphs/guided-review-journey',{headers})).json() as GraphSummary;
+  expect(saved.record.state).toBe('stopped');
+  expect(saved.graph.spec.nodes[0].tools??[]).toEqual([]);
+  expect(saved.graph.spec.task).toMatchObject({nodeId:'guided-reviewer',resultNodeId:'guided-reviewer',channelId:'requests',messageType:'work.request'});
+  await page.goto('/#/graphs');
+  const row=page.getByRole('row').filter({has:page.getByRole('button',{name:'Guided review journey',exact:true})});
+  await row.getByRole('link',{name:'New task for Guided review journey',exact:true}).click();
+  await expect(page.getByRole('combobox',{name:'Workflow',exact:true})).toHaveValue('guided-review-journey');
 });

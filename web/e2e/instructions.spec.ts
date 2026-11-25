@@ -44,6 +44,13 @@ test("admin creates and associates guidance, runs an agent and inspects its immu
       r.request().method() === "PUT" &&
       r.url().endsWith("/graphs/instruction-browser"),
   );
+  await page.getByRole("button", { name: "Review associations" }).click();
+  const review = page.getByRole('dialog', {name:'Review workflow associations'});
+  await expect(review).toContainText('expected version 1');
+  await expect(review).toContainText('Save creates a new workflow version');
+  await review.getByRole('button', {name:'Cancel',exact:true}).click();
+  await expect(page.getByLabel("Browser skill (browser-skill)")).toBeChecked();
+  await page.getByRole("button", { name: "Review associations" }).click();
   await page.getByRole("button", { name: "Save associations" }).click();
   expect((await saved).ok()).toBeTruthy();
   await page.getByRole("link",{name:"Inspect instructions",exact:true}).click();
@@ -127,6 +134,7 @@ test("Activity shows historical progressive guidance to a viewer", async ({ page
   await page.getByLabel("Workflow", { exact: true }).selectOption(id);
   await page.getByLabel("Discover repository instructions and skills", {exact:true}).check();
   const saved = page.waitForResponse((r) => r.request().method() === "PUT" && r.url().endsWith(`/graphs/${id}`));
+  await page.getByRole("button", { name: "Review associations" }).click();
   await page.getByRole("button", { name: "Save associations" }).click();
   expect((await saved).ok()).toBeTruthy();
   await page.getByRole("link", {name:"Inspect instructions",exact:true}).click();

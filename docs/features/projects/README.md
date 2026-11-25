@@ -3,8 +3,11 @@
 Projects register repositories and pin a commit for later task worktrees.
 Open **Configuration → Projects** (`#/projects`). The table provides search,
 execution-environment filtering, repository/ref/commit facts, optional server
-path disclosure and a **Create task** link. That link currently opens the new
-task page; it does not preselect the project.
+path disclosure and a **Create task** link. That link opens
+`#/tasks/new?project=<id>` and selects this project after resource discovery,
+including its concrete registered base commit and environment preference.
+The task still needs a workflow, requirements review and explicit execution
+authorization. Unknown or unavailable project IDs remain visible for correction.
 
 A task without a selected project can still inherit a repository configured in
 the workflow workspace. The task form's **No repository (managed workspace)**
@@ -25,6 +28,12 @@ the workflow also configures a repository is rejected to avoid two owners.
 5. Select the project in a task's **Workflow & repository** section and review
    its base commit. Task worktrees start from the reviewed commit; uncommitted
    source changes remain in the original checkout.
+
+Starting from **Create task** avoids selecting the repository again. This
+project context wins over a workflow's suggested project. Changing the project
+in the task deliberately updates its base/preference; late discovery does not
+replace an explicit choice or an existing saved task. **Review task** saves
+the selected version/base and checks that saved revision without starting work.
 
 ## Import from a remote URL
 
@@ -67,4 +76,5 @@ Task evidence distinguishes declared checks from arbitrary shell commands.
 - [Project UI tests](../../../web/src/components/ProjectsPage.test.tsx).
 
 Continue with [tasks](../tasks/README.md), [connections](../connections/README.md)
-and the detailed [task workflow guide](../../task-workflows.md).
+and [setup and readiness](../setup-and-readiness/README.md). The detailed
+[task workflow guide](../../task-workflows.md) describes admission boundaries.

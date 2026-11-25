@@ -4,7 +4,7 @@ Created before implementation on 2026-11-25 from the maintainer-approved UX audi
 Every oracle below is **spec-derived** from TASK-009; tests inspected/extended
 after code exists must additionally disclose implementation awareness in evidence.
 
-| ID | Criterion / scenario | Invariant and observable oracle | Planned verification |
+| ID | Criterion / scenario | Invariant and observable oracle | Verification approach (results and file anchors in evidence.md) |
 | --- | --- | --- | --- |
 | J01 | AC-001 project/workflow entry | Known context selected once; version/base concrete; no persisted task override | Helper unit; route→editor integration |
 | J02 | AC-001 unavailable/late context | No replacement resource; visible correction; explicit edits retained | Helper boundary unit; async UI integration |

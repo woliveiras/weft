@@ -1,7 +1,8 @@
 # Feature flow inventory
 
-This directory describes the console and API journeys implemented at source
-baseline `a1668c1`, inspected on 2026-11-25. It is a reference for finding the
+This directory describes the console and API journeys first inspected at source
+baseline `a1668c1` on 2026-11-25, then updated for the approved guided operator
+journeys refactoring. It is a reference for finding the
 whole flow without opening the application. UI labels are written as displayed.
 It records current behavior, including manual handoffs; it does not propose a
 new experience or replace acceptance criteria in [specs](../../specs/README.md).
@@ -17,6 +18,7 @@ for protocol details and qualification limits.
 | Feature | Complete flow |
 | --- | --- |
 | [Tasks](tasks/README.md) | Describe work, select a version and repository, review access, prepare, start, inspect evidence, deliver and retain history |
+| [Setup and readiness](setup-and-readiness/README.md) | Read configuration facts, follow goal guidance, save before repairing dependencies and return to the saved task |
 | [Agents](agents/README.md) | Create or discover a reusable agent, publish a version, bind it to workflows and configure local behavior |
 | [Workflows](workflows/README.md) | Create a definition, assemble agents and channels, review/save a version and control execution |
 | [Projects](projects/README.md) | Register or import a repository, pin its commit and choose it for a task |
@@ -57,7 +59,7 @@ path makes an agent's summary proof that its checks or delivery succeeded.
 | --- | --- | --- |
 | Installation | Providers, connections, budgets, network policy, skill catalogue | Explicit resource save; individual contracts determine effects on existing work |
 | Agent version | Shared instructions, model, tools, parameter declarations | Publish creates an immutable version; workflows must explicitly adopt it |
-| Workflow version | Agent bindings/values, local instructions, channels, execution settings | Save graph; a browser draft is not the running definition |
+| Workflow version | Agent bindings/values, local instructions, channels, execution settings and task defaults | Save graph; a browser draft is not the running definition; task defaults are suggestions only |
 | Task revision | Request, workflow/version, repository commit, delivery and execution choices | Save draft; reviewed authorization must match the saved configuration |
 | Execution | Task-owned graph, instructions, plans, tool outcomes, delivery records | Recorded as work proceeds; retained separately from editable templates |
 
@@ -85,11 +87,12 @@ unrelated external or destructive action.
 
 | Observed implementation | Where the operator encounters it |
 | --- | --- |
-| New workflows begin with YAML/JSON, even though existing workflows have a visual editor | Workflow creation dialog, then canvas and settings |
+| New workflows offer a visual builder plus advanced YAML/JSON, with review before saving | Dedicated workflow creation page, then canvas and settings |
 | Publishing an agent and adopting its version are separate saves | Agent detail, then workflow binding and graph save |
 | Inline workflow agents are registered in the catalogue without automatically converting the origin node into a binding | Agent catalogue and workflow configuration |
 | Repository registration, SCM delivery and issue integration are separate resources | Projects, Connections, then task setup |
-| Task interpretation is optional and may need manual repair | Resolve request, visible setup cards, requirements review |
+| Review task saves the exact edits then reviews the saved revision, while interpretation remains optional | Review task, Resolve request, visible setup cards and readiness summary |
+| Task entry carries a selected project/workflow, and configuration repair saves first and offers return navigation | Projects/workflows task links, task editor, Models/Connections return context |
 | Saving, authorizing, preparing an environment and starting are distinct transitions | Task draft, access review and Environment & logs |
 | A prepared environment does not automatically start an interactively prepared task | Fresh requirements review and explicit start |
 | A completed plan, passed check, pushed branch and open PR are separate evidence | Task overview, Changes & checks and delivery result |

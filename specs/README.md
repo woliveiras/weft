@@ -44,7 +44,7 @@ The [historical source map](./historical-source-map.md) records the migration of
 
 ### In progress
 
-- [TASK-009 — Guided Operator Journeys](./product-and-tasks/guided-operator-journeys/spec.md) — `in-progress`. Contextual task entry, reusable workflow defaults, guided creation and explicit agent adoption.
+- [TASK-009 — Guided Operator Journeys](./product-and-tasks/guided-operator-journeys/spec.md) — `implemented`. Contextual task entry, reusable workflow defaults, guided creation and explicit agent adoption.
 
 ### Implemented
 

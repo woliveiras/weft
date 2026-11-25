@@ -20,7 +20,7 @@ test('saves and resumes a reviewed request without starting or changing the work
  await page.getByRole('combobox',{name:'Result agent',exact:true}).selectOption('');
  await page.getByRole('button',{name:'Save draft',exact:true}).click();
  await expect(page).toHaveURL(/#\/tasks\/tsk_/);
- await expect(page.getByRole('region',{name:'Save and review task'}).getByRole('status')).toHaveText('Draft saved. No agents have been started.');
+ await expect(page.getByRole('region',{name:'Save and review task'}).getByRole('status').filter({hasText:'Draft saved.'})).toHaveText('Draft saved. No agents have been started.');
  await page.reload();
  await expect(page.getByRole('textbox',{name:'Request',exact:true})).toHaveValue('Explain why the parser rejects this input.');
  await page.getByRole('button',{name:'Review requirements'}).click();
@@ -34,7 +34,7 @@ test('saves and resumes a reviewed request without starting or changing the work
  await openTaskSettings(page);
  await page.getByRole('textbox',{name:'Title',exact:true}).fill('Updated request');
  await page.getByRole('button',{name:'Save draft',exact:true}).click();
- await expect(page.getByRole('region',{name:'Save and review task'}).getByRole('status')).toHaveText('Draft saved. No agents have been started.');
+ await expect(page.getByRole('region',{name:'Save and review task'}).getByRole('status').filter({hasText:'Draft saved.'})).toHaveText('Draft saved. No agents have been started.');
  await page.reload();await openTaskSettings(page);
  await expect(page.getByRole('textbox',{name:'Title',exact:true})).toHaveValue('Updated request');
  await page.getByRole('link',{name:'Back to tasks',exact:true}).click();
@@ -46,7 +46,7 @@ test('saves and resumes a reviewed request without starting or changing the work
  await expect(version).toHaveValue('1');
  await expect(version.getByRole('option',{name:'Current workflow version (Version 2)'})).toHaveCount(1);
  await version.selectOption('2');
- await page.getByRole('button',{name:'Review and run',exact:true}).click();
+ await page.getByRole('button',{name:'Review task',exact:true}).click();
  await expect(page.getByRole('article',{name:'Task requirements'})).toContainText('Current workflow version: 2');
  const taskId=url.split('/').pop()!;
  const updated=await(await page.request.get(`/api/v1/tasks/${taskId}`,{headers})).json();
@@ -177,7 +177,7 @@ test('opens a previously saved echo example and runs it only after explicit revi
  await expect(page.getByRole('heading',{name:'Try the task flow'})).toHaveCount(0);
  await page.getByRole('link',{name:'Previously saved echo example',exact:true}).click();
  await expect(page).toHaveURL(new RegExp(`#/tasks/${id}$`));
- await expect(page.getByRole('region',{name:'Save and review task'}).getByRole('status')).toHaveText('Draft saved. No agents have been started.');
+ await expect(page.getByRole('region',{name:'Save and review task'}).getByRole('status').filter({hasText:'Draft saved.'})).toHaveText('Draft saved. No agents have been started.');
  const draft=await(await page.request.get(`/api/v1/tasks/${id}`,{headers})).json();
  expect(draft.status).toBe('draft');
  expect(await(await page.request.get(`/api/v1/graphs/${draft.graphId}/executions`,{headers})).json()).toEqual([]);
@@ -226,7 +226,7 @@ test('keeps task approvals contextual and preserves viewer restrictions and deci
  const decisions=page.getByRole('region',{name:'Task decisions',exact:true});await expect(decisions).toContainText('Waiting for an authorized operator to decide.');await expect(decisions.getByRole('button',{name:'Approve',exact:true})).toHaveCount(0);
 });
 
-test('repairs an MCP connection in another tab and rechecks the retained task before start',async({page})=>{
+test('repairs an MCP connection in context and rechecks the retained task before start',async({page})=>{
  const create=await page.request.post('/api/v1/mcp/connections',{headers,data:{id:'task-repair',name:'Task repair connection',service:'generic',endpoint:'https://mcp.fixture.invalid/mcp',enabled:true,credential:{value:'fixture-mcp-token'}}});expect(create.status()).toBe(201);
  const connection=await(await page.request.post('/api/v1/mcp/connections/task-repair/tools/refresh',{headers})).json();
  expect((await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id:'task-repair-flow',name:'Repair workflow'},spec:{nodes:[{id:'worker',runtime:{kind:'echo'},loop:{mode:'once'},tools:[{name:'mcp.task-repair.search'}]}]}}})).status()).toBe(201);
@@ -236,8 +236,10 @@ test('repairs an MCP connection in another tab and rechecks the retained task be
  await page.getByRole('textbox',{name:'Title',exact:true}).fill('Retained repair draft');await page.getByRole('textbox',{name:'Request',exact:true}).fill('Keep my request during connection repair');await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption('task-repair-flow');
  await page.getByRole('button',{name:'Save draft',exact:true}).click();await page.getByRole('button',{name:'Review requirements',exact:true}).click();await expect(page.getByRole('button',{name:'Start task',exact:true})).toBeDisabled();
  const taskURL=page.url();await page.getByRole('checkbox',{name:'I reviewed the workflow and authorize a separate execution copy.'}).check();
- const popupPromise=page.waitForEvent('popup');await page.getByRole('link',{name:'Review connection task-repair in another tab'}).click();const popup=await popupPromise;
- await popup.getByRole('link',{name:'Settings',exact:true}).click();await popup.getByRole('button',{name:'Edit Task repair connection',exact:true}).click();await popup.getByRole('checkbox',{name:'Connection enabled',exact:true}).check();await popup.getByRole('button',{name:'Save MCP connection',exact:true}).click();await expect(popup.getByText('2 tools discovered. Grant access to agents before they can use them.')).toBeVisible();await popup.close();
+ await page.getByRole('link',{name:'Review connection task-repair',exact:true}).click();
+ await expect(page.getByRole('complementary',{name:'Task configuration context'})).toBeVisible();
+ await page.getByRole('link',{name:'Settings',exact:true}).click();await page.getByRole('button',{name:'Edit Task repair connection',exact:true}).click();await page.getByRole('checkbox',{name:'Connection enabled',exact:true}).check();await page.getByRole('button',{name:'Save MCP connection',exact:true}).click();await expect(page.getByText('2 tools discovered. Grant access to agents before they can use them.')).toBeVisible();
+ await page.getByRole('link',{name:'Return to saved task',exact:true}).click();
  await expect(page).toHaveURL(taskURL);await expect(page.getByRole('textbox',{name:'Request',exact:true})).toHaveValue('Keep my request during connection repair');await page.getByRole('button',{name:'Review requirements',exact:true}).click();
  await expect(page.getByRole('checkbox',{name:'I reviewed the workflow and authorize a separate execution copy.'})).not.toBeChecked();await expect(page.getByRole('button',{name:'Start task',exact:true})).toBeDisabled();
  await page.getByRole('checkbox',{name:'I reviewed the workflow and authorize a separate execution copy.'}).check();await expect(page.getByRole('button',{name:'Start task',exact:true})).toBeEnabled();
@@ -370,7 +372,7 @@ test('prompt-first draft keeps settings visible and never starts or interprets a
  await page.getByRole('textbox',{name:'Title',exact:true}).fill('Custom title');
  await openTaskSettings(page);await page.getByRole('textbox',{name:'Request',exact:true}).fill('Revised request');
  await page.getByRole('button',{name:'Save draft',exact:true}).click();
- await expect(page.getByRole('region',{name:'Save and review task'}).getByRole('status')).toHaveText('Draft saved. No agents have been started.');
+ await expect(page.getByRole('region',{name:'Save and review task'}).getByRole('status').filter({hasText:'Draft saved.'})).toHaveText('Draft saved. No agents have been started.');
  await page.reload();await openTaskSettings(page);
  await expect(page.getByRole('textbox',{name:'Title',exact:true})).toHaveValue('Custom title');
 });

@@ -59,24 +59,44 @@ test('keeps invalid and ambiguous model output blocked and allows repair after r
  await expect(page.getByLabel('Request interpretation')).toContainText('Clarify the objective');
  await page.getByRole('textbox',{name:'Request',exact:true}).fill('fixture-model-error');
  await page.getByRole('button',{name:'Resolve request',exact:true}).click();
- await expect(page.getByRole('link',{name:'Configure models'})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Configure models',exact:true})).toBeVisible();
  await page.reload();
  await expect(page.getByRole('textbox',{name:'Request',exact:true})).toHaveValue('fixture-model-error');
  const retained=await(await page.request.get(`/api/v1/tasks/${taskId}`,{headers})).json();
  expect(retained.status).toBe('draft');expect(retained.executionGraphId).toBeUndefined();
  expect(await(await page.request.get(`/api/v1/graphs/${graphId}/executions`,{headers})).json()).toEqual([]);
 });
-test('runs a ready prompt once and reloads tracking without changing the workflow',async({page})=>{
+test('reviews a ready prompt without starting and preserves legacy API submission idempotency',async({page})=>{
  test.skip(process.env.WEFT_E2E_PROMPT_MODEL!=='1','Requires deterministic interpretation provider');
  const graph={metadata:{id:'submit-flow',name:'Submit flow'},spec:{nodes:[{id:'worker',runtime:{kind:'echo'},loop:{mode:'once'},tools:[]}]}};
  expect((await page.request.post('/api/v1/graphs',{headers,data:graph})).status()).toBe(201);
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));await page.goto('/#/tasks/new');
  await page.getByRole('textbox',{name:'Request',exact:true}).fill('Explain the parser without modifying files.');await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption('submit-flow');
- const sent=page.waitForRequest(r=>r.url().endsWith('/api/v1/tasks/submit')&&r.method()==='POST');
- await page.getByRole('button',{name:'Run task',exact:true}).click();const body=(await sent).postDataJSON();
- await expect(page).toHaveURL(/#\/tasks\/tsk_/);await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
- const replay=await page.request.post('/api/v1/tasks/submit',{headers,data:body});expect(replay.status()).toBe(200);const result=await replay.json();
- await page.reload();await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
+ const mutations:string[]=[];page.on('request',request=>{if(request.method()==='POST'&&/\/(submit|prompt|start|prepare-environment)$/.test(request.url()))mutations.push(request.url());});
+ for(const width of [1440,390]) {
+  await page.setViewportSize({width,height:900});
+  const summary=page.getByRole('region',{name:'Task setup summary',exact:true});
+  await expect(summary).toContainText('Empty managed workspace');
+  await expect(summary).toContainText('Not required for echo agents');
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ }
+ await page.getByRole('button',{name:'Review task',exact:true}).focus();await page.keyboard.press('Enter');
+ await expect(page).toHaveURL(/#\/tasks\/tsk_/);
+ await expect(page.getByRole('article',{name:'Task requirements'})).toContainText('Current workflow version: 1');
+ await expect(page.getByRole('button',{name:'Start task',exact:true})).toBeDisabled();
+ expect(mutations).toEqual([]);
+ const draftId=page.url().split('/').pop()!;
+ const draft=await(await page.request.get(`/api/v1/tasks/${draftId}`,{headers})).json();
+ expect(draft.status).toBe('draft');expect(draft.executionGraphId).toBeUndefined();
+ await page.reload();await expect(page.getByRole('textbox',{name:'Request',exact:true})).toHaveValue('Explain the parser without modifying files.');
+ // The older submit API retains its explicit-confirmation and idempotency contract.
+ // It is no longer the ordinary Review task UI path.
+ const body={key:'legacy-submit-flow-key',confirm:true,request:'Explain the parser without modifying files.',graphId:'submit-flow',settings:{executionMode:'workflow'}};
+ const first=await page.request.post('/api/v1/tasks/submit',{headers,data:body});expect(first.ok()).toBe(true);const result=await first.json();
+ const replay=await page.request.post('/api/v1/tasks/submit',{headers,data:body});expect(replay.status()).toBe(200);
+ expect((await replay.json()).task.id).toBe(result.task.id);
+ expect(result.task.id).not.toBe(draftId);
+ await expect.poll(async()=>(await(await page.request.get(`/api/v1/tasks/${result.task.id}`,{headers})).json()).status).toBe('succeeded');
  const copies=await(await page.request.get('/api/v1/graphs',{headers})).json();expect(copies.filter((g:{graph:{metadata:{id:string}}})=>g.graph.metadata.id===result.task.executionGraphId)).toHaveLength(1);
  const original=await(await page.request.get('/api/v1/graphs/submit-flow',{headers})).json();expect(original.record.version).toBe(1);expect(original.graph.spec.nodes[0].tools??[]).toEqual([]);
 });
@@ -85,11 +105,11 @@ test('retains a blocked submission and continues after clarification without a n
  const graph={metadata:{id:'submit-repair-flow'},spec:{nodes:[{id:'worker',runtime:{kind:'echo'},loop:{mode:'once'},tools:[]}]}};expect((await page.request.post('/api/v1/graphs',{headers,data:graph})).status()).toBe(201);
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));await page.goto('/#/tasks/new');
  await page.getByRole('textbox',{name:'Request',exact:true}).fill('fixture-ambiguous');await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption('submit-repair-flow');
- await page.getByRole('button',{name:'Run task',exact:true}).click();await expect(page).toHaveURL(/#\/tasks\/tsk_/);const address=page.url();
+ await page.getByRole('button',{name:'Resolve request',exact:true}).click();await expect(page).toHaveURL(/#\/tasks\/tsk_/);const address=page.url();
  await expect(page.getByLabel('Request interpretation')).toContainText('Clarify');await page.reload();
  await expect(page.getByLabel('Request interpretation')).toContainText('Clarify');
  await expect(page.getByRole('button',{name:'Start task',exact:true})).toHaveCount(0);
- await page.getByRole('button',{name:'Continue task',exact:true}).click();
+ await page.getByRole('button',{name:'Review task',exact:true}).click();
  const actions=page.getByRole('region',{name:'Save and review task'});
  await expect(actions.getByRole('status')).toContainText('Task has not started.');
  await expect(actions.getByRole('status')).toContainText('entry agent');
@@ -117,7 +137,7 @@ test('retains a blocked submission and continues after clarification without a n
  page.on('request',request=>{if(request.url().endsWith('/api/v1/tasks/submit'))submitCalls.push(request.url());});
  // Failed writes retain edits and do not reinterpret or start the task.
  await page.route(`**/api/v1/tasks/${blockedId}`,route=>route.request().method()==='PUT'?route.fulfill({status:409,json:{error:'Draft changed',code:'conflict'}}):route.continue());
- await page.getByRole('button',{name:'Continue task',exact:true}).click();
+ await page.getByRole('button',{name:'Review task',exact:true}).click();
  await expect(actions.getByRole('alert')).toContainText('Draft changed');
  await expect(entry).toHaveValue('worker');await expect(version).toHaveValue('1');
  await expect(page.getByRole('textbox',{name:'Title',exact:true})).toHaveValue('Manually repaired task');
@@ -126,14 +146,14 @@ test('retains a blocked submission and continues after clarification without a n
  await page.unroute(`**/api/v1/tasks/${blockedId}`);
  // Successful save followed by review failure must retain its new revision.
  await page.route(`**/api/v1/tasks/${blockedId}/review`,route=>route.fulfill({status:503,json:{error:'Review unavailable',code:'unavailable'}}));
- await page.getByRole('button',{name:'Continue task',exact:true}).click();
+ await page.getByRole('button',{name:'Review task',exact:true}).click();
  await expect(actions.getByRole('alert')).toContainText('Review unavailable');
  const repaired=await(await page.request.get(`/api/v1/tasks/${blockedId}`,{headers})).json();
  expect(repaired).toMatchObject({status:'draft',graphVersion:1,nodeId:'worker',title:'Manually repaired task',request:'fixture-ambiguous'});
  expect(repaired.revision).toBeGreaterThan(before.revision);
  expect(repaired.resolution).toBeUndefined();expect(repaired.executionGraphId).toBeUndefined();
  await page.unroute(`**/api/v1/tasks/${blockedId}/review`);
- await page.getByRole('button',{name:'Review and run',exact:true}).click();
+ await page.getByRole('button',{name:'Review task',exact:true}).click();
  await expect(page.getByRole('article',{name:'Task requirements'})).toContainText('Current workflow version: 1');
  const reviewed=await(await page.request.get(`/api/v1/tasks/${blockedId}`,{headers})).json();
  expect(reviewed.revision).toBe(repaired.revision);

@@ -5,6 +5,13 @@ own execution. Its normal entry is **Tasks → New task** (`#/tasks/new`). Exist
 requests open at `#/tasks/<id>`. The list searches title, task ID and issue and
 filters by status/workflow, with the most recently updated records first.
 
+**Create task** from Projects opens `#/tasks/new?project=<id>` with that
+registered repository selected. **New task** from a workflow opens
+`#/tasks/new?workflow=<id>` with its current saved version and compatible input
+suggestions. These entry contexts apply only to a new task after discovery;
+they do not replace an existing draft or later explicit choices. Unknown IDs
+remain visible for correction rather than selecting a replacement resource.
+
 ## Before starting
 
 - An appropriate [workflow](../workflows/README.md) must be saved. Task entry and
@@ -37,9 +44,18 @@ was selected. An existing pinned version is retained until explicitly changed.
 The server can still reject start if the source workflow has changed since the
 draft was reviewed; retaining a pin does not guarantee admission of stale work.
 
-The UI suggests bindings when there is one unambiguous queue ingress/receiver
-or a single enabled agent, and can infer one terminal result agent. Ambiguous
-entry, result or message choices remain explicit. Generated channel payloads
+Saved workflow **Settings → Task defaults** (`spec.task`) can suggest entry and
+result agents, channel/message type, project and source-control connection.
+Authored defaults take precedence over topology inference. A project selected
+at task entry or in the editor takes precedence over the workflow project
+preference. Selecting a workflow deliberately replaces routing suggestions;
+late resource loading preserves explicit choices. The saved task captures a
+concrete workflow version and selected project base commit, rather than a
+moving "current" alias. Defaults never contain execution consent or grants.
+
+When authored defaults are absent, the UI suggests bindings when there is one
+unambiguous queue ingress/receiver or a single enabled agent, and can infer one
+terminal result agent. Ambiguous entry, result or message choices remain explicit. Generated channel payloads
 follow the request while they remain generated; custom JSON is not silently
 rewritten. Channel delivery sends its JSON, not an additional direct copy of
 the request. Consult the workflow's expected message contract.
@@ -52,7 +68,7 @@ Execution environment is a task compatibility choice:
 - **Local worktree** requires native Weft and separates files, not process or
   network permissions.
 
-## 2. Save, interpret or continue
+## 2. Save, optionally interpret, then review
 
 **Save draft** persists an editable request revision; it does not start agents.
 Edits are local until saved. Leaving an unsaved task form triggers the existing
@@ -64,20 +80,29 @@ proposals retain the original request and explain which setup needs repair.
 Use **Configure task manually** to move to the relevant visible sections.
 Interpretation never grants tools or execution consent.
 
-For a **new** request, **Run task** uses the submission endpoint: it can
-interpret, save and start if admission and authorization requirements are met.
-Otherwise it returns a saved task and the next required review/preparation step.
-Submission replay protection prevents a retry from creating duplicate work.
+**Review task** has the same meaning for a new request and an existing draft:
+validate visible required fields, save changes if needed, then call the review
+endpoint for the acknowledged saved task. It never interprets the request or
+starts work. An unchanged saved draft can be reviewed without another write.
+While pending, it shows **Reviewing task…**. Missing fields receive inline
+guidance, an invalid-state border and an actionable setup message.
 
-For an **existing draft**, **Continue task / Review and run** does not reinterpret
-the request. It validates the local configuration, saves changes and reviews
-that saved revision. Missing fields receive inline guidance, an invalid-state
-border and an actionable setup message. Failed save/review must preserve the
-operator's edits. A successful review is not itself an execution start.
+A failed save preserves edits and prevents review. If saving succeeds but review
+fails, the acknowledged saved revision remains available and the error is
+shown; retry reviews that revision without creating another task. A successful
+review reports blockers or the next explicit decision. The normal console flow
+does not use the combined `/tasks/submit` API as its primary action.
+
+The **Task setup summary** gathers workflow/input, repository/base, provider,
+isolation/environment, delivery, access and budget facts. It distinguishes
+configuration from verified readiness. Its goal-specific setup guidance and
+save-before-repair links are documented in
+[setup and readiness](../setup-and-readiness/README.md).
 
 ## 3. Review requirements and authorize access
 
-**Review requirements** checks the saved configuration, model, workflow
+**Review requirements** checks an already saved configuration; **Review task**
+also saves current edits before that check. Review checks the model, workflow
 version, agents, bindings, repository, environment and permissions. Review
 results are usable only for that task revision; dirty fields require saving and
 reviewing again. A version conflict requires an explicit current-version choice
@@ -171,7 +196,7 @@ precondition details remain in OpenAPI.
 | --- | --- | --- |
 | Save/create draft | `POST /api/v1/tasks`, `PUT /api/v1/tasks/<id>` | Operator/admin |
 | Interpret request | `POST /api/v1/tasks/prompt` | Operator/admin |
-| Submit a new request | `POST /api/v1/tasks/submit` | Admin |
+| Combined API submission, separate from the normal console review flow | `POST /api/v1/tasks/submit` | Admin |
 | Inspect admission | `GET /api/v1/tasks/<id>/review` | Viewer or higher |
 | Confirm task mode | `PUT /api/v1/tasks/<id>/authorization` | Admin |
 | Prepare/start/stop | `POST /api/v1/tasks/<id>/prepare-environment`, `/start`, `/cancel` | Admin |
@@ -181,11 +206,11 @@ precondition details remain in OpenAPI.
 
 | Boundary | Source |
 | --- | --- |
-| Form, continuation and review | [TasksPage](../../../web/src/components/TasksPage.tsx), [task defaults](../../../web/src/components/taskDefaults.ts), [task types](../../../web/src/api/tasks.ts), [HTTP client](../../../web/src/api/client.ts) |
+| Form, exact-save review and contextual entry | [TasksPage](../../../web/src/components/TasksPage.tsx), [task defaults](../../../web/src/components/taskDefaults.ts), [entry context](../../../web/src/components/taskEntryContext.ts), [task types](../../../web/src/api/tasks.ts), [HTTP client](../../../web/src/api/client.ts) |
 | Tracking, plans and preparation | [TaskDetails](../../../web/src/components/TaskDetails.tsx), [TaskPlan](../../../web/src/components/TaskPlan.tsx), [TaskEnvironment](../../../web/src/components/TaskEnvironment.tsx) |
 | Access and evidence | [TaskAuthorization](../../../web/src/components/TaskAuthorization.tsx), [TaskEvidence](../../../web/src/components/TaskEvidence.tsx), [TaskCheckpoints](../../../web/src/components/TaskCheckpoints.tsx) |
 | Draft persistence and execution | [taskconfig](../../../server/internal/taskconfig), [taskrun](../../../server/internal/taskrun), [task API](../../../server/internal/api/tasks.go) |
-| Regression coverage | [draft E2E](../../../web/e2e/task-drafts.spec.ts), [prompt E2E](../../../web/e2e/task-prompts.spec.ts), [journey tests](../../../web/src/components/TaskJourney.test.tsx), [draft deletion tests](../../../web/src/components/TaskDraftDelete.test.tsx) |
+| Regression coverage | [draft E2E](../../../web/e2e/task-drafts.spec.ts), [prompt E2E](../../../web/e2e/task-prompts.spec.ts), [entry and review tests](../../../web/src/components/TaskEntryFlow.test.tsx), [journey tests](../../../web/src/components/TaskJourney.test.tsx), [draft deletion tests](../../../web/src/components/TaskDraftDelete.test.tsx) |
 
 Owning guides: [task workflows](../../task-workflows.md),
 [authorization](../../task-authorization.md), [HTTP contract](../../../api/openapi.yaml).
