@@ -4,7 +4,8 @@ import type {Skill,InstructionSnapshot,RepositoryGuidancePolicy,RepositorySource
 import {repositorySources} from '../api/instructions';
 import type {Graph,Execution} from '../api/types';
 import {useAsync} from '../hooks/useData';
-import {Btn,ErrorBox} from './common';
+import {Btn,ErrorBox,Modal} from './common';
+import {associationChanges} from './agentJourneyModel';
 import {HelpField} from './FieldHelp';
 import {InstructionManifest} from './InstructionManifest';
 
@@ -21,6 +22,9 @@ export function SkillAssociations({skills,skillsUnavailable,role,mode,workflowId
  const [snapshotAttempt,setSnapshotAttempt]=useState(0);
  const [error,setError]=useState<string>();const [notice,setNotice]=useState<string>();const [busy,setBusy]=useState(false);
  const [baseline,setBaseline]=useState('');
+ const [reviewedGraph,setReviewedGraph]=useState<Graph>();
+ const reviewTrigger=useRef<HTMLButtonElement>(null);
+ const closeReview=()=>{if(busy)return;setReviewedGraph(undefined);reviewTrigger.current?.focus();};
  const dirty=!!graph&&JSON.stringify(graph)!==baseline;
  const edit=role==='admin'&&!skillsUnavailable&&!graphs.error&&!graphs.loading;
  const available=skills;
@@ -36,7 +40,7 @@ export function SkillAssociations({skills,skillsUnavailable,role,mode,workflowId
   setSnapshot(undefined);setExecutions(undefined);setError(undefined);
  },[workflowId,agentId,graphs.data]);
  async function run(fn:()=>Promise<void>) {setBusy(true);setError(undefined);setNotice(undefined);try{await fn();}catch(e){setError(errorMessage(e));}finally{setBusy(false);}}
- function updateGraph(next:Graph){setGraph(next);setSnapshot(undefined);setNotice(undefined);}
+ function updateGraph(next:Graph){setGraph(next);setSnapshot(undefined);setNotice(undefined);setReviewedGraph(undefined);}
  const refs=graph?.spec.instructions??{};
  const repositoryEnabled=!!refs.repositoryGuidance&&!refs.repositoryGuidance.disabled;
  const savedInstruction=async()=>{
@@ -63,13 +67,14 @@ export function SkillAssociations({skills,skillsUnavailable,role,mode,workflowId
   <div className="skills-filters"><HelpField label="Workflow" help="Select the workflow to configure or inspect. This does not start it."><select disabled={busy||graphs.loading||!!graphs.error} value={graph?.metadata.id??''} onChange={event=>{
     if(dirty&&!window.confirm('Discard unsaved associations?'))return;
     const next=graphs.data?.find(s=>s.graph.metadata.id===event.target.value)?.graph;
-    graphSelection.current=next?.metadata.id??'';setGraph(next);setBaseline(JSON.stringify(next));setNode(next?.spec.nodes[0]?.id??'');setSnapshot(undefined);setExecutions(undefined);setError(undefined);setNotice(undefined);
+    setReviewedGraph(undefined);graphSelection.current=next?.metadata.id??'';setGraph(next);setBaseline(JSON.stringify(next));setNode(next?.spec.nodes[0]?.id??'');setSnapshot(undefined);setExecutions(undefined);setError(undefined);setNotice(undefined);
     onSelection(next?.metadata.id,next?.spec.nodes[0]?.id);
   }}><option value="">Select workflow</option>{graphs.data?.filter(s=>!s.graph.metadata.id.startsWith('task-run-')&&!s.graph.metadata.labels?.['weft.task']).map(s=><option key={s.graph.metadata.id} value={s.graph.metadata.id}>{s.graph.metadata.name||s.graph.metadata.id}</option>)}</select></HelpField>
   {mode==='inspect'&&graph&&<HelpField label="Agent" help="Inspect one workflow node. Saved configuration can differ from past execution snapshots."><select disabled={busy} value={node} onChange={event=>{setNode(event.target.value);setSnapshot(undefined);setRunPage(0);onSelection(graph.metadata.id,event.target.value);}}>{graph.spec.nodes.map(n=><option value={n.id} key={n.id}>{n.name||n.id}</option>)}</select></HelpField>}
   </div>
   {workflowId&&!graph&&!graphs.loading&&!graphs.error&&<p role="note">Workflow not found.</p>}
   {!graph&&!workflowId&&!graphs.loading&&<p className="empty">Select a workflow to {mode==='associations'?'configure its guidance.':'inspect its instruction records.'}</p>}
+  {busy&&mode==='associations'&&<p role="status">Saving workflow associations…</p>}
   <ErrorBox error={error}/>{error&&executionId&&<Btn disabled={busy} onClick={()=>setSnapshotAttempt(value=>value+1)}>Retry execution instructions</Btn>}{notice&&<p role="status">{notice}</p>}
   {graph&&mode==='associations'&&<div className="card form skill-association-form">
             <fieldset disabled={!edit || busy}>
@@ -242,27 +247,29 @@ export function SkillAssociations({skills,skillsUnavailable,role,mode,workflowId
                     ))}
                 </fieldset></details>
               ))}
-              <Btn tone="primary"
-                type="button"
-                onClick={() =>
-                  void run(async () => {
-                    const saved = await api.updateGraph(
-                      graph.metadata.id,
-                      graph,
-                      graph.metadata.version,
-                    );
-                    setGraph(saved.graph);
-                    setBaseline(JSON.stringify(saved.graph));
-                    setNotice(`Associations saved in workflow version ${saved.graph.metadata.version}.`);
-                    await graphs.reload();
-                    onChanged();
-                  })
-                }
-              >
-                Save associations
-              </Btn>
+              <button ref={reviewTrigger} className="btn btn-primary" type="button" disabled={!dirty} onClick={()=>setReviewedGraph(graph)}>
+                Review associations
+              </button>
             </fieldset>
   </div>}
+  {reviewedGraph&&mode==='associations'&&<Modal title="Review workflow associations" onClose={closeReview} keyboard>
+    <p>{reviewedGraph.metadata.name||reviewedGraph.metadata.id} · expected version {reviewedGraph.metadata.version}</p>
+    <p>Save creates a new workflow version. Running executions keep their saved configuration. This does not start agents or grant tools.</p>
+    <h3>Changed sections</h3>
+    <ul>{associationChanges(JSON.parse(baseline) as Graph,reviewedGraph).map(path=><li key={path}><code>{path}</code></li>)}</ul>
+    <div className="btn-row">
+      <Btn autoFocus disabled={busy} onClick={closeReview}>Cancel</Btn>
+      <Btn tone="primary" disabled={busy||!edit||reviewedGraph!==graph||!dirty} onClick={()=>void run(async()=>{
+        if (!edit || reviewedGraph!==graph || !dirty) return;
+        const candidate=reviewedGraph;
+        setReviewedGraph(undefined);
+        const saved=await api.updateGraph(candidate.metadata.id,candidate,candidate.metadata.version);
+        setGraph(saved.graph);setBaseline(JSON.stringify(saved.graph));
+        setNotice(`Associations saved in workflow version ${saved.graph.metadata.version}.`);
+        await graphs.reload();onChanged();reviewTrigger.current?.focus();
+      })}>{busy?'Saving…':'Save associations'}</Btn>
+    </div>
+  </Modal>}
   {graph&&mode==='inspect'&&<>
     <div className="card skill-inspection-controls"><h3>Saved configuration</h3><p className="muted small">Reads the currently saved workflow and skill revisions. This is not a record of a previous execution.</p><Btn disabled={busy||!node} onClick={()=>void savedInstruction()}>Inspect saved instructions</Btn></div>
     <section className="card skill-executions" aria-label="Execution instructions"><div className="section-head"><div><h3>Execution records</h3><p className="muted small">Up to 100 recent executions. A snapshot records the revisions and omissions used at that time.</p></div><Btn disabled={busy} onClick={()=>void run(async()=>{setExecutions(await api.executions(graph.metadata.id));setRunPage(0);})}>{busy?'Loading…':'Load executions'}</Btn></div>

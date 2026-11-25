@@ -1,11 +1,12 @@
 import { FieldHelp, HelpField } from './FieldHelp';
-import { useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api, errorMessage } from '../api/client';
 import { workflowAgentLink, type Agent, type AgentDefinition } from '../api/agents';
 import type { GraphNode, GraphSummary } from '../api/types';
 import { useAsync } from '../hooks/useData';
 import { AgentEditor, NodeSettings } from './NodePanel';
 import { agentDefinitionChanged } from './agentSettingsModel';
+import { mayDiscardAgentDraft, type AgentDraftState } from './agentJourneyModel';
 import { Btn, ErrorBox, Icon } from './common';
 
 interface InventoryProps {
@@ -14,6 +15,7 @@ interface InventoryProps {
   workflowsError?: string;
   onReloadWorkflows: () => Promise<void>;
   canEdit: boolean;
+  onDraftState?: (state: AgentDraftState) => void;
 }
 
 const definitionSections = {
@@ -24,7 +26,7 @@ type DefinitionSection = keyof typeof definitionSections;
 
 export function AgentsPage({id, create, ...inventory}: InventoryProps & {id?: string; create?: boolean}) {
   return <section className="page" aria-label="Agent catalog">
-    {create ? <NewAgent canEdit={inventory.canEdit} />
+    {create ? <NewAgent canEdit={inventory.canEdit} onDraftState={inventory.onDraftState} />
       : id ? <AgentDetails id={id} {...inventory} />
         : <AgentInventory workflows={inventory.workflows} canEdit={inventory.canEdit} />}
   </section>;
@@ -64,20 +66,22 @@ function AgentInventory({workflows, canEdit}: Pick<InventoryProps, 'workflows' |
   </>;
 }
 
-function NewAgent({canEdit}: {canEdit: boolean}) {
+function NewAgent({canEdit, onDraftState}: Pick<InventoryProps, 'canEdit' | 'onDraftState'>) {
   const [published, setPublished] = useState<Agent>();
   return <>
     <a href="#/agents">Back to Agents</a>
     <h1>New agent</h1>
     {published ? <p role="status"><a href={`#/agents/${encodeURIComponent(published.id)}`}>Open {published.versions[0]?.definition.name}</a></p>
       : <DefinitionEditor initial={{name:'', runtime:{kind:'native'}, isolation:{mode:'docker'}}}
-          initialId="" canEdit={canEdit} onPublished={setPublished} />}
+          initialId="" canEdit={canEdit} onPublished={setPublished} onDraftState={onDraftState} />}
   </>;
 }
 
-function AgentDetails({id, workflows, workflowsLoading, workflowsError, onReloadWorkflows, canEdit}: InventoryProps & {id: string}) {
+function AgentDetails({id, workflows, workflowsLoading, workflowsError, onReloadWorkflows, canEdit, onDraftState}: InventoryProps & {id: string}) {
   const result = useAsync(() => api.agent(id), [id]);
   const [version, setVersion] = useState<number>();
+  const [draft, setDraft] = useState<AgentDraftState>({dirty:false,busy:false});
+  const reportDraft = useCallback((value:AgentDraftState) => {setDraft(value);onDraftState?.(value);}, [onDraftState]);
   const latest = result.data?.versions.at(-1);
   const chosen = result.data?.versions.find(value => value.version === version) ?? latest;
   const origin = result.data?.origin;
@@ -93,7 +97,9 @@ function AgentDetails({id, workflows, workflowsLoading, workflowsError, onReload
         {chosen?.definition.description && <p>{chosen.definition.description}</p>}
       </div>
       {latest && chosen && <HelpField className="form" label={"Version"} help={"Choose a published definition to inspect. Save changes as a new version, then select it in each workflow that should adopt it."}>
-        <select value={chosen.version} onChange={event => setVersion(Number(event.target.value))}>
+        <select value={chosen.version} disabled={draft.busy} onChange={event => {
+          if (mayDiscardAgentDraft(draft, () => window.confirm('Discard unpublished agent changes?'))) setVersion(Number(event.target.value));
+        }}>
           {result.data?.versions.map(v => <option key={v.version} value={v.version}>Version {v.version}{v.version === latest.version ? ' (latest)' : ''}</option>)}
         </select>
       </HelpField>}
@@ -101,8 +107,8 @@ function AgentDetails({id, workflows, workflowsLoading, workflowsError, onReload
     {result.loading && <p role="status">Loading agent versions…</p>}
     <ErrorBox error={result.error} />
     {result.error && <Btn onClick={() => void result.reload()}>Retry loading versions</Btn>}
-    {latest && chosen && <DefinitionEditor key={chosen.version} initial={chosen.definition} initialId={id} currentVersion={latest.version}
-      canEdit={canEdit && chosen.version === latest.version} onPublished={agent => {
+    {latest && chosen && <DefinitionEditor key={chosen.version} initial={chosen.definition} initialId={id} currentVersion={latest.version} baseVersion={chosen.version}
+      canEdit={canEdit && chosen.version === latest.version} onDraftState={reportDraft} onPublished={agent => {
         result.setData(agent);
         setVersion(agent.versions.at(-1)?.version);
       }} workflowsPanel={<section aria-label="Workflows using this agent">
@@ -119,13 +125,15 @@ function AgentDetails({id, workflows, workflowsLoading, workflowsError, onReload
   </div>;
 }
 
-function DefinitionEditor({initial, initialId, currentVersion, canEdit, onPublished, workflowsPanel}: {
+function DefinitionEditor({initial, initialId, currentVersion, baseVersion, canEdit, onPublished, workflowsPanel, onDraftState}: {
   initial: AgentDefinition;
   initialId: string;
   currentVersion?: number;
+  baseVersion?: number;
   canEdit: boolean;
   onPublished: (agent: Agent) => void;
   workflowsPanel?: ReactNode;
+  onDraftState?: (state:AgentDraftState) => void;
 }) {
   const [id,setId] = useState(initialId);
   const [definition,setDefinition] = useState(initial);
@@ -134,6 +142,14 @@ function DefinitionEditor({initial, initialId, currentVersion, canEdit, onPublis
   const [section, setSection] = useState<DefinitionSection>('general');
   const agentId = id.trim();
   const dirty = agentId !== initialId || agentDefinitionChanged(initial, definition);
+  useEffect(() => {onDraftState?.({dirty,busy:saving});}, [dirty,saving,onDraftState]);
+  useEffect(() => () => onDraftState?.({dirty:false,busy:false}), [onDraftState]);
+  useEffect(() => {
+    if (!dirty && !saving) return;
+    const warn = (event:BeforeUnloadEvent) => {event.preventDefault();event.returnValue='';};
+    window.addEventListener('beforeunload',warn);
+    return () => window.removeEventListener('beforeunload',warn);
+  }, [dirty,saving]);
   const canPublish = canEdit && dirty && !saving && /^[a-z0-9][a-z0-9-]{0,63}$/.test(agentId) && !!definition.name.trim();
   const sections: DefinitionSection[] = ['general', 'instructions', 'tools', 'parameters'];
   if (workflowsPanel) sections.push('workflows');
@@ -165,10 +181,11 @@ function DefinitionEditor({initial, initialId, currentVersion, canEdit, onPublis
         <Btn type="submit" tone="primary" disabled={!canPublish}>Publish</Btn>
       </div>}
     </div>
+    <p className="muted small" role="note">Shared definition{baseVersion ? ` · based on version ${baseVersion}` : ''}. Publish creates one version from all tab changes. Workflows keep their pinned versions until you review and adopt an update.</p>
     <ErrorBox error={error} />
     {section === 'workflows' ? workflowsPanel : <>
     {section === 'general' && <HelpField label={"Agent ID"} help={"A stable catalog identifier used by workflow bindings. Use lowercase letters, digits and hyphens. The ID is fixed after publication."}><input value={id} onChange={event => setId(event.target.value)}
-      readOnly={!!currentVersion || !canEdit} required pattern={'[a-z0-9][a-z0-9\\-]{0,63}'} /></HelpField>}
+      readOnly={!!currentVersion || !canEdit || saving} required pattern={'[a-z0-9][a-z0-9\\-]{0,63}'} /></HelpField>}
     <fieldset className="catalog-fields" disabled={!canEdit || saving}>
       {(section === 'general' || section === 'tools') && <AgentEditor summary={summary} nodeId={node.id} section={section} onUpdateNode={updateNode} definitionOnly />}
       {section === 'tools' && <>

@@ -1,0 +1,19 @@
+.agent-version-review {
+  border-block: 1px solid var(--border);
+  padding-block: 1rem;
+  margin-block: 1rem;
+}
+.agent-version-review pre {
+  max-height: 14rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agent-version-review details {
+  margin-block: .75rem;
+}
+.agent-version-review .btn-row {
+  flex-wrap: wrap;
+  gap: .75rem;
+  margin-top: 1rem;
+}

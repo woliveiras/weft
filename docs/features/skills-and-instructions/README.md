@@ -30,10 +30,12 @@ The `weft-` built-in namespace is reserved.
 
 1. Open Workflow associations, select a saved workflow and review its selected
    skills and installation-default participation.
-2. Select workflow/agent associations and use **Save associations** on this
-   page. It updates the graph using its loaded version as a precondition and
-   immediately creates a new saved workflow version; it does not open the
-   workflow editor's Review & save dialog. Node selections narrow applicable
+2. Select workflow/agent associations and choose **Review associations**. The
+   review names the workflow, expected version and changed sections. **Cancel**
+   retains the unsaved selection. **Save associations** updates the graph using
+   the reviewed version as a precondition and creates a new workflow version;
+   failure retains edits and requires a new review. This does not start agents
+   or change tool grants. Node selections narrow applicable
    guidance according to the instruction contract; installation defaults remain
    independently applicable when enabled.
 3. Use Inspect instructions for the workflow/agent to inspect the effective

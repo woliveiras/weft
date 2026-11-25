@@ -33,8 +33,11 @@ bindings automatically.
 
 The latest version is editable for an administrator; historical versions are
 read-only. The version selector changes the viewed definition. This editor has
-local state across tabs, but does not implement the task form's navigation-loss
-guard; do not assume unpublished edits survive version changes or reloads.
+local state across tabs. Changing the viewed version or navigating away while
+changes are unpublished asks whether to discard them; cancelling stays in the
+editor. Browser reload/close uses the native unsaved-changes warning. Pending
+publication blocks navigation and version changes. This protects the current
+session; unpublished content is not a server-side draft or durable backup.
 
 ## Agents created inside a workflow
 
@@ -57,8 +60,8 @@ catalogue entry survives changes/removal of its origin workflow.
    published version. Review its definition and access requirements and provide
    the binding's parameter values.
 2. Add it to the workflow draft. This does not persist the graph or start work.
-3. Open **Agent configuration** for the node. Shared version fields are shown
-   read-only. Workflow-local instructions, parameters and instance execution
+3. Open **Agent configuration** for the node. The panel identifies the shared pinned definition separately from **This
+   workflow** settings. Shared version fields are shown read-only. Workflow-local instructions, parameters and instance execution
    settings control this use of the agent.
 4. Review and save the complete graph draft. The node records the selected agent
    ID/version and its local values.
@@ -69,8 +72,10 @@ use the same version with different parameters/instructions without modifying
 each other.
 
 For an already linked node, **Agent version** is a dropdown for that agent, with
-the in-use version selected. Adopting a different version is explicit and then
-requires graph save. Values for parameters still declared are retained;
+the in-use version selected. Selecting a different version opens an inline comparison before changing the
+binding. Expand changed sections to inspect current and proposed shared values,
+then choose **Use this version** or **Cancel version change**. Adoption changes
+the workflow draft only and still requires graph save. Values for parameters still declared are retained;
 obsolete parameters are dropped and new defaults participate in resolution.
 Read-only workspace restrictions are not silently relaxed by adoption. Validation
 can still reject a newly required parameter or incompatible configuration.
@@ -93,6 +98,9 @@ flow is exposed by the current catalogue routes.
 
 - [AgentsPage](../../../web/src/components/AgentsPage.tsx): cards, versioned
   editing, parameters, publication and usages.
+- [Agent journey model](../../../web/src/components/agentJourneyModel.ts) and
+  [journey tests](../../../web/src/components/AgentJourneys.test.tsx): draft
+  guards, publication recovery and reviewed adoption.
 - [AgentBinding](../../../web/src/components/AgentBinding.tsx): catalogue
   selection, binding parameters and version adoption.
 - [AgentConfiguration](../../../web/src/components/AgentConfiguration.tsx):

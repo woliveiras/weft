@@ -1,10 +1,12 @@
+import './agent-journeys.css';
 import { HelpField } from './FieldHelp';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { nodeWithAgent, nodeWithAgentVersion, type AgentDefinition, type AgentBinding } from '../api/agents';
 import type { GraphNode, GraphSummary } from '../api/types';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
+import { agentDefinitionSectionsChanged } from './agentJourneyModel';
 
 type AgentPickerProps = {
   node?: GraphNode;
@@ -65,9 +67,14 @@ export function AgentPickerFields({node, onCancel, onSelect}: AgentPickerProps) 
   </div>;
 }
 
-function DefinitionChange({node, definition}: {node?: GraphNode; definition: AgentDefinition}) {
-  const fields = ['runtime','model','prompt','tools','isolation','skillIds','repositoryGuidance'] as const;
-  const changed = fields.filter(key=>JSON.stringify(node?.[key])!==JSON.stringify(definition[key]));
+function DefinitionChange({node, definition, previous}: {node?: GraphNode; definition: AgentDefinition; previous?:AgentDefinition}) {
+  const fields = ['name','description','runtime','model','prompt','tools','isolation','skillIds','repositoryGuidance','readOnly','parameters'] as const;
+  const before = previous ?? (node && {
+    name:node.name ?? node.id, description:node.description, runtime:node.runtime, model:node.model,
+    prompt:node.prompt,tools:node.tools,isolation:node.isolation,skillIds:node.skillIds,
+    repositoryGuidance:node.repositoryGuidance,readOnly:node.workspace?.readOnly,
+  });
+  const changed = before ? agentDefinitionSectionsChanged(before, definition) : [...fields];
   return <details open>
     <summary>Review definition {node ? 'changes' : 'and access'}</summary>
     {node && <p>{changed.length ? `Updated sections: ${changed.join(', ')}.` : 'The selected definition matches the saved agent settings.'}</p>}
@@ -75,10 +82,14 @@ function DefinitionChange({node, definition}: {node?: GraphNode; definition: Age
     <p>Tool grants in selected version</p>
     <pre>{JSON.stringify(definition.tools ?? [],null,2)}</pre>
     {node && changed.includes('tools') && <details>
-      <summary>Previous tool grants</summary><pre>{JSON.stringify(node.tools ?? [],null,2)}</pre>
+      <summary>Previous tool grants</summary><pre>{JSON.stringify(before?.tools ?? [],null,2)}</pre>
     </details>}
-    {changed.includes('prompt') && <details><summary>Instructions in selected version</summary><pre>{definition.prompt || '(empty)'}</pre></details>}
-    <p>Review and save the workflow draft to adopt this version.</p>
+    {changed.filter(field=>field!=='tools').map(field=><details key={field}>
+      <summary>{field} · proposed change</summary>
+      {before && <><p>Current published value</p><pre>{JSON.stringify(before[field as keyof AgentDefinition] ?? null,null,2)}</pre></>}
+      <p>Selected version</p><pre>{JSON.stringify(definition[field as keyof AgentDefinition] ?? null,null,2)}</pre>
+    </details>)}
+    <p>Workflow node identity, local instructions, compatible parameter values and instance execution settings are retained. Review and save the workflow draft to adopt this version.</p>
   </details>;
 }
 
@@ -104,6 +115,7 @@ export function AgentInstance({node, summary, canEdit, onUpdate}: {
   onUpdate: (node: GraphNode) => void;
 }) {
   const [picker, setPicker] = useState(false);
+  const [pendingVersion, setPendingVersion] = useState<number>();
   const binding = node.agent;
   const details = useAsync(() => binding ? api.agent(binding.id) : Promise.resolve(undefined), [binding?.id]);
   const origin = useAsync(async () => {
@@ -114,6 +126,8 @@ export function AgentInstance({node, summary, canEdit, onUpdate}: {
   const agent = binding && details.data?.id === binding.id ? details.data : undefined;
   const current = agent?.versions.find(version => version.version === binding?.version);
   const parameters = current?.definition.parameters ?? [];
+  const proposed = pendingVersion !== binding?.version ? agent?.versions.find(value=>value.version===pendingVersion) : undefined;
+  useEffect(()=>setPendingVersion(undefined),[binding?.id,binding?.version,node.id]);
   const agentId = binding?.id ?? origin.data?.id;
   const agentName = binding ? current?.definition.name : origin.data?.name;
 
@@ -122,19 +136,35 @@ export function AgentInstance({node, summary, canEdit, onUpdate}: {
       <a href={`#/agents/${encodeURIComponent(agentId)}`}>{agentName || node.name || node.id} configuration</a>
       {!binding && ' · Origin workflow'}
     </p>}
+    {binding ? <p role="note">Shared definition · Version {binding.version} pinned in this workflow. Publishing elsewhere does not update this use.</p>
+      : <p role="note">Workflow-owned definition. Saving registers a reusable snapshot in Agents; later workflow edits do not publish shared versions. Link an agent to use a pinned shared definition.</p>}
     {binding && <>
       <HelpField label={"Agent version"} help={"Choose a published version of this agent. The workflow keeps using its saved version until you review and save the draft."}>
-        <select value={binding.version} disabled={!canEdit || details.loading || !!details.error || !agent?.versions.some(version => version.version !== binding.version)}
+        <select value={proposed?.version ?? binding.version} disabled={!canEdit || details.loading || !!details.error || !agent?.versions.some(version => version.version !== binding.version)}
           onChange={event => {
             if (!canEdit || !agent) return;
-            const updated = nodeWithAgentVersion(node, agent, Number(event.target.value));
-            if (updated !== node) onUpdate(updated);
+            const version=Number(event.target.value);
+            setPendingVersion(agent.versions.some(value=>value.version===version) ? version : undefined);
           }}>
           {!current && <option value={binding.version}>Version {binding.version}</option>}
           {agent?.versions.map(version => <option key={version.version} value={version.version}>Version {version.version}</option>)}
         </select>
       </HelpField>
       {details.loading && <p role="status">Loading agent versions…</p>}
+      {proposed && <section className="agent-version-review" aria-label="Version adoption review">
+        <h3>Review version {binding.version} → {proposed.version}</h3>
+        <DefinitionChange node={node} definition={proposed.definition} previous={current?.definition}/>
+        <div className="btn-row">
+          <Btn onClick={()=>setPendingVersion(undefined)}>Cancel version change</Btn>
+          <Btn tone="primary" disabled={!canEdit} onClick={()=>{
+            if (!canEdit || !agent) return;
+            const updated=nodeWithAgentVersion(node,agent,proposed.version);
+            if (updated!==node) onUpdate(updated);
+            setPendingVersion(undefined);
+          }}>Use this version</Btn>
+        </div>
+      </section>}
+      <h3>This workflow</h3><p className="muted small">Parameters and local instructions affect only {summary.graph.metadata.name || summary.graph.metadata.id} / {node.name || node.id}. Save them with this workflow draft.</p>
       <ParameterFields parameters={parameters} values={binding.parameters ?? {}}
         onChange={canEdit ? values => onUpdate({...node, agent:{...binding, parameters:values}}) : undefined} />
     </>}

@@ -105,13 +105,14 @@ it("associates graph and narrowed agents and inspects saved/execution manifests"
   fireEvent.click(screen.getByLabelText('Review (review)'));
   fireEvent.click(screen.getByText('n · Inherited skills'));
   fireEvent.click(screen.getByLabelText('Inherit graph skills'));
+  fireEvent.click(screen.getByRole('button',{name:'Review associations'}));
   fireEvent.click(screen.getByRole('button',{name:'Save associations'}));
   await waitFor(()=>expect(routes.find('PUT','/api/v1/graphs/g')).toHaveLength(1));
   const req=routes.find('PUT','/api/v1/graphs/g')[0];
   expect(req.headers['If-Match']).toBe('3');
   expect((req.body as typeof graph & {spec:{nodes:{skillIds:string[]}[]}}).spec.nodes[0].skillIds).toEqual([]);
   await screen.findByText('Associations saved in workflow version 3.');
-  await waitFor(()=>expect(screen.getByRole('button',{name:'Save associations'}).matches(':disabled')).toBe(false));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Review associations'}).matches(':disabled')).toBe(true));
   fireEvent.click(screen.getByRole('link',{name:'Inspect instructions'}));
   await screen.findByRole('button',{name:'Inspect saved instructions'});
   await waitFor(()=>expect((screen.getByLabelText('Workflow') as HTMLSelectElement).value).toBe('g'));
@@ -137,8 +138,8 @@ it("blocks inspection selection during requests and keeps operator associations 
   fakeApi({'GET /api/v1/skills':()=>[skill],'GET /api/v1/graphs':()=>[{graph}],
     'GET /api/v1/graphs/g/instructions':()=>new Promise(r=>{resolve=r;})});
   const {unmount}=render(<SkillsView role="operator" route={{section:'associations',workflow:'g'}} onChanged={()=>{}}/>);
-  await screen.findByRole('button',{name:'Save associations'});
-  expect(screen.getByRole('button',{name:'Save associations'}).matches(':disabled')).toBe(true);unmount();
+  await screen.findByRole('button',{name:'Review associations'});
+  expect(screen.getByRole('button',{name:'Review associations'}).matches(':disabled')).toBe(true);unmount();
   render(<SkillsView role="operator" route={{section:'inspect',workflow:'g'}} onChanged={()=>{}}/>);
   await screen.findByRole('button',{name:'Inspect saved instructions'});
   fireEvent.click(screen.getByRole('button',{name:'Inspect saved instructions'}));
@@ -205,6 +206,7 @@ it('shows a failed association save without discarding narrowed selection',async
     'PUT /api/v1/graphs/g':()=>apiError(409,'Workflow changed; reload before saving','conflict')});
   render(<SkillsView role="admin" route={{section:'associations',workflow:'g'}} onChanged={()=>{}}/>);
   fireEvent.click(await screen.findByLabelText('Review (review)'));
+  fireEvent.click(screen.getByRole('button',{name:'Review associations'}));
   fireEvent.click(screen.getByRole('button',{name:'Save associations'}));
   await screen.findByText('Workflow changed; reload before saving');
   expect((screen.getByLabelText('Review (review)') as HTMLInputElement).checked).toBe(true);
@@ -288,4 +290,23 @@ it('identifies missing skill fields after save and reveals invalid Markdown whil
  fireEvent.change(title,{target:{value:'New skill'}});
  expect(title.getAttribute('aria-invalid')).toBeNull();
  expect(body.getAttribute('aria-invalid')).toBe('true');
+});
+
+it('reviews association changes before writing and cancellation retains the draft',async()=>{
+ const graph={metadata:{id:'g',name:'Delivery workflow',version:3},spec:{nodes:[{id:'n'}]}};
+ const routes=fakeApi({'GET /api/v1/skills':()=>[skill],'GET /api/v1/graphs':()=>[{graph}],
+  'PUT /api/v1/graphs/g':({body})=>({graph:body})});
+ render(<SkillsView role="admin" route={{section:'associations',workflow:'g'}} onChanged={()=>{}}/>);
+ fireEvent.click(await screen.findByLabelText('Review (review)'));
+ fireEvent.click(screen.getByRole('button',{name:'Review associations'}));
+ const review=screen.getByRole('dialog',{name:'Review workflow associations'});
+ expect(within(review).getByText(/Delivery workflow.*version 3/)).toBeTruthy();
+ expect(routes.find('PUT','/api/v1/graphs/g')).toHaveLength(0);
+ fireEvent.click(within(review).getByRole('button',{name:'Cancel'}));
+ expect(screen.getByLabelText('Review (review)')).toHaveProperty('checked',true);
+ expect(routes.find('PUT','/api/v1/graphs/g')).toHaveLength(0);
+ fireEvent.click(screen.getByRole('button',{name:'Review associations'}));
+ fireEvent.click(screen.getByRole('button',{name:'Save associations'}));
+ await waitFor(()=>expect(routes.find('PUT','/api/v1/graphs/g')).toHaveLength(1));
+ expect(routes.find('PUT','/api/v1/graphs/g')[0].headers['If-Match']).toBe('3');
 });

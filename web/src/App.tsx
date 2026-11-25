@@ -148,12 +148,18 @@ export function App() {
 
 function Shell() {
   const [route, setRoute] = useState<Route>(() => parseRoute(location.hash));
+  const configurationDraft=useRef({dirty:false,busy:false});
+  const onConfigurationDraft=useCallback((value:{dirty:boolean;busy:boolean})=>{configurationDraft.current=value;},[]);
   const administrationDraft=useRef({dirty:false,busy:false});
   const onAdministrationDraft=useCallback((value:{dirty:boolean;busy:boolean})=>{administrationDraft.current=value;},[]);
   useEffect(() => {
     const f = () => {
       const previous = route;
       const next = parseRoute(location.hash);
+      if(previous.view==='agents'&&routeHash(next)!==routeHash(previous)){
+        if(configurationDraft.current.busy||(configurationDraft.current.dirty&&!window.confirm('Discard unpublished configuration changes?'))){history.replaceState(null,'',routeHash(previous));return;}
+        configurationDraft.current={dirty:false,busy:false};
+      }
       if(previous.view==='administration'&&routeHash(next)!==routeHash(previous)) {
         if(administrationDraft.current.busy||(administrationDraft.current.dirty&&!window.confirm('Discard unsaved administration changes?'))){history.replaceState(null,'',routeHash(previous));return;}
         administrationDraft.current={dirty:false,busy:false};
@@ -259,7 +265,7 @@ function Shell() {
             />
           )}
           {route.view === 'agents' && <AgentsPage key={routeHash(route)} id={route.agentId} create={route.create}
-            workflows={workflows} workflowsLoading={graphs.loading} workflowsError={graphs.error} onReloadWorkflows={graphs.reload} canEdit={info.data?.identity?.role==='admin'}/>}
+            workflows={workflows} workflowsLoading={graphs.loading} workflowsError={graphs.error} onReloadWorkflows={graphs.reload} onDraftState={onConfigurationDraft} canEdit={info.data?.identity?.role==='admin'}/>}
           {route.view === 'skills' && <SkillsView role={info.data?.identity?.role} route={route.skills} onNavigate={skills=>go({view:'skills',skills})} onChanged={() => void graphs.reload()} />}
           {route.view === 'approvals' && <ApprovalsView role={info.data?.identity?.role} onChanged={() => void approvals.reload()} />}
           {route.view === 'connections' && <ConnectionsPage info={info.data} connectionID={route.connectionID} connectionTab={route.connectionTab} create={route.create} sourceControlCreate={route.sourceControlCreate} issueEdition={route.issueEdition} issueConnectionCreate={route.issueConnectionCreate} issueConnectionID={route.issueConnectionID} issueTransitions={route.issueTransitions} issueMapping={route.issueMapping} history={route.history} connectQuery={route.connectQuery} oauthQuery={route.oauthQuery} />}
