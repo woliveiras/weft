@@ -36,8 +36,9 @@ baseline is claimed.
   retain inference from unambiguous topology and remain round-trippable.
 - Roles, CAS, gateway grants, budgets, required approvals, isolation and project
   ownership remain authoritative. No secret is stored in navigation context.
-- Existing task-submit API semantics remain compatible; the console's ordinary
-  task creation uses explicit save, review, prepare and start actions.
+- Existing task-submit API semantics remain compatible. The console coordinates
+  saving and prerequisite inspection behind Run task; preparation and execution
+  remain separate explicit actions against a reviewed saved revision.
 - No automatic migration of existing inline agents or historical executions.
   Origin snapshots remain reusable and distinguishable from linked definitions.
 - Contextual setup is optional and belongs to the current task. The withdrawn
@@ -55,15 +56,30 @@ an actionable unavailable state instead of silently selecting another resource.
 A visible summary names workflow/version, project or workflow repository/base,
 effective isolation/environment and delivery. Missing configuration stays visible.
 
-### AC-002 — One meaning per action
+### AC-002 — A clear task launch
 
-Save draft persists without interpreting or executing. Review task saves complete
-edits, then checks that exact saved revision without calling the model or
-starting work, for both new and existing drafts. Missing fields receive guidance;
-save/review failure retains edits and the last acknowledged revision. Prepare
-task environment and Start task remain distinct, explicit, freshly reviewed
-operations. Loading, unchanged success, blockers and failure are announced.
-Optional Resolve request remains explicit and explains its binding changes.
+Run task is the single primary action for new tasks, saved drafts and retry
+drafts. It saves outstanding edits and inspects that exact acknowledged revision
+without calling the model. The operator need not separately save and refresh
+requirements. Save draft remains a non-executing alternative. Optional Resolve
+request remains explicit and explains its binding changes.
+
+An execution requires a preceding visible review of the saved workflow version,
+input, repository/base, environment, effective grants, access mode and budget.
+Run task may start directly only when those displayed facts still match the
+fresh server review. Otherwise it presents a compact inline launch review and
+requires another explicit Run task click. Saving, navigation and background
+inspection alone never authorize execution. New tasks retain Ask; Workspace or
+Full access requires existing explicit scope-bound consent. A retry does not
+inherit consent from its source. Mandatory approvals and server admission apply.
+
+Missing configuration opens its editable section and receives field guidance.
+Save, inspection or start failure retains inputs and the last acknowledged
+revision. Repeated clicks cannot dispatch concurrent launch requests. Loading,
+unchanged success, blockers and failures are announced. Environment preparation
+shows its reviewed definition before a separate explicit build action. Build
+completion refreshes prerequisites without starting agents; the ready environment
+offers Run task without a separate inspection button or redundant consent form.
 
 ### AC-003 — Reusable task defaults
 
@@ -92,6 +108,13 @@ work from an issue, review a PR) explain their prerequisites near the task, with
 links to the relevant existing configuration. Required configuration is not hidden
 behind optional help. Simple corrections stay in the editor; advanced routing may
 collapse only while complete, with a readable summary and an Edit action.
+
+The ordinary editor keeps request, workflow and repository visible. Optional
+identity, environment overrides, routing, payload, issue source and delivery
+settings use an Advanced settings disclosure with a factual summary. Required
+missing or invalid advanced settings open automatically. Technical environment
+definitions and raw grants remain available for inspection rather than filling
+the ordinary launch path with duplicate forms.
 
 Configuration repair links retain the saved task destination and offer return
 navigation. Unsaved edits must be saved before leaving for repair, or remain in
@@ -163,6 +186,16 @@ scheduled execution, real provider call or external write.
 Server-side agent draft storage, forced catalogue migration, subgraph reuse,
 automatic configuration/credentials, production rollout and quantitative usability
 claims are excluded. Draft guard is browser-session protection, not durable backup.
+
+## Maintainer decision — 2026-11-25
+
+The maintainer approved simplifying task starts generally after reporting that
+save/review/start controls were confusing for both newly configured and retry
+tasks. This refinement replaces AC-002's separate console inspection buttons
+with coordinated Run task and visible scope review; TASK-006 and TASK-007's
+authorization and admission contracts remain unchanged. Local visualization and
+commits are authorized; running the operator's real dependency-security request
+is outside this UI implementation.
 
 ## Verification and evidence
 

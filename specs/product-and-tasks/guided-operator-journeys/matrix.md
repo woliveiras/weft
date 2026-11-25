@@ -8,8 +8,8 @@ after code exists must additionally disclose implementation awareness in evidenc
 | --- | --- | --- | --- |
 | J01 | AC-001 project/workflow entry | Known context selected once; version/base concrete; no persisted task override | Helper unit; route→editor integration |
 | J02 | AC-001 unavailable/late context | No replacement resource; visible correction; explicit edits retained | Helper boundary unit; async UI integration |
-| J03 | AC-002 new/existing review | Exact edits saved then reviewed; zero interpretation/start calls | Action helper unit; real API/browser or component boundary integration |
-| J04 | AC-002 incomplete/save/review failure | Errors visible; values/revision retained; retry never starts | Failure unit; UI integration |
+| J03 | AC-002 new/existing/retry launch | Exact edits saved then reviewed without interpretation; execution only after displayed scope matches fresh review and explicit Run task | Launch helper unit; editor/API integration; disposable backend browser |
+| J04 | AC-002 incomplete/save/review/start failure | Errors visible; values/acknowledged revision retained; no start on invalid or uncertain review | Failure unit; UI/API integration |
 | J05 | AC-003 authored defaults/legacy fallback | Explicit bindings win; old graphs round-trip; external names are suggestions | Go validation unit; schema/API integration; TS defaults unit |
 | J06 | AC-003 invalid bounds/references/channel | Invalid disabled node, mismatched receiver/type or excess bounds rejected | Go unit; API create/update integration |
 | J07 | AC-004 readiness/goal/roles | Facts distinguished from checks; unavailable is not ready; admin handoff explicit | View-model unit; editor integration |
@@ -21,3 +21,9 @@ after code exists must additionally disclose implementation awareness in evidenc
 | J13 | AC-007 unpublished edits | Tabs retain; navigation/version/unload warn; discard explicit; publish failure retains | Guard unit; editor integration |
 | J14 | AC-007 association review | Review expected version/changes before write; cancel/failure retain | Review model unit; association integration |
 | J15 | AC-008 accessibility/compatibility | Keyboard labels, narrow layouts and existing role/consent gates retained | Browser/responsive inspection; regression suites |
+| J16 | AC-002 changed scope and repeated action | New grants/version/base/access/environment/budget facts require visible review and another explicit Run; duplicate clicks do not dispatch twice | Scope comparison unit; deferred HTTP integration |
+| J17 | AC-002 prepared environment | Ready transition inspects prerequisites without starting; explicit Run uses fresh matching revision; review failure and non-admin block start | Component unit/integration; environment browser regression |
+| J18 | AC-004 ordinary/advanced editor | Request/workflow/repository visible; advanced routing summarized and editable, automatically open for missing/invalid required input | Defaults unit; editor integration; narrow/wide browser inspection |
+
+J03–J04 were refined and J16–J18 added before launch implementation on
+2026-11-25 from the maintainer-approved general task-start simplification.
