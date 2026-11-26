@@ -100,9 +100,26 @@ def main():
             factory = request(base, token, "GET", "/api/v1/graphs/software-factory")[1]
             assert factory["graph"]["metadata"]["name"] == "Software Factory"
             assert request(base, token, "GET", "/api/v1/graphs/upgrade-fixture/executions")[1] == []
+        chat_id = "ab" * 16
+        chat_path = "/api/v1/chat/sessions/" + chat_id
         with server(current, profile, base):
             assert request(base, token, "GET", "/api/v1/graphs/upgrade-fixture")[1] == original
             assert request(base, token, "GET", "/api/v1/graphs/software-factory")[1] == factory
+            _, session = request(base, token, "POST", "/api/v1/chat/sessions",
+                                 {"requestId": chat_id, "text": "/inspect workflows"})
+            assert original["graph"]["metadata"]["id"] in session["messages"][1]["text"]
+            _, archived = request(base, token, "POST", chat_path + "/archive")
+            assert archived["archived"]
+        backup = temp / "with-chat.tar.gz"
+        run([str(current), "--backup-local", str(backup), "--data-dir", str(profile)])
+        # Preserve the original disposable profile while testing restoration
+        # at the path recorded by the native backup.
+        profile.rename(temp / "original-profile")
+        run([str(current), "--restore-local", str(backup), "--data-dir", str(profile)])
+        with server(current, profile, base):
+            assert request(base, token, "GET", chat_path)[1] == archived
+            history = request(base, token, "GET", "/api/v1/chat/sessions?archived=true")[1]
+            assert [item["id"] for item in history["items"]] == [chat_id]
         manifest = profile / "installation.json"
         manifest.write_text('{"version":999}')
         before = snapshot(profile)
