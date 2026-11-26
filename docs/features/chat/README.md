@@ -187,6 +187,13 @@ Name the workflow and, for a single-agent change, the node. Choose **Pause
 new turns** to let current work continue, **Drain and stop** for a graceful
 stop, or **Interrupt now** to cancel active turns in the selected scope.
 Start and resume go through the workflow's usual runtime and budget checks.
+
+To resize one agent, specify a fixed replica count or an autoscale ceiling.
+Review the node, saved version, current count and proposed count. The fixed
+count is a runtime override. An autoscale ceiling creates a workflow revision.
+Setting a fixed count of zero drains the node and stops it. A positive count
+on a stopped node applies when it next runs. Use **View node** to inspect the
+policy and active replicas on the workflow canvas.
 Chat shows the target, requested state and observed runtime state. An
 ambiguous request such as “Deactivate the reviewer” needs a choice about
 trigger intake, new turns, draining or immediate interruption.

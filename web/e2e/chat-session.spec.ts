@@ -299,6 +299,43 @@ test('reviews an exact current task allowance and observes the native budget res
   }
 });
 
+test('scales a running fixed node and separately saves an autoscale ceiling', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  for (const [id,cluster] of [
+    ['chat-scale-fixed',{replicas:1}],
+    ['chat-scale-auto',{mode:'autoscale',minReplicas:1,maxReplicas:3}],
+  ] as const) {
+    const created = await request.post('/api/v1/graphs',{headers,data:{metadata:{id},spec:{
+      nodes:[{id:'reader',runtime:{kind:'echo'},loop:{mode:'event'},cluster}],
+      channels:[{id:'requests',to:['reader']}],
+    }}});
+    expect(created.status()).toBe(201);
+  }
+  expect((await request.post('/api/v1/graphs/chat-scale-fixed/start',{headers})).ok()).toBe(true);
+  await page.addInitScript(() => localStorage.setItem('weftToken','e2e-operator-token'));
+  await page.goto('/');
+  const read = async (id:string) => (await request.get(`/api/v1/graphs/${id}`,{headers})).json();
+  await send(page,'Set three fixed replicas for reader in chat-scale-fixed.');
+  const fixed = page.getByRole('region',{name:'Scale chat-scale-fixed / reader'});
+  await expect(fixed.getByText('1 → 3')).toBeVisible();
+  await fixed.getByRole('button',{name:'Save replica count',exact:true}).click();
+  await expect(fixed.getByText('Observed 3 active replicas · Version 1.')).toBeVisible();
+  await page.getByRole('button',{name:'New chat',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Chat',exact:true})).toBeVisible();
+  await send(page,'Set the reader autoscale maximum to two in chat-scale-auto.');
+  const autoscale = page.getByRole('region',{name:'Scale chat-scale-auto / reader'});
+  await expect(autoscale.getByText('3 → 2')).toBeVisible();
+  expect((await read('chat-scale-auto')).graph.spec.nodes[0].cluster.maxReplicas).toBe(3);
+  await autoscale.getByRole('button',{name:'Save autoscale ceiling',exact:true}).click();
+  await expect(autoscale.getByText('Policy saved · Version 2. The node is inactive.')).toBeVisible();
+  expect((await read('chat-scale-auto')).graph.spec.nodes[0].cluster.maxReplicas).toBe(2);
+  const node = autoscale.getByRole('link',{name:'View node',exact:true});
+  await node.click();
+  await expect(page).toHaveURL(/#\/g\/chat-scale-auto\/canvas\?sel=node%3Areader/);
+  await page.goBack();
+  await expect(node).toBeFocused();
+});
+
 test('prepares one reviewed retry from a failed task and opens the linked draft', async ({ page, request }) => {
   await selectFixtureModel(request);
   const original = await startTaskWaitingForApproval(request,'chat-retry-source','Failed documentation task fixture');

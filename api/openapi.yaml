@@ -3027,6 +3027,7 @@ components:
             - {$ref: "#/components/schemas/ChatTaskDraftReview"}
             - {$ref: "#/components/schemas/ChatTaskStartReview"}
             - {$ref: "#/components/schemas/ChatWorkflowControlReview"}
+            - {$ref: "#/components/schemas/ChatWorkflowScaleReview"}
             - {$ref: "#/components/schemas/ChatTaskRetryReview"}
             - {$ref: "#/components/schemas/ChatCorrectionReview"}
             - {$ref: "#/components/schemas/ChatEnvironmentReview"}
@@ -3322,6 +3323,42 @@ components:
                 observed: {type: string}
                 settled: {type: boolean}
                 incomplete: {type: boolean}
+    ChatWorkflowScaleReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [workflowScale]
+          properties:
+            workflowScale:
+              type: object
+              required: [scope, size]
+              properties:
+                size: {type: integer, minimum: 0, maximum: 256}
+                scope:
+                  type: object
+                  required: [workflowId, nodeId, version, runId, createdAt, desiredState, autoscale, minimum, current]
+                  properties:
+                    workflowId: {type: string}
+                    nodeId: {type: string}
+                    version: {type: integer, minimum: 1}
+                    runId: {type: string}
+                    createdAt: {type: string, format: date-time}
+                    desiredState: {type: string}
+                    stoppedAndIdle: {type: boolean}
+                    nodePaused: {type: boolean}
+                    nodeStopped: {type: boolean}
+                    nodeDisabled: {type: boolean}
+                    replicaOverride: {type: integer}
+                    autoscale: {type: boolean}
+                    minimum: {type: integer, minimum: 0}
+                    current: {type: integer, minimum: 0}
+            scaleResult:
+              type: object
+              required: [version, activeReplicas, state]
+              properties:
+                version: {type: integer, minimum: 1}
+                activeReplicas: {type: integer, minimum: 0}
+                state: {type: string, enum: [converging, saved, observed, failed, superseded]}
     ChatDraftText:
       type: object
       required: [title, request, outcome]

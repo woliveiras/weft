@@ -235,6 +235,14 @@ and the results observed for the affected runs in `budgetResult`. An
 `accepted` review can still be waiting to observe a resume. A recorded
 increase leaves recurring definitions and future-run defaults intact.
 
+An operator can review the replica policy of one reusable workflow node.
+`workflowScale` binds the node, policy, workflow version and run. Fixed
+counts write a runtime override. Autoscale ceilings save a workflow version
+and keep the current minimum. `scaleResult` reports the recorded version
+and count observed from the runtime. `accepted` means the policy was saved
+and the runtime is still settling. A stopped node can report a saved policy
+with zero active replicas.
+
 An operator can review a start, pause, resume, graceful stop or immediate
 interruption on a reusable workflow or one node. Chat seals the exact graph
 version, target, run and desired control state. Confirmation takes the native

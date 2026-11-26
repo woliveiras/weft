@@ -294,6 +294,8 @@ func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID 
 		return s.reviewChatApproval(ctx, actor, sessionID, plan)
 	case chat.ControlWorkflow:
 		return s.reviewChatWorkflowControl(ctx, actor, sessionID, plan)
+	case chat.ScaleWorkflowNode:
+		return s.reviewChatScale(ctx, actor, sessionID, plan)
 	case chat.RetryTask:
 		return s.reviewChatTaskRetry(ctx, actor, sessionID, plan)
 	case chat.InspectTask, chat.WatchTask:

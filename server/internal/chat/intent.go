@@ -57,6 +57,7 @@ Return exactly one JSON object. "kind" is one of:
 - "workflow.adopt_agent": propose an explicit catalog version change for one workflow node. Add "adoptWorkflow" and "adoptNode" with their stated IDs or exact names and "adoptVersion" with the requested version as a string. Use "latest" only if explicitly requested. Ask about missing targets or version. Never infer adoption from a catalog publication.
 - "workflow.create": propose a stopped task workflow with one existing catalog agent. Add "workflowId" (lowercase letters, digits and hyphens), "workflowName" and "agent" (the stated catalog ID or exact name). Add "agentVersion" as a string only if the user requested that version or explicitly requested "latest". Ask which agent when the request is ambiguous. This capability never creates an agent or starts a workflow.
 - "workflow.control": propose a workflow runtime control. Add "controlWorkflow" with the exact workflow ID or name, "controlAction" (start, pause, resume, stop or kill), and "controlNode" only when the user identifies one agent in that workflow. Pause stops new turns and allows active work to finish. Stop requests a graceful drain. Kill interrupts active turns and must be explicitly intended. For a request like "disable the reviewer", clarify whether the intent is to pause future trigger intake, pause new turns, drain work or immediately interrupt active work. A workflow control cannot change trigger intake or a task-owned run.
+- "workflow.scale": change one existing node's fixed replica count or its autoscale ceiling. Include the exact workflow and node IDs or names in "scaleWorkflow" and "scaleNode", the absolute nonnegative integer as a string in "scaleSize", and "scaleMode" (fixed for an exact count, autoscale for an explicit autoscale maximum). Ask when the target, numeric count, or effect is ambiguous. Zero for a fixed node is a graceful stop and must be intended. The operation never changes cluster mode or starts a workflow.
 - "installation.plan": propose installation configuration using one or more weft.io/v1 YAML documents in "document". Use only supported installation kinds: InferencePlugin, ModelProvider, PriceCatalog, CostPolicy, Budget, NetworkPolicy, MCPConnection, SCMConnection, IssueConnection, IssueWorkflowMapping, JiraCloudProfile, JiraCloudWorkflowMapping, Project, Graph, PullRequestReviewRoute, IssueTrigger. Ask about missing consequential settings. For requested issue or PR intake activation, include "intakeConsent":"review" to show its separate scope to the administrator. Credential input goes to manual setup. Never set force, claim consent, or report a change as applied.
 - "workflow.instructions": replace the local instructions of one node in a saved workflow. Add "instructionWorkflow" and "instructionNode" (exact IDs) and "localInstructions" with the complete proposed replacement (empty only for an explicit request to clear local instructions). Ask which scope is intended if the request could mean a one-time message or reusable catalog publication.
 - "node.guide": send one operator message to a later matching turn of a running workflow. Add "guideWorkflow" and "guideNode" with the stated exact IDs, "guideReplica" with a replica number or "any" only if the user explicitly selected it, and "guidance" with the requested message. Ask for any missing target. For an ambiguous change of behavior, ask whether the operator wants one-time guidance, a workflow instruction revision, or a reusable catalog change.
@@ -72,6 +73,7 @@ You may include a short, neutral "title" for the conversation based on the lates
 // Plan proposes an operation or asks for clarification. A task selector is
 // always resolved against the caller's permitted resources before it is used.
 type Plan struct {
+	Scale                 WorkflowScaleDraft
 	Budget                BudgetRaiseDraft
 	Correction            taskconfig.DraftText
 	Skill                 SkillDraft
@@ -165,6 +167,14 @@ func decodePlan(body string) (Plan, error) {
 		}
 		value := strings.TrimSpace(*input)
 		switch key {
+		case "scaleWorkflow":
+			plan.Scale.Workflow = value
+		case "scaleNode":
+			plan.Scale.Node = value
+		case "scaleSize":
+			plan.Scale.Size = value
+		case "scaleMode":
+			plan.Scale.Mode = value
 		case "budgetScope":
 			plan.Budget.Scope = value
 		case "budgetTarget":
@@ -331,10 +341,17 @@ func decodePlan(body string) (Plan, error) {
 	if plan.Kind != ControlWorkflow && (seen["controlWorkflow"] || seen["controlNode"] || seen["controlAction"]) {
 		return Plan{}, ErrInvalidPlan
 	}
+	if plan.Kind != ScaleWorkflowNode && (seen["scaleWorkflow"] || seen["scaleNode"] || seen["scaleSize"] || seen["scaleMode"]) {
+		return Plan{}, ErrInvalidPlan
+	}
 	if plan.Kind != RaiseBudget && (seen["budgetScope"] || seen["budgetTarget"] || seen["budgetAmount"] || seen["budgetCurrency"]) {
 		return Plan{}, ErrInvalidPlan
 	}
 	switch plan.Kind {
+	case ScaleWorkflowNode:
+		if !plan.Scale.valid() || seen["task"] || seen["question"] {
+			return Plan{}, ErrInvalidPlan
+		}
 	case RaiseBudget:
 		if !plan.Budget.Valid() || seen["task"] || seen["question"] {
 			return Plan{}, ErrInvalidPlan

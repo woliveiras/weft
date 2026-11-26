@@ -243,3 +243,15 @@ raise and audit event across repeated confirmation. Chat observed the original
 run resume in one fixture and reported a different applicable budget blocking
 it in another. Chromium confirmed 2.004005 USD, checked the stored allowance
 and the separate default for new tasks, and returned from Models to the review.
+
+## 2026-11-26 — Reviewed replica policy
+
+S39 passed unit checks for exact counts, template limits, policy selection
+and confirmation binding. Authenticated HTTP and SQLite observed three fixed
+replicas through the engine after review, preserved a manual scale made after
+another proposal, drained only the selected node at zero and saved one new
+version for the autoscale ceiling on a stopped workflow. Viewers and out-of-policy
+counts received no review. The affected Go packages, TypeScript, 14 component
+checks, OpenAPI parsing, `make lint` and `git diff --check` passed.
+Chromium confirmed both effects and restored focus on return from the selected
+node in the workflow canvas.

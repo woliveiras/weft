@@ -9,7 +9,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
 import type { ChatAgentAdoptionReview, ChatApprovalReview, ChatCatalogPublicationReview, ChatMessage, ChatOperationReview,
   ChatSession, ChatSessionSummary, ChatTask, ChatTaskCancellationReview, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview,
-  ChatBudgetRaiseReview, ChatEnvironmentReview, ChatCorrectionReview, ChatTaskAuthorizationReview, ChatTaskRetryReview } from '../api/chat';
+  ChatBudgetRaiseReview, ChatEnvironmentReview, ChatCorrectionReview, ChatTaskAuthorizationReview, ChatTaskRetryReview, ChatWorkflowScaleReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -307,7 +307,7 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
     {onRetry && <Btn onClick={onRetry}>Retry saved request</Btn>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
-    {review && <OperationReviewCard review={review} now={now} canConfirm={('taskCorrection' in review || 'pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'approval' in review) ? canOperate : canCreateAgent}
+    {review && <OperationReviewCard review={review} now={now} canConfirm={('taskCorrection' in review || 'pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'workflowScale' in review || 'approval' in review) ? canOperate : canCreateAgent}
       onDecide={decision => onDecide(review,decision)} onView={onView}/>}
     {value.unread && <Btn onClick={onRead}>Mark result read</Btn>}
   </article>;
@@ -327,6 +327,7 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   if ('taskCancel' in review) return <TaskCancellationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskAuthorization' in review) return <TaskAuthorizationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('workflowControl' in review) return <WorkflowControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('workflowScale' in review) return <WorkflowScaleCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('environment' in review) return <EnvironmentPreparationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskCorrection' in review) return <CorrectionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskRetry' in review) return <TaskRetryReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
@@ -497,6 +498,41 @@ const workflowControlCopy = {
   stop: ['Drain and stop', 'Stop taking new work and let active turns drain. Pending reviews in this scope can be canceled.'],
   kill: ['Interrupt now', 'Interrupt active turns immediately in this scope. Pending reviews in this scope can be canceled.'],
 };
+
+function WorkflowScaleCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatWorkflowScaleReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const {scope, size} = review.workflowScale;
+  const result = review.scaleResult;
+  const anchor = `chat-scale-${review.id}`;
+  const target = `${scope.workflowId} / ${scope.nodeId}`;
+  const stopped = scope.nodeStopped || scope.nodeDisabled || scope.desiredState === 'stopped';
+  return <section className="chat-agent-review" aria-label={`Scale ${target}`}>
+    <h3>Scale {scope.nodeId}</h3>
+    <dl>
+      <dt>Target</dt><dd>{target} · Version {scope.version}</dd>
+      {scope.runId && <><dt>Reviewed run</dt><dd>{scope.runId}</dd></>}
+      <dt>{scope.autoscale ? 'Autoscale ceiling' : 'Fixed replica count'}</dt><dd>{scope.current} → {size}</dd>
+      {scope.autoscale && <><dt>Autoscale minimum</dt><dd>{scope.minimum}</dd></>}
+    </dl>
+    <p>{scope.autoscale ? 'This saves a workflow revision. The scheduler chooses the active count within the reviewed bounds.'
+      : size === 0 ? 'This lets active turns drain and stops this node.'
+      : 'This saves a runtime override for this node.'}</p>
+    {stopped && size > 0 && <p>The new policy applies when the node next runs.</p>}
+    {review.state === 'awaiting_confirmation' && <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm}
+      confirmLabel={scope.autoscale ? 'Save autoscale ceiling' : 'Save replica count'} onDecide={onDecide}/>}
+    {review.state === 'applying' && <p role="status">Applying the reviewed scale…</p>}
+    {review.state === 'accepted' && <p role="status">Replica policy saved. Waiting for the runtime to settle.</p>}
+    {result?.state === 'saved' && <p role="status">Policy saved · Version {result.version}. The node is inactive.</p>}
+    {result?.state === 'observed' && <p role="status">Observed {result.activeReplicas} active replicas · Version {result.version}.</p>}
+    {review.state === 'conflict' && <p role="status">The target changed or a workflow guard blocked the action. Inspect the node and request a new review.</p>}
+    {review.state === 'incomplete' && <p role="status">The policy was saved. Inspect the node to see why the runtime did not settle under this review.</p>}
+    {review.state === 'unknown' && <p role="status">The outcome could not be verified. Inspect the current workflow before trying again.</p>}
+    {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+    <a id={anchor} href={`#/g/${encodeURIComponent(scope.workflowId)}/canvas?sel=${encodeURIComponent('node:' + scope.nodeId)}`}
+      onClick={() => onView(anchor)}>View node</a>
+  </section>;
+}
 
 function WorkflowControlCard({review, now, canConfirm, onDecide, onView}: {
   review:ChatWorkflowControlReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;

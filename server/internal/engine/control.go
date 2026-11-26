@@ -147,6 +147,7 @@ func (e *Engine) SaveGraph(ctx context.Context, g *domain.Graph, expectedVersion
 type GraphSaveReview struct {
 	CreatedAt time.Time
 	Operation string
+	scale     *WorkflowScaleScope
 }
 
 // SaveReviewedGraph is the normal graph save with an additional identity
@@ -223,6 +224,20 @@ func (e *Engine) saveGraph(ctx context.Context, g, effective *domain.Graph, expe
 	}
 	if review != nil && (isNew || !current.Metadata.CreatedAt.Equal(review.CreatedAt)) {
 		return nil, nil, fmt.Errorf("%w: the reviewed workflow identity changed", ErrConflict)
+	}
+	if review != nil && review.scale != nil {
+		node := effective.Node(review.scale.NodeID)
+		if node == nil {
+			return nil, nil, ErrConflict
+		}
+		graph.Normalize(current)
+		record, err := e.store.GetGraphRecord(ctx, g.Metadata.ID)
+		if err != nil {
+			return nil, nil, err
+		}
+		if _, err := e.checkReviewedScale(ctx, current, record, *review.scale, node.Cluster.MaxReplicas, actor); err != nil {
+			return nil, nil, err
+		}
 	}
 	if isNew {
 		if err := e.retryBrokerCleanup(ctx, g.Metadata.ID); err != nil {
@@ -648,21 +663,41 @@ func (e *Engine) Scale(ctx context.Context, id, node string, replicas int, actor
 		_, _, err := e.SaveGraph(ctx, g, g.Metadata.Version, actor)
 		return err
 	}
-	c := e.getNodeControl(ctx, id, node)
+	return e.WithGraphTransition(ctx, id, func(ctx context.Context) error {
+		g, _, err := e.GetGraph(ctx, id, 0)
+		if err != nil {
+			return err
+		}
+		fresh := g.Node(node)
+		if fresh == nil || fresh.Cluster.Mode == domain.ClusterAutoscale {
+			return ErrConflict
+		}
+		c, err := e.readNodeControl(ctx, id, node)
+		if err != nil {
+			return err
+		}
+		return e.scaleFixed(ctx, g, node, replicas, c, actor, "")
+	})
+}
+
+func (e *Engine) scaleFixed(ctx context.Context, g *domain.Graph, node string, replicas int, c nodeControl, actor, operation string) error {
+	id := g.Metadata.ID
 	c.Replicas = replicas
+	c.Operation = operation
 	if replicas == 0 {
 		c.Stopped = true
 	}
-	if err := e.putNodeControl(ctx, id, node, c); err != nil {
-		return err
-	}
 	// Broadcast channels need a group per replica.
+	otherReplicas := e.replicasFor(ctx, g)
 	if err := e.declareTopology(ctx, g, func(nid string) int {
 		if nid == node {
 			return max(replicas, 1)
 		}
-		return replicasOf(g, nid)
+		return otherReplicas(nid)
 	}); err != nil {
+		return err
+	}
+	if err := e.putNodeControl(ctx, id, node, c); err != nil {
 		return err
 	}
 	e.bus.Publish(ctx, domain.NewEvent(domain.EvNodeScaled, id, map[string]any{"replicas": replicas}).WithNode(node, -1).WithActor(actor))
