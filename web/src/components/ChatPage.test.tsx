@@ -58,9 +58,14 @@ it('shows simultaneous running and unread success cues with metadata and keyboar
   const row = await screen.findByRole('listitem');
   expect(within(row).getByRole('img',{name:/running.*successful result unread.*failed or blocked result unread.*decision required/})).toBeTruthy();
   const disclosure = within(row).getByRole('button',{name:'Actions for Follow important release work'});
+  vi.spyOn(disclosure, 'getBoundingClientRect').mockReturnValue(new DOMRect(300, 48, 32, 32));
+  vi.spyOn(disclosure.closest('.chat-panel')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(100, 32, 232, 240));
   fireEvent.click(disclosure);
   expect(disclosure.getAttribute('aria-expanded')).toBe('true');
-  expect(within(row).getByRole('button',{name:'Rename'})).toBeTruthy();
+  const actions = within(row).getByRole('group', {name:'Conversation actions'});
+  expect(actions.style.top).toBe('84px');
+  expect(actions.style.left).not.toBe('');
+  expect(within(actions).getByRole('button',{name:'Rename'})).toBeTruthy();
   expect(within(row).getByRole('button',{name:'Archive'})).toBeTruthy();
   fireEvent.keyDown(disclosure,{key:'Escape'});
   expect(disclosure.getAttribute('aria-expanded')).toBe('false');

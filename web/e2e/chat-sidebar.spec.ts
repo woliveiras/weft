@@ -76,3 +76,34 @@ test('reads the full recent title with a mouse, keyboard and narrow touch search
     expect(await phone.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   } finally {await mobile.close();}
 });
+
+test('overlays session actions without moving rows at either end of the list', async ({page, request}) => {
+  const headers = {Authorization:'Bearer e2e-viewer-token'};
+  for (let i = 0; i < 13; i++) {
+    const requestId = i.toString(16).padStart(32, 'e');
+    expect((await request.post('/api/v1/chat/sessions', {headers, data:{requestId, text:'/inspect tasks'}})).ok()).toBe(true);
+  }
+  await page.setViewportSize({width: 1280, height: 450});
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-viewer-token'));
+  await page.goto('/#/chat');
+  const sessions = page.getByRole('complementary', {name:'Chat sessions'});
+  const rows = sessions.getByRole('listitem');
+  await expect(rows.first()).toBeVisible();
+  for (const row of [rows.first(), rows.last()]) {
+    const trigger = row.getByRole('button', {name:/^Actions for /});
+    await trigger.scrollIntoViewIfNeeded();
+    const positions = () => rows.evaluateAll(items => items.map(item => item.getBoundingClientRect().top));
+    const before = await positions();
+    await trigger.click();
+    const actions = row.getByRole('group', {name:'Conversation actions'});
+    await expect(actions).toBeVisible();
+    expect(await positions()).toEqual(before);
+    const box = await actions.boundingBox();
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(450);
+    await row.getByRole('button', {name:'Rename'}).click({trial:true});
+    await page.keyboard.press('Escape');
+    await expect(actions).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  }
+});

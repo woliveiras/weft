@@ -13,7 +13,7 @@ import { ChatInstructionCard } from './ChatInstructionCard';
 import { ChatGuidanceCard } from './ChatGuidanceCard';
 import { ChatConfigurationCard } from './ChatConfigurationCard';
 import { ChatManualLink } from './ChatManualLink';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
 import type { ChatAgentAdoptionReview, ChatApprovalReview, ChatCatalogPublicationReview, ChatMessage, ChatOperationReview,
   ChatSession, ChatSessionSummary, ChatTask, ChatTaskCancellationReview, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview,
@@ -384,42 +384,53 @@ function SessionRow({item, current, expanded, archived, onRename, onArchive, onO
       </span>
       <button type="button" ref={actions} className="chat-details icon-btn" aria-label={`Actions for ${title}`} aria-expanded={expanded} onClick={onDetails}>⋯</button>
     </div>
-    {expanded && <div className="chat-session-actions" role="group" aria-label="Conversation actions">
+    {expanded && actions.current && <SessionOverlay anchor={actions.current} variant="actions">
       <button type="button" onClick={()=>actions.current && onRename(actions.current)}>Rename</button>
       <button type="button" onClick={onArchive}>{archived ? 'Unarchive' : 'Archive'}</button>
-    </div>}
+    </SessionOverlay>}
     <span className="chat-session-description" id={`chat-row-${item.id}`}>{description}</span>
-    {preview && row.current && <SessionPreview anchor={row.current} title={title} description={description}/>}
+    {preview && row.current && <SessionOverlay anchor={row.current} variant="preview">
+      <strong>{title}</strong><div>{description}</div>
+    </SessionOverlay>}
   </li>;
 }
 
-function SessionPreview({anchor,title,description}:{anchor:HTMLElement; title:string; description:string}) {
+function SessionOverlay({anchor, variant, children}: {
+  anchor: HTMLElement; variant: 'preview' | 'actions'; children: ReactNode;
+}) {
   const card = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    function position() {
-      const element = card.current;
-      if (!element) return;
+    const element = card.current;
+    if (!element) return;
+    const position = () => {
       const rect = anchor.getBoundingClientRect();
       const panel = anchor.closest('.chat-panel')?.getBoundingClientRect();
       element.hidden = !!panel && (rect.bottom <= panel.top || rect.top >= panel.bottom);
-      const width = Math.min(Math.max(240,rect.width),window.innerWidth - 16);
-      element.style.width = width+'px';
-      const height = element.offsetHeight;
-      const below = rect.bottom + height <= window.innerHeight - 8;
-      element.style.top = (below ? rect.bottom - 1 : Math.max(8,rect.top-height+1))+'px';
-      element.style.left = Math.max(8,Math.min(rect.left,window.innerWidth-width-8))+'px';
-    }
+      if (element.hidden) return;
+      if (variant === 'preview') {
+        element.style.width = Math.min(Math.max(240,rect.width),window.innerWidth - 16)+'px';
+      }
+      const {width, height} = element.getBoundingClientRect();
+      const gap = variant === 'actions' ? 4 : -1;
+      const below = rect.bottom + gap + height <= window.innerHeight - 8;
+      const left = variant === 'actions' ? rect.right - width : rect.left;
+      element.style.top = (below ? rect.bottom + gap : Math.max(8,rect.top - height - gap))+'px';
+      element.style.left = Math.max(8, Math.min(left,window.innerWidth - width - 8))+'px';
+    };
     position();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(position) : undefined;
+    observer?.observe(element);
     window.addEventListener('scroll',position,true);
     window.addEventListener('resize',position);
     return () => {
+      observer?.disconnect();
       window.removeEventListener('scroll',position,true);
       window.removeEventListener('resize',position);
     };
-  }, [anchor,title,description]);
-  return <div ref={card} className="chat-session-preview" aria-hidden="true">
-    <strong>{title}</strong><div>{description}</div>
-  </div>;
+  }, [anchor,variant]);
+  return variant === 'actions'
+    ? <div ref={card} className="chat-session-actions" role="group" aria-label="Conversation actions">{children}</div>
+    : <div ref={card} className="chat-session-preview" aria-hidden="true">{children}</div>;
 }
 
 type PRAction = (operation: string, commentIds?: number[]) => void;

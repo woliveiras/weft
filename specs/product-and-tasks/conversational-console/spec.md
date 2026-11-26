@@ -111,7 +111,7 @@ accepted, redacted user request, ideally during its first interpretation.
 Updates to operation targets and model retries preserve the chosen safe title.
 The row has a full accessible name. A hover card and a focus-triggered
 description expose the title and accessible metadata such as time and status.
-Show the truncated title and compact indicators in the row. Its labeled actions control offers Rename and Archive (Unarchive in Archived). On touch, the search dialog exposes full titles and the opened conversation exposes its transcript. The disclosure is dismissible with Escape, interactive controls
+Show the truncated title and compact indicators in the row. Its labeled actions control opens Rename and Archive (Unarchive in Archived) in an overlay anchored to the row. Opening it preserves the position of neighboring sessions. On touch, the search dialog exposes full titles and the opened conversation exposes its transcript. The disclosure is dismissible with Escape, interactive controls
 receive focus when needed, and closing returns focus to its opener. Modal
 drawers trap focus while open. The main landmarks, DOM/tab order, sent message
 and status announcements, and selected-session indicator work in both expanded
