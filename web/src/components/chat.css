@@ -62,7 +62,6 @@
 .chat-agent-review dd { margin: 0; overflow-wrap: anywhere; }
 .chat-pr-diff { max-height: 24rem; overflow: auto; border: 1px solid var(--border); padding: 0.75rem; }
 .chat-composer { display: grid; gap: 0.5rem; margin-block: 1rem; }
-.chat-composer textarea { width: 100%; resize: vertical; }
 .chat-composer button { justify-self: end; }
 @keyframes chat-running { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .chat-running { animation: none; } }

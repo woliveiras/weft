@@ -7,6 +7,7 @@ for (const width of [1440,390]) {
     await page.goto('/#/chat');
     const message=page.getByRole('textbox',{name:'Message',exact:true});
     const send=page.getByRole('button',{name:'Send',exact:true});
+    await expect(message).toHaveCSS('resize', 'none');
     await message.fill('/ins');
     await page.getByRole('option',{name:/^\/inspect /}).click();
     await page.getByRole('option',{name:'/inspect tasks',exact:true}).click();

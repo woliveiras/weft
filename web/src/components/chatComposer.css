@@ -12,7 +12,7 @@
 .chat-composer:focus-within { outline: 2px solid var(--primary); outline-offset: 1px; }
 .chat-page .chat-composer textarea {
   width: 100%; padding: var(--space-2); min-height: 2.75rem; max-height: min(20vh, 10rem);
-  border: 0; border-radius: 6px; background: transparent; box-shadow: none; resize: vertical;
+  border: 0; border-radius: 6px; background: transparent; box-shadow: none; resize: none;
 }
 .chat-page .chat-composer textarea:focus { outline: none; }
 .chat-composer-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
