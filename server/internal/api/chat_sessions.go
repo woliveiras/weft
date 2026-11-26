@@ -228,6 +228,8 @@ func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.Cha
 func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID string, plan chat.Plan) chat.Interpretation {
 	reply := chat.Interpretation{Plan: plan}
 	switch plan.Kind {
+	case chat.EditInstructions:
+		return s.reviewChatInstructions(ctx, actor, sessionID, plan)
 	case chat.GuideNode:
 		return s.reviewChatGuidance(ctx, actor, sessionID, plan)
 	case chat.PlanInstallation:

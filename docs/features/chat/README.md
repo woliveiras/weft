@@ -85,6 +85,10 @@ preparation or delivery settings. If the task or its authorization changes
 while you are reviewing, inspect the updated setup and request a fresh start
 proposal.
 
+## Change instructions for one workflow
+
+Name the workflow and node, then describe the replacement for that node’s **local instructions**. Review the old and proposed text and the pinned catalog version. **Save workflow instructions** creates a new workflow version. The reusable agent’s instructions and existing task copies stay on their recorded versions. Future turns use the normal workflow rollout. **View workflow** opens the selected node in the editor.
+
 ## Guide the next turn of a running agent
 
 Specify the workflow ID, node ID and replica, or explicitly select any replica. Ask for one message on the next turn and choose **Send guidance** after checking the run and message. The node’s operator chat receives the message. A queued message can only be picked up by a matching replica in the selected run. Current turns continue with their existing input.

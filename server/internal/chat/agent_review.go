@@ -101,6 +101,7 @@ type AgentCreation struct {
 // OperationReview persists the reviewed action. The digest binds the payload
 // to the owner and session. Claim state and the result are recorded separately.
 type OperationReview struct {
+	Instructions *InstructionEdit `json:"instructions,omitempty"`
 	Guidance     *Guidance        `json:"guidance,omitempty"`
 	ConsumedAt   *time.Time       `json:"consumedAt,omitempty"`
 	*AgentCreation
@@ -138,7 +139,7 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	choices := 0
-	for _, exists := range []bool{r.AgentCreation != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.Guidance != nil} {
+	for _, exists := range []bool{r.AgentCreation != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.Guidance != nil, r.Instructions != nil} {
 		if exists {
 			choices++
 		}
@@ -148,6 +149,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 	}
 	var payload any
 	switch {
+	case r.Instructions != nil:
+		payload = struct {
+			Owner, Session, ID, Operation string
+			ExpiresAt                     time.Time
+			Instructions                  *InstructionEdit
+		}{owner, session, r.ID, EditInstructions, r.ExpiresAt, r.Instructions}
 	case r.Guidance != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string

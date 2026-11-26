@@ -83,9 +83,13 @@ for the viewer and administrator. Chromium followed the link to Budgets and
 returned by browser Back to the same message with focus restored. TypeScript
 and seven component tests passed.
 
+## 2026-11-26 — Workflow-local instructions
+
+For S14, HTTP and SQLite checks retained the catalog pin and prior graph version. An intervening edit invalidated confirmation. Two confirmations produced a single new revision. Chromium reviewed both instruction texts, saved the change and returned from the selected node to the originating chat.
+
 ## 2026-11-26 — One-time guidance to a running node
 
-S15 now has fixture evidence for reviewed, run-scoped messages. A viewer could not prepare a send. Changing the run invalidated confirmation. Postgres 17, SQLite and filesystem conformance verified single pickup and exclusion of other runs and replicas. Chromium followed a live fixture from review through actual pickup and checked the durable node-chat receipt. The shared event carries message and run identifiers.
+S14 now has fixture evidence for reviewed, run-scoped messages. A viewer could not prepare a send. Changing the run invalidated confirmation. Postgres 17, SQLite and filesystem conformance verified single pickup and exclusion of other runs and replicas. Chromium followed a live fixture from review through actual pickup and checked the durable node-chat receipt. The shared event carries message and run identifiers.
 
 ## 2026-11-26 — Installation configuration review
 

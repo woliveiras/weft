@@ -125,6 +125,9 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		}
 		settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 		defer cancel()
+		if review.Instructions != nil {
+			return s.applyChatInstructions(settleCtx, actor, sessionID, review)
+		}
 		if review.Guidance != nil {
 			return s.applyChatGuidance(settleCtx, actor, sessionID, review)
 		}

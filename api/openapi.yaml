@@ -3028,6 +3028,7 @@ components:
             - {$ref: "#/components/schemas/ChatTaskStartReview"}
             - {$ref: "#/components/schemas/ChatConfigurationReview"}
             - {$ref: "#/components/schemas/ChatGuidanceReview"}
+            - {$ref: "#/components/schemas/ChatInstructionReview"}
         task:
           type: object
           required: [id, state]
@@ -3081,6 +3082,24 @@ components:
                   key: {type: string}
                   result: {type: string, enum: [applied, unchanged, failed, not-applied, saved-revision-unknown]}
                   revision: {type: string}
+    ChatInstructionReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [instructions]
+          properties:
+            instructions:
+              type: object
+              required: [graph, node, version, before, after, sourceDigest]
+              properties:
+                graph: {type: string}
+                node: {type: string}
+                version: {type: integer, minimum: 1}
+                before: {type: string}
+                after: {type: string}
+                sourceDigest: {type: string}
+                catalogId: {type: string}
+                catalogVersion: {type: integer}
     ChatGuidanceReview:
       allOf:
         - {$ref: "#/components/schemas/ChatReviewState"}

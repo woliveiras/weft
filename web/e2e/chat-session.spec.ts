@@ -143,6 +143,33 @@ test('one-time guidance records pickup on the reviewed workflow run', async ({ p
   }
 });
 
+test('a reviewed local instruction change opens the selected node in its workflow', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const graphId = 'instruction-sample';
+  const graph = '/api/v1/graphs/'+graphId;
+  const created = await request.post('/api/v1/graphs', {headers,data:{
+    metadata:{id:graphId},spec:{
+      nodes:[{id:'reader',runtime:{kind:'echo'},loop:{mode:'event'},localInstructions:'Review documentation.'}],
+      channels:[{id:'requests',to:['reader']}],
+    },
+  }});
+  expect(created.status()).toBe(201);
+  await page.addInitScript(() => localStorage.setItem('weftToken','e2e-admin-token'));
+  await page.goto('/');
+  await send(page, 'Set local instructions for reader in instruction-sample to review test changes.');
+  const review = page.getByRole('region', {name:'Workflow-local instructions'});
+  await expect(review).toContainText('Review documentation.');
+  await expect(review).toContainText('Review test changes.');
+  await review.getByRole('button', {name:'Save workflow instructions'}).click();
+  await expect(review.getByRole('status')).toContainText('Workflow version 2 saved.');
+  await review.getByRole('link', {name:'View workflow'}).click();
+  await expect(page).toHaveURL(/#\/g\/instruction-sample\/canvas\?sel=node%3Areader/);
+  const saved = await (await request.get(graph,{headers})).json();
+  expect(saved.graph.spec.nodes[0].localInstructions).toBe('Review test changes.');
+  await page.goBack();
+  await expect(review).toBeVisible();
+});
+
 test('a console link opens Budgets and returns to its originating chat message', async ({ page, request }) => {
   await selectFixtureModel(request);
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));

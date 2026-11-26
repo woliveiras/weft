@@ -1,3 +1,4 @@
+import { ChatInstructionCard } from './ChatInstructionCard';
 import { ChatGuidanceCard } from './ChatGuidanceCard';
 import { ChatConfigurationCard } from './ChatConfigurationCard';
 import { ChatManualLink } from './ChatManualLink';
@@ -294,6 +295,7 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
 function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   review:ChatOperationReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
 }) {
+  if ('instructions' in review) return <ChatInstructionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('guidance' in review) return <ChatGuidanceCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;
   if ('configuration' in review) return <ChatConfigurationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;
   if ('taskDraft' in review) return <TaskDraftReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
