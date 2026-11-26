@@ -344,6 +344,7 @@ func (s *Server) observeChatTask(ctx context.Context, id string) (chat.TaskSumma
 	if result.State == "cancelled" && view.Task.Status != "cancelled" {
 		result.State = view.Task.Status
 	}
+	chat.ProjectTaskEvidence(&result, view)
 	if view.Result != nil && view.Result.GraphID == result.GraphID {
 		result.ExecutionID = view.Result.ID
 	}

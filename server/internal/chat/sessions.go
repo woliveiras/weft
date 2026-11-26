@@ -35,12 +35,15 @@ type Message struct {
 }
 
 type TaskSummary struct {
-	ID             string `json:"id"`
-	State          string `json:"state"`
-	GraphID        string `json:"graphId,omitempty"`
-	ExecutionID    string `json:"executionId,omitempty"`
-	DecisionNeeded bool   `json:"decisionNeeded,omitempty"`
-	SettledBlock   bool   `json:"settledBlock,omitempty"`
+	Repositories      []RepositoryEvidence `json:"repositories,omitempty"`
+	OtherRepositories int                  `json:"otherRepositories,omitempty"`
+	RetryOf           string               `json:"retryOf,omitempty"`
+	ID                string               `json:"id"`
+	State             string               `json:"state"`
+	GraphID           string               `json:"graphId,omitempty"`
+	ExecutionID       string               `json:"executionId,omitempty"`
+	DecisionNeeded    bool                 `json:"decisionNeeded,omitempty"`
+	SettledBlock      bool                 `json:"settledBlock,omitempty"`
 }
 
 type Watch struct {

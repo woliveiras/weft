@@ -111,6 +111,19 @@ func TestChatProjectAdmissionPinsCommitAndRejectsProjectDrift(t *testing.T) {
 		var progress taskrun.View
 		return call(t, srv, "GET", "/api/v1/tasks/"+d.ID+"/progress", viewerTok, "", "", &progress) == 200 && progress.State == "succeeded" && progress.WorkspacePath != ""
 	})
+	var observed chat.Session
+	waitFor(t, 5*time.Second, "repo evidence", func() bool {
+		if call(t, srv, "GET", "/api/v1/chat/sessions/"+next.ID, adminTok, "", "", &observed) != 200 {
+			return false
+		}
+		for _, msg := range observed.Messages {
+			if msg.Task != nil && msg.Task.ID == d.ID && msg.Task.State == "succeeded" && len(msg.Task.Repositories) == 1 {
+				row := msg.Task.Repositories[0]
+				return row.Project == p.ID && row.Base == p.Head
+			}
+		}
+		return false
+	})
 	if saved, err := os.ReadFile(filepath.Join(repo, "uncommitted")); err != nil || string(saved) != "preserve" {
 		t.Fatal("changed source", err)
 	}

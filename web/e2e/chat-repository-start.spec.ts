@@ -39,5 +39,11 @@ test('pins each local repository before admitting a multi-repository task',async
     await review.getByRole('button',{name:'Start task',exact:true}).click();
     await expect(review).toContainText('Task admission recorded.');
     await expect.poll(async()=> (await (await request.get('/api/v1/tasks/'+task.id+'/progress',{headers})).json()).state).toBe('succeeded');
+    const evidence=page.getByRole('region',{name:'Repository evidence'}).last();
+    for(const repo of repositories){
+      const row=evidence.getByRole('listitem').filter({hasText:repo.alias});
+      await expect(row).toContainText(repo.baseCommit);
+      await expect(row).toContainText('ready');
+    }
   } finally {rmSync(temp,{recursive:true,force:true});}
 });

@@ -1,6 +1,9 @@
 import type { AuthorizationMode, TaskAuthorization } from './tasks';
 
 export interface ChatTask {
+  repositories?:{alias?:string;project:string;base:string;preparation:string;delivery?:string;pullRequest?:number}[];
+  otherRepositories?:number;
+  retryOf?:string;
   id: string;
   state: string;
   graphId?: string;

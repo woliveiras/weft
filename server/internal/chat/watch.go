@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/storage"
@@ -43,10 +44,10 @@ func (s Sessions) recordObservation(ctx context.Context, owner, id string, prior
 			watch := &session.Watches[i]
 			// A later observer or overlapping browser query may already
 			// have committed a transition. Discard the older read.
-			if watch.RequestID != prior.RequestID || *watch != prior || watch.Complete {
+			if watch.RequestID != prior.RequestID || !reflect.DeepEqual(*watch, prior) || watch.Complete {
 				continue
 			}
-			if unknown == watch.Unknown && (unknown || state == watch.Task) {
+			if unknown == watch.Unknown && (unknown || reflect.DeepEqual(state, watch.Task)) {
 				return false, nil
 			}
 			watch.Unknown = unknown

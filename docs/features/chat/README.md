@@ -42,6 +42,8 @@ their own accessible status. Open the original conversation and follow the
 task result link to its evidence. If the provider is down, the monitor
 continues to read task state without calling that provider.
 
+Completed watches and task inspections show the pinned base commit, checkout state and available delivery evidence for each repository. A confirmed PR receipt shows the PR number. **View task result** opens Changes & checks for that attempt. A retried task can also link to its previous attempt.
+
 ## Review a pull request
 
 Ask “Revise o PR 418.” If several running workflows or connections qualify, name the workflow and connection. The reviewer needs a native event node, one exclusive ingress, a single input per turn, an explicit model and a named repository read grant. Connections with interactive read approval require the existing manual path.

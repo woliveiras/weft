@@ -3050,6 +3050,20 @@ components:
             executionId: {type: string}
             decisionNeeded: {type: boolean}
             settledBlock: {type: boolean}
+            retryOf: {type: string}
+            otherRepositories: {type: integer, minimum: 0}
+            repositories:
+              type: array
+              items:
+                type: object
+                required: [project, base, preparation]
+                properties:
+                  alias: {type: string}
+                  project: {type: string}
+                  base: {type: string}
+                  preparation: {type: string}
+                  delivery: {type: string}
+                  pullRequest: {type: integer, minimum: 1}
     ChatAgentReview:
       allOf:
         - {$ref: "#/components/schemas/ChatReviewState"}

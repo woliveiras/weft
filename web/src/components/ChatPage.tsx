@@ -712,6 +712,15 @@ function TaskLink({task, message, onView}: {task:ChatTask; message:string; onVie
   const target = result ? 'changes' : 'overview';
   const anchor = `chat-task-${message}`;
   return <div className="chat-evidence">
+    {!!task.repositories?.length && <section aria-label="Repository evidence">
+      <h4>Repositories</h4>
+      <ul>{task.repositories.map(row=><li key={row.alias || row.project}>
+        <strong>{row.alias || row.project}</strong> · {row.project} @ <code>{row.base}</code> · {row.preparation}
+        {row.delivery && <> · {row.delivery}</>}{row.pullRequest && <> · PR #{row.pullRequest}</>}
+      </li>)}</ul>
+      {!!task.otherRepositories && <p>{task.otherRepositories} more in Tasks.</p>}
+    </section>}
+    {task.retryOf && <a href={taskSectionLink(task.retryOf,'overview')} id={anchor+'-prior'} onClick={()=>onView(anchor+'-prior')}>Previous attempt</a>}
     <a id={anchor} href={taskSectionLink(task.id,target)} onClick={() => onView(anchor)}>
       {result ? 'View task result' : 'Open task'}
     </a>
