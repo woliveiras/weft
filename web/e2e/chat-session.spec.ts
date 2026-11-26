@@ -61,6 +61,10 @@ test('analyzes a pinned PR and returns a draft with its execution', async ({ pag
     }});
     expect(graph.status()).toBe(201);
     expect((await request.post('/api/v1/graphs/manual-review/start', {headers})).ok()).toBe(true);
+    await expect.poll(async () => {
+      const graph = await (await request.get('/api/v1/graphs/manual-review',{headers})).json();
+      return graph.record.state === 'running' && !!graph.record.runId;
+    }).toBe(true);
     await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-operator-token'));
     await page.goto('/');
     await send(page, 'Revise o PR 418.');

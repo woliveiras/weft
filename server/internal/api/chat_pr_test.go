@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/woliveiras/weft/server/internal/chat"
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/scm"
 	"net/http"
@@ -100,6 +101,10 @@ func verifyChatPRFixture(t *testing.T, kind string) {
 	if code := call(t, server, "POST", "/api/v1/graphs/pr-review/start", operatorTok, "", "", nil); code != 200 {
 		t.Fatalf("start: %d", code)
 	}
+	waitFor(t, 5*time.Second, "fixture workflow running with an assigned run ID", func() bool {
+		record, err := a.Store.GetGraphRecord(t.Context(), "pr-review")
+		return err == nil && record.DesiredState == domain.GraphRunning && record.State == domain.GraphRunning && record.RunID != ""
+	})
 	request := func(id, token string) chat.Session {
 		t.Helper()
 		var s chat.Session
