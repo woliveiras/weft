@@ -47,3 +47,32 @@ test('pins each local repository before admitting a multi-repository task',async
     }
   } finally {rmSync(temp,{recursive:true,force:true});}
 });
+
+test('creates a draft against a reviewed registered checkout', async ({page,request})=>{
+  const headers={Authorization:'Bearer e2e-admin-token'};
+  const dir=mkdtempSync(join(tmpdir(),'weft-chat-draft-repo-'));
+  try {
+    execFileSync('git',['init','-q',dir]);
+    execFileSync('git',['-C',dir,'-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','--allow-empty','-qm','initial']);
+    const registration=await request.post('/api/v1/projects',{headers,data:{name:'Draft repository fixture',path:dir}});
+    expect(registration.status()).toBe(201);
+    const project=await registration.json();
+    expect((await request.post('/api/v1/graphs',{headers,data:{metadata:{id:'draft-project-fixture'},spec:{nodes:[{id:'worker',runtime:{kind:'echo'},loop:{mode:'once'}}]}}})).status()).toBe(201);
+    const settings=await (await request.get('/api/v1/chat/settings',{headers})).json();
+    expect((await request.put('/api/v1/chat/settings',{headers:{...headers,'If-Match':String(settings.revision)},data:{provider:'e2e',name:'fixture'}})).ok()).toBe(true);
+    await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-operator-token'));
+    await page.goto('/');
+    await page.getByRole('textbox',{name:'Message'}).fill('Draft a comparison of the registered chat project.');
+    await page.getByRole('button',{name:'Send',exact:true}).click();
+    const review=page.getByRole('region',{name:'Task draft Compare registered project'});
+    await expect(review.getByRole('list',{name:'Reviewed repository pins'})).toContainText(project.head);
+    await review.getByRole('button',{name:'Create task draft'}).click();
+    const href=await review.getByRole('link',{name:'View task draft'}).getAttribute('href');
+    const id=href?.match(/#\/tasks\/([^?]+)/)?.[1];
+    const draft=await(await request.get('/api/v1/tasks/'+id,{headers})).json();
+    expect(draft.status).toBe('draft');
+    expect(draft.repositories).toMatchObject([{projectId:project.id,alias:'examples',baseCommit:project.head}]);
+  } finally {
+    rmSync(dir,{recursive:true,force:true});
+  }
+});

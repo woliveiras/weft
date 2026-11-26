@@ -253,7 +253,7 @@ func (m Manager) save(ctx context.Context, id string, in Input, revision int64, 
 	return m.saveDraft(ctx, id, in, revision, actor, githubIssueKey, nil, "")
 }
 
-func (m Manager) saveDraft(ctx context.Context, id string, in Input, revision int64, actor, githubIssueKey string, origin *IssueOrigin, operation string) (*Draft, error) {
+func (m Manager) saveDraft(ctx context.Context, id string, in Input, revision int64, actor, githubIssueKey string, origin *IssueOrigin, operation string, guards ...storage.SettingRevision) (*Draft, error) {
 	if in.ResultNodeID == "" {
 		in.ResultNodeID = in.NodeID
 	}
@@ -329,7 +329,12 @@ func (m Manager) saveDraft(ctx context.Context, id string, in Input, revision in
 	if err != nil {
 		return nil, err
 	}
-	rev, err := m.Store.PutSetting(ctx, prefix+d.ID, b, revision, actor)
+	var rev int64
+	if len(guards) > 0 {
+		rev, err = m.Store.PutSettingIf(ctx, prefix+d.ID, b, revision, actor, guards)
+	} else {
+		rev, err = m.Store.PutSetting(ctx, prefix+d.ID, b, revision, actor)
+	}
 	if err != nil {
 		return nil, err
 	}

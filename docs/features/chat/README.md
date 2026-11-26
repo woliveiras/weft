@@ -119,6 +119,8 @@ asking to try again.
 
 ## Prepare a task draft
 
+Name the saved workflow and the registered projects to work with. Each selected project has a checkout alias. The draft card displays its project ID, revision and base commit. Weft checks the project revisions again before saving. Missing or ambiguous projects require clarification. Creating the draft leaves the task ready for a separate review and start.
+
 As an operator or administrator, name the workflow and describe the task.
 Chat shows the workflow version, request, outcome and selected agents before
 **Create task draft** saves anything. Open **View task draft** to inspect its

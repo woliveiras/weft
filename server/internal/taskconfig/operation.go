@@ -18,11 +18,11 @@ func operationDraftID(operation string) string {
 // CreateForOperation commits the creation receipt with the new draft using
 // the regular validation and audit boundary. Neither the ID nor the receipt
 // comes from the task input.
-func (m Manager) CreateForOperation(ctx context.Context, in Input, actor, operation string) (*Draft, error) {
+func (m Manager) CreateForOperation(ctx context.Context, in Input, actor, operation string, guards ...storage.SettingRevision) (*Draft, error) {
 	if operation == "" {
 		return nil, fmt.Errorf("%w: creation operation is required", ErrInvalid)
 	}
-	return m.saveDraft(ctx, "", in, 0, actor, "", nil, operation)
+	return m.saveDraft(ctx, "", in, 0, actor, "", nil, operation, guards...)
 }
 
 // CreationForOperation proves that the operation created a task, including

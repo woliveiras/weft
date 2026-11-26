@@ -43,3 +43,16 @@ func TestTaskReviewRequiresBoundDraft(t *testing.T) {
 		t.Fatalf("missing workflow accepted: %v", err)
 	}
 }
+
+func TestTaskDraftAcceptsOnlyBoundedRegisteredRepositorySelectors(t *testing.T) {
+	const base = `{"kind":"task.create","taskTitle":"Read","workflow":"editorial","request":"Compare sources.","outcome":"understand","repositories":`
+	for _, v := range []string{`[{"project":"one","alias":"../out"}]`, `[{"project":"one","alias":"app","commit":"HEAD"}]`, `[{"project":"one","alias":"app","path":"/private"}]`, `[{"project":"one","alias":"app"},{"project":"two","alias":"app"}]`, `[]`} {
+		if _, err := decodePlan(base + v + "}"); err == nil {
+			t.Fatal(v)
+		}
+	}
+	p, err := decodePlan(base + `[{"project":"One","alias":"app"},{"project":"Two","alias":"tests"}]}`)
+	if err != nil || len(p.TaskDraft.Repositories) != 2 {
+		t.Fatal(p, err)
+	}
+}

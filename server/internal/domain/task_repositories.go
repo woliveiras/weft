@@ -26,6 +26,8 @@ var aliasPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,39}$`)
 var projectPattern = regexp.MustCompile(`^prj_[a-z0-9]{1,80}$`)
 var fullCommit = regexp.MustCompile(`^[0-9a-f]{40}([0-9a-f]{24})?$`)
 
+func ValidFullCommit(value string) bool { return fullCommit.MatchString(value) }
+
 func ValidRepositoryAlias(name string) bool {
 	if !aliasPattern.MatchString(name) || !filepath.IsLocal(name) {
 		return false

@@ -14,6 +14,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
+	"github.com/woliveiras/weft/server/internal/projectconfig"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 )
@@ -39,7 +40,19 @@ func (s *Server) reviewChatTaskDraft(ctx context.Context, actor Identity, sessio
 		out.Plan.Kind = chat.Clarify
 		return out
 	}
-	input, err := taskconfig.BindWorkflowDraft(draft.Input(), workflow)
+	request := draft.Input()
+	refs, bindings, err := s.bindDraftRepositories(ctx, draft.Repositories)
+	if err != nil {
+		out.Text = "Choose each registered project by its exact ID or unique name and use its registered base commit."
+		out.Plan.Kind = chat.Clarify
+		if !errors.Is(err, storage.ErrNotFound) && !errors.Is(err, taskconfig.ErrInvalid) {
+			out.Text = "Could not read registered projects. Retry the saved request."
+			out.Retryable = true
+		}
+		return out
+	}
+	request.Repositories = refs
+	input, err := taskconfig.BindWorkflowDraft(request, workflow)
 	if err != nil {
 		out.Text = "Choose the task's agent, input or repository settings in Tasks before saving."
 		out.Destination = "tasks"
@@ -50,7 +63,7 @@ func (s *Server) reviewChatTaskDraft(ctx context.Context, actor Identity, sessio
 		out.Text, out.Retryable = "Could not verify the workflow revision. Retry the saved request.", true
 		return out
 	}
-	review, err := chat.NewTaskReview(actor.chatOwner, sessionID, input, revision, time.Now())
+	review, err := chat.NewTaskReview(actor.chatOwner, sessionID, input, revision, time.Now(), bindings...)
 	if err != nil {
 		out.Text, out.Retryable = "Could not prepare a reviewed task draft. Retry the saved request.", true
 		return out
@@ -118,7 +131,11 @@ func (s *Server) applyReviewedChatTaskDraft(ctx context.Context, actor Identity,
 		if current.Metadata.Version != input.GraphVersion || revision != review.TaskDraft.WorkflowRevision {
 			return storage.ErrConflict
 		}
-		draft, err = manager.CreateForOperation(ctx, input, actor.Name, review.ID)
+		var guards []storage.SettingRevision
+		for _, repo := range review.TaskDraft.Repositories {
+			guards = append(guards, projectconfig.RevisionGuard(repo.Project, repo.Revision))
+		}
+		draft, err = manager.CreateForOperation(ctx, input, actor.Name, review.ID, guards...)
 		return err
 	})
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)

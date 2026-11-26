@@ -54,7 +54,7 @@ Return exactly one JSON object. "kind" is one of:
 - "approval.decide": propose an explicit decision for one pending request. Include either "approvalId" with its exact ID or "task" when the user identifies a single task's pending approval. Add "approvalDecision" (approve or reject), optionally "approvalAnswer" for the user's exact answer to a question and "approvalComment" for their stated comment. Never invent an answer, edit a held message, or infer an approval from opening, starting or following a task.
 - "task.retry": propose saving a linked retry draft of an explicitly identified failed task. Add "task" with its ID or exact title. This prepares the next attempt for review. It does not start the retry or apply the original attempt's authorization.
 - "task.edit": correct an existing draft. Include "task" with the exact ID or unique title and only requested replacement fields "newTitle", "newRequest" or "newOutcome". Outcome is understand, implement, investigate, review or freeform. Do not change runtime or bindings.
-- "task.create": prepare a saved task draft using a named workflow. Add "taskTitle", "workflow" (the stated workflow ID or exact name), "request" (the intended work), and "outcome" (understand, implement, investigate, review, freeform). Add "workflowVersion" as a string only if the user named the version. Ask for the workflow if the target is unclear. Work requiring a repository or delivery settings must be configured in Tasks. Never include grants or start a task.
+- "task.create": prepare a saved task draft using a named workflow. Add "taskTitle", "workflow" (the stated workflow ID or exact name), "request" (the intended work), and "outcome" (understand, implement, investigate, review, freeform). Add "workflowVersion" as a string only if the user named the version. Ask for the workflow if the target is unclear. For named registered projects include "repositories", an array of up to eight objects with project (exact registered ID or name), alias (checkout alias) and optional commit (full SHA explicitly stated). Ask which projects if unclear. Remote delivery settings use Tasks. Never include grants or start a task.
 - "agent.create": propose a reusable agent for the catalog. Add "agentId" (lowercase letters, digits and hyphens), "agentName" and concise "instructions". The operator reviews the proposal before anything is created. Never interpret a confirmation as a new create request.
 - "agent.publish": propose replacing shared catalog instructions in a new agent version. Add "publishAgent" with the exact catalog ID or name and "sharedInstructions" with the complete proposed text. A publication never changes existing workflow pins. Ask whether the user wants shared publication, workflow-local instructions or one-time guidance if that scope is unclear.
 - "workflow.adopt_agent": propose an explicit catalog version change for one workflow node. Add "adoptWorkflow" and "adoptNode" with their stated IDs or exact names and "adoptVersion" with the requested version as a string. Use "latest" only if explicitly requested. Ask about missing targets or version. Never infer adoption from a catalog publication.
@@ -169,6 +169,13 @@ func decodePlan(body string) (Plan, error) {
 			return Plan{}, ErrInvalidPlan
 		}
 		seen[key] = true
+		if key == "repositories" {
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&plan.TaskDraft.Repositories); err != nil || len(plan.TaskDraft.Repositories) == 0 {
+				return Plan{}, ErrInvalidPlan
+			}
+			continue
+		}
 		var input *string
 		if err := decoder.Decode(&input); err != nil || input == nil {
 			return Plan{}, ErrInvalidPlan
@@ -344,7 +351,7 @@ func decodePlan(body string) (Plan, error) {
 	if (seen["newTitle"] || seen["newRequest"] || seen["newOutcome"]) && plan.Kind != CorrectTask {
 		return Plan{}, ErrInvalidPlan
 	}
-	if plan.Kind != CreateTask && (seen["taskTitle"] || seen["workflow"] || seen["workflowVersion"] || seen["request"] || seen["outcome"]) {
+	if plan.Kind != CreateTask && (seen["repositories"] || seen["taskTitle"] || seen["workflow"] || seen["workflowVersion"] || seen["request"] || seen["outcome"]) {
 		return Plan{}, ErrInvalidPlan
 	}
 	if plan.Kind != DecideApproval && (seen["approvalId"] || seen["approvalDecision"] || seen["approvalAnswer"] || seen["approvalComment"]) {

@@ -475,6 +475,9 @@ function TaskDraftReviewCard({review, now, canConfirm, onDecide, onView}: {
       <dt>Input</dt><dd>{input.channelId ? `${input.channelId} · ${input.messageType}` : 'Direct agent request'}</dd>
       <dt>Outcome</dt><dd>{input.outcome}</dd>
     </dl>
+    {!!review.taskDraft.repositories?.length && <ul aria-label="Reviewed repository pins">
+      {review.taskDraft.repositories.map(repo => <li key={repo.alias}>{repo.alias} · {repo.project} · Revision {repo.revision} · <code>{repo.commit}</code></li>)}
+    </ul>}
     <h4>Request</h4>
     <p>{input.request}</p>
     {review.state === 'awaiting_confirmation' && <>

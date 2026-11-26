@@ -3236,6 +3236,17 @@ components:
               type: object
               required: [input, workflowRevision]
               properties:
+                repositories:
+                  type: array
+                  maxItems: 8
+                  items:
+                    type: object
+                    required: [alias, project, commit, revision]
+                    properties:
+                      alias: {type: string}
+                      project: {type: string}
+                      commit: {type: string}
+                      revision: {type: integer}
                 workflowRevision: {type: string, pattern: '^[0-9a-f]{64}$'}
                 input:
                   type: object

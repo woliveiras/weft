@@ -69,6 +69,7 @@ interface ChatWorkflowReview extends ChatReviewState {
 
 export interface ChatTaskDraftReview extends ChatReviewState {
   taskDraft: {
+    repositories?: {alias:string; project:string; commit:string; revision:number}[];
     input: {
       title: string;
       request: string;
