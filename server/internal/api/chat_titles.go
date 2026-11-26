@@ -25,7 +25,7 @@ func (s *Server) retryChatTitle(w http.ResponseWriter, r *http.Request) error {
 		return chatError(err)
 	}
 	if current.TitleRetryState != "" {
-		writeJSON(w, http.StatusOK, current)
+		writeChatSession(w, actor, current)
 		return nil
 	}
 	settings, err := s.readChatModel(ctx)
@@ -58,6 +58,6 @@ func (s *Server) retryChatTitle(w http.ResponseWriter, r *http.Request) error {
 			return chatError(err)
 		}
 	}
-	writeJSON(w, http.StatusOK, session)
+	writeChatSession(w, actor, session)
 	return nil
 }

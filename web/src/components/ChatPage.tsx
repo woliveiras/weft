@@ -1,3 +1,4 @@
+import { ChatConfigurationCard } from './ChatConfigurationCard';
 import { ChatManualLink } from './ChatManualLink';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
@@ -290,6 +291,7 @@ function Message({value, now, canCreateAgent, onView, onRead, onRetry, onDecide}
 function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   review:ChatOperationReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
 }) {
+  if ('configuration' in review) return <ChatConfigurationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;
   const workflow = review.workflow;
   const name = review.workflow ? review.workflow.graph.metadata.name : review.definition.name;
   const kind = workflow ? 'workflow' : 'agent';

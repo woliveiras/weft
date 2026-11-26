@@ -23,7 +23,7 @@ interface ChatReviewState {
   id: string;
   digest: string;
   expiresAt: string;
-  state: 'awaiting_confirmation' | 'applying' | 'created' | 'conflict' | 'unknown' | 'declined';
+  state: 'applied' | 'incomplete' | 'awaiting_confirmation' | 'applying' | 'created' | 'conflict' | 'unknown' | 'declined';
   resultVersion?: number;
 }
 
@@ -56,7 +56,19 @@ interface ChatWorkflowReview extends ChatReviewState {
   };
 }
 
-export type ChatOperationReview = ChatAgentReview | ChatWorkflowReview;
+export interface ChatConfigurationReview extends ChatReviewState {
+  configuration: {
+    document: string;
+    intakeConsent?: boolean;
+    objects: {
+      key: string; action: string; revision: string; consent?: string; warning?: string;
+      changes: {path: string; before?: unknown; after?: unknown}[];
+    }[];
+  };
+  configReceipts?: { key: string; result: string; revision?: string }[];
+}
+
+export type ChatOperationReview = ChatAgentReview | ChatWorkflowReview | ChatConfigurationReview;
 
 export interface ChatSession {
   id: string;

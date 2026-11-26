@@ -186,6 +186,8 @@ decision retrieves its recorded state without creating another version.
 The Chat message endpoint accepts the explicit confirmation or decline text
 shown on the card when the conversation contains exactly one pending review.
 
+Installation reviews use the same decision endpoint and require administrator access. The `configuration` on a review contains the proposed document, per-object changes, expected revisions and intake consent. A terminal review distinguishes `applied`, `incomplete`, `conflict` and `unknown`. Inspect `configReceipts` to identify each applied, unchanged, failed, untouched or saved-but-unverified object. A repeated confirmation returns the recorded outcome. A role change hides the administrative review on subsequent reads.
+
 Workflow creation uses the same decision endpoint. The workflow review contains
 the planned graph, one pinned catalog agent version and task ingress defaults.
 Confirmation checks that the workflow ID is still unused under the normal

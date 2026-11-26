@@ -20,6 +20,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 	}
 	var content string
 	switch last.Content {
+	case "Set the task budget to two dollars with an eighty percent warning.":
+		content = `{"kind":"installation.plan","document":"apiVersion: weft.io/v1\nkind: CostPolicy\nmetadata: {name: installation}\nspec: {taskRunBudgetMicros: 2000000, warningPercent: 80}","title":"Review task budget"}`
 	case "Where can I inspect the model budget?":
 		content = `{"kind":"manual.open","destination":"budgets","title":"Inspect model budget"}`
 	case "Let me know when the release notes review is complete.":

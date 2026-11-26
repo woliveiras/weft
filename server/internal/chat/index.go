@@ -93,11 +93,11 @@ func (s *Session) summary(owner, key string) storage.ChatSummary {
 				meta.ReviewExpiries = append(meta.ReviewExpiries, review.ExpiresAt)
 			case ReviewApplying:
 				meta.Running++
-			case ReviewCreated:
+			case ReviewCreated, ReviewApplied:
 				if message.Unread {
 					meta.UnreadSuccess++
 				}
-			case ReviewConflict:
+			case ReviewConflict, ReviewIncomplete:
 				if message.Unread {
 					meta.UnreadFailure++
 				}

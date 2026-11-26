@@ -3022,6 +3022,7 @@ components:
           oneOf:
             - {$ref: "#/components/schemas/ChatAgentReview"}
             - {$ref: "#/components/schemas/ChatWorkflowReview"}
+            - {$ref: "#/components/schemas/ChatConfigurationReview"}
         task:
           type: object
           required: [id, state]
@@ -3041,6 +3042,40 @@ components:
             agentId: {type: string}
             definition: {$ref: "#/components/schemas/AgentDefinition"}
             modelRevision: {type: integer}
+    ChatConfigurationReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [configuration]
+          properties:
+            configuration:
+              type: object
+              required: [document, objects]
+              properties:
+                document: {type: string, maxLength: 4096}
+                intakeConsent: {type: boolean}
+                objects:
+                  type: array
+                  maxItems: 8
+                  items:
+                    type: object
+                    required: [key, action, revision, changes]
+                    properties:
+                      key: {type: string}
+                      action: {type: string}
+                      revision: {type: string}
+                      consent: {type: string}
+                      warning: {type: string}
+                      changes: {type: array, items: {type: object}}
+            configReceipts:
+              type: array
+              items:
+                type: object
+                required: [key, result]
+                properties:
+                  key: {type: string}
+                  result: {type: string, enum: [applied, unchanged, failed, not-applied, saved-revision-unknown]}
+                  revision: {type: string}
     ChatWorkflowReview:
       allOf:
         - {$ref: "#/components/schemas/ChatReviewState"}
@@ -3065,7 +3100,7 @@ components:
         id: {type: string}
         expiresAt: {type: string, format: date-time}
         digest: {type: string, pattern: '^[0-9a-f]{64}$'}
-        state: {type: string, enum: [awaiting_confirmation, applying, created, conflict, unknown, declined]}
+        state: {type: string, enum: [awaiting_confirmation, applying, created, applied, incomplete, conflict, unknown, declined]}
         claimedAt: {type: string, format: date-time}
         resultVersion: {type: integer}
     ChatModelSelection:

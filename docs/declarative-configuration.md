@@ -47,6 +47,8 @@ planning never discovers tools, tests connections, downloads repositories,
 builds environments or records consent. It also never writes a revision sidecar.
 A plan containing errors or conflicts cannot be applied.
 
+Administrators can also request an installation change from Chat. The review uses the same planner, revision checks, consent rules and per-object apply results. Chat accepts up to eight objects per review and can preserve an existing credential. Use the CLI or connection editor to supply or rotate credentials. After a partial outcome, obtain a new review against current revisions. [Chat operator guide](features/chat/README.md#review-installation-configuration)
+
 ## Object kinds
 
 All documents use `apiVersion: weft.io/v1`, `kind`, `metadata.name`, optional

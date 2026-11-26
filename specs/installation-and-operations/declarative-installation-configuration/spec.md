@@ -194,4 +194,5 @@ collaboration. No permission to mutate the live installation is inferred from YA
 ## Reconciliation
 
 - [Behavior and oracle matrix](./matrix.md).
+- TASK-012 adds an administrator-owned conversational entry to the same planner and apply service. Portable integration kinds remain governed by INT-009 and the [current operator contract](../../../docs/declarative-configuration.md#object-kinds).
 - INT-001, OPS-001, RUN-006 and ENV-009 record the bounded maintainer decisions.

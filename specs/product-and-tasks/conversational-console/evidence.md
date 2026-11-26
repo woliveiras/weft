@@ -83,6 +83,10 @@ for the viewer and administrator. Chromium followed the link to Budgets and
 returned by browser Back to the same message with focus restored. TypeScript
 and seven component tests passed.
 
+## 2026-11-26 — Installation configuration review
+
+An HTTP and SQLite fixture exercised S18 with a three-object plan. Fault injection after the first write preserved the applied, failed and untouched outcomes. Replaying confirmation left the previous results in place. A manual edit invalidated the next review, and a fresh review then applied successfully. Chromium kept the task budget unchanged until confirmation and displayed the object receipt. No provider, external account or persistent installation was used.
+
 ## 2026-11-26 — Independent title retry
 
 S26 passed targeted Go unit and HTTP/SQLite integration. A title-only model

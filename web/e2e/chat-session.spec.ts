@@ -60,6 +60,35 @@ async function approvePendingTaskInput(request: APIRequestContext, taskId: strin
   expect(decision.ok()).toBe(true);
 }
 
+test('an administrator reviews the installation budget in chat before applying it', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const policyPath = '/api/v1/cost/policy';
+  const readPolicy = async () => {
+    const response = await request.get(policyPath, { headers });
+    expect(response.ok()).toBe(true);
+    return response.json();
+  };
+  const before = await readPolicy();
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.goto('/');
+  await send(page, 'Set the task budget to two dollars with an eighty percent warning.');
+  const card = page.getByRole('region', { name: 'Installation configuration review' });
+  await expect(card).toContainText('CostPolicy/installation');
+  expect(await readPolicy()).toEqual(before);
+  try {
+    await card.getByRole('button', { name: 'Apply configuration' }).click();
+    await expect(card).toContainText('Configuration applied.');
+    await expect(card.getByRole('list', { name: 'Configuration results' })).toContainText('CostPolicy/installation');
+    const saved = await readPolicy();
+    expect(saved.taskRunBudgetMicros).toBe(2000000);
+  } finally {
+    const restored = await request.put(policyPath, {
+      headers, data: {taskRunBudgetMicros:before.taskRunBudgetMicros, warningPercent:before.warningPercent},
+    });
+    expect(restored.ok()).toBe(true);
+  }
+});
+
 test('a console link opens Budgets and returns to its originating chat message', async ({ page, request }) => {
   await selectFixtureModel(request);
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));

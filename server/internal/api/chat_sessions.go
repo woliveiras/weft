@@ -107,7 +107,7 @@ func (s *Server) getChat(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return chatError(err)
 	}
-	writeJSON(w, http.StatusOK, session)
+	writeChatSession(w, actor, session)
 	return nil
 }
 
@@ -181,7 +181,7 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 			return chatError(err)
 		}
 	}
-	writeJSON(w, http.StatusOK, session)
+	writeChatSession(w, actor, session)
 	return nil
 }
 
@@ -228,6 +228,8 @@ func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.Cha
 func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID string, plan chat.Plan) chat.Interpretation {
 	reply := chat.Interpretation{Plan: plan}
 	switch plan.Kind {
+	case chat.PlanInstallation:
+		return s.reviewChatInstallation(ctx, actor, sessionID, plan)
 	case chat.OpenManual:
 		return chat.ManualHandoff(plan, actor.Role)
 	case chat.Clarify:
@@ -327,7 +329,7 @@ func (s *Server) updateChat(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return chatError(err)
 	}
-	writeJSON(w, http.StatusOK, session)
+	writeChatSession(w, actor, session)
 	return nil
 }
 

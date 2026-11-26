@@ -392,6 +392,7 @@ sessions or present an agent definition for review. The Go API authenticates
 the caller and submits bounded conversation context to the model selected for
 Chat. It resolves the model's proposed action against domain services. The task
 runner owns the observed outcome and the agent catalog owns published versions.
+The installer and Chat share the declarative planner and apply service. Chat binds the proposed documents, changes, consent and reviewed revisions to a single administrator’s confirmation. Partial application records object-level receipts in the session.
 The browser reads the session and its results through the caller's Chat API.
 See the [operator guide](features/chat/README.md) and [interaction sequences](diagrams/sequences.md#11-chat-actions-and-background-observation).
 

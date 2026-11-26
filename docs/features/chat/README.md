@@ -64,6 +64,12 @@ shows a conflict and you can ask for a fresh proposal with a different ID.
 If the creation outcome is temporarily unknown, inspect Workflows before
 asking to try again.
 
+## Review installation configuration
+
+As an administrator, ask for a concrete change such as “Set the task budget to two dollars with an eighty percent warning.” Review the object names, current revisions, field changes and any intake consent before choosing **Apply configuration**. A plan can include up to eight objects. The installation service validates the complete plan before applying its first change.
+
+Each result names the object and its outcome. If a plan stops midway, inspect the applied objects, correct the failure and request a fresh plan. An unknown outcome requires inspection of the installation. Use the existing setup form or installation CLI to enter or rotate credentials. Chat can preserve existing credentials.
+
 ## Archive and access
 
 Use **Archive conversation** to move a conversation out of Recents. In

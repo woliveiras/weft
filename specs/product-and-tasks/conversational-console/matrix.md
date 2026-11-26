@@ -12,6 +12,7 @@ Delivery evidence covers [model selection](./evidence.md#2026-11-26--explicit-ch
 [reviewed agent creation](./evidence.md#2026-11-26--reviewed-catalog-agent-creation).
 [Indexed session lists and watches](./evidence.md#2026-11-26--indexed-session-lists-and-watches)
 have SQLite, FS, PostgreSQL and browser evidence. S11 has full fixture coverage.
+[Installation configuration review](./evidence.md#2026-11-26--installation-configuration-review) records the S18 fault, stale revision and browser checks.
 Remaining P1 qualifications are open.
 Existing tests cited in the impact review describe the baseline.
 

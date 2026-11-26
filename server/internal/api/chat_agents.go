@@ -81,7 +81,7 @@ func (s *Server) decideChatReview(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return chatError(err)
 	}
-	writeJSON(w, http.StatusOK, session)
+	writeChatSession(w, actor, session)
 	return nil
 }
 
@@ -99,6 +99,9 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		// separately from the browser connection and reconcile a lost reply.
 		settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
+		if review.Configuration != nil {
+			return s.applyReviewedChatInstallation(settleCtx, actor, sessionID, review)
+		}
 		if review.Workflow != nil {
 			return s.applyReviewedChatWorkflow(settleCtx, actor, sessionID, review)
 		}

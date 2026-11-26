@@ -237,12 +237,23 @@ func (s *Server) configApply(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if !in.Confirmed {
-		return badRequest("review the plan and explicitly confirm apply")
-	}
-	plan, _, _, err := s.buildConfigPlan(r.Context(), in, ds)
+	plan, err := s.applyInstallationPlan(r.Context(), identityFrom(r.Context()).Name, in, ds)
 	if err != nil {
 		return err
+	}
+	writeJSON(w, http.StatusOK, plan)
+	return nil
+}
+
+// applyInstallationPlan rechecks every reviewed revision before the first
+// effect. Callers share the existing installation write lock.
+func (s *Server) applyInstallationPlan(ctx context.Context, actor string, in installation.Request, ds []installation.Document) (installation.Plan, error) {
+	if !in.Confirmed {
+		return installation.Plan{}, badRequest("review the plan and explicitly confirm apply")
+	}
+	plan, _, _, err := s.buildConfigPlan(ctx, in, ds)
+	if err != nil {
+		return installation.Plan{}, err
 	}
 	// Revalidate the entire reviewed snapshot before the first mutation, even with force.
 	for i := range plan.Objects {
@@ -257,10 +268,8 @@ func (s *Server) configApply(w http.ResponseWriter, r *http.Request) error {
 		for i := range plan.Objects {
 			plan.Objects[i].Result = "not-applied"
 		}
-		writeJSON(w, 200, plan)
-		return nil
+		return plan, nil
 	}
-	actor := identityFrom(r.Context()).Name
 	failed := false
 	aliases := map[string]string{}
 	for i, d := range ds {
@@ -269,7 +278,7 @@ func (s *Server) configApply(w http.ResponseWriter, r *http.Request) error {
 			item.Result = "not-applied"
 			continue
 		}
-		current, err := s.configSnapshot(r.Context())
+		current, err := s.configSnapshot(ctx)
 		if err != nil {
 			item.Result = "failed"
 			item.Error = "configuration state unavailable"
@@ -307,9 +316,9 @@ func (s *Server) configApply(w http.ResponseWriter, r *http.Request) error {
 				d.Spec["projectId"] = aliases[alias]
 			}
 		}
-		p, err := s.prepareConfig(r.Context(), d, old, nil)
+		p, err := s.prepareConfig(ctx, d, old, nil)
 		if err == nil {
-			item.Status, err = s.applyConfigObject(r.Context(), p, old, actor, in.RecordConsent)
+			item.Status, err = s.applyConfigObject(ctx, p, old, actor, in.RecordConsent)
 		}
 		if err != nil {
 			item.Result = "failed"
@@ -318,7 +327,7 @@ func (s *Server) configApply(w http.ResponseWriter, r *http.Request) error {
 			continue
 		}
 		item.Result = "applied"
-		current, err = s.configSnapshot(r.Context())
+		current, err = s.configSnapshot(ctx)
 		if err != nil {
 			item.Result = "failed"
 			item.Error = "saved object; revision could not be read; export before retry"
@@ -338,8 +347,7 @@ func (s *Server) configApply(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	plan.OK = !failed
-	writeJSON(w, 200, plan)
-	return nil
+	return plan, nil
 }
 func (s *Server) applyConfigObject(ctx context.Context, p configPrepared, old configObject, actor string, recordConsent bool) (string, error) {
 	name := p.Doc.Name()
