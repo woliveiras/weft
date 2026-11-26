@@ -106,13 +106,12 @@ The composer stays at the bottom of the visible conversation. Slash suggestions 
 
 Use **New chat** as the temporary title, and **Untitled chat** with a visible
 title-generation failure state after a failure or a filtered result. Preserve
-the session and allow a bounded retry. Generate one short title from the first
+the session and offer manual title entry in the header. Generate one short title from the first
 accepted, redacted user request, ideally during its first interpretation.
 Updates to operation targets and model retries preserve the chosen safe title.
 The row has a full accessible name. A hover card and a focus-triggered
 description expose the title and accessible metadata such as time and status.
-Use a labeled Details control for keyboard and touch, including when hover is
-unavailable. The disclosure is dismissible with Escape, interactive controls
+Show the truncated title and compact indicators in the row. Its labeled actions control offers Rename and Archive (Unarchive in Archived). On touch, the search dialog exposes full titles and the opened conversation exposes its transcript. The disclosure is dismissible with Escape, interactive controls
 receive focus when needed, and closing returns focus to its opener. Modal
 drawers trap focus while open. The main landmarks, DOM/tab order, sent message
 and status announcements, and selected-session indicator work in both expanded
@@ -439,7 +438,7 @@ global onboarding. This criterion owns the new default and chat return behavior.
 
 ### AC-002 — Accessible sessions and archive
 
-A user can start, locate, open, inspect details, archive and restore their
+A user can start, search by title, open, inspect details, rename, archive and restore their
 sessions using pointer, keyboard and touch. The truncated title and deterministic
 fallbacks, accessible status, focus return, reduced motion and narrow layout work
 while preserving monitoring and unread state. No user delete route exists.

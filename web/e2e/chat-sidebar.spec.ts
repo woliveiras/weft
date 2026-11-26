@@ -17,17 +17,38 @@ test('reads the full recent title with a mouse, keyboard and narrow touch search
   await opener.hover();
   const preview=row.locator('.chat-session-preview');
   await expect(preview).toHaveText(new RegExp(title));
+  expect(await preview.evaluate(card => {
+    const rect = card.getBoundingClientRect();
+    return card.contains(document.elementFromPoint(rect.left + rect.width / 2,rect.top + rect.height / 2));
+  })).toBe(true);
   await preview.hover();
   await expect(preview).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(preview).toHaveCount(0);
   await page.mouse.move(0,0);
-  await row.getByRole('button',{name:'Details for '+title}).focus();
+  await row.getByRole('button',{name:'Actions for '+title}).focus();
   await page.keyboard.press('Shift+Tab');
   await expect(opener).toBeFocused();
   await expect(preview).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(preview).toHaveCount(0);
+  const message=page.getByRole('textbox',{name:'Message'});
+  await message.fill('Keep my other conversation draft');
+  await row.getByRole('button',{name:'Actions for '+title}).click();
+  await row.getByRole('button',{name:'Rename'}).click();
+  const rename=page.getByRole('dialog',{name:'Rename conversation'});
+  await rename.getByRole('textbox',{name:'Conversation title'}).fill('Renamed release session');
+  await rename.getByRole('button',{name:'Save title'}).click();
+  await expect(page.getByRole('button',{name:'Renamed release session',exact:true})).toBeVisible();
+  await expect(message).toHaveValue('Keep my other conversation draft');
+  const renamed=page.getByRole('button',{name:'Actions for Renamed release session'});
+  await renamed.click();
+  await page.getByRole('button',{name:'Archive',exact:true}).click();
+  await page.getByRole('button',{name:/^Archived/}).click();
+  await expect(message).toHaveValue('Keep my other conversation draft');
+  await renamed.click();
+  await page.getByRole('button',{name:'Unarchive',exact:true}).click();
+  await expect(renamed).toHaveCount(0);
   const mobile=await browser.newContext({baseURL:new URL(page.url()).origin,viewport:{width:375,height:800},hasTouch:true,reducedMotion:'reduce'});
   try{
     await mobile.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
@@ -40,13 +61,13 @@ test('reads the full recent title with a mouse, keyboard and narrow touch search
     await expect(query).toBeFocused();
     await query.fill('missing title fixture');
     await expect(dialog.getByText('No matching conversations.')).toBeVisible();
-    await query.fill(title.slice(0,20));
-    await expect(dialog.getByRole('button',{name:title})).toBeVisible();
+    await query.fill('Renamed release');
+    await expect(dialog.getByRole('button',{name:'Renamed release session'})).toBeVisible();
     await query.press('Escape');
     await expect(search).toBeFocused();
     await search.tap();
-    await dialog.getByRole('button',{name:title}).tap();
-    await expect(phone.getByRole('heading',{name:title})).toBeVisible();
+    await dialog.getByRole('button',{name:'Renamed release session'}).tap();
+    await expect(phone.getByRole('heading',{name:'Renamed release session'})).toBeVisible();
     expect(await phone.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   } finally {await mobile.close();}
 });

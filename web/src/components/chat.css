@@ -30,9 +30,9 @@
 .chat-session-details { padding: 0.5rem; overflow-wrap: anywhere; }
 .chat-session-description { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(100%); }
 .chat-session-preview {
-  position: absolute;
-  z-index: 2;
-  inset-inline: 0;
+  position: fixed;
+  z-index: 5;
+  box-shadow: var(--shadow-2);
   padding: 0.5rem;
   border: 1px solid var(--border);
   border-radius: 0.5rem;
@@ -73,3 +73,31 @@
 .chat-search-results { list-style: none; padding: 0; margin: 0; max-height: 48dvh; overflow: auto; }
 .chat-search-results button { border: 0; background: none; color: inherit; width: 100%; text-align: start; padding: var(--space-3); overflow-wrap: anywhere; cursor:pointer; }
 .chat-search-results button:hover, .chat-list-tabs button[aria-pressed=true] { background: var(--primary-soft); }
+.chat-session-line { border-radius: var(--radius-sm); }
+.chat-session-row:has([aria-current="page"]) .chat-session-line { background: var(--primary-soft); }
+.chat-session-line:hover { background: var(--surface-raised); }
+.chat-details { flex: none; }
+.chat-session-actions {
+  display: grid; gap: 2px; margin: 2px 0 var(--space-2) auto; width: max-content;
+  min-width: 8rem; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+.chat-session-actions button {
+  text-align: start; cursor: pointer; padding: var(--space-2) var(--space-3);
+  border: none; background: transparent; color: inherit; border-radius: var(--radius-sm);
+}
+.chat-session-actions button:is(:hover,:focus-visible) { background: var(--primary-soft); }
+.chat-title-form, .chat-title-form label { display: grid; gap: var(--space-2); }
+.chat-header h1 { overflow-wrap: anywhere; }
+.chat-header .chat-title-form { margin-block-start: var(--space-2); }
+.chat-header p[role=status] { margin-block: var(--space-2); }
+.chat-session-line .chat-details { min-width: 32px; min-height: 32px; color: var(--text-muted); }
+@media (max-width: 800px) {
+  .primary-navigation.chat-navigation { flex-flow: row nowrap; align-items: center; gap: var(--space-2); }
+  .chat-navigation .navigation-destinations { position: relative; flex: 1; min-width: 0; overflow-x: auto; flex-flow: row nowrap; }
+  .chat-navigation .navigation-group, .chat-navigation .navigation-items { display: flex; flex-flow: row nowrap; align-items: center; gap: var(--space-1); }
+  .chat-navigation .navigation-group { flex: none; }
+  .chat-navigation .navigation-group + .navigation-group { border: 0; border-inline-start: 1px solid var(--border); margin: 0; padding: 0 var(--space-2); }
+  .chat-navigation .navigation-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .chat-navigation .nav-item { flex: none; }
+}

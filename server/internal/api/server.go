@@ -255,6 +255,7 @@ func (s *Server) routes() {
 		{"POST /api/v1/chat/sessions/{chatID}/messages", R, s.submitChat},
 		{"POST /api/v1/chat/sessions/{chatID}/messages/{requestID}/retry", R, s.retryChat},
 		{"POST /api/v1/chat/sessions/{chatID}/messages/{messageID}/read", R, s.updateChat},
+		{"PUT /api/v1/chat/sessions/{chatID}/title", R, s.renameChat},
 		{"POST /api/v1/chat/sessions/{chatID}/title/retry", R, s.retryChatTitle},
 		{"GET /api/v1/chat/sessions/{chatID}/operations/{operationID}/pr-diff", O, s.inspectChatPRDiff},
 		{"POST /api/v1/chat/sessions/{chatID}/operations/{operationID}/pr-comment-review", O, s.prepareChatPRComments},

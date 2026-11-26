@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/llm"
+	"github.com/woliveiras/weft/server/internal/storage"
 )
 
 var ErrTitleRetryUnavailable = errors.New("this conversation has no title retry available")
@@ -92,6 +93,27 @@ func (s Sessions) FinishTitleRetry(ctx context.Context, owner, id, title string)
 			}
 			session.TitleRetryState = "completed"
 		}
+		return true, nil
+	})
+}
+
+var ErrInvalidTitle = errors.New("enter a single-line conversation title of up to 120 bytes without URLs or credentials")
+
+func (s Sessions) Rename(ctx context.Context, owner, id, previous, value string) (*Session, error) {
+	title := cleanTitle(value)
+	if title == "" || title == "Untitled chat" {
+		return nil, ErrInvalidTitle
+	}
+	return s.update(ctx, owner, id, func(session *Session) (bool, error) {
+		if session.Title == title {
+			return false, nil
+		}
+		if session.Title != previous {
+			return false, storage.ErrConflict
+		}
+		session.Title = title
+		session.TitleRetryState = ""
+		session.TitleRetryStarted = time.Time{}
 		return true, nil
 	})
 }

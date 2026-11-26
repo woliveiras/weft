@@ -1,3 +1,4 @@
+import { ChatTitleForm } from './ChatTitleForm';
 import { Search } from 'lucide-react';
 import { ChatSessionSearch } from './ChatSessionSearch';
 import { ChatComposer } from './ChatComposer';
@@ -18,7 +19,7 @@ import type { ChatAgentAdoptionReview, ChatApprovalReview, ChatCatalogPublicatio
   ChatBudgetRaiseReview, ChatEnvironmentReview, ChatCorrectionReview, ChatTaskAuthorizationReview, ChatTaskRetryReview,
   ChatWorkflowScaleReview, ChatTriggerReview, ChatWorkflowEnvironmentReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
-import { Btn, ErrorBox } from './common';
+import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
 import { settingsPath } from './graphSettingsSections';
 import './chat.css';
@@ -58,6 +59,27 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
     setModelEditorOpen(true);
     window.requestAnimationFrame(() => modelPanel.current?.focus());
   };
+  const [renaming, setRenaming] = useState<{id:string; previous:string; inline?:boolean}>();
+  const selected = useRef(id);
+  useLayoutEffect(() => { selected.current = id; setRenaming(undefined); }, [id]);
+  const returnToActions = useRef<HTMLButtonElement | null>(null);
+  function finishRename(result?: ChatSession) {
+    if (result && result.id === selected.current) conversation.setData(result);
+    if (result) void list.reload();
+    setRenaming(undefined);
+    window.requestAnimationFrame(() => (returnToActions.current?.isConnected ? returnToActions.current : heading.current)?.focus());
+  }
+  async function archiveRow(target:string) {
+    setDetails(undefined);
+    try {
+      const next = await api.archiveChat(target,!archived);
+      if (next.id === selected.current) {
+        conversation.setData(next);
+        onOpen(next.id,next.archived);
+      }
+      void list.reload();
+    } catch (cause) {setError(errorMessage(cause));}
+  }
   const [details, setDetails] = useState<string>();
   const [now, setNow] = useState(Date.now);
   const keys = useRef(new Map<string, {id:string; text:string}>());
@@ -197,7 +219,11 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
     {visiblePage?.items.length === 0 && <p className="muted">{archived ? 'No archived conversations on this page.' : 'No conversations on this page.'}</p>}
     <ul className="chat-sessions">
       {visiblePage?.items.map(item => <SessionRow key={item.id} item={item} current={item.id === id}
-        expanded={details === item.id} onOpen={() => navigate(item.id,archived)} onDetails={() => setDetails(details === item.id ? undefined : item.id)}/>)}
+        archived={archived} onRename={opener => {
+          setDetails(undefined);
+          returnToActions.current = opener;
+          setRenaming({id:item.id,previous:item.title || ''});
+        }} onArchive={() => void archiveRow(item.id)} expanded={details === item.id} onOpen={() => navigate(item.id,archived)} onDetails={() => setDetails(details === item.id ? undefined : item.id)}/>)}
     </ul>
     <div className="btn-row">
       {after && <Btn onClick={() => setCursor({archived})}>Newest conversations</Btn>}
@@ -212,15 +238,15 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
           <h1 id="chat-heading" tabIndex={-1} ref={heading}>{headingTitle}</h1>
           {list.data?.shared && <p className="muted">Shared local history</p>}
           {session?.title === 'Untitled chat' && <>
-            <p className="muted" role="status">{titlePending ? 'Generating a title…' : 'A title could not be generated.'}</p>
-            {!session.titleRetryState && modelAvailable && !waiting && <Btn disabled={sending}
-              onClick={() => void mutate(() => api.retryChatTitle(session.id))}>Retry title</Btn>}
+            <p className="muted" role="status">{titlePending ? 'Generating a title…' : 'A title could not be generated automatically.'}</p>
+            {renaming?.inline && renaming.id === session.id
+              ? <ChatTitleForm id={session.id} previous={renaming.previous} onSaved={finishRename} onCancel={()=>finishRename()}/>
+              : <Btn small onClick={event=>{
+                returnToActions.current=event.currentTarget;
+                setRenaming({id:session.id,previous:session.title || '',inline:true});
+              }}>Edit title</Btn>}
           </>}
         </div>
-        {session && <Btn disabled={sending}
-          onClick={() => void mutate(() => api.archiveChat(session.id,!session.archived), next => onOpen(next.id,next.archived))}>
-          {session.archived ? 'Restore conversation' : 'Archive conversation'}
-        </Btn>}
       </header>
 
       <div className="chat-reading-area" ref={history} onScroll={() => {
@@ -270,7 +296,8 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
           onRetry={!session.archived && modelAvailable && !sending && canRetry(message,now) ? () => void mutate(() => api.retryChat(session.id,message.id)) : undefined}/>)}
       </div>
       </div>
-      {session?.archived && <p className="muted">This conversation is archived. Restore it to send a message.</p>}
+      {session?.archived && <p className="muted">This conversation is archived. <Btn disabled={sending}
+        onClick={() => void mutate(() => api.archiveChat(session.id,false), next => onOpen(next.id,false))}>Restore conversation</Btn></p>}
       {(!id || session) && !session?.archived && <ChatComposer key={draftKey} draft={draft}
         onChange={text => setDrafts(previous => ({...previous,[draftKey]:text}))}
         onSend={() => void send()} disabled={!canSend || sending || !!waiting}
@@ -280,6 +307,9 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
     <aside className="chat-panel" aria-label="Chat sessions">
       <section aria-label={archived ? 'Archived' : 'Recents'}>{sessionList}</section>
     </aside>
+    {renaming && !renaming.inline && <Modal title="Rename conversation" keyboard onClose={()=>finishRename()}>
+      <ChatTitleForm key={renaming.id} id={renaming.id} previous={renaming.previous} onSaved={finishRename} onCancel={()=>finishRename()}/>
+    </Modal>}
     {drawer && <ChatSessionSearch key={role} archived={archived} onClose={closeDrawer} onSelect={navigate}/>}
   </div>;
 }
@@ -289,9 +319,20 @@ function canRetry(message: ChatMessage, now: number) {
     (message.state === 'interpreting' && !!message.attempt && now - Date.parse(message.attempt) > 60_000);
 }
 
-function SessionRow({item, current, expanded, onOpen, onDetails}: {
+function SessionRow({item, current, expanded, archived, onRename, onArchive, onOpen, onDetails}: {
+  archived:boolean; onRename:(opener:HTMLButtonElement)=>void; onArchive:()=>void;
   item: ChatSessionSummary; current: boolean; expanded: boolean; onOpen: () => void; onDetails: () => void;
 }) {
+  const actions = useRef<HTMLButtonElement>(null);
+  const row = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (!expanded) return;
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !row.current?.contains(event.target)) onDetails();
+    };
+    document.addEventListener('pointerdown',outside);
+    return () => document.removeEventListener('pointerdown',outside);
+  }, [expanded,onDetails]);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -320,10 +361,11 @@ function SessionRow({item, current, expanded, onOpen, onDetails}: {
   const title = item.title || 'New chat';
   const lastActive = new Date(item.lastActivity).toLocaleString();
   const description = [!item.title ? 'Generating title' : item.title === 'Untitled chat' ? 'Title unavailable' : '', lastActive, status].filter(Boolean).join(' · ');
-  return <li className="chat-session-row" onPointerLeave={() => setHovered(false)} onKeyDown={event => {
+  return <li ref={row} className="chat-session-row" onBlur={event=>{if(expanded && event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) onDetails();}} onPointerLeave={() => setHovered(false)} onKeyDown={event => {
     if (event.key === 'Escape' && expanded) {
       event.stopPropagation();
       setDismissed(true);
+      actions.current?.focus();
       onDetails();
     }
   }}>
@@ -339,16 +381,44 @@ function SessionRow({item, current, expanded, onOpen, onDetails}: {
         {!!item.unreadSuccess && <span className="chat-success" aria-hidden="true"/>}
         {!!(item.unreadFailure || item.unreadCancellation || item.decisions || item.unknown) && <span className="chat-attention" aria-hidden="true">!</span>}
       </span>
-      <button type="button" className="btn chat-details" aria-label={`Details for ${title}`} aria-expanded={expanded} onClick={onDetails}>⋯</button>
+      <button type="button" ref={actions} className="chat-details icon-btn" aria-label={`Actions for ${title}`} aria-expanded={expanded} onClick={onDetails}>⋯</button>
     </div>
-    {expanded && <div className="chat-session-details">
-      <strong>{title}</strong><br/>
-      <time dateTime={item.lastActivity}>{lastActive}</time>
-      {status && <div>{status}</div>}
+    {expanded && <div className="chat-session-actions" role="group" aria-label="Conversation actions">
+      <button type="button" onClick={()=>actions.current && onRename(actions.current)}>Rename</button>
+      <button type="button" onClick={onArchive}>{archived ? 'Unarchive' : 'Archive'}</button>
     </div>}
     <span className="chat-session-description" id={`chat-row-${item.id}`}>{description}</span>
-    {preview && <div className="chat-session-preview" aria-hidden="true"><strong>{title}</strong><div>{description}</div></div>}
+    {preview && row.current && <SessionPreview anchor={row.current} title={title} description={description}/>}
   </li>;
+}
+
+function SessionPreview({anchor,title,description}:{anchor:HTMLElement; title:string; description:string}) {
+  const card = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    function position() {
+      const element = card.current;
+      if (!element) return;
+      const rect = anchor.getBoundingClientRect();
+      const panel = anchor.closest('.chat-panel')?.getBoundingClientRect();
+      element.hidden = !!panel && (rect.bottom <= panel.top || rect.top >= panel.bottom);
+      const width = Math.min(Math.max(240,rect.width),window.innerWidth - 16);
+      element.style.width = width+'px';
+      const height = element.offsetHeight;
+      const below = rect.bottom + height <= window.innerHeight - 8;
+      element.style.top = (below ? rect.bottom - 1 : Math.max(8,rect.top-height+1))+'px';
+      element.style.left = Math.max(8,Math.min(rect.left,window.innerWidth-width-8))+'px';
+    }
+    position();
+    window.addEventListener('scroll',position,true);
+    window.addEventListener('resize',position);
+    return () => {
+      window.removeEventListener('scroll',position,true);
+      window.removeEventListener('resize',position);
+    };
+  }, [anchor,title,description]);
+  return <div ref={card} className="chat-session-preview" aria-hidden="true">
+    <strong>{title}</strong><div>{description}</div>
+  </div>;
 }
 
 type PRAction = (operation: string, commentIds?: number[]) => void;

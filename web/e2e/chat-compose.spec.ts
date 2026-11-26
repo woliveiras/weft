@@ -11,6 +11,7 @@ for (const width of [1440,390]) {
     await page.getByRole('option',{name:/^\/inspect /}).click();
     await page.getByRole('option',{name:'/inspect tasks',exact:true}).click();
     await expect(message).toHaveValue('/inspect tasks');
+    if (width===390) expect((await page.getByRole('navigation',{name:'Main navigation'}).boundingBox())!.height).toBeLessThan(80);
     const box=await send.boundingBox();
     expect(box!.y+box!.height).toBeGreaterThan(800);
     expect(box!.y+box!.height).toBeLessThanOrEqual(900);

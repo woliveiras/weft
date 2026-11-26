@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -57,6 +59,31 @@ func (s *Server) retryChatTitle(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return chatError(err)
 		}
+	}
+	writeChatSession(w, actor, session)
+	return nil
+}
+
+func (s *Server) renameChat(w http.ResponseWriter, r *http.Request) error {
+	actor, err := s.chatOwner(r)
+	if err != nil {
+		return err
+	}
+	var input struct {
+		Title    string  `json:"title"`
+		Previous *string `json:"previousTitle"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&input) != nil || decoder.Decode(new(any)) != io.EOF || input.Previous == nil {
+		return badRequest("provide the new and previous conversation titles")
+	}
+	session, err := s.chatStore().Rename(r.Context(), actor.chatOwner, r.PathValue("chatID"), *input.Previous, input.Title)
+	if errors.Is(err, chat.ErrInvalidTitle) {
+		return badRequest("%s", err)
+	}
+	if err != nil {
+		return chatError(err)
 	}
 	writeChatSession(w, actor, session)
 	return nil

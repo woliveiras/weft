@@ -1,13 +1,11 @@
 # Chat
-  
+
 The message field stays at the bottom while the conversation scrolls above it.
 Type `/` for commands. Use the arrow keys and Enter or Tab to complete a suggestion.
 Send with **Ctrl+Enter** or **Command+Enter**, or select **Send**.
 
-
 Open Chat from the left navigation or the console's home URL. Start with
-**New chat** above **Recents** on the right. On a narrow screen, open that
-panel from **Sessions**.
+**New chat** above **Recents** on the right. The magnifier next to **Recents** and **Archived** searches titles across the chosen list. Filtering keeps the current conversation and draft open.
 
 ## Choose the model
 
@@ -19,9 +17,7 @@ pages without a usable model. If interpretation becomes unavailable, use
 **Retry** after restoring the model or budget. Supply provider
 credentials only in the existing Models configuration form.
 
-When a saved conversation stays **Untitled chat**, use **Retry title** to
-generate a title from the first request. The transcript and any open reviews
-remain available while the title is generated.
+When automatic naming fails, **Untitled chat** shows a notice and **Edit title** in the header. Hover or focus a sidebar title for its full name, last activity and status. Use its three-dot menu to **Rename**, **Archive** or **Unarchive** that conversation. Select an archived conversation to read it, then restore it to send another message.
 
 When inference fails, the saved reply identifies the next step. A budget rejection opens Budgets, an unavailable model opens Chat model settings, and a busy model can be retried after a slot becomes available. With a proposal open, **Confirm** and **Decline** and their explicit text equivalents (“confirm this proposal” or “decline this proposal”) use the reviewed operation directly. Weft still checks the current role, revision and expiry before acting.
 

@@ -652,7 +652,8 @@ test('an archived watch signals a new result and can be restored from the sessio
   await page.goto('/');
   await send(page, 'Follow the documentation check until it finishes.');
   await expect(page.getByRole('heading', { name: 'Follow documentation check' })).toBeVisible();
-  await page.getByRole('button', { name: 'Archive conversation', exact: true }).click();
+  await page.getByRole('button', { name: 'Actions for Follow documentation check' }).click();
+  await page.getByRole('button', { name: 'Archive', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Restore conversation', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'New chat', exact: true }).click();
   const recents = page.getByRole('region', { name: 'Recents' });

@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -91,5 +92,42 @@ func TestArchivedChatMustBeRestoredBeforeSending(t *testing.T) {
 	}
 	if code := call(t, srv, "POST", path+"/messages", adminTok, "application/json", message, nil); code != 200 {
 		t.Fatal(code)
+	}
+}
+
+func TestChatRenameUpdatesOwnedHistoryAndRejectsStaleEdits(t *testing.T) {
+	srv, _ := setupApp(t, nil)
+	const id = "d4154ae9cee7436ca37f848ef78c410e"
+	const sessions = "/api/v1/chat/sessions"
+	const url = sessions + "/" + id + "/title"
+	var original chat.Session
+	if code := call(t, srv, "POST", sessions, adminTok, "application/json", `{"requestId":"`+id+`","text":"/inspect projects"}`, &original); code != 200 {
+		t.Fatal(code)
+	}
+	body, err := json.Marshal(map[string]string{"title": "Release notes", "previousTitle": original.Title})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := call(t, srv, "PUT", url, viewerTok, "application/json", string(body), nil); code != 404 {
+		t.Fatal(code)
+	}
+	for range 2 {
+		var saved chat.Session
+		if code := call(t, srv, "PUT", url, adminTok, "application/json", string(body), &saved); code != 200 {
+			t.Fatal(code)
+		}
+		if saved.Title != "Release notes" || !saved.LastActivity.Equal(original.LastActivity) || len(saved.Messages) != len(original.Messages) {
+			t.Fatal("unexpected rename result")
+		}
+	}
+	if code := call(t, srv, "PUT", url, adminTok, "application/json", `{"title":"A stale change","previousTitle":"Former title"}`, nil); code != 409 {
+		t.Fatal(code)
+	}
+	if code := call(t, srv, "PUT", url, adminTok, "application/json", `{"title":" ","previousTitle":"Release notes"}`, nil); code != 400 {
+		t.Fatal(code)
+	}
+	var page struct{ Items []struct{ Title string } }
+	if code := call(t, srv, "GET", sessions, adminTok, "", "", &page); code != 200 || len(page.Items) != 1 || page.Items[0].Title != "Release notes" {
+		t.Fatal("history did not reflect rename")
 	}
 }

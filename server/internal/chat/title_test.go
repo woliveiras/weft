@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/woliveiras/weft/server/internal/llm"
@@ -30,6 +31,14 @@ func TestGenerateTitleReturnsOnlyTheSafeTitle(t *testing.T) {
 		})
 		if !errors.Is(err, ErrInvalidPlan) {
 			t.Errorf("unsafe title response accepted: %v", err)
+		}
+	}
+}
+
+func TestRenameRejectsInvalidTitlesBeforeStorage(t *testing.T) {
+	for _, value := range []string{" ", "Untitled chat", "Title\nwith a newline", "https://private.example", strings.Repeat("a", 121)} {
+		if _, err := (Sessions{}).Rename(t.Context(), "owner", "id", "before", value); !errors.Is(err, ErrInvalidTitle) {
+			t.Errorf("expected invalid title: %v", err)
 		}
 	}
 }

@@ -57,9 +57,11 @@ it('shows simultaneous running and unread success cues with metadata and keyboar
   render(<ChatPage archived={false} onOpen={open}/>);
   const row = await screen.findByRole('listitem');
   expect(within(row).getByRole('img',{name:/running.*successful result unread.*failed or blocked result unread.*decision required/})).toBeTruthy();
-  const disclosure = within(row).getByRole('button',{name:'Details for Follow important release work'});
+  const disclosure = within(row).getByRole('button',{name:'Actions for Follow important release work'});
   fireEvent.click(disclosure);
   expect(disclosure.getAttribute('aria-expanded')).toBe('true');
+  expect(within(row).getByRole('button',{name:'Rename'})).toBeTruthy();
+  expect(within(row).getByRole('button',{name:'Archive'})).toBeTruthy();
   fireEvent.keyDown(disclosure,{key:'Escape'});
   expect(disclosure.getAttribute('aria-expanded')).toBe('false');
   fireEvent.click(within(row).getByRole('button',{name:/^Follow important release work$/}));
@@ -283,21 +285,25 @@ it('shows archived novelty from Recents and navigates across bounded pages', asy
   expect(backend.fetch.mock.calls.some(([url]) => new URL(String(url),'http://localhost').searchParams.get('after') === '123~'+id)).toBe(true);
 });
 
-it('offers title-only retry after an untitled conversation', async () => {
+it('edits a fallback title in the header without repeating the original request', async () => {
   const original = {id,title:'Untitled chat',archived:false,messages:[{id:'request',role:'user',text:'Follow release work'}]};
-  const path = `${paths}/${id}/title/retry`;
+  const path = `${paths}/${id}/title`;
   const backend = fakeApi({
     'GET /api/v1/chat/settings': () => ({status:'configured',revision:1}),
     [`GET ${paths}`]: () => ({items:[],shared:false}),
     [`GET ${paths}/${id}`]: () => original,
-    [`POST ${path}`]: () => ({...original,title:'Release work',titleRetryState:'completed'}),
+    [`PUT ${path}`]: () => ({...original,title:'Release work'}),
   });
   render(<ChatPage id={id} archived={false} onOpen={vi.fn()}/>);
-  expect(await screen.findByText('A title could not be generated.')).toBeTruthy();
-  fireEvent.click(await screen.findByRole('button',{name:'Retry title'}));
+  expect(await screen.findByText('A title could not be generated automatically.')).toBeTruthy();
+  expect(screen.queryByRole('button',{name:'Retry title'})).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'Edit title'}));
+  fireEvent.change(screen.getByRole('textbox',{name:'Conversation title'}),{target:{value:'Release work'}});
+  fireEvent.click(screen.getByRole('button',{name:'Save title'}));
   expect(await screen.findByRole('heading',{name:'Release work'})).toBeTruthy();
   expect(screen.getByText('Follow release work')).toBeTruthy();
-  expect(backend.calls.filter(request => request.method === 'POST').map(request => request.path)).toEqual([path]);
+  expect(backend.find('PUT',path)[0].body).toEqual({title:'Release work',previousTitle:'Untitled chat'});
+  expect(backend.calls.filter(request => request.method === 'POST')).toHaveLength(0);
 });
 
 it.each([true,false])('keeps a late response in its original chat (success %s)', async success => {

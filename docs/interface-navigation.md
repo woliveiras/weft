@@ -1,6 +1,6 @@
 # Console navigation
 
-Chat is the home screen. The conversation occupies the center. The right panel has **New chat**, a flat **Recents** list and access to **Archived**. Hover, focus or open a row’s details to read a truncated title. Use the magnifier beside **Recents** and **Archived** to search session titles, including older pages. On narrow screens these controls sit above the conversation. Running activity, unread results and requests for a decision have independent indicators.
+Chat is the home screen. The conversation occupies the center. The right panel has **New chat**, a flat **Recents** list and access to **Archived**. Hover or focus a title for its full text, activity and status. The three-dot menu offers Rename and Archive or Unarchive. Use the magnifier beside **Recents** and **Archived** to search session titles, including older pages. On narrow screens these controls sit above the conversation. Running activity, unread results and requests for a decision have independent indicators.
 
 When a request matches several resources, Chat shows a numbered list in the conversation. Reply with a number or a distinguishing name to continue the request in the same chat. You can reopen it from Recents before answering. See [Find a resource by name](features/chat/README.md#find-a-resource-by-name).
 

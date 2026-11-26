@@ -2313,6 +2313,29 @@ paths:
       x-weft-role: viewer
       responses:
         "200": {$ref: "#/components/responses/ChatSession"}
+  /api/v1/chat/sessions/{chatId}/title:
+    parameters:
+      - {$ref: "#/components/parameters/ChatSessionID"}
+    put:
+      tags: [chat]
+      operationId: renameChat
+      x-weft-role: viewer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, previousTitle]
+              additionalProperties: false
+              properties:
+                title: {type: string, minLength: 1, maxLength: 120, description: Safe single-line title of up to 120 UTF-8 bytes}
+                previousTitle: {type: string}
+      responses:
+        "200": {$ref: "#/components/responses/ChatSession"}
+        "400": {description: Invalid title or request}
+        "404": {description: Session absent or inaccessible}
+        "409": {description: Title changed since the editor opened}
   /api/v1/chat/sessions/{chatId}/title/retry:
     parameters:
       - {$ref: "#/components/parameters/ChatSessionID"}

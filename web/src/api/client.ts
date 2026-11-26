@@ -351,8 +351,8 @@ export const api = {
     request<ChatSession>(id ? `${V1}/chat/sessions/${enc(id)}/messages` : `${V1}/chat/sessions`, {method:'POST', body:{requestId,text}}),
   retryChat: (id: string, message: string) =>
     request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/messages/${enc(message)}/retry`, {method:'POST'}),
-  retryChatTitle: (id:string) =>
-    request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/title/retry`, {method:'POST'}),
+  renameChat: (id:string, previousTitle:string, title:string) =>
+    request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/title`, {method:'PUT',body:{previousTitle,title}}),
   chatPRDiff: (id: string, operation: string) =>
     request<{head: string; base: string; diff: string}>(`${V1}/chat/sessions/${enc(id)}/operations/${enc(operation)}/pr-diff`),
   prepareChatPRComments: (id: string, operation: string, commentIds: number[]) =>

@@ -53,7 +53,7 @@ export function PrimaryNavigation({ active, pending, onNavigate }: {
       {count > 0 && <span className="count">{count}</span>}
     </button>
   );
-  return <nav className={`primary-navigation${compact ? ' is-compact' : ''}`} aria-label="Main navigation"
+  return <nav className={`primary-navigation${active === 'chat' ? ' chat-navigation' : ''}${compact ? ' is-compact' : ''}`} aria-label="Main navigation"
     onKeyDown={event=>{if(event.key==='Escape')setTooltip(undefined);}}>
     <div className="navigation-header">
       <span className="navigation-label navigation-title">Navigation</span>
