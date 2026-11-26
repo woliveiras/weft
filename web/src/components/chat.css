@@ -87,7 +87,8 @@
   border: none; background: transparent; color: inherit; border-radius: var(--radius-sm);
 }
 .chat-session-actions button:is(:hover,:focus-visible) { background: var(--primary-soft); }
-.chat-title-form, .chat-title-form label { display: grid; gap: var(--space-2); }
+.chat-title-form { display: grid; gap: var(--space-4); }
+.chat-title-form label { display: grid; gap: var(--space-2); }
 .chat-header h1 { overflow-wrap: anywhere; }
 .chat-header .chat-title-form { margin-block-start: var(--space-2); }
 .chat-header p[role=status] { margin-block: var(--space-2); }
