@@ -116,11 +116,11 @@ func (m Manager) Save(ctx context.Context, in Input, rev int64, actor string, de
 	return m.save(ctx, in, rev, actor, deleted, "")
 }
 
-func (m Manager) SaveForOperation(ctx context.Context, in Input, rev int64, actor, operation string) (*Skill, error) {
+func (m Manager) SaveForOperation(ctx context.Context, in Input, rev int64, actor, operation string, deleted bool) (*Skill, error) {
 	if operation == "" {
 		return nil, errors.New("missing skill operation identity")
 	}
-	return m.save(ctx, in, rev, actor, false, operation)
+	return m.save(ctx, in, rev, actor, deleted, operation)
 }
 
 func (m Manager) save(ctx context.Context, in Input, rev int64, actor string, deleted bool, operation string) (*Skill, error) {

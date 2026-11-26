@@ -23,8 +23,8 @@ func (s *Server) reviewChatSkill(ctx context.Context, actor Identity, id string,
 		out.Text, out.Retryable = "The skill catalogue is temporarily unavailable.", true
 		return out
 	}
-	if old == nil && d.Action == "revise" {
-		out.Plan.Kind, out.Text = chat.Clarify, "Which existing managed skill should receive these instructions? Supply its exact ID."
+	if old == nil && d.Action != "create" {
+		out.Plan.Kind, out.Text = chat.Clarify, "Which existing managed skill should I use? Enter its name or ID."
 		return out
 	}
 	if old != nil && d.Action == "create" {
@@ -36,6 +36,19 @@ func (s *Server) reviewChatSkill(ctx context.Context, actor Identity, id string,
 		out.Text = "Review this skill in Skills and instructions. Its content or state is outside the Chat preview."
 		return out
 	}
+	if out.Review.Skill.Delete {
+		if err := s.checkSkillDeletion(ctx, old.Input); err != nil {
+			out.Review = nil
+			out.Text = "This skill is referenced by a workflow. Remove its association before deleting it."
+			if !errors.Is(err, storage.ErrConflict) {
+				out.Text, out.Retryable = "Could not verify the workflows using this skill.", true
+			}
+			return out
+		}
+	} else if d.Action != "revise" && old != nil && old.Input == out.Review.Skill.After {
+		out.Review, out.Text = nil, "The saved skill already matches the request."
+		return out
+	}
 	out.Destination = ""
 	out.Text = "Review the managed skill text and the workflows it can affect."
 	return out
@@ -44,7 +57,15 @@ func (s *Server) reviewChatSkill(ctx context.Context, actor Identity, id string,
 func (s *Server) applyChatSkill(ctx context.Context, actor Identity, id string, r *chat.OperationReview) (*chat.Session, error) {
 	p := r.Skill
 	m := instructions.Manager{Store: s.Store}
-	saved, err := m.SaveForOperation(ctx, p.After, p.Revision, actor.Name, r.ID)
+	if p.Delete {
+		if err := s.checkSkillDeletion(ctx, p.After); err != nil {
+			if errors.Is(err, storage.ErrConflict) {
+				return s.chatStore().FinishReview(ctx, actor.chatOwner, id, r.ID, chat.ReviewConflict, 0)
+			}
+			return nil, err
+		}
+	}
+	saved, err := m.SaveForOperation(ctx, p.After, p.Revision, actor.Name, r.ID, p.Delete)
 	if err == nil {
 		s.auditSavedSkill(ctx, saved)
 		return s.chatStore().FinishReview(ctx, actor.chatOwner, id, r.ID, chat.ReviewApplied, int(saved.Revision))
@@ -62,7 +83,7 @@ func (s *Server) observeChatSkill(ctx context.Context, owner string, session *ch
 	}
 	if skill != nil {
 		for _, v := range append(skill.History, skill.Version) {
-			if v.Operation == r.ID && v.Revision == r.Skill.Revision+1 && v.Input == r.Skill.After {
+			if v.Operation == r.ID && v.Revision == r.Skill.Revision+1 && v.Input == r.Skill.After && v.Deleted == r.Skill.Delete {
 				return s.chatStore().FinishReview(ctx, owner, session.ID, r.ID, chat.ReviewApplied, int(v.Revision))
 			}
 		}

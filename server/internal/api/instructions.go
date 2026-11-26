@@ -83,34 +83,8 @@ func (s *Server) saveSkill(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if deleted {
-		// Conservative reference guard: remove associations from every latest graph
-		// before deletion. Already-running old versions retain immutable snapshots.
-		gs, err := s.Store.ListGraphs(r.Context())
-		if err != nil {
+		if err := s.checkSkillDeletion(r.Context(), in); err != nil {
 			return err
-		}
-		records, err := s.Store.ListGraphRecords(r.Context())
-		if err != nil {
-			return err
-		}
-		for _, rec := range records {
-			if rec.State == domain.GraphRunning || rec.State == domain.GraphPaused || rec.State == domain.GraphStopping {
-				active, err := s.Store.GetGraph(r.Context(), rec.ID, rec.Version)
-				if err != nil {
-					return err
-				}
-				gs = append(gs, active)
-			}
-		}
-		for _, g := range gs {
-			if in.Global && g.Spec.Instructions.InstallationDefaults {
-				return storage.ErrConflict
-			}
-			for _, id := range g.Spec.Instructions.SkillIDs {
-				if id == in.ID {
-					return storage.ErrConflict
-				}
-			}
 		}
 	}
 	v, err := m.Save(r.Context(), in, rev, identityFrom(r.Context()).Name, deleted)
@@ -126,6 +100,39 @@ func (s *Server) saveSkill(w http.ResponseWriter, r *http.Request) error {
 	writeJSON(w, status, v)
 	return nil
 }
+func (s *Server) checkSkillDeletion(ctx context.Context, in instructions.Input) error {
+	// Conservative reference guard: remove associations from every latest graph
+	// before deletion. Already-running old versions retain immutable snapshots.
+	gs, err := s.Store.ListGraphs(ctx)
+	if err != nil {
+		return err
+	}
+	records, err := s.Store.ListGraphRecords(ctx)
+	if err != nil {
+		return err
+	}
+	for _, rec := range records {
+		if rec.State == domain.GraphRunning || rec.State == domain.GraphPaused || rec.State == domain.GraphStopping {
+			active, err := s.Store.GetGraph(ctx, rec.ID, rec.Version)
+			if err != nil {
+				return err
+			}
+			gs = append(gs, active)
+		}
+	}
+	for _, g := range gs {
+		if in.Global && g.Spec.Instructions.InstallationDefaults {
+			return storage.ErrConflict
+		}
+		for _, id := range g.Spec.Instructions.SkillIDs {
+			if id == in.ID {
+				return storage.ErrConflict
+			}
+		}
+	}
+	return nil
+}
+
 func (s *Server) auditSavedSkill(ctx context.Context, v *instructions.Skill) {
 	s.Bus.Publish(ctx, domain.NewEvent("instruction.skill.updated", "", map[string]any{"skill_id": v.ID, "revision": v.Revision, "deleted": v.Deleted}).WithActor(v.Actor))
 }

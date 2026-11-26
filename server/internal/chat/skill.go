@@ -16,10 +16,23 @@ type SkillDraft struct {
 }
 
 func (d SkillDraft) Valid() bool {
-	return (d.Action == "create" || d.Action == "revise") && instructions.ID.MatchString(d.ID) && !instructions.IsBuiltin(d.ID) && shortLabel(d.Title) && safeText(d.Body, 3000) && instructions.Validate(instructions.Input{ID: d.ID, Title: d.Title, Body: d.Body}) == nil
+	if !shortLabel(d.ID) || instructions.IsBuiltin(d.ID) {
+		return false
+	}
+	switch d.Action {
+	case "create", "revise":
+		if d.Action == "create" && !instructions.ID.MatchString(d.ID) {
+			return false
+		}
+		return shortLabel(d.Title) && safeText(d.Body, 3000) && instructions.Validate(instructions.Input{ID: "skill", Title: d.Title, Body: d.Body}) == nil
+	case "enable", "disable", "make-default", "remove-default", "delete":
+		return d.Title == "" && d.Body == ""
+	}
+	return false
 }
 
 type SkillChange struct {
+	Delete   bool                `json:"delete,omitempty"`
 	Before   *instructions.Input `json:"before,omitempty"`
 	After    instructions.Input  `json:"after"`
 	Revision int64               `json:"revision"`
@@ -37,6 +50,16 @@ func NewSkillReview(owner, session string, d SkillDraft, old *instructions.Skill
 		before := old.Input
 		change.Before, change.After, change.Revision = &before, before, old.Revision
 	}
-	change.After.ID, change.After.Title, change.After.Body = d.ID, d.Title, d.Body
+	switch d.Action {
+	case "enable", "disable":
+		change.After.Enabled = d.Action == "enable"
+	case "make-default", "remove-default":
+		change.After.Global = d.Action == "make-default"
+	case "delete":
+		change.Delete = true
+		change.After.Enabled = false
+	default:
+		change.After.ID, change.After.Title, change.After.Body = d.ID, d.Title, d.Body
+	}
 	return newReview(owner, session, now, OperationReview{Skill: &change})
 }

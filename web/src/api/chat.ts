@@ -121,7 +121,7 @@ interface ManagedSkillText {
   id: string; title: string; body: string; description: string; enabled: boolean; global: boolean;
 }
 export interface ChatSkillReview extends ChatReviewState {
-  skill: {before?: ManagedSkillText; after: ManagedSkillText; revision: number};
+  skill: {delete?: boolean; before?: ManagedSkillText; after: ManagedSkillText; revision: number};
 }
 
 export interface ChatPRReview extends ChatReviewState {

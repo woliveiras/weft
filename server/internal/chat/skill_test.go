@@ -26,3 +26,32 @@ func TestManagedSkillReviewPreservesScopeAndChecksContent(t *testing.T) {
 		t.Fatal("mixed intents")
 	}
 }
+
+func TestSkillLifecycleOnlyChangesRequestedSetting(t *testing.T) {
+	input := instructions.Input{ID: "release", Title: "Release notes", Description: "Description", Body: "Use the template."}
+	for _, action := range []string{"enable", "disable", "make-default", "remove-default", "delete"} {
+		before := input
+		before.Enabled = action != "enable"
+		before.Global = action != "make-default"
+		old := &instructions.Skill{Version: instructions.Version{Revision: 2, Input: before}}
+		d := SkillDraft{ID: before.ID, Action: action}
+		r, err := NewSkillReview("owner", "session", d, old, time.Now())
+		if err != nil {
+			t.Fatal(action, err)
+		}
+		want := before
+		switch action {
+		case "enable", "disable", "delete":
+			want.Enabled = action == "enable"
+		case "make-default", "remove-default":
+			want.Global = action == "make-default"
+		}
+		if r.Skill.After != want || *r.Skill.Before != before || r.Skill.Delete != (action == "delete") {
+			t.Fatal(action, r.Skill)
+		}
+		d.Body = "replace content"
+		if d.Valid() {
+			t.Fatal("unexpected content permitted in lifecycle action")
+		}
+	}
+}

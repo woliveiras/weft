@@ -3157,6 +3157,7 @@ components:
               type: object
               required: [revision, after]
               properties:
+                delete: {type: boolean, description: "Save a deletion revision after checking workflow references."}
                 revision: {type: integer, minimum: 0}
                 before: {$ref: "#/components/schemas/ChatSkillText"}
                 after: {$ref: "#/components/schemas/ChatSkillText"}

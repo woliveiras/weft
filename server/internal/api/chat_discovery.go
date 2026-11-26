@@ -62,7 +62,7 @@ func discoverySlots(p *chat.Plan) []discoverySlot {
 	case chat.ControlTrigger:
 		add("triggers", &p.Trigger.Target)
 	case chat.SaveSkill:
-		if p.Skill.Action == "revise" {
+		if p.Skill.Action != "create" {
 			add("skills", &p.Skill.ID)
 		}
 	case chat.CancelExecution, chat.InspectExecution:
