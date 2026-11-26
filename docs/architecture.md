@@ -387,7 +387,15 @@ The endpoint contract is in [OpenAPI](../api/openapi.yaml); see the
 
 ### 5.10 Web console (`web/`)
 
-The console uses React 19, TypeScript, `@xyflow/react` and dagre. Its views are:
+The console opens on Chat. A conversation can follow a task across browser
+sessions or present an agent definition for review. The Go API authenticates
+the caller and submits bounded conversation context to the model selected for
+Chat. It resolves the model's proposed action against domain services. The task
+runner owns the observed outcome and the agent catalog owns published versions.
+The browser reads the session and its results through the caller's Chat API.
+See the [operator guide](features/chat/README.md) and [interaction sequences](diagrams/sequences.md#11-chat-actions-and-background-observation).
+
+The manual console uses React 19, TypeScript, `@xyflow/react` and dagre. Its views include
 
 - graph list (with YAML/JSON create);
 - visual graph editor for nodes and channels, including state, replica stacks and channel backlog;

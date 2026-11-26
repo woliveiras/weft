@@ -14,7 +14,25 @@ export interface ChatMessage {
   state?: 'pending' | 'interpreting' | 'interpreted' | 'unavailable' | 'clarification';
   attempt?: string;
   task?: ChatTask;
+  review?: ChatAgentReview;
   unread?: boolean;
+}
+
+export interface ChatAgentReview {
+  id: string;
+  agentId: string;
+  definition: {
+    name: string;
+    prompt: string;
+    model: { provider: string; name: string };
+    runtime: { kind: string };
+    isolation?: { mode: string };
+    readOnly: boolean;
+  };
+  digest: string;
+  expiresAt: string;
+  state: 'awaiting_confirmation' | 'applying' | 'created' | 'conflict' | 'unknown' | 'declined';
+  resultVersion?: number;
 }
 
 export interface ChatSession {

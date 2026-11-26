@@ -171,6 +171,9 @@ A channel is a broker subject `"<graph>.<channel>"`. Every declared group receiv
 | processed | (group, message id) | after ack | Dedupe marker. |
 | `Approval` | id | hitl | `DecideApproval` succeeds only from `pending`. |
 | `OperatorMessage` | id | API | Consumed atomically. `replica = -1` means the first replica to ask. |
+| Chat session | owner and session ID | Chat API | Contains user requests, assistant replies, archive state and read markers. The request ID supports replay of a submission. |
+| Task watch | session and request ID | Chat API and background observer | Tracks a task attempt. A terminal observation links the result to its task and any recorded execution. |
+| Agent creation review | owner, session and operation ID | Chat API | Binds the proposed definition to its reviewed parameters. The catalog version records publication. |
 | `ReplicaStatus` | (graph, node, replica) | replica | Live view; written on every state change. |
 | KV | (namespace, key) | agents, engine | Agent state `<graph>/<node>` (shared by replicas); `_control/<graph>` holds node overrides and `done/<node>#<n>` = run id; `<graph>/<node>/_ring` holds ring lines. |
 | `Lease` | `<graph>/<node>#<n>` | reconciler | TTL-based ownership of a replica by an instance. |

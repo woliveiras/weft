@@ -40,7 +40,7 @@ async function send(page: Page, message: string) {
   await page.getByRole('button', { name: 'Send', exact: true }).click();
 }
 
-test('a task watch reports the result after switching conversations and closing the console', async ({ page, context, request }) => {
+test('a task watch reports the result after creating a reviewed agent in another chat and closing the console', async ({ page, context, request }) => {
   const model = await request.get('/api/v1/chat/settings', { headers });
   expect(model.ok()).toBe(true);
   const settings = await model.json();
@@ -64,6 +64,25 @@ test('a task watch reports the result after switching conversations and closing 
   await send(page, 'Show me the current state of the release notes review.');
   await expect(recents).toContainText('Inspect release notes');
   expect(page.url()).not.toBe(watchURL);
+
+  // A second request in this session creates a new catalog agent only after review.
+  await send(page, 'Create a reusable agent called Release reader to summarize release notes.');
+  const confirm = page.getByRole('button', { name: 'Create agent', exact: true });
+  await expect(confirm).toBeEnabled();
+  await expect(page.getByText('Summarize release notes.', { exact: true })).toBeVisible();
+  const agentURL = '/api/v1/agents/release-reader';
+  expect((await request.get(agentURL, { headers })).status()).toBe(404);
+  await confirm.click();
+  const catalogLink = page.getByRole('link', { name: 'View agent' });
+  await expect(catalogLink).toHaveAttribute('href', '#/agents/release-reader');
+  const published = await request.get(agentURL, { headers });
+  expect(published.ok()).toBe(true);
+  const agent = await published.json();
+  expect(agent.versions).toHaveLength(1);
+  expect(agent.versions[0].definition).toMatchObject({
+    name: 'Release reader', prompt: 'Summarize release notes.', readOnly: true,
+  });
+  expect(agent.versions[0].definition.tools ?? []).toHaveLength(0);
   await page.close();
 
   // An independent caller completes the actual task while no console is mounted.

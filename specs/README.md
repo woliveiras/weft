@@ -44,7 +44,7 @@ The [historical source map](./historical-source-map.md) records the migration of
 
 ### In progress
 
-- [TASK-012 — Conversational Console](./product-and-tasks/conversational-console/spec.md) — `in-progress`. Chat model selection, task inspection and durable task monitoring delivered. Reviewed agent creation is next.
+- [TASK-012 — Conversational Console](./product-and-tasks/conversational-console/spec.md) — `in-progress`. Chat model selection, task inspection and monitoring, and reviewed catalog agent creation delivered. History indexing and later operation slices remain open.
 - [TASK-009 — Guided Operator Journeys](./product-and-tasks/guided-operator-journeys/spec.md) — `implemented`. Contextual task entry, reusable workflow defaults, guided creation and explicit agent adoption.
 
 ### Implemented

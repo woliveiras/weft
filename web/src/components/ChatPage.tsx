@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
-import type { ChatMessage, ChatSession, ChatSessionSummary, ChatTask } from '../api/chat';
+import type { ChatAgentReview, ChatMessage, ChatSession, ChatSessionSummary, ChatTask } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -10,7 +10,7 @@ type OpenChat = (id?: string, archived?: boolean) => void;
 
 const accessLost = (error: unknown) => error instanceof ApiError && [401,403,404].includes(error.status);
 
-export function ChatPage({id, archived, onOpen}: {id?: string; archived: boolean; onOpen: OpenChat}) {
+export function ChatPage({id, archived, canCreateAgent = false, onOpen}: {id?: string; archived:boolean; canCreateAgent?:boolean; onOpen:OpenChat}) {
   const settings = useAsync(api.chatModelSettings, []);
   const list = useAsync(() => api.chatSessions(archived), [archived], accessLost);
   const conversation = useAsync(() => id ? api.chatSession(id) : Promise.resolve(undefined), [id], accessLost);
@@ -154,13 +154,15 @@ export function ChatPage({id, archived, onOpen}: {id?: string; archived: boolean
       {id && !session && conversation.loading && <p role="status">Loading conversation…</p>}
       {id && conversation.error && <><ErrorBox error={session ? conversation.error : 'Conversation unavailable.'}/>
         <Btn onClick={() => void conversation.reload()}>Retry loading conversation</Btn></>}
-      {!id && !archived && <p className="muted">Ask for the current state of a task or follow it until a result is ready.</p>}
+      {!id && !archived && <p className="muted">Ask for a task’s current state, follow its work, or prepare a reusable catalog agent.</p>}
       {session?.watches?.filter(watch => !watch.complete).map(watch => <p className="chat-watch" key={watch.requestId}>
         {watch.unknown ? 'Status temporarily unknown' : watch.task.decisionNeeded ? 'Decision required' : `Following task: ${watch.task.state}`} · <a href={taskSectionLink(watch.task.id,'overview')}>{watch.task.id}</a>
         {watch.unknown && <span className="muted"> · Last seen <time dateTime={watch.observedAt}>{new Date(watch.observedAt).toLocaleString()}</time></span>}
       </p>)}
       <div className="chat-transcript" aria-label="Conversation">
         {session?.messages.map(message => <Message key={message.id} value={message}
+          now={now} canCreateAgent={canCreateAgent && !sending}
+          onDecide={(review, decision) => void mutate(() => api.decideChatAgent(session.id, review.id, review.digest, decision))}
           onView={anchor => { evidence.current = anchor; }}
           onRead={() => void markRead(message.id)}
           onRetry={modelAvailable && !sending && canRetry(message,now) ? () => void mutate(() => api.retryChat(session.id,message.id)) : undefined}/>)}
@@ -229,10 +231,12 @@ function SessionRow({item, current, expanded, onOpen, onDetails}: {
   </li>;
 }
 
-function Message({value, onView, onRead, onRetry}: {
-  value:ChatMessage; onView:(anchor:string)=>void; onRead:()=>void; onRetry?:()=>void;
+function Message({value, now, canCreateAgent, onView, onRead, onRetry, onDecide}: {
+  value:ChatMessage; now:number; canCreateAgent:boolean; onView:(anchor:string)=>void; onRead:()=>void;
+  onRetry?:()=>void; onDecide:(review:ChatAgentReview, decision:'confirm'|'decline')=>void;
 }) {
   const panel = useRef<HTMLElement>(null);
+  const review = value.review;
   const read = useRef(onRead);
   read.current = onRead;
   useEffect(() => {
@@ -250,8 +254,48 @@ function Message({value, onView, onRead, onRetry}: {
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
     {onRetry && <Btn onClick={onRetry}>Retry saved request</Btn>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
+    {review && <AgentReviewCard review={review} now={now} canConfirm={canCreateAgent}
+      onDecide={decision => onDecide(review,decision)} onView={onView}/>}
     {value.unread && <Btn onClick={onRead}>Mark result read</Btn>}
   </article>;
+}
+
+function AgentReviewCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatAgentReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const definition = review.definition;
+  const expired = now >= Date.parse(review.expiresAt);
+  const anchor = `chat-agent-${review.id}`;
+  return <section className="chat-agent-review" aria-label={`Catalog agent ${definition.name}`}>
+    <h3>{definition.name}</h3>
+    <dl>
+      <dt>Agent ID</dt><dd>{review.agentId}</dd>
+      <dt>Model</dt><dd>{definition.model.provider} · {definition.model.name}</dd>
+      <dt>Runtime</dt><dd>{definition.runtime.kind} · {definition.isolation?.mode} · Read-only workspace</dd>
+      <dt>Tool grants</dt><dd>None</dd>
+    </dl>
+    <h4>Instructions</h4>
+    <p>{definition.prompt}</p>
+    {review.state === 'awaiting_confirmation' && <>
+      <p>This creates a reusable catalog definition. No workflow starts.</p>
+      {expired
+        ? <p role="status">Confirmation expired. Ask for a new review.</p>
+        : <><p>Review expires at <time dateTime={review.expiresAt}>{new Date(review.expiresAt).toLocaleTimeString()}</time>.</p>
+          <div className="btn-row">
+            <Btn tone="primary" disabled={!canConfirm} onClick={() => onDecide('confirm')}>Create agent</Btn>
+            <Btn disabled={!canConfirm} onClick={() => onDecide('decline')}>Decline</Btn>
+          </div>
+          {canConfirm && <p className="small muted">When this is the only pending review, you can type “Confirm this proposal” or “Decline this proposal”.</p>}</>}
+    </>}
+    {review.state === 'applying' && <p role="status">Creation accepted. Checking the catalog result…</p>}
+    {review.state === 'conflict' && <p role="status">The reviewed configuration changed. Ask for a new review.</p>}
+    {review.state === 'unknown' && <p role="status">Creation outcome is temporarily unknown. Check Agents before asking to try again.</p>}
+    {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+    {review.state === 'created' && <>
+      <p role="status">Catalog version {review.resultVersion} created.</p>
+      <a id={anchor} href={`#/agents/${encodeURIComponent(review.agentId)}`} onClick={() => onView(anchor)}>View agent</a>
+    </>}
+  </section>;
 }
 
 function TaskLink({task, message, onView}: {task:ChatTask; message:string; onView:(anchor:string)=>void}) {

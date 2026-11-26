@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -63,7 +64,7 @@ func (s *Server) agentCatalog(w http.ResponseWriter, r *http.Request) error {
 	} else {
 		id = input.ID
 	}
-	if err := s.validateAgentDefinition(r, &input.Definition); err != nil {
+	if err := s.validateAgentDefinition(r.Context(), &input.Definition); err != nil {
 		return err
 	}
 	actor := identityFrom(r.Context()).Name
@@ -74,14 +75,18 @@ func (s *Server) agentCatalog(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	s.Bus.Publish(r.Context(), domain.NewEvent(domain.EvAgentVersionPublished, "", map[string]any{
-		"agentId": agent.ID, "version": agent.Versions[len(agent.Versions)-1].Version,
-	}).WithActor(actor))
+	s.auditAgentPublication(r.Context(), agent, actor)
 	writeJSON(w, status, agent)
 	return nil
 }
 
-func (s *Server) validateAgentDefinition(r *http.Request, d *domain.AgentDefinition) error {
+func (s *Server) auditAgentPublication(ctx context.Context, agent agentcatalog.Agent, actor string) {
+	s.Bus.Publish(ctx, domain.NewEvent(domain.EvAgentVersionPublished, "", map[string]any{
+		"agentId": agent.ID, "version": agent.Versions[len(agent.Versions)-1].Version,
+	}).WithActor(actor))
+}
+
+func (s *Server) validateAgentDefinition(ctx context.Context, d *domain.AgentDefinition) error {
 	n := domain.Node{ID: "agent"}
 	agentcatalog.ApplyDefinition(&n, *d)
 	g := &domain.Graph{Metadata: domain.GraphMetadata{ID: "agent-definition"}, Spec: domain.GraphSpec{Nodes: []domain.Node{n}}}
@@ -96,7 +101,7 @@ func (s *Server) validateAgentDefinition(r *http.Request, d *domain.AgentDefinit
 		return &engine.ValidationError{Report: report}
 	}
 	if s.MCP != nil {
-		if err := s.MCP.ValidateGrants(r.Context(), g); err != nil {
+		if err := s.MCP.ValidateGrants(ctx, g); err != nil {
 			if errors.Is(err, mcpconfig.ErrInvalid) {
 				return badRequest("%s", err)
 			}

@@ -279,3 +279,33 @@ sequenceDiagram
     E->>R: started again under v2 on the next reconcile
   end
 ```
+
+## 11. Chat actions and background observation
+
+```mermaid
+sequenceDiagram
+  actor U as Console user
+  participant C as Chat API
+  participant M as Selected model
+  participant S as Session store
+  participant A as Agent catalog
+  U->>C: Describe the agent
+  C->>S: Save the owner's request
+  C->>M: Interpret bounded conversation context
+  M-->>C: Propose an agent definition
+  C->>S: Save the reviewed definition and its expiry
+  C-->>U: Show instructions, model, access and target
+  U->>C: Confirm this review
+  C->>C: Check current role, review and versions
+  C->>A: Publish with a creation precondition
+  A-->>C: Agent ID and published version
+  C->>S: Record the operation outcome
+  C-->>U: Open the catalog entry
+```
+
+A task watch takes a different path after the initial interpretation. The
+server stores the task reference and compares the canonical task state with
+the last observation. A terminal transition writes an unread result to the
+session. Closing the browser or archiving the conversation keeps the watch
+record. The observer can resume after a restart. Background observation
+depends on current authority for the owner. [Chat access](../security.md#conversation-access)

@@ -22,6 +22,7 @@ const (
 
 	WatchTask   = "task.watch"
 	InspectTask = "task.inspect"
+	CreateAgent = "agent.create"
 	Clarify     = "clarify"
 	Unsupported = "unsupported"
 )
@@ -37,6 +38,7 @@ const intentPrompt = `You interpret a Weft operator's requests. The service chec
 Return exactly one JSON object. "kind" is one of:
 - "task.watch": follow a particular existing task and report when it settles. Add "task" containing the task's stated ID or exact name as a selector.
 - "task.inspect": show the latest state of a particular task now. Add "task" with the same selector convention.
+- "agent.create": propose a reusable agent for the catalog. Add "agentId" (lowercase letters, digits and hyphens), "agentName" and concise "instructions". The operator reviews the proposal before anything is created. Never interpret a confirmation as a new create request.
 - "clarify": ask one focused question when the target or action is unclear. Add "question". Never guess between different targets or effects.
 - "unsupported": any request outside these capabilities. Do not add a task or question.
 You may include a short, neutral "title" for the conversation based on the latest user request. Omit credentials, repository URLs, account names, and sensitive identifiers. Do not add any other keys.`
@@ -48,6 +50,7 @@ type Plan struct {
 	Task     string `json:"task,omitempty"`
 	Question string `json:"question,omitempty"`
 	Title    string `json:"title,omitempty"`
+	Agent    AgentDraft
 }
 
 func safeText(text string, limit int) bool {
@@ -129,11 +132,20 @@ func decodePlan(body string) (Plan, error) {
 			if safeText(value, 120) && !strings.Contains(value, "://") && !strings.ContainsAny(value, "\r\n\t") {
 				plan.Title = value
 			}
+		case "agentId":
+			plan.Agent.ID = value
+		case "agentName":
+			plan.Agent.Name = value
+		case "instructions":
+			plan.Agent.Instructions = value
 		default:
 			return Plan{}, ErrInvalidPlan
 		}
 	}
 	if _, err = decoder.Token(); err != nil || decoder.Decode(new(any)) != io.EOF {
+		return Plan{}, ErrInvalidPlan
+	}
+	if plan.Kind != CreateAgent && (seen["agentId"] || seen["agentName"] || seen["instructions"]) {
 		return Plan{}, ErrInvalidPlan
 	}
 	switch plan.Kind {
@@ -147,6 +159,10 @@ func decodePlan(body string) (Plan, error) {
 		}
 	case Unsupported:
 		if seen["task"] || seen["question"] {
+			return Plan{}, ErrInvalidPlan
+		}
+	case CreateAgent:
+		if seen["task"] || seen["question"] || plan.Agent.validate() != nil {
 			return Plan{}, ErrInvalidPlan
 		}
 	default:

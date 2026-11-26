@@ -82,6 +82,9 @@ func (s *Server) listChats(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 		for _, message := range session.Messages {
+			if message.Review != nil && message.Review.State == chat.ReviewAwaiting && time.Now().Before(message.Review.ExpiresAt) {
+				item.Decisions++
+			}
 			if message.Unread {
 				item.Unread++
 				if message.Task != nil {
@@ -108,6 +111,10 @@ func (s *Server) getChat(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	session, err := s.chatStore().Reconcile(r.Context(), actor.chatOwner, r.PathValue("chatID"), s.observeChatTask)
+	if err != nil {
+		return chatError(err)
+	}
+	session, err = s.reconcileAgentReviews(r.Context(), actor.chatOwner, session)
 	if err != nil {
 		return chatError(err)
 	}
@@ -157,14 +164,26 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 	if !claim.IsZero() {
 		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 		defer cancel()
-		plan, err := chat.Interpret(ctx, session.Context(requestID), func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-			return s.callChatModel(ctx, actor, req)
-		})
+		history := session.Context(requestID)
 		var answer chat.Interpretation
-		if err != nil {
-			answer = chat.Interpretation{Text: "Chat could not interpret this request. Check the Chat model or budget, then retry the saved request.", Retryable: true}
+		directive := ""
+		if len(history) > 0 {
+			directive = chat.ExplicitReviewDirective(history[len(history)-1].Content)
+		}
+		if directive != "" {
+			answer, err = s.decideChatAgentFromText(ctx, actor, session, directive)
+			if err != nil {
+				answer = chat.Interpretation{Text: "The review decision could not be read. Inspect the existing review before trying again."}
+			}
 		} else {
-			answer = s.resolveChatPlan(ctx, plan)
+			plan, modelErr := chat.Interpret(ctx, history, func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+				return s.callChatModel(ctx, actor, req)
+			})
+			if modelErr != nil {
+				answer = chat.Interpretation{Text: "Chat could not interpret this request. Check the Chat model or budget, then retry the saved request.", Retryable: true}
+			} else {
+				answer = s.resolveChatPlan(ctx, actor, id, plan)
+			}
 		}
 		saveCtx, finish := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
 		defer finish()
@@ -196,16 +215,12 @@ func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.Cha
 	provider := settings.Model.Provider
 	typ := s.Models.Type(provider)
 	prices := cost.Prices{Store: s.Store}
-	catalogue, _, err := prices.Get(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !catalogue.Lookup(provider, typ, req.Model).Priced() && catalogue.Unpriced == cost.UnpricedRefuse {
-		return nil, cost.ErrUnpriced
-	}
 	budgets := cost.Budgets{Store: s.Store, Bus: s.Bus}
 	reservation, err := budgets.Reserve(ctx, cost.Target{User: actor.Name, Execution: req.Metadata["execution"]},
-		func(context.Context) (cost.Catalogue, error) { return catalogue, nil }, provider, typ, req)
+		func(ctx context.Context) (cost.Catalogue, error) {
+			catalogue, _, err := prices.Get(ctx)
+			return catalogue, err
+		}, provider, typ, req)
 	if err != nil {
 		return nil, err
 	}
@@ -221,13 +236,15 @@ func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.Cha
 	return response, err
 }
 
-func (s *Server) resolveChatPlan(ctx context.Context, plan chat.Plan) chat.Interpretation {
+func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID string, plan chat.Plan) chat.Interpretation {
 	reply := chat.Interpretation{Plan: plan}
 	switch plan.Kind {
 	case chat.Clarify:
 		reply.Text = plan.Question
 	case chat.Unsupported:
-		reply.Text = "Chat can inspect or follow an existing task. Use the console navigation for other operations."
+		reply.Text = "Chat can inspect or follow an existing task, or propose a reusable catalog agent. Use the console navigation for other operations."
+	case chat.CreateAgent:
+		return s.reviewChatAgent(ctx, actor, sessionID, plan)
 	case chat.InspectTask, chat.WatchTask:
 		id, err := s.resolveChatTask(ctx, plan.Task)
 		if errors.Is(err, storage.ErrNotFound) {

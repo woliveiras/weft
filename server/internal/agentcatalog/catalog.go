@@ -27,6 +27,7 @@ type Version struct {
 	Definition domain.AgentDefinition `json:"definition"`
 	CreatedAt  time.Time              `json:"createdAt"`
 	CreatedBy  string                 `json:"createdBy"`
+	Operation  string                 `json:"operation,omitempty"`
 }
 
 type Origin struct {
@@ -90,6 +91,19 @@ func (m Manager) List(ctx context.Context) ([]Summary, error) {
 }
 
 func (m Manager) Publish(ctx context.Context, id string, expected int64, d domain.AgentDefinition, actor string) (Agent, error) {
+	return m.publish(ctx, id, expected, d, actor, "")
+}
+
+// CreateForOperation records a server-owned operation ID atomically with the
+// first version so the caller can reconcile a lost response without republishing.
+func (m Manager) CreateForOperation(ctx context.Context, id string, d domain.AgentDefinition, actor, operation string) (Agent, error) {
+	if operation == "" {
+		return Agent{}, fmt.Errorf("%w: missing creation operation", ErrInvalid)
+	}
+	return m.publish(ctx, id, 0, d, actor, operation)
+}
+
+func (m Manager) publish(ctx context.Context, id string, expected int64, d domain.AgentDefinition, actor, operation string) (Agent, error) {
 	switch {
 	case id == "new" || id == "source" || (expected == 0 && strings.HasPrefix(id, workflowAgentPrefix)):
 		return Agent{}, fmt.Errorf("%w: agent ID is reserved", ErrInvalid)
@@ -114,7 +128,7 @@ func (m Manager) Publish(ctx context.Context, id string, expected int64, d domai
 			return a, err
 		}
 	}
-	a.Versions = append(a.Versions, Version{Version: len(a.Versions) + 1, Definition: d, CreatedAt: time.Now().UTC(), CreatedBy: actor})
+	a.Versions = append(a.Versions, Version{Version: len(a.Versions) + 1, Definition: d, CreatedAt: time.Now().UTC(), CreatedBy: actor, Operation: operation})
 	raw, err := json.Marshal(a)
 	if err != nil {
 		return a, err

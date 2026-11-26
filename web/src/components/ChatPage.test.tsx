@@ -40,3 +40,29 @@ it('shows simultaneous running and unread success cues with metadata and keyboar
   fireEvent.click(within(row).getByRole('button',{name:/^Follow important release work$/}));
   expect(open).toHaveBeenCalledWith(id,false);
 });
+
+it('shows the reviewed definition and sends a scoped decline without publishing', async () => {
+  const review = {
+    id:'chatop-test', agentId:'release-reader',
+    definition:{name:'Release reader', prompt:'Summarize release notes.', model:{provider:'local',name:'model'},
+      runtime:{kind:'native'}, isolation:{mode:'process'}, readOnly:true},
+    digest:'recorded-digest', expiresAt:'2999-11-26T08:00:00Z', state:'awaiting_confirmation',
+  };
+  const session = (state:string) => ({
+    id, archived:false, messages:[{id:'reply',role:'assistant',text:'Review the definition.',review:{...review,state}}],
+  });
+  const declinePath = `${paths}/${id}/operations/chatop-test/decline`;
+  const backend = fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'configured',revision:1}),
+    [`GET ${paths}`]: () => ({items:[],shared:false}),
+    [`GET ${paths}/${id}`]: () => session('awaiting_confirmation'),
+    [`POST ${declinePath}`]: () => session('declined'),
+  });
+  render(<ChatPage id={id} archived={false} canCreateAgent onOpen={vi.fn()}/>);
+  const card = await screen.findByRole('region',{name:'Catalog agent Release reader'});
+  expect(within(card).getByText('Summarize release notes.')).toBeTruthy();
+  expect(within(card).getByText('Read-only workspace',{exact:false})).toBeTruthy();
+  fireEvent.click(within(card).getByRole('button',{name:'Decline'}));
+  expect(await screen.findByText('Proposal declined.')).toBeTruthy();
+  expect(backend.find('POST',declinePath).map(req => req.body)).toEqual([{digest:'recorded-digest'}]);
+});

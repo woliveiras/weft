@@ -296,6 +296,7 @@ function Shell() {
           </section>}
           {chatRoute && <Activity mode={route.view === 'chat' ? 'visible' : 'hidden'}>
             <ChatPage id={chatRoute.chatId} archived={!!chatRoute.archived}
+              canCreateAgent={info.data?.identity?.role === 'admin'}
               onOpen={(chatId, archived) => go({view:'chat', chatId, archived})}/>
           </Activity>}
           {returnTask&&<aside className="card task-return-context" aria-label="Task configuration context"><a href={returnTask}>Return to saved task</a><p>Configuration changes do not start the task. Return to review its requirements and authorization.</p></aside>}

@@ -8,7 +8,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/llm"
 )
 
-// These two scripted model replies exercise the real API, worker and store.
+// These scripted model replies exercise the real API, worker and store.
 // An unexpected prompt is a fixture error so a test cannot pass by echoing it.
 func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error) {
 	if len(request.Messages) == 0 {
@@ -24,6 +24,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"task.watch","task":"Release notes for Chat fixture","title":"Follow release notes"}`
 	case "Show me the current state of the release notes review.":
 		content = `{"kind":"task.inspect","task":"Release notes for Chat fixture","title":"Inspect release notes"}`
+	case "Create a reusable agent called Release reader to summarize release notes.":
+		content = `{"kind":"agent.create","agentId":"release-reader","agentName":"Release reader","instructions":"Summarize release notes.","title":"Create release reader"}`
 	default:
 		return nil, errors.New("unknown Chat fixture request")
 	}

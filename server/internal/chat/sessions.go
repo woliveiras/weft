@@ -29,6 +29,7 @@ type Message struct {
 	State   string       `json:"state,omitempty"`
 	Attempt time.Time    `json:"attempt,omitempty"`
 	Task    *TaskSummary `json:"task,omitempty"`
+	Review  *AgentReview `json:"review,omitempty"`
 	Unread  bool         `json:"unread,omitempty"`
 	Created time.Time    `json:"createdAt"`
 }

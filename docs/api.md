@@ -169,6 +169,15 @@ between lists. These operations do not cancel its watches. Use
 result read. Session writes use the same authenticated ownership rule as reads.
 The user API has no conversation deletion operation.
 
+An administrator's request to create a reusable catalog agent returns a
+saved review with its exact agent definition and an expiry. Send the review's
+`digest` to `POST /api/v1/chat/sessions/{id}/operations/{operationId}/confirm`
+or `/decline`. The server binds the digest to the owner, session, operation,
+definition, model revision and catalog create precondition. A repeated
+decision retrieves its recorded state without creating another version.
+The Chat message endpoint accepts the explicit confirmation or decline text
+shown on the card when the conversation contains exactly one pending review.
+
 ## Native issue connections
 
 Native Jira Data Center connections have their own credential store, independent

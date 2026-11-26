@@ -31,6 +31,7 @@ tags:
   - name: events
   - name: approvals
   - name: catalog
+  - name: chat
   - name: workspace
   - name: mcp
   - name: providers
@@ -2306,6 +2307,29 @@ paths:
       x-weft-role: viewer
       responses:
         "200": {$ref: "#/components/responses/ChatSession"}
+  /api/v1/chat/sessions/{chatId}/operations/{operationId}/{decision}:
+    parameters:
+      - {$ref: "#/components/parameters/ChatSessionID"}
+      - {name: operationId, in: path, required: true, schema: {type: string}}
+      - {name: decision, in: path, required: true, schema: {type: string, enum: [confirm, decline]}}
+    post:
+      tags: [chat]
+      operationId: decideChatAgentCreation
+      x-weft-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [digest]
+              properties:
+                digest: {type: string, pattern: '^[0-9a-f]{64}$'}
+      responses:
+        "200": {$ref: "#/components/responses/ChatSession"}
+        "404": {description: Review absent or inaccessible}
+        "409": {description: Review digest mismatch or confirmation expired}
   /api/v1/providers/{name}/models:
     get:
       tags: [catalog]
@@ -2974,6 +2998,7 @@ components:
         createdAt: {type: string, format: date-time}
         attempt: {type: string, format: date-time}
         unread: {type: boolean}
+        review: {$ref: "#/components/schemas/ChatAgentReview"}
         task:
           type: object
           required: [id, state]
@@ -2984,6 +3009,19 @@ components:
             executionId: {type: string}
             decisionNeeded: {type: boolean}
             settledBlock: {type: boolean}
+    ChatAgentReview:
+      type: object
+      required: [id, agentId, definition, modelRevision, expiresAt, digest, state]
+      properties:
+        id: {type: string}
+        agentId: {type: string}
+        definition: {$ref: "#/components/schemas/AgentDefinition"}
+        modelRevision: {type: integer}
+        expiresAt: {type: string, format: date-time}
+        digest: {type: string, pattern: '^[0-9a-f]{64}$'}
+        state: {type: string, enum: [awaiting_confirmation, applying, created, conflict, unknown, declined]}
+        claimedAt: {type: string, format: date-time}
+        resultVersion: {type: integer}
     ChatModelSelection:
       type: object
       additionalProperties: false
@@ -3639,6 +3677,7 @@ components:
               definition: {$ref: "#/components/schemas/AgentDefinition"}
               createdAt: {type: string, format: date-time}
               createdBy: {type: string}
+              operation: {type: string, description: Optional ID of the confirmed Chat operation that created this version}
     Graph:
       $ref: "../schemas/graph.schema.json"
     Message:

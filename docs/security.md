@@ -57,6 +57,23 @@ flowchart TB
 | Agent → model | LLM gateway | Keys stay server-side; per-turn token budget |
 | Content → agent | prompt | Inputs framed as data in the preamble (mitigation, not a boundary) |
 
+### Conversation access
+
+With authentication enabled, Chat scopes list, detail and mutation requests
+to the owner's identity. Uniquely named static principals and OIDC subjects
+use separate identity namespaces. In a local installation with authentication
+disabled, the console labels conversations **Shared local history**. Anyone
+with access to that instance can read that history. Archiving changes where a
+conversation appears. Both active and archived content are retained.
+
+The configured Chat model receives bounded user context and returns an action
+proposal. The API validates the proposal and applies the domain role and
+revision checks for the requested effect. Provider credentials belong in
+the existing configuration forms. Task monitoring uses recorded state
+without sending periodic messages to the model. Detached observation can
+verify a configured static principal or the shared local identity. An OIDC
+owner's authenticated session can reconcile its watch on return. [Chat guide](features/chat/README.md)
+
 ## Coding-agent development boundary
 
 Agents that modify the Weft repository are a separate trust boundary from

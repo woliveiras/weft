@@ -7,10 +7,11 @@ implementation and pending maintainer review. **C** is implementation-aware
 baseline compatibility, identified by its existing criterion or contract.
 **X** is an external adapter contract, with independent live qualification
 required. The new oracles must be reviewed before tests are implemented.
-Delivery evidence covers [model selection](./evidence.md#2026-11-26--explicit-chat-model-selection)
-and [task tracking](./evidence.md#2026-11-26--conversational-task-tracking).
-The full workflow in S11 and the P1 gate remain pending. Existing tests cited
-in the impact review describe the baseline.
+Delivery evidence covers [model selection](./evidence.md#2026-11-26--explicit-chat-model-selection),
+[task tracking](./evidence.md#2026-11-26--conversational-task-tracking) and
+[reviewed agent creation](./evidence.md#2026-11-26--reviewed-catalog-agent-creation).
+S11 has full fixture coverage. Other rows and the P1 gate remain pending.
+Existing tests cited in the impact review describe the baseline.
 
 ## Behavior and oracle matrix
 
@@ -48,6 +49,7 @@ a write. Live transport/data tests support only the editions actually exercised.
 | S21 | AC-009. Existing installation/profile, interrupted persistence or dependency | Upgrade, restart/reopen store, replay concurrent claims, exercise limits and restore approved backup | Old domain records remain intact; new data recoverable on qualified stores; audit persists once; safe diagnostics and bounded labels/context exclude contents; errors/unknown never become success | P/C storage and INT-004 | U bounds/telemetry/cache; I conformance SQLite and FS, supported PostgreSQL, add/restore migrations, failure injection; native and E2E restart | P1, PROD-02/08/09 before claims |
 | S22 | AC-009. Untrusted or sensitive user input and restricted evidence | Submit secret-shaped payload, generate a title, revoke source access and ask for recap | Known secrets rejected safely; sensitive title falls back; revoked context/derived projections cannot leak through transcripts, model, events or logs | P | U redaction and provenance; I request/model fixture/log/traces/store and permission recheck | P1, P3 credential handoff |
 | S23 | AC-003. A configured provider and authenticated viewer and administrator | Inspect the empty selection, save an explicit model, try a stale or forbidden write, then remove the registered provider in a fixture | Only the administrator can change the selection with its revision. The saved model remains visible when unavailable. Setup never calls inference or falls back to another provider. | M | U model validation and form states, I role and CAS across SQLite and HTTP, E Models → Chat model with reload | P1 |
+| S24 | AC-004. An administrator has one or more saved agent proposals | Select the action on a specific review or type the explicit text displayed on the card. Repeat with an expired or stale review and with a viewer. | The same bound review controls both entry points. Ambiguous text, decline, expiry and lack of authority leave the catalog unchanged. Replayed confirmation returns one recorded version. | M/P | U digest/expiry/explicit directive, I API, catalog and SQLite with fixture model, E task tracking with reviewed creation | P1 |
 
 ## Operation inventory
 

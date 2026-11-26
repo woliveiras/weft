@@ -17,7 +17,7 @@ for protocol details and qualification limits.
 
 | Feature | Complete flow |
 | --- | --- |
-| [Chat](chat/README.md) | Inspect or follow an existing task, switch conversations and return to its retained result |
+| [Chat](chat/README.md) | Inspect and follow tasks, switch conversations, create a reviewed catalog agent and return to retained evidence |
 | [Tasks](tasks/README.md) | Describe work, select a version and repository, review access, prepare, start, inspect evidence, deliver and retain history |
 | [Setup and readiness](setup-and-readiness/README.md) | Read configuration facts, follow goal guidance, save before repairing dependencies and return to the saved task |
 | [Agents](agents/README.md) | Create or discover a reusable agent, publish a version, bind it to workflows and configure local behavior |

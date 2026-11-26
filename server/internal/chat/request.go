@@ -105,6 +105,7 @@ type Interpretation struct {
 	Plan      Plan
 	Text      string
 	Task      *TaskSummary
+	Review    *AgentReview
 	Retryable bool
 }
 
@@ -132,7 +133,7 @@ func (s Sessions) FinishInterpretation(ctx context.Context, owner, id, requestID
 					session.Title = "Untitled chat"
 				}
 			}
-			reply := Message{ID: "reply-" + requestID, Role: "assistant", Text: outcome.Text, Task: outcome.Task, State: state, Created: now}
+			reply := Message{ID: "reply-" + requestID, Role: "assistant", Text: outcome.Text, Task: outcome.Task, Review: outcome.Review, State: state, Created: now}
 			if outcome.Plan.Kind == WatchTask && outcome.Task != nil && !outcome.Task.Terminal() {
 				session.Watches = append(session.Watches, Watch{RequestID: requestID, Task: *outcome.Task, Observed: now})
 			}

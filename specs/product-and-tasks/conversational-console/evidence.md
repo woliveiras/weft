@@ -35,8 +35,26 @@ ownership, monitoring and session presentation require their own evidence.
   regressions. `make lint`, `make build`, the OpenAPI parse and
   `git diff --check` passed.
 
-This verifies the task-monitoring portion of S11. The agent creation and
-confirmation in that scenario remain pending. Also pending are indexed
-recents and due watches at large history sizes, the full independent
-title retry flow, physical-device and assistive technology checks,
-live provider qualification, and production backup and restore.
+This slice verifies the task-monitoring portion of S11.
+
+## 2026-11-26 — Reviewed catalog agent creation
+
+- Targeted Go unit and HTTP/SQLite integration passed. The checks covered the
+  exact digest, expiry, role denial, explicit Portuguese confirmation, multiple
+  pending-review ambiguity, refusal by button, replay, revision changes and a
+  durable catalog receipt. The fixture also verifies that an unpriced call is
+  admitted according to the existing policy when no monetary budget applies,
+  and deferred when an applicable budget refuses unpriced calls.
+- The TypeScript check and 24 focused Vitest checks passed. The reviewed card
+  displays the instructions and read-only effect and submits a scoped decline.
+- Chromium passed the full S11 fixture journey. An authenticated task watch
+  continued while the user opened another session, reviewed and created a
+  reusable agent, closed the browser and returned to the original result.
+  The API observed exactly one created version with empty tool grants.
+- `make test` passed, including 830 web tests, alongside `make lint`,
+  `make build`, the OpenAPI parse and `git diff --check`. Live-provider
+  environment overrides were excluded from the fixture run.
+
+P1 still needs indexed recents and due watches for larger histories, independent
+title retry, and the remaining qualification checks for devices, assistive
+technology, providers and production recovery.

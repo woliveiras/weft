@@ -38,6 +38,8 @@ func TestInterpretRejectsInvalidOrUntrustedModelPlans(t *testing.T) {
 		`{"kind":"task.watch","task":"tsk_example","question":"Which task?"}`,
 		`{"kind":"task.watch","task":"tsk_example"} []`,
 		`{"kind":"clarify","question":"Which task?","task":"tsk_example"}`,
+		`{"kind":"clarify","question":"Which task?","agentId":"abc"}`,
+		`{"kind":"agent.create","agentId":"abc","agentName":"ABC","instructions":"Read a release note.","tools":"shell"}`,
 		`null`,
 	} {
 		t.Run(body, func(t *testing.T) {
