@@ -38,8 +38,10 @@ import (
 
 type analysisProvider struct{}
 
-func (analysisProvider) Name() string                                    { return "e2e" }
-func (analysisProvider) Models(context.Context) ([]llm.ModelInfo, error) { return nil, nil }
+func (analysisProvider) Name() string { return "e2e" }
+func (analysisProvider) Models(context.Context) ([]llm.ModelInfo, error) {
+	return []llm.ModelInfo{{ID: "fixture", Provider: "e2e"}, {ID: "fixture-other", Provider: "e2e"}}, nil
+}
 func (analysisProvider) Chat(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
 	if r.Metadata["graph"] == "manual-review" && len(r.Tools) == 0 && len(r.Messages) == 2 && strings.Contains(r.Messages[1].Content, "fixture change") {
 		return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, Content: "Add a boundary test for the fixture change."}}, nil

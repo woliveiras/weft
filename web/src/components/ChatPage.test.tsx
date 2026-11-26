@@ -25,6 +25,7 @@ it('configures the model in Chat without inference and keeps the unsent request'
   const backend = fakeApi({
     'GET /api/v1/chat/settings': () => ({status:'unconfigured',revision:0}),
     'GET /api/v1/providers': () => [{name:'local',type:'mock',status:'configured',defaultModel:'fixture'}],
+    'GET /api/v1/providers/local/models': () => [{id:'fixture'}],
     'PUT /api/v1/chat/settings': () => ({model:{provider:'local',name:'fixture'},status:'configured',revision:1}),
     [`GET ${paths}`]: () => ({items:[]}),
   });
@@ -34,6 +35,7 @@ it('configures the model in Chat without inference and keeps the unsent request'
   fireEvent.click(await screen.findByRole('button',{name:'Choose Chat model here'}));
   await screen.findByRole('option',{name:'local'});
   fireEvent.change(screen.getByLabelText('Provider'),{target:{value:'local'}});
+  await screen.findByRole('option',{name:/^fixture$/});
   fireEvent.change(screen.getByLabelText('Model ID'),{target:{value:'fixture'}});
   fireEvent.click(screen.getByRole('button',{name:'Save Chat model'}));
   await screen.findByText('Chat model saved.');

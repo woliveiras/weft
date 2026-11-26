@@ -15,7 +15,7 @@ test('an administrator selects the Chat model and a viewer sees the persisted ch
   await page.getByRole('link', { name: 'Chat model', exact: true }).click();
   const form = page.getByRole('form', { name: 'Chat model selection' });
   await form.getByLabel('Provider').selectOption('e2e');
-  await form.getByLabel('Model ID').fill('fixture');
+  await form.getByRole('combobox',{name:'Model ID'}).selectOption('fixture');
   await form.getByRole('button', { name: 'Save Chat model' }).click();
   await expect(page.getByText('Chat model saved.')).toBeVisible();
 
@@ -47,7 +47,7 @@ test('changes the model from a conversation and preserves the pending request', 
   const field = form.getByLabel('Model ID');
   const before = await field.inputValue();
   await form.getByLabel('Provider').selectOption('e2e');
-  await field.fill(before === 'fixture' ? 'fixture-other' : 'fixture');
+  await field.selectOption(before === 'fixture' ? 'fixture-other' : 'fixture');
   await form.getByRole('button',{name:'Save Chat model'}).click();
   await expect(page.getByText('Chat model saved.')).toBeVisible();
   await page.getByRole('button',{name:'Close model settings'}).click();

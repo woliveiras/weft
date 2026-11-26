@@ -209,13 +209,15 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       {error && <ErrorBox error={error}/>}
       {settings.error && <><ErrorBox error={settings.error}/><Btn onClick={() => void settings.reload()}>Check Chat model</Btn></>}
       {MOCK && <p className="card">Conversational requests require a running Weft server.</p>}
-      {!MOCK && !modelAvailable && settings.data && <p className="card">
-        {settings.data.status === 'unconfigured' ? 'No Chat model selected.' : 'The selected Chat model provider is unavailable.'}{' '}
-        <a href="#/models/chat">Open Chat model settings</a>
-        {' or '}<a href="#/tasks">open Tasks</a>. Use <code>/inspect</code> to see available read-only queries.
-      </p>}
-      {!MOCK && canCreateAgent && !modelAvailable && !modelEditorOpen && settings.data &&
-        <Btn onClick={openModelEditor}>Choose Chat model here</Btn>}
+      {!MOCK && !modelAvailable && settings.data && !modelEditorOpen &&
+        <section className="card chat-setup-notice" aria-labelledby="chat-setup-title">
+          <h2 id="chat-setup-title">{settings.data.status === 'unconfigured' ? 'No Chat model selected.' : 'Chat model unavailable'}</h2>
+          <p>{canCreateAgent ? 'Choose a model to send requests in natural language.' : 'Ask an administrator to configure a model for natural-language requests.'} You can already use <code>/inspect</code> and <code>/find</code>.</p>
+          <div className="btn-row">{canCreateAgent
+            ? <Btn tone="primary" onClick={openModelEditor}>Choose Chat model here</Btn>
+            : <a href="#/models/chat">Open Chat model settings</a>}
+            <a href="#/tasks">Open Tasks</a></div>
+        </section>}
       {!MOCK && canCreateAgent && modelEditorOpen && <div ref={modelPanel} tabIndex={-1}>
         <ChatModelSection canEdit onSaved={settings.setData}/>
         <Btn onClick={() => {
@@ -226,7 +228,10 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       {id && !session && conversation.loading && <p role="status">Loading conversation…</p>}
       {id && conversation.error && <><ErrorBox error={session ? conversation.error : 'Conversation unavailable.'}/>
         <Btn onClick={() => void conversation.reload()}>Retry loading conversation</Btn></>}
-      {!id && !archived && <p className="muted">Ask to prepare a task, follow its progress, or create a reusable agent or workflow.</p>}
+      {!id && !archived && modelAvailable && <div className="chat-welcome">
+        <h2>What would you like to do?</h2>
+        <p className="muted">Follow a task, create an agent, or review a pull request.</p>
+      </div>}
       {session?.watches?.filter(watch => !watch.complete).map(watch => <p className="chat-watch" key={watch.requestId}>
         {watch.unknown ? 'Status temporarily unknown' : watch.task.decisionNeeded ? 'Decision required' : `Following task: ${watch.task.state}`} · <a href={taskSectionLink(watch.task.id,'overview')}>{watch.task.id}</a>
         {watch.unknown && <span className="muted"> · Last seen <time dateTime={watch.observedAt}>{new Date(watch.observedAt).toLocaleString()}</time></span>}

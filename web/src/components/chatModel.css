@@ -1,0 +1,26 @@
+.page .chat-model-settings {
+  box-sizing: border-box;
+  width: min(100%, 48rem);
+  align-items: stretch;
+  gap: var(--space-3);
+}
+.chat-model-settings h2, .chat-model-settings p { margin: 0; }
+.chat-model-form { display: grid; gap: var(--space-4); justify-items: start; }
+.chat-model-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: var(--space-4);
+  width: 100%;
+}
+.chat-model-fields label { display: grid; gap: var(--space-2); min-width: 0; font-weight: 600; }
+.chat-model-fields select { width: 100%; min-width: 0; min-height: 40px; font-weight: 400; }
+
+.chat-page .chat-conversation { width: min(100%, 54rem); justify-self: center; }
+.chat-page .chat-setup-notice { display: grid; gap: var(--space-3); justify-items: start; }
+.chat-setup-notice h2, .chat-setup-notice p, .chat-welcome h2, .chat-welcome p { margin: 0; }
+.chat-welcome { margin-block: clamp(1.25rem, 6vh, 4.5rem) var(--space-4); }
+.chat-welcome p { margin-block-start: var(--space-2); }
+.chat-page .chat-sessions-toggle { display: none; }
+@media (max-width: 850px) {
+  .chat-page .chat-sessions-toggle { display: inline-flex; }
+}
