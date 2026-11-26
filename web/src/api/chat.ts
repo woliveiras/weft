@@ -12,7 +12,12 @@ export interface ChatTask {
   settledBlock?: boolean;
 }
 
+export interface ChatExecution {
+  id: string; root: string; graph: string; state: string; nodes: number; active: number; cancellationRequested: boolean;
+}
+
 export interface ChatMessage {
+  execution?: ChatExecution;
   id: string;
   role: 'user' | 'assistant';
   text: string;

@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const InspectExecution = "execution.inspect"
+
 const InspectConsole = "console.inspect"
 const InspectionLimit = 8
 
@@ -58,6 +60,9 @@ func (v Inspection) Text(now time.Time) string {
 
 func ExplicitInspection(text string) (Interpretation, bool) {
 	fields := strings.Fields(text)
+	if len(fields) == 3 && fields[0] == "/inspect" && fields[1] == "execution" && validReferenceID(fields[2]) {
+		return Interpretation{Plan: Plan{Kind: InspectExecution, ExecutionID: fields[2], Title: "Inspect execution"}}, true
+	}
 	if len(fields) == 0 || fields[0] != "/inspect" {
 		return Interpretation{}, false
 	}

@@ -1,4 +1,5 @@
 import { ChatSkillCard } from './ChatSkillCard';
+import { runLink } from './runPresentation';
 import { ChatPRCard } from './ChatPRCard';
 import { takeChatReturnFocus } from './chatConnectionReturn';
 import { ChatInstructionCard } from './ChatInstructionCard';
@@ -306,6 +307,13 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
     {value.destination && <ChatManualLink destination={value.destination} message={value.id} onView={onView}/>}
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
     {onRetry && <Btn onClick={onRetry}>Retry saved request</Btn>}
+    {value.execution && <section aria-label="Execution evidence">
+      <p>{value.execution.id} · {value.execution.state} · {value.execution.active} of {value.execution.nodes} executions active</p>
+      <p>Tree root · {value.execution.root}</p>
+      {value.execution.cancellationRequested && <p>Cancellation requested</p>}
+      <a id={`chat-execution-${value.id}`} href={runLink(value.execution.graph,value.execution.id)}
+        onClick={() => onView(`chat-execution-${value.id}`)}>View execution</a>
+    </section>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
     {review && <OperationReviewCard review={review} now={now} canConfirm={('taskCorrection' in review || 'pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'workflowScale' in review || 'approval' in review) ? canOperate : canCreateAgent}
       onDecide={decision => onDecide(review,decision)} onView={onView}/>}

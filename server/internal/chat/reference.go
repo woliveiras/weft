@@ -9,12 +9,18 @@ import (
 // Definitions, tool output, provider errors and approval material stay local.
 var contextID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
 
+func validReferenceID(id string) bool {
+	return contextID.MatchString(id) && !credentialPattern.MatchString(id)
+}
+
 func observedReference(message Message) string {
 	if message.Role != "assistant" {
 		return ""
 	}
 	kind, id, version := "", "", 0
-	if message.Task != nil {
+	if message.Execution != nil {
+		kind, id = "execution", message.Execution.ID
+	} else if message.Task != nil {
 		kind, id = "task", message.Task.ID
 	} else if r := message.Review; r != nil && (r.State == ReviewCreated || r.State == ReviewApplied) {
 		switch {
@@ -28,7 +34,7 @@ func observedReference(message Message) string {
 			kind, id = "task", r.ResultID
 		}
 	}
-	if !contextID.MatchString(id) || credentialPattern.MatchString(id) {
+	if !validReferenceID(id) {
 		return ""
 	}
 	if version > 0 {

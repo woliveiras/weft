@@ -174,8 +174,8 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 			answer = chat.ManualHandoff(chat.Plan{Kind: chat.OpenManual, Destination: "configuration-export", Title: "Export configuration"}, actor.Role)
 		} else if explicit, ok := chat.ExplicitInspection(lastInput); ok {
 			answer = explicit
-			if explicit.Plan.Kind == chat.InspectConsole {
-				answer = s.inspectChatConsole(ctx, actor, explicit.Plan)
+			if explicit.Plan.Kind == chat.InspectConsole || explicit.Plan.Kind == chat.InspectExecution {
+				answer = s.resolveChatPlan(ctx, actor, id, explicit.Plan)
 			}
 		} else if directive != "" {
 			answer, err = s.decideChatReviewFromText(ctx, actor, session, directive)
@@ -252,6 +252,8 @@ func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID 
 	switch plan.Kind {
 	case chat.AnalyzePR:
 		return s.reviewChatPR(ctx, actor, sessionID, plan)
+	case chat.InspectExecution:
+		return s.inspectChatExecution(ctx, plan)
 	case chat.InspectConsole:
 		return s.inspectChatConsole(ctx, actor, plan)
 	case chat.SaveSkill:

@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"github.com/woliveiras/weft/server/internal/chat"
 	"github.com/woliveiras/weft/server/internal/delegation"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/executioncontrol"
@@ -66,5 +67,26 @@ func TestExecutionTreeBudgetUsesRootLedger(t *testing.T) {
 		if code := call(t, srv, "GET", "/api/v1/executions/"+id+"/tree", viewerTok, "", "", &view); code != 200 || view.Budget.Charged != 7 || view.Budget.Reserved != 0 || view.Budget.Limit != 100 {
 			t.Fatal(code, view)
 		}
+	}
+}
+
+func TestExecutionInspectionInChatReferencesExactChildWithoutMutation(t *testing.T) {
+	srv, a := setupApp(t, nil)
+	for _, x := range []*domain.Execution{{ID: "parent", GraphID: "g", RunID: "r", Status: domain.ExecSucceeded}, {ID: "child", ParentExecutionID: "parent", GraphID: "g", RunID: "r", Status: domain.ExecRunning}} {
+		x.StartedAt = time.Now()
+		if err := a.Store.PutExecution(t.Context(), x); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var session chat.Session
+	if status := call(t, srv, "POST", "/api/v1/chat/sessions", viewerTok, "application/json", `{"requestId":"c125e80ce56b4b50a83981d63b1a811b","text":"/inspect execution child"}`, &session); status != 200 || len(session.Messages) != 2 {
+		t.Fatal(status, session)
+	}
+	x := session.Messages[1].Execution
+	if x == nil || x.ID != "child" || x.Root != "parent" || x.Active != 1 || x.Nodes != 2 || x.CancellationRequested {
+		t.Fatalf("receipt %+v", x)
+	}
+	if result, err := (executioncontrol.Manager{Store: a.Store}).Requested(t.Context(), "child"); err != nil || result != nil {
+		t.Fatal("inspection mutated execution", result, err)
 	}
 }

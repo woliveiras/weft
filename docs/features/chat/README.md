@@ -234,3 +234,5 @@ scoped to the authenticated static or OIDC principal.
 When inference fails, the saved reply identifies the next step. A budget rejection opens Budgets, an unavailable model opens Chat model settings, and a busy model can be retried after a slot becomes available. With a proposal open, **Confirm** and **Decline** and their explicit text equivalents (“confirm this proposal” or “decline this proposal”) use the reviewed operation directly. Weft still checks the current role, revision and expiry before acting.
 
 Administrators can type `/export` or ask to download the current installation configuration. **Download installation YAML** retrieves the export with the current credentials. The file uses the same secret-preservation markers as the CLI export. The conversation stores the download action and leaves the YAML out of its transcript and model context.
+
+Use `/inspect execution <id>` or ask about an exact execution to see its observed state, tree root and number of active executions. **View execution** opens the selected execution. A cancellation request and the execution's eventual terminal status are shown separately.

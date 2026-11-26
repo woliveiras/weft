@@ -104,6 +104,7 @@ func (s *Session) Context(requestID string) []llm.ChatMessage {
 }
 
 type Interpretation struct {
+	Execution   *ExecutionSummary
 	Plan        Plan
 	Text        string
 	Task        *TaskSummary
@@ -138,6 +139,7 @@ func (s Sessions) FinishInterpretation(ctx context.Context, owner, id, requestID
 			}
 			reply := Message{ID: "reply-" + requestID, Role: "assistant", Text: outcome.Text, Task: outcome.Task, Review: outcome.Review, State: state, Created: now}
 			reply.Destination = outcome.Destination
+			reply.Execution = outcome.Execution
 			if outcome.Plan.Kind == WatchTask && outcome.Task != nil && !outcome.Task.Terminal() {
 				session.Watches = append(session.Watches, Watch{RequestID: requestID, Task: *outcome.Task, Observed: now})
 			}

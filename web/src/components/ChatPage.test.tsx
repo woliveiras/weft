@@ -287,3 +287,17 @@ it('allows an explicit review decision while model inference is unavailable', as
   await act(async () => fireEvent.click(screen.getByRole('button',{name:'Send'})));
   expect(backend.find('POST',`${paths}/${id}/messages`)).toHaveLength(1);
 });
+
+it('opens the selected child execution and distinguishes a request from terminal state', async () => {
+  fakeApi({
+    'GET /api/v1/chat/settings':()=>({status:'unconfigured',revision:0}),
+    [`GET ${paths}`]:()=>({items:[],shared:true}),
+    [`GET ${paths}/${id}`]:()=>({id,title:'Execution status',messages:[{id:'a1',role:'assistant',
+      text:'Current execution state',execution:{id:'child',root:'parent',graph:'review',state:'running',nodes:2,active:1,cancellationRequested:true}}]}),
+  });
+  render(<ChatPage archived={false} id={id} onOpen={vi.fn()}/>);
+  const summary=await screen.findByRole('region',{name:'Execution evidence'});
+  expect(within(summary).getByText(/child · running/)).toBeTruthy();
+  expect(within(summary).getByText('Cancellation requested')).toBeTruthy();
+  expect(within(summary).getByRole('link',{name:'View execution'}).getAttribute('href')).toContain('#/g/review/runs?execution=child');
+});

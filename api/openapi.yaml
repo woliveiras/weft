@@ -3019,7 +3019,18 @@ components:
         createdAt: {type: string, format: date-time}
         attempt: {type: string, format: date-time}
         unread: {type: boolean}
-        destination: {type: string, enum: [tasks, workflows, agents, projects, activity, approvals, models, chat-model, plugins, usage, budgets, prices, connections, connection-setup, skills, administration], description: "Read-only navigation target in the local console."}
+        execution:
+          type: object
+          required: [id, root, graph, state, nodes, active, cancellationRequested]
+          properties:
+            id: {type: string}
+            root: {type: string}
+            graph: {type: string}
+            state: {type: string}
+            nodes: {type: integer}
+            active: {type: integer}
+            cancellationRequested: {type: boolean}
+        destination: {type: string, enum: [tasks, workflows, agents, projects, activity, approvals, models, chat-model, plugins, usage, budgets, prices, connections, connection-setup, skills, administration, configuration-export], description: "Read-only console destination or authenticated download."}
         review:
           oneOf:
             - {$ref: "#/components/schemas/ChatAgentReview"}

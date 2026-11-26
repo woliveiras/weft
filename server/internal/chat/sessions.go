@@ -22,16 +22,17 @@ var (
 // Message stores the text and safe operation references rendered in the chat.
 // Raw provider responses and task evidence remain outside the transcript.
 type Message struct {
-	ID          string           `json:"id"`
-	Role        string           `json:"role"`
-	Text        string           `json:"text"`
-	State       string           `json:"state,omitempty"`
-	Attempt     time.Time        `json:"attempt,omitempty"`
-	Task        *TaskSummary     `json:"task,omitempty"`
-	Review      *OperationReview `json:"review,omitempty"`
-	Destination string           `json:"destination,omitempty"`
-	Unread      bool             `json:"unread,omitempty"`
-	Created     time.Time        `json:"createdAt"`
+	Execution   *ExecutionSummary `json:"execution,omitempty"`
+	ID          string            `json:"id"`
+	Role        string            `json:"role"`
+	Text        string            `json:"text"`
+	State       string            `json:"state,omitempty"`
+	Attempt     time.Time         `json:"attempt,omitempty"`
+	Task        *TaskSummary      `json:"task,omitempty"`
+	Review      *OperationReview  `json:"review,omitempty"`
+	Destination string            `json:"destination,omitempty"`
+	Unread      bool              `json:"unread,omitempty"`
+	Created     time.Time         `json:"createdAt"`
 }
 
 type TaskSummary struct {
