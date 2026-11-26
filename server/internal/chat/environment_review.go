@@ -36,7 +36,7 @@ func (s Sessions) RecordEnvironmentState(ctx context.Context, owner, id string, 
 	return s.update(ctx, owner, id, func(v *Session) (bool, error) {
 		for i := range v.Messages {
 			m := &v.Messages[i]
-			if m.Review == nil || m.Review.Environment == nil || m.Review.ID != prior.ID {
+			if m.Review == nil || (m.Review.Environment == nil && m.Review.WorkflowEnvironment == nil) || m.Review.ID != prior.ID {
 				continue
 			}
 			if m.Review.State != prior.State || prior.State == next {

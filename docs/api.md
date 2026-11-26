@@ -256,6 +256,13 @@ scope. Confirmation uses the native lifecycle and saves an operation receipt
 on the trigger. `applied` confirms the intake control. Separately inspect the
 trigger's current state or follow a task to see the result of admitted work.
 
+An operator can review a saved reusable workflow environment. A
+`workflowEnvironment` review binds the workflow ID, saved version and
+definition hash. Confirmation uses the native non-forced build and watches
+its recorded state. A compatible ready environment can be reused. `queued`
+represents a build in progress, and `applied` means the reviewed definition
+is ready. Inspect Environment settings for native build diagnostics.
+
 An operator can review a start, pause, resume, graceful stop or immediate
 interruption on a reusable workflow or one node. Chat seals the exact graph
 version, target, run and desired control state. Confirmation takes the native

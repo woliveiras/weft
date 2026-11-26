@@ -10,7 +10,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
 import type { ChatAgentAdoptionReview, ChatApprovalReview, ChatCatalogPublicationReview, ChatMessage, ChatOperationReview,
   ChatSession, ChatSessionSummary, ChatTask, ChatTaskCancellationReview, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview,
-  ChatBudgetRaiseReview, ChatEnvironmentReview, ChatCorrectionReview, ChatTaskAuthorizationReview, ChatTaskRetryReview, ChatWorkflowScaleReview, ChatTriggerReview } from '../api/chat';
+  ChatBudgetRaiseReview, ChatEnvironmentReview, ChatCorrectionReview, ChatTaskAuthorizationReview, ChatTaskRetryReview,
+  ChatWorkflowScaleReview, ChatTriggerReview, ChatWorkflowEnvironmentReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -319,7 +320,7 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
         onClick={() => onView(`chat-execution-${value.id}`)}>View execution</a>
     </section>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
-    {review && <OperationReviewCard review={review} now={now} canConfirm={('executionCancel' in review || 'taskCorrection' in review || 'pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'workflowScale' in review || 'approval' in review) ? canOperate : canCreateAgent}
+    {review && <OperationReviewCard review={review} now={now} canConfirm={('executionCancel' in review || 'taskCorrection' in review || 'pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'workflowScale' in review || 'workflowEnvironment' in review || 'approval' in review) ? canOperate : canCreateAgent}
       onDecide={decision => onDecide(review,decision)} onView={onView}/>}
     {value.unread && <Btn onClick={onRead}>Mark result read</Btn>}
   </article>;
@@ -361,7 +362,7 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   }
   if ('workflowScale' in review) return <WorkflowScaleCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('triggerControl' in review) return <TriggerControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
-  if ('environment' in review) return <EnvironmentPreparationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('environment' in review || 'workflowEnvironment' in review) return <EnvironmentPreparationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskCorrection' in review) return <CorrectionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskRetry' in review) return <TaskRetryReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('publication' in review) return <CatalogPublicationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
@@ -643,24 +644,28 @@ function WorkflowControlCard({review, now, canConfirm, onDecide, onView}: {
 }
 
 function EnvironmentPreparationCard({review, now, canConfirm, onDecide, onView}: {
-  review:ChatEnvironmentReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+  review:ChatEnvironmentReview|ChatWorkflowEnvironmentReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
 }) {
-  const target = review.environment;
+  const task = 'environment' in review ? review.environment : undefined;
+  const target = 'environment' in review ? review.environment : review.workflowEnvironment;
   const anchor = 'chat-environment-' + review.id;
-  return <section className="chat-agent-review" aria-label="Prepare task environment">
-    <h3>Prepare task environment</h3>
-    <p>{target.task} · revision {target.revision} · {target.workflow} v{target.workflowVersion}</p>
-    {target.repositories?.map(repository=><p key={repository}>{repository}</p>)}
+  const name = task ? 'Prepare task environment' : 'Prepare workflow environment';
+  return <section className="chat-agent-review" aria-label={name}>
+    <h3>{name}</h3>
+    <p>{task && <>{task.task} · revision {task.revision} · </>}{target.workflow} v{target.workflowVersion}</p>
+    {task?.repositories?.map(repository=><p key={repository}>{repository}</p>)}
     <pre>{target.definition}</pre>
-    <p>Preparing the environment can build an image and run its setup. Starting task agents takes a separate decision.</p>
+    {!task && <details><summary>Reviewed definition hash</summary><code>{target.definitionHash}</code></details>}
+    <p>Preparing the environment can build an image and run its setup. Starting {task ? 'task agents' : 'the workflow'} takes a separate decision.</p>
     {review.state === 'awaiting_confirmation' && <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm} confirmLabel="Prepare environment" onDecide={onDecide}/>}
     {review.state === 'applied' && <p role="status">Environment ready for the reviewed definition.</p>}
     {(review.state === 'applying' || review.state === 'queued') && <p role="status">Checking environment preparation…</p>}
-    {review.state === 'unknown' && <p role="status">Build outcome unknown. Open the task for diagnostics.</p>}
-    {review.state === 'incomplete' && <p role="status">Preparation did not complete. Inspect the build in Tasks.</p>}
+    {review.state === 'unknown' && <p role="status">Build outcome unknown. Open {task ? 'the task' : 'Environment settings'} for diagnostics.</p>}
+    {review.state === 'incomplete' && <p role="status">The reviewed definition is unavailable. Inspect the build state in {task ? 'Tasks' : 'Environment settings'}.</p>}
     {review.state === 'declined' && <p role="status">Preparation declined.</p>}
-    {review.state === 'conflict' && <p role="status">The reviewed state changed. Review the task requirements again.</p>}
-    <a id={anchor} href={taskSectionLink(target.task,'overview')} onClick={()=>onView(anchor)}>Inspect task</a>
+    {review.state === 'conflict' && <p role="status">The reviewed state changed. Request a fresh review.</p>}
+    <a id={anchor} href={task ? taskSectionLink(task.task,'overview') : settingsPath(target.workflow,'environment')}
+      onClick={()=>onView(anchor)}>{task ? 'Inspect task' : 'Inspect workflow environment'}</a>
   </section>;
 }
 

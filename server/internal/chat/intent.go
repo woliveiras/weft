@@ -47,6 +47,7 @@ Return exactly one JSON object. "kind" is one of:
 - "execution.inspect": inspect a specific execution and its tree. Add "executionId" with the exact ID. Ask for the ID if missing.
 - "task.inspect": show the latest state of a particular task now. Add "task" with the same selector convention.
 - "task.prepare_environment": propose a build for the explicitly named task. Include "task" with its ID or unique title. Preparing an environment and starting task agents require separate requests.
+- "workflow.prepare_environment": build the current saved environment of a named reusable workflow. Include "environmentWorkflow" with its exact ID or name. Use this only for a build of a saved definition. A task environment is separate. Never use this to force, reset, change a definition, or start agents.
 - "task.start": propose starting an explicitly identified saved task. Add "task" with the task ID or exact title established in the conversation. Ask which task when the target is unclear. Starting requires a separate review. Never infer start from a request to create, inspect or follow a task.
 - "task.cancel": propose interrupting the confirmed running attempt of an explicitly named task. Add "task" with its ID or unique exact title. Use this only when the caller intends to cancel the task attempt. Workflow controls and trigger intake are different scopes.
 - "task.authorize": propose an explicit authorization mode for a named task. Add "task" and "taskAuthorizationMode" (ask, workspace or full). Ask for the mode if the request is unclear. A running task can only narrow its current authorization. Never infer consent from a request to start a task. Never set a project preference or change the workflow's grants.
@@ -76,6 +77,7 @@ You may include a short, neutral "title" for the conversation based on the lates
 // Plan proposes an operation or asks for clarification. A task selector is
 // always resolved against the caller's permitted resources before it is used.
 type Plan struct {
+	EnvironmentWorkflow   string
 	Trigger               TriggerControlDraft
 	Scale                 WorkflowScaleDraft
 	ExecutionScope        string
@@ -173,6 +175,8 @@ func decodePlan(body string) (Plan, error) {
 		}
 		value := strings.TrimSpace(*input)
 		switch key {
+		case "environmentWorkflow":
+			plan.EnvironmentWorkflow = value
 		case "triggerTarget":
 			plan.Trigger.Target = value
 		case "triggerAction":
@@ -358,6 +362,9 @@ func decodePlan(body string) (Plan, error) {
 	if plan.Kind != ControlWorkflow && (seen["controlWorkflow"] || seen["controlNode"] || seen["controlAction"]) {
 		return Plan{}, ErrInvalidPlan
 	}
+	if seen["environmentWorkflow"] && plan.Kind != PrepareWorkflowEnvironment {
+		return Plan{}, ErrInvalidPlan
+	}
 	if plan.Kind != ControlTrigger && (seen["triggerTarget"] || seen["triggerAction"]) {
 		return Plan{}, ErrInvalidPlan
 	}
@@ -368,6 +375,10 @@ func decodePlan(body string) (Plan, error) {
 		return Plan{}, ErrInvalidPlan
 	}
 	switch plan.Kind {
+	case PrepareWorkflowEnvironment:
+		if !shortLabel(plan.EnvironmentWorkflow) || seen["task"] || seen["question"] {
+			return Plan{}, ErrInvalidPlan
+		}
 	case ControlTrigger:
 		if !plan.Trigger.valid() || seen["task"] || seen["question"] {
 			return Plan{}, ErrInvalidPlan

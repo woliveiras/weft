@@ -104,20 +104,21 @@ type AgentCreation struct {
 // OperationReview persists the reviewed action. The digest binds the payload
 // to the owner and session. Claim state and the result are recorded separately.
 type OperationReview struct {
-	ExecutionCancel *executioncontrol.CancelScope    `json:"executionCancel,omitempty"`
-	TriggerControl  *trigger.IntakeScope             `json:"triggerControl,omitempty"`
-	WorkflowScale   *WorkflowScale                   `json:"workflowScale,omitempty"`
-	ScaleResult     *engine.WorkflowScaleObservation `json:"scaleResult,omitempty"`
-	BudgetRaise     *BudgetRaise                     `json:"budgetRaise,omitempty"`
-	BudgetResult    *BudgetRaiseResult               `json:"budgetResult,omitempty"`
-	Environment     *EnvironmentPreparation          `json:"environment,omitempty"`
-	TaskCorrection  *TaskCorrection                  `json:"taskCorrection,omitempty"`
-	Skill           *SkillChange                     `json:"skill,omitempty"`
-	PR              *PRAnalysis                      `json:"pr,omitempty"`
-	PRSummary       string                           `json:"prSummary,omitempty"`
-	Instructions    *InstructionEdit                 `json:"instructions,omitempty"`
-	Guidance        *Guidance                        `json:"guidance,omitempty"`
-	ConsumedAt      *time.Time                       `json:"consumedAt,omitempty"`
+	WorkflowEnvironment *WorkflowEnvironment             `json:"workflowEnvironment,omitempty"`
+	ExecutionCancel     *executioncontrol.CancelScope    `json:"executionCancel,omitempty"`
+	TriggerControl      *trigger.IntakeScope             `json:"triggerControl,omitempty"`
+	WorkflowScale       *WorkflowScale                   `json:"workflowScale,omitempty"`
+	ScaleResult         *engine.WorkflowScaleObservation `json:"scaleResult,omitempty"`
+	BudgetRaise         *BudgetRaise                     `json:"budgetRaise,omitempty"`
+	BudgetResult        *BudgetRaiseResult               `json:"budgetResult,omitempty"`
+	Environment         *EnvironmentPreparation          `json:"environment,omitempty"`
+	TaskCorrection      *TaskCorrection                  `json:"taskCorrection,omitempty"`
+	Skill               *SkillChange                     `json:"skill,omitempty"`
+	PR                  *PRAnalysis                      `json:"pr,omitempty"`
+	PRSummary           string                           `json:"prSummary,omitempty"`
+	Instructions        *InstructionEdit                 `json:"instructions,omitempty"`
+	Guidance            *Guidance                        `json:"guidance,omitempty"`
+	ConsumedAt          *time.Time                       `json:"consumedAt,omitempty"`
 	*AgentCreation
 	Publication       *CatalogPublication                `json:"publication,omitempty"`
 	Adoption          *AgentAdoption                     `json:"adoption,omitempty"`
@@ -165,7 +166,7 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	choices := 0
-	for _, exists := range []bool{r.ExecutionCancel != nil, r.TriggerControl != nil, r.WorkflowScale != nil, r.BudgetRaise != nil, r.Environment != nil, r.TaskCorrection != nil, r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskCancel != nil, r.TaskAuthorization != nil, r.TaskRetry != nil, r.Approval != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
+	for _, exists := range []bool{r.WorkflowEnvironment != nil, r.ExecutionCancel != nil, r.TriggerControl != nil, r.WorkflowScale != nil, r.BudgetRaise != nil, r.Environment != nil, r.TaskCorrection != nil, r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskCancel != nil, r.TaskAuthorization != nil, r.TaskRetry != nil, r.Approval != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
 		if exists {
 			choices++
 		}
@@ -175,6 +176,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 	}
 	var payload any
 	switch {
+	case r.WorkflowEnvironment != nil:
+		payload = struct {
+			Owner, Session, ID, Operation string
+			ExpiresAt                     time.Time
+			Preparation                   *WorkflowEnvironment
+		}{owner, session, r.ID, PrepareWorkflowEnvironment, r.ExpiresAt, r.WorkflowEnvironment}
 	case r.TriggerControl != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string

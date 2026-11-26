@@ -282,6 +282,8 @@ func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID 
 		return s.reviewChatWorkflow(ctx, actor, sessionID, plan)
 	case chat.PrepareTaskEnvironment:
 		return s.reviewChatEnvironment(ctx, actor, sessionID, plan)
+	case chat.PrepareWorkflowEnvironment:
+		return s.reviewChatWorkflowEnvironment(ctx, actor, sessionID, plan)
 	case chat.CorrectTask:
 		return s.reviewChatTaskCorrection(ctx, actor, sessionID, plan)
 	case chat.CreateTask:

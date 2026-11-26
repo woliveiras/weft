@@ -274,3 +274,13 @@ with the new workflow version and scope. The operator role received no review.
 Repeated confirmation left one native pause and one resume audit. Chromium
 verified both states, the fresh consent under the local fixture actor and focus
 restoration from the workflow's Triggers section.
+
+## 2026-11-26 — Reviewed reusable workflow environment
+
+For S43, Go checked exact version and hash binding, rejection of force or
+mixed task intents, and credential-shaped definition redaction. Authenticated
+HTTP and SQLite used a fixture daemon to verify successful and failed native
+builds, zero builds from a stale or viewer request, one operator audit after
+confirmation and reuse of the ready matching definition. The workflow stayed
+stopped. Chromium passed the task and workflow environment journeys and
+returned from the workflow's Environment settings to the same review.

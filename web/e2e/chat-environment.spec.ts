@@ -29,3 +29,37 @@ test('reviews a task environment, observes readiness and keeps agents stopped',a
   await review.getByRole('link',{name:'Inspect task'}).click();
   await expect(page).toHaveURL(new RegExp(task.id));
 });
+
+test('observes the reviewed reusable workflow build and returns from native settings',async ({page,request})=>{
+  const headers = {Authorization:'Bearer e2e-admin-token'};
+  const workflow = 'chat-shared-build';
+  const path = `/api/v1/graphs/${workflow}`;
+  const graph = {metadata:{id:workflow,name:'Shared build workflow'},spec:{environment:{image:'alpine:3.22'},
+    nodes:[{id:'reader',runtime:{kind:'echo'},isolation:{mode:'docker'},loop:{mode:'event'}}]}};
+  expect((await request.post('/api/v1/graphs',{headers,data:graph})).status()).toBe(201);
+  const selection = await (await request.get('/api/v1/chat/settings',{headers})).json();
+  expect((await request.put('/api/v1/chat/settings',{headers:{...headers,'If-Match':String(selection.revision)},data:{provider:'e2e',name:'fixture'}})).ok()).toBe(true);
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-operator-token'));
+  await page.goto('/');
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Build the environment for the shared build workflow.');
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  const review = page.getByRole('region',{name:'Prepare workflow environment'});
+  await expect(review).toContainText(`${workflow} v1`);
+  await expect(review).toContainText('alpine:3.22');
+  const current = async () => (await request.get(`${path}/environment`,{headers})).json();
+  expect((await current()).state).toBe('absent');
+  await review.getByRole('button',{name:'Prepare environment',exact:true}).click();
+  await expect(review).toContainText('Environment ready for the reviewed definition.');
+  const native = await current();
+  expect(native).toMatchObject({state:'ready',upToDate:true});
+  expect(native.buildOperation).toBeUndefined();
+  await review.getByText('Reviewed definition hash',{exact:true}).click();
+  await expect(review.getByText(native.hash,{exact:true})).toBeVisible();
+  const details = await (await request.get(path,{headers})).json();
+  expect(details.record.desiredState).toBe('stopped');
+  const inspect = review.getByRole('link',{name:'Inspect workflow environment',exact:true});
+  await inspect.click();
+  await expect(page).toHaveURL(new RegExp(`#/g/${workflow}/settings/environment$`));
+  await page.goBack();
+  await expect(inspect).toBeFocused();
+});

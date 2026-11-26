@@ -3044,6 +3044,7 @@ components:
             - {$ref: "#/components/schemas/ChatTaskRetryReview"}
             - {$ref: "#/components/schemas/ChatCorrectionReview"}
             - {$ref: "#/components/schemas/ChatEnvironmentReview"}
+            - {$ref: "#/components/schemas/ChatWorkflowEnvironmentReview"}
             - {$ref: "#/components/schemas/ChatCatalogPublicationReview"}
             - {$ref: "#/components/schemas/ChatAgentAdoptionReview"}
             - {$ref: "#/components/schemas/ChatApprovalReview"}
@@ -3446,6 +3447,21 @@ components:
                 definitionHash: {type: string}
                 definition: {type: string}
                 repositories: {type: array, items: {type: string}}
+    ChatWorkflowEnvironmentReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [workflowEnvironment]
+          properties:
+            workflowEnvironment:
+              type: object
+              required: [workflow, workflowVersion, workflowDigest, definitionHash, definition]
+              properties:
+                workflow: {type: string}
+                workflowVersion: {type: integer, minimum: 1}
+                workflowDigest: {type: string}
+                definitionHash: {type: string}
+                definition: {type: string}
     ChatCorrectionReview:
       allOf:
         - {$ref: "#/components/schemas/ChatReviewState"}

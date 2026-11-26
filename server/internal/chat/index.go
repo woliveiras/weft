@@ -112,7 +112,7 @@ func (s *Session) summary(owner, key string) storage.ChatSummary {
 			if (review.Skill != nil || review.TaskCorrection != nil) && review.State == ReviewApplying {
 				meta.WatchCount++
 			}
-			if (review.Environment != nil || review.PR != nil) && (review.State == ReviewQueued || review.State == ReviewApplying) {
+			if (review.Environment != nil || review.WorkflowEnvironment != nil || review.PR != nil) && (review.State == ReviewQueued || review.State == ReviewApplying) {
 				meta.WatchCount++
 			}
 			if review.Guidance != nil && (review.State == ReviewQueued || review.State == ReviewApplying) {

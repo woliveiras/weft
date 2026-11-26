@@ -175,6 +175,10 @@ func writeChatSession(w http.ResponseWriter, actor Identity, session *chat.Sessi
 				message.Review = nil
 				message.Text = "Administrator access is required to view this environment review."
 			}
+			if message.Review != nil && message.Review.WorkflowEnvironment != nil && !actor.Role.Allows(config.RoleOperator) {
+				message.Review = nil
+				message.Text = "Operator access is required to view this workflow environment review."
+			}
 			if message.Review != nil && message.Review.Configuration != nil {
 				message.Review = nil
 				message.Text = "Administrator access is required to view this installation review."

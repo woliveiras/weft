@@ -54,6 +54,14 @@ The preview identifies the repository, source and base commits, model and workfl
 
 Ask to prepare the environment of a saved task by ID or unique name. An administrator can review the pinned workflow, task revision, repository commits and saved build definition before confirming. The session reports readiness when the native environment matches the reviewed definition. Use **Inspect task** for build diagnostics, existing preparations or approval holds. After readiness, ask to start the saved task. The start card identifies the prepared build, its completion time and task authorization. Confirmation rechecks readiness and admits the task once.
 
+## Build a reusable workflow environment
+
+As an operator, ask “Build the environment for the shared build workflow.”
+Review the saved workflow version and definition before choosing **Prepare
+environment**. Chat follows the build and reports readiness for the reviewed
+definition. Starting the workflow takes a separate decision. Use **Inspect
+workflow environment** for logs, repository-backed builds and reset controls.
+
 ## Correct a task draft
 
 Identify the draft by its ID or unique title and specify the replacement title, request, or outcome. Compare the current and proposed text, then select **Save draft correction**. The draft keeps its workflow and repository bindings. When it uses a generated channel payload, the title and request update there as well. Open **Tasks** to review custom payloads, resolve incomplete bindings or change repositories. A newer draft or workflow revision requires a fresh review.

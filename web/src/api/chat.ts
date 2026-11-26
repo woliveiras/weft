@@ -154,6 +154,9 @@ export interface ChatWorkflowControlReview extends ChatReviewState {
 export interface ChatEnvironmentReview extends ChatReviewState {
   environment:{task:string; revision:number; workflow:string; workflowVersion:number; workflowDigest:string; definitionHash:string; definition:string; repositories?:string[]};
 }
+export interface ChatWorkflowEnvironmentReview extends ChatReviewState {
+  workflowEnvironment:{workflow:string;workflowVersion:number;workflowDigest:string;definitionHash:string;definition:string};
+}
 export interface ChatDraftText { title:string; request:string; outcome:string }
 export interface ChatCorrectionReview extends ChatReviewState {
   taskCorrection:{task:string; revision:number; workflow:string; workflowVersion:number; workflowDigest:string; before:ChatDraftText; after:ChatDraftText};
@@ -226,7 +229,7 @@ export interface ChatTriggerReview extends ChatReviewState {
   };
 }
 
-export type ChatOperationReview = ChatExecutionCancelReview | ChatTriggerReview | ChatWorkflowScaleReview | ChatBudgetRaiseReview | ChatEnvironmentReview | ChatCorrectionReview | ChatSkillReview | ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
+export type ChatOperationReview = ChatExecutionCancelReview | ChatTriggerReview | ChatWorkflowScaleReview | ChatBudgetRaiseReview | ChatEnvironmentReview | ChatWorkflowEnvironmentReview | ChatCorrectionReview | ChatSkillReview | ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
   ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview |
   ChatTaskRetryReview | ChatCatalogPublicationReview | ChatAgentAdoptionReview | ChatApprovalReview | ChatTaskCancellationReview |
   ChatTaskAuthorizationReview;

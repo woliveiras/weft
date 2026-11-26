@@ -31,6 +31,7 @@ func (s *Server) getEnvironment(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	v.BuildOperation = ""
 	writeJSON(w, http.StatusOK, v)
 	return nil
 }
@@ -62,6 +63,7 @@ func (s *Server) buildEnvironment(w http.ResponseWriter, r *http.Request) error 
 	if v.State == environment.StateBuilding {
 		code = http.StatusAccepted
 	}
+	v.BuildOperation = ""
 	writeJSON(w, code, v)
 	return nil
 }
@@ -86,6 +88,7 @@ func (s *Server) resetEnvironment(w http.ResponseWriter, r *http.Request) error 
 	if err != nil {
 		return err
 	}
+	v.BuildOperation = ""
 	writeJSON(w, http.StatusOK, v)
 	return nil
 }

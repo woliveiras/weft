@@ -63,6 +63,7 @@ type CacheMount struct {
 
 // Status is the persisted state of a graph's environment.
 type Status struct {
+	BuildOperation string       `json:"buildOperation,omitempty"`
 	Phase          string       `json:"phase,omitempty"`
 	ReuseDecision  string       `json:"reuseDecision,omitempty"`
 	BuildReasons   []string     `json:"buildReasons,omitempty"`
@@ -227,15 +228,24 @@ func (m *Manager) view(g *domain.Graph, st *Status) *View {
 // Build starts building g's environment in the background and returns the
 // building status. Without force, an up-to-date environment is left alone.
 func (m *Manager) Build(ctx context.Context, g *domain.Graph, force bool, actor string) (*View, error) {
-	return m.buildEnvironment(ctx, g, force, actor, false)
+	return m.buildEnvironment(ctx, g, force, actor, false, "")
 }
 
 // BuildSaved checks that the graph still exists while holding its environment lease.
 func (m *Manager) BuildSaved(ctx context.Context, g *domain.Graph, force bool, actor string) (*View, error) {
-	return m.buildEnvironment(ctx, g, force, actor, true)
+	return m.buildEnvironment(ctx, g, force, actor, true, "")
 }
 
-func (m *Manager) buildEnvironment(ctx context.Context, g *domain.Graph, force bool, actor string, saved bool) (*View, error) {
+// BuildReviewedSaved uses the ordinary saved-build path without force and
+// records the reviewing operation alongside the native build status.
+func (m *Manager) BuildReviewedSaved(ctx context.Context, g *domain.Graph, actor, operation string) (*View, error) {
+	if operation == "" {
+		return nil, ErrInvalidDefinition
+	}
+	return m.buildEnvironment(ctx, g, false, actor, true, operation)
+}
+
+func (m *Manager) buildEnvironment(ctx context.Context, g *domain.Graph, force bool, actor string, saved bool, operation string) (*View, error) {
 	env := g.Spec.Environment
 	if env == nil {
 		return nil, ErrNotDefined
@@ -319,7 +329,7 @@ func (m *Manager) buildEnvironment(ctx context.Context, g *domain.Graph, force b
 	m.mu.Unlock()
 
 	now := time.Now().UTC()
-	st := &Status{Phase: "preparing", BuildReasons: buildReasons(cur, force), Graph: id, State: StateBuilding, Hash: Hash(env), StartedAt: &now, Actor: actor, Instance: m.opt.Instance}
+	st := &Status{Phase: "preparing", BuildReasons: buildReasons(cur, force), Graph: id, State: StateBuilding, Hash: Hash(env), StartedAt: &now, Actor: actor, Instance: m.opt.Instance, BuildOperation: operation}
 	if err := m.save(ctx, st); err != nil {
 		m.finish(id, b)
 		release()

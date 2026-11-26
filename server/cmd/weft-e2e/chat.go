@@ -28,6 +28,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"task.start","task":"Release sandbox fixture"}`
 	case "Prepare the release sandbox task environment.":
 		content = `{"kind":"task.prepare_environment","task":"Release sandbox fixture"}`
+	case "Build the environment for the shared build workflow.":
+		content = `{"kind":"workflow.prepare_environment","environmentWorkflow":"chat-shared-build","title":"Build shared environment"}`
 	case "Correct the release checklist draft to review dates.":
 		content = `{"kind":"task.edit","task":"Correctable release checklist","newRequest":"Review the release dates."}`
 	case "Set the task budget to two dollars with an eighty percent warning.":
