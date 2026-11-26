@@ -1,3 +1,4 @@
+import { ChatManualLink } from './ChatManualLink';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
 import type { ChatAgentReview, ChatMessage, ChatSession, ChatSessionSummary, ChatTask } from '../api/chat';
@@ -276,6 +277,7 @@ function Message({value, now, canCreateAgent, onView, onRead, onRetry, onDecide}
   return <article className={`chat-message chat-message-${value.role}`} ref={panel}>
     <span className="small muted">{value.role === 'user' ? 'You' : 'Weft'}</span>
     <p>{value.text}</p>
+    {value.destination && <ChatManualLink destination={value.destination} message={value.id} onView={onView}/>}
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
     {onRetry && <Btn onClick={onRetry}>Retry saved request</Btn>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}

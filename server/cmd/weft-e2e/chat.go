@@ -20,6 +20,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 	}
 	var content string
 	switch last.Content {
+	case "Where can I inspect the model budget?":
+		content = `{"kind":"manual.open","destination":"budgets","title":"Inspect model budget"}`
 	case "Let me know when the release notes review is complete.":
 		content = `{"kind":"task.watch","task":"Release notes for Chat fixture","title":"Follow release notes"}`
 	case "Show me the current state of the release notes review.":

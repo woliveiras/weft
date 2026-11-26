@@ -74,6 +74,15 @@ found no additional failures. The broad browser suite remains failing.
   selector count and paging.
 - `make lint`, `make build`, the OpenAPI parse and `git diff --check` passed.
 
+## 2026-11-26 — Manual inspection from a conversation
+
+A bounded destination selector now opens a known console page from the reply.
+Unit tests rejected arbitrary routes and mixed action/navigation payloads.
+HTTP and SQLite integration preserved the appropriate destination separately
+for the viewer and administrator. Chromium followed the link to Budgets and
+returned by browser Back to the same message with focus restored. TypeScript
+and seven component tests passed.
+
 ## 2026-11-26 — Independent title retry
 
 S26 passed targeted Go unit and HTTP/SQLite integration. A title-only model

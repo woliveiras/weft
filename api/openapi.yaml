@@ -3017,6 +3017,7 @@ components:
         createdAt: {type: string, format: date-time}
         attempt: {type: string, format: date-time}
         unread: {type: boolean}
+        destination: {type: string, enum: [tasks, workflows, agents, projects, activity, approvals, models, chat-model, plugins, usage, budgets, prices, connections, connection-setup, skills, administration], description: "Read-only navigation target in the local console."}
         review: {$ref: "#/components/schemas/ChatAgentReview"}
         task:
           type: object

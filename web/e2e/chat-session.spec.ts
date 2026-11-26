@@ -59,6 +59,19 @@ async function approvePendingTaskInput(request: APIRequestContext, taskId: strin
   expect(decision.ok()).toBe(true);
 }
 
+test('a console link opens Budgets and returns to its originating chat message', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.goto('/');
+  await send(page, 'Where can I inspect the model budget?');
+  const link = page.getByRole('link', { name: 'Open Budgets', exact: true });
+  await link.click();
+  await expect(page).toHaveURL(/#\/models\/budgets$/);
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'Inspect model budget', exact: true })).toBeVisible();
+  await expect(link).toBeFocused();
+});
+
 test('a task watch reports the result after creating a reviewed agent in another chat and closing the console', async ({ page, context, request }) => {
   await selectFixtureModel(request);
   const taskId = await startTaskWaitingForApproval(request, 'chat-release-notes', 'Release notes for Chat fixture');

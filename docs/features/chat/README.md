@@ -16,6 +16,10 @@ When a saved conversation stays **Untitled chat**, use **Retry title** to
 generate a title from the first request. The transcript and any open reviews
 remain available while the title is generated.
 
+## Open a console page from a conversation
+
+Ask “Where can I inspect my model budget?” or “Where do I enter the MCP connection credentials?” Follow the link in the reply to the relevant console page. Enter credentials in its setup form. Use browser Back to return to the same conversation. Opening a page leaves decisions, saves and execution to the controls on that page.
+
 ## Follow a task
 
 Ask Chat to show the current state of a task or follow it until it settles.

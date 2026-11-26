@@ -20,6 +20,7 @@ const (
 	maxContextTurns = 8
 	maxAnswerTokens = 640
 
+	OpenManual  = "manual.open"
 	WatchTask   = "task.watch"
 	InspectTask = "task.inspect"
 	CreateAgent = "agent.create"
@@ -39,6 +40,7 @@ Return exactly one JSON object. "kind" is one of:
 - "task.watch": follow a particular existing task and report when it settles. Add "task" containing the task's stated ID or exact name as a selector.
 - "task.inspect": show the latest state of a particular task now. Add "task" with the same selector convention.
 - "agent.create": propose a reusable agent for the catalog. Add "agentId" (lowercase letters, digits and hyphens), "agentName" and concise "instructions". The operator reviews the proposal before anything is created. Never interpret a confirmation as a new create request.
+- "manual.open": open a console page for inspection or to enter credentials. Add "destination" with one of: tasks, workflows, agents, projects, activity, approvals, models, chat-model, plugins, usage, budgets, prices, connections, connection-setup, skills, administration. Never ask for a credential. Use this for navigation requests or secure setup. Never represent navigation as performing the requested operation.
 - "clarify": ask one focused question when the target or action is unclear. Add "question". Never guess between different targets or effects.
 - "unsupported": any request outside these capabilities. Do not add a task or question.
 You may include a short, neutral "title" for the conversation based on the latest user request. Omit credentials, repository URLs, account names, and sensitive identifiers. Do not add any other keys.`
@@ -46,11 +48,12 @@ You may include a short, neutral "title" for the conversation based on the lates
 // Plan proposes an operation or asks for clarification. A task selector is
 // always resolved against the caller's permitted resources before it is used.
 type Plan struct {
-	Kind     string `json:"kind"`
-	Task     string `json:"task,omitempty"`
-	Question string `json:"question,omitempty"`
-	Title    string `json:"title,omitempty"`
-	Agent    AgentDraft
+	Kind        string `json:"kind"`
+	Task        string `json:"task,omitempty"`
+	Question    string `json:"question,omitempty"`
+	Title       string `json:"title,omitempty"`
+	Destination string `json:"destination,omitempty"`
+	Agent       AgentDraft
 }
 
 func safeText(text string, limit int) bool {
@@ -122,6 +125,8 @@ func decodePlan(body string) (Plan, error) {
 		}
 		value = strings.TrimSpace(value)
 		switch key {
+		case "destination":
+			plan.Destination = value
 		case "kind":
 			plan.Kind = value
 		case "task":
@@ -146,7 +151,14 @@ func decodePlan(body string) (Plan, error) {
 	if plan.Kind != CreateAgent && (seen["agentId"] || seen["agentName"] || seen["instructions"]) {
 		return Plan{}, ErrInvalidPlan
 	}
+	if seen["destination"] && plan.Kind != OpenManual {
+		return Plan{}, ErrInvalidPlan
+	}
 	switch plan.Kind {
+	case OpenManual:
+		if !ManualDestination(plan.Destination) || seen["task"] || seen["question"] {
+			return Plan{}, ErrInvalidPlan
+		}
 	case WatchTask, InspectTask:
 		if plan.Task == "" || !safeText(plan.Task, 200) || strings.ContainsAny(plan.Task, "\r\n\t") || seen["question"] {
 			return Plan{}, ErrInvalidPlan

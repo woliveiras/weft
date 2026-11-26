@@ -13,6 +13,7 @@ export interface ChatMessage {
   text: string;
   state?: 'pending' | 'interpreting' | 'interpreted' | 'unavailable' | 'clarification';
   attempt?: string;
+  destination?: string;
   task?: ChatTask;
   review?: ChatAgentReview;
   unread?: boolean;

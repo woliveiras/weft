@@ -1,0 +1,36 @@
+package chat
+
+import "github.com/woliveiras/weft/server/internal/config"
+
+// ManualDestination accepts only named console pages. The model cannot supply a URL.
+func ManualDestination(name string) bool {
+	switch name {
+	case "tasks", "workflows", "agents", "projects", "activity", "approvals",
+		"models", "chat-model", "plugins", "usage", "budgets", "prices",
+		"connections", "connection-setup", "skills", "administration":
+		return true
+	default:
+		return false
+	}
+}
+
+func ManualHandoff(plan Plan, role config.Role) Interpretation {
+	reply := Interpretation{Plan: plan}
+	if !ManualDestination(plan.Destination) {
+		reply.Text = "That console page is unavailable."
+		return reply
+	}
+	reply.Destination = plan.Destination
+	switch plan.Destination {
+	case "connection-setup":
+		if role.Allows(config.RoleAdmin) {
+			reply.Text = "Open the connection form to choose the integration and enter credentials there."
+		} else {
+			reply.Text = "An administrator can set up a connection. You can inspect existing connections."
+			reply.Destination = "connections"
+		}
+	default:
+		reply.Text = "Open the console page to inspect this area."
+	}
+	return reply
+}
