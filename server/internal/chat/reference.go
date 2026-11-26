@@ -17,6 +17,9 @@ func observedReference(message Message) string {
 	if message.Role != "assistant" {
 		return ""
 	}
+	if message.Inventory != nil {
+		return message.Inventory.Context()
+	}
 	kind, id, version := "", "", 0
 	if message.Execution != nil {
 		kind, id = "execution", message.Execution.ID

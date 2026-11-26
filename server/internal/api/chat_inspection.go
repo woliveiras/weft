@@ -35,6 +35,9 @@ func (s *Server) inspectChatConsole(ctx context.Context, caller Identity, plan c
 		result.Retryable = true
 		return result
 	}
+	if len(view.References) > 0 {
+		result.Inventory = &chat.Inventory{Area: view.Area, Items: view.References}
+	}
 	result.Text = view.Text(now)
 	return result
 }
@@ -50,7 +53,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return err
 		}
 		for _, t := range rows.Items {
-			v.Add(fmt.Sprintf("%s · %s · %s", t.ID, t.Title, t.Status))
+			v.AddResource(t.ID, fmt.Sprintf("%s · %s · %s", t.ID, t.Title, t.Status))
 		}
 		v.More = rows.Next != ""
 	case "workflows":
@@ -60,7 +63,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 		}
 		for _, g := range rows {
 			if !strings.HasPrefix(g.ID, domain.TaskRunGraphPrefix) {
-				v.Add(fmt.Sprintf("%s · version %d · %s", g.ID, g.Version, g.State))
+				v.AddResource(g.ID, fmt.Sprintf("%s · version %d · %s", g.ID, g.Version, g.State))
 			}
 		}
 	case "agents":
@@ -69,7 +72,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return err
 		}
 		for _, a := range rows {
-			v.Add(fmt.Sprintf("%s · %s · version %d", a.ID, a.Name, a.Latest))
+			v.AddResource(a.ID, fmt.Sprintf("%s · %s · version %d", a.ID, a.Name, a.Latest))
 		}
 	case "projects":
 		rows, err := (projectconfig.Manager{Store: s.Store}).List(ctx)
@@ -77,7 +80,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return err
 		}
 		for _, p := range rows {
-			v.Add(fmt.Sprintf("%s · %s · revision %d", p.ID, p.Name, p.Revision))
+			v.AddResource(p.ID, fmt.Sprintf("%s · %s · revision %d", p.ID, p.Name, p.Revision))
 		}
 	case "skills":
 		rows, err := (instructions.Manager{Store: s.Store}).List(ctx)

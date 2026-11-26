@@ -25,3 +25,22 @@ func TestModelFollowUpUsesOnlyObservedSafeReferences(t *testing.T) {
 		}
 	}
 }
+
+func TestObservedInventoryPreservesVisiblePositionsAndDropsUntrustedFields(t *testing.T) {
+	v := Inspection{Area: "projects"}
+	v.AddResource("prj_first", "prj_first · Example")
+	v.AddResource("secret/path", "hidden\nsecond line")
+	v.AddResource("prj_third", "prj_third · Example")
+	inv := Inventory{Area: v.Area, Items: v.References}
+	if got := inv.Context(); got != "Weft listed projects in this order: 1=prj_first, 3=prj_third." {
+		t.Fatal(got)
+	}
+	inv.Items[1].Position = 1
+	if got := inv.Context(); got != "" {
+		t.Fatal(got)
+	}
+	inv.Area = "privileged scope"
+	if got := inv.Context(); got != "" {
+		t.Fatal(got)
+	}
+}

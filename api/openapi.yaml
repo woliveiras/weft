@@ -3019,6 +3019,20 @@ components:
         createdAt: {type: string, format: date-time}
         attempt: {type: string, format: date-time}
         unread: {type: boolean}
+        inventory:
+          type: object
+          required: [area, items]
+          properties:
+            area: {enum: [tasks, workflows, agents, projects]}
+            items:
+              type: array
+              maxItems: 8
+              items:
+                type: object
+                required: [position, id]
+                properties:
+                  position: {type: integer, minimum: 1, maximum: 8}
+                  id: {type: string}
         execution:
           type: object
           required: [id, root, graph, state, nodes, active, cancellationRequested]

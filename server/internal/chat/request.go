@@ -104,6 +104,7 @@ func (s *Session) Context(requestID string) []llm.ChatMessage {
 }
 
 type Interpretation struct {
+	Inventory   *Inventory
 	Execution   *ExecutionSummary
 	Plan        Plan
 	Text        string
@@ -140,6 +141,7 @@ func (s Sessions) FinishInterpretation(ctx context.Context, owner, id, requestID
 			reply := Message{ID: "reply-" + requestID, Role: "assistant", Text: outcome.Text, Task: outcome.Task, Review: outcome.Review, State: state, Created: now}
 			reply.Destination = outcome.Destination
 			reply.Execution = outcome.Execution
+			reply.Inventory = outcome.Inventory
 			// A continuing watch announces its terminal result separately. Reviews
 			// already expose a decision or a receipt in the index.
 			reply.Unread = outcome.Review == nil && (outcome.Plan.Kind != WatchTask || outcome.Task == nil || outcome.Task.Terminal())

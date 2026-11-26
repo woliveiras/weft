@@ -27,10 +27,19 @@ func InspectionDestination(area string) string {
 	return ""
 }
 
+type InventoryReference struct {
+	Position int    `json:"position"`
+	ID       string `json:"id"`
+}
+type Inventory struct {
+	Area  string               `json:"area"`
+	Items []InventoryReference `json:"items"`
+}
 type Inspection struct {
-	Area  string
-	Lines []string
-	More  bool
+	References []InventoryReference
+	Area       string
+	Lines      []string
+	More       bool
 }
 
 func (v *Inspection) Add(line string) {
@@ -44,6 +53,35 @@ func (v *Inspection) Add(line string) {
 	v.Lines = append(v.Lines, line)
 }
 
+// Add an identifier only when its corresponding line was displayed verbatim.
+func (v *Inspection) AddResource(id, line string) {
+	before := len(v.Lines)
+	v.Add(line)
+	if len(v.Lines) > before && v.Lines[before] == line && validReferenceID(id) {
+		v.References = append(v.References, InventoryReference{Position: before + 1, ID: id})
+	}
+}
+
+func (v Inventory) Context() string {
+	switch v.Area {
+	case "tasks", "workflows", "agents", "projects":
+	default:
+		return ""
+	}
+	if len(v.Items) == 0 || len(v.Items) > InspectionLimit {
+		return ""
+	}
+	parts := []string{}
+	last := 0
+	for _, item := range v.Items {
+		if !validReferenceID(item.ID) || item.Position <= last || item.Position > InspectionLimit {
+			return ""
+		}
+		parts = append(parts, fmt.Sprintf("%d=%s", item.Position, item.ID))
+		last = item.Position
+	}
+	return "Weft listed " + v.Area + " in this order: " + strings.Join(parts, ", ") + "."
+}
 func (v Inspection) Text(now time.Time) string {
 	lines := []string{fmt.Sprintf("%s · %s", v.Area, now.UTC().Format(time.RFC3339))}
 	if len(v.Lines) == 0 {
