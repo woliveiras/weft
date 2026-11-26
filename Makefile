@@ -150,3 +150,7 @@ test-native-browser: ## Chromium against a disposable production native profile;
 .PHONY: test-native-upgrade
 test-native-upgrade: ## Disposable format-1 native binary upgrade and safe failure qualification (host Go/Git/Python)
 	$(PYTHON) scripts/test-native-upgrade.py
+
+.PHONY: eval-chat
+eval-chat: ## Exercise conversational Chat evals against isolated local fixtures
+	$(GO) test -count=1 -v ./internal/api -run '^TestChatEval'

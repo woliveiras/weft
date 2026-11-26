@@ -315,3 +315,5 @@ that local installation can access the same conversations. Private history is
 scoped to the authenticated static or OIDC principal. If your role changes, Chat filters historical operation details before displaying them or building model context.
 
 When you switch chats before a reply arrives, Recents keeps that reply unread until you view it. A hollow dot indicates an unread reply and the green dot indicates a successful operational result. Both can appear alongside the running indicator.
+
+Developers can run the [conversation evals](evals.md) to check tool selection, follow-ups and reviewed effects with repeatable fixtures.
