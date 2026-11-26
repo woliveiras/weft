@@ -45,6 +45,7 @@ type Input struct {
 }
 type Draft struct {
 	CreationOperation     string       `json:"creationOperation,omitempty"`
+	StartOperation        string       `json:"startOperation,omitempty"`
 	RepositoryRevision    int64        `json:"repositoryRevision,omitempty"`
 	RetryOfTaskID         string       `json:"retryOfTaskId,omitempty"`
 	RetryOfRevision       int64        `json:"retryOfRevision,omitempty"`
@@ -327,8 +328,9 @@ func (m Manager) saveDraft(ctx context.Context, id string, in Input, revision in
 	return d, nil
 }
 
-// Transition commits lifecycle state with CAS, preserving the request snapshot.
-func (m Manager) Transition(ctx context.Context, d *Draft, status, actor string) (*Draft, error) {
+// Transition commits lifecycle state against the draft revision and any
+// reviewed dependency revisions, preserving the request snapshot.
+func (m Manager) Transition(ctx context.Context, d *Draft, status, actor string, guards ...storage.SettingRevision) (*Draft, error) {
 	old, err := m.Get(ctx, d.ID)
 	if err != nil {
 		return nil, err
@@ -346,12 +348,21 @@ func (m Manager) Transition(ctx context.Context, d *Draft, status, actor string)
 	if err != nil {
 		return nil, err
 	}
-	rev, err := m.Store.PutSetting(ctx, prefix+d.ID, b, d.Revision, actor)
+	var rev int64
+	if len(guards) == 0 {
+		rev, err = m.Store.PutSetting(ctx, prefix+d.ID, b, d.Revision, actor)
+	} else {
+		rev, err = m.Store.PutSettingIf(ctx, prefix+d.ID, b, d.Revision, actor, guards)
+	}
 	if err != nil {
 		return nil, err
 	}
 	d.Revision = rev
 	return d, nil
+}
+
+func (d *Draft) RevisionGuard() storage.SettingRevision {
+	return storage.SettingRevision{Key: prefix + d.ID, Revision: d.Revision}
 }
 
 // DeleteDraft removes a never-prepared draft from ordinary task reads. A minimal

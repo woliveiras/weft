@@ -120,5 +120,16 @@ on that version, and opened the saved draft in Tasks. The full Go suites for
 `chat`, `taskconfig` and `api` passed. TypeScript, ten focused component
 checks, OpenAPI parsing, `make lint`, `make build` and `git diff --check` passed.
 
+## 2026-11-26 — Reviewed local task start
+
+S29 passed the Go suites for `chat`, `taskauth`, `taskrun` and `api`. The
+HTTP/SQLite journey admitted the approved revision once, retained the human
+gate and appended the observed execution result on approval. A changed
+authorization revision left the second task unstarted. Reopening SQLite
+preserved an archived admission claim in the detached observation queue.
+Chromium replayed the task start through the independent approval and
+execution evidence. TypeScript, eleven focused component checks and OpenAPI
+parsing passed.
+
 Device and assistive-technology review, external provider qualification and
 production backup and restore remain open.

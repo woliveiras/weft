@@ -128,6 +128,34 @@ it('lets an operator submit the reviewed draft and inspect the persisted task', 
   expect(backend.find('POST',confirmPath).map(request => request.body)).toEqual([{digest:'task-digest'}]);
 });
 
+it('shows task admission separately from the outcome following confirmation', async () => {
+  const taskId = 'tsk_admission';
+  const review = {
+    id:'start-review', digest:'start-digest', expiresAt:'2999-11-26T08:00:00Z',
+    taskStart:{id:taskId,title:'Summarize notes',workflowId:'editorial',workflowVersion:2,taskRevision:1,
+      consent:{mode:'ask',revision:0},agentGrants:[{id:'reader',isolation:'process'}]},
+  };
+  const session = (state:string) => ({
+    id, archived:false, messages:[{id:'reply',role:'assistant',text:'Review the start.',review:{...review,state}}],
+    watches: state==='accepted' ? [{requestId:'start-review',task:{id:taskId,state:'running'},observedAt:'2026-11-26T10:00:00Z'}] : [],
+  });
+  const confirmPath = `${paths}/${id}/operations/start-review/confirm`;
+  const backend = fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'configured',revision:1}),
+    [`GET ${paths}`]: () => ({items:[],shared:false}),
+    [`GET ${paths}/${id}`]: () => session('awaiting_confirmation'),
+    [`POST ${confirmPath}`]: () => session('accepted'),
+  });
+  render(<ChatPage id={id} archived={false} canCreateAgent canOperate onOpen={vi.fn()}/>);
+  const card = await screen.findByRole('region',{name:'Start task Summarize notes'});
+  expect(within(card).getByText('Ask for approval as required · Default')).toBeTruthy();
+  fireEvent.click(within(card).getByRole('button',{name:'Start task'}));
+  expect(await within(card).findByText(/Task admission recorded/)).toBeTruthy();
+  expect(screen.getByText(/Following task: running/)).toBeTruthy();
+  expect(screen.queryByRole('link',{name:'View task result'})).toBeNull();
+  expect(backend.find('POST',confirmPath).map(request => request.body)).toEqual([{digest:'start-digest'}]);
+});
+
 it('shows archived novelty from Recents and navigates across bounded pages', async () => {
   const open = vi.fn();
   const item = {

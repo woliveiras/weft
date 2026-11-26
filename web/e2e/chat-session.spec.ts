@@ -4,7 +4,7 @@ import type { GraphSummary } from '../src/api/types';
 
 const headers = { Authorization: 'Bearer e2e-admin-token' };
 
-async function startTaskWaitingForApproval(request: APIRequestContext, graphId: string, title: string) {
+async function draftTaskWithApproval(request: APIRequestContext, graphId: string, title: string) {
   const graph = await request.post('/api/v1/graphs', {
     headers,
     data: {
@@ -25,12 +25,16 @@ async function startTaskWaitingForApproval(request: APIRequestContext, graphId: 
     },
   });
   expect(draft.status()).toBe(201);
-  const task = await draft.json();
+  return await draft.json() as {id: string; revision: number};
+}
+
+async function startTaskWaitingForApproval(request: APIRequestContext, graphId: string, title: string) {
+  const task = await draftTaskWithApproval(request, graphId, title);
   const started = await request.post(`/api/v1/tasks/${task.id}/start`, {
     headers: { ...headers, 'If-Match': String(task.revision) }, data: { confirm: true },
   });
   expect(started.status()).toBe(202);
-  return task.id as string;
+  return task.id;
 }
 
 async function send(page: Page, message: string) {
@@ -59,6 +63,24 @@ async function approvePendingTaskInput(request: APIRequestContext, taskId: strin
   const decision = await request.post(`/api/v1/approvals/${pendingApprovals[0].id}/approve`, { headers });
   expect(decision.ok()).toBe(true);
 }
+
+test('starts a reviewed task, preserves its approval and follows the observed result', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const task = await draftTaskWithApproval(request, 'chat-start-approval', 'Archive review task fixture');
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.goto('/');
+  await send(page, 'Start the saved archive review task.');
+  const card = page.getByRole('region', { name: 'Start task Archive review task fixture' });
+  await expect(card.getByText('Ask for approval as required · Default')).toBeVisible();
+  const draft = await request.get(`/api/v1/tasks/${task.id}`, { headers });
+  expect(await draft.json()).toMatchObject({status: 'draft'});
+  await card.getByRole('button', { name: 'Start task', exact: true }).click();
+  await expect(card.getByText(/Task admission recorded/)).toBeVisible();
+  await expect(page.getByText(/Decision required/).first()).toBeVisible();
+  await approvePendingTaskInput(request, task.id);
+  await expect(page.getByRole('link', { name: 'View execution', exact: true })).toBeVisible();
+  await expect(page.getByText(`Task ${task.id}: succeeded.`)).toBeVisible();
+});
 
 test('an administrator reviews the installation budget in chat before applying it', async ({ page, request }) => {
   await selectFixtureModel(request);

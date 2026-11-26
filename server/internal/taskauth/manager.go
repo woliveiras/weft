@@ -112,12 +112,19 @@ func (m Manager) Review(ctx context.Context, id string) (*Review, error) {
 	return r, nil
 }
 func (m Manager) Save(ctx context.Context, id string, mode Mode, scope string, revision int64, actor string, confirm bool) (*Record, error) {
+	return m.save(ctx, id, mode, scope, revision, actor, confirm, 0)
+}
+
+func (m Manager) save(ctx context.Context, id string, mode Mode, scope string, revision int64, actor string, confirm bool, draftRevision int64) (*Record, error) {
 	if !Valid(mode) || actor == "" || !confirm {
 		return nil, ErrInvalid
 	}
 	d, err := (taskconfig.Manager{Store: m.Store}).Get(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if draftRevision > 0 && d.Revision != draftRevision {
+		return nil, storage.ErrConflict
 	}
 	running := d.Status == "running" || d.Status == "starting"
 	if d.Status != "draft" && d.Status != "environment_pending" && !running {
@@ -147,7 +154,7 @@ func (m Manager) Save(ctx context.Context, id string, mode Mode, scope string, r
 	if err != nil {
 		return nil, err
 	}
-	rec.Revision, err = m.Store.PutSetting(ctx, prefix+id, b, revision, actor)
+	rec.Revision, err = m.Store.PutSettingIf(ctx, prefix+id, b, revision, actor, []storage.SettingRevision{d.RevisionGuard()})
 	return rec, err
 }
 

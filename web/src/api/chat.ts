@@ -23,7 +23,7 @@ interface ChatReviewState {
   id: string;
   digest: string;
   expiresAt: string;
-  state: 'queued' | 'consumed' | 'run_ended' | 'applied' | 'incomplete' | 'awaiting_confirmation' | 'applying' | 'created' | 'conflict' | 'unknown' | 'declined';
+  state: 'queued' | 'consumed' | 'run_ended' | 'applied' | 'incomplete' | 'awaiting_confirmation' | 'applying' | 'created' | 'conflict' | 'unknown' | 'declined' | 'accepted';
   resultVersion?: number;
   resultId?: string;
 }
@@ -91,7 +91,19 @@ export interface ChatGuidanceReview extends ChatReviewState {
   consumedAt?: string;
 }
 
-export type ChatOperationReview = ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview | ChatConfigurationReview | ChatTaskDraftReview;
+export interface ChatTaskStartReview extends ChatReviewState {
+  taskStart: {
+    id: string;
+    title: string;
+    workflowId: string;
+    workflowVersion: number;
+    taskRevision: number;
+    consent: {scope: string; mode: string; revision: number};
+    agentGrants: {id: string; isolation: string; tools?: string[]}[];
+  };
+}
+
+export type ChatOperationReview = ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview | ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview;
 
 export interface ChatSession {
   id: string;

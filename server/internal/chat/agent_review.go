@@ -21,6 +21,7 @@ const (
 	ReviewConflict = "conflict"
 	ReviewUnknown  = "unknown"
 	ReviewDeclined = "declined"
+	ReviewAccepted = "accepted"
 )
 
 // ExplicitReviewDirective recognizes the confirmation text shown on the
@@ -100,13 +101,14 @@ type AgentCreation struct {
 // OperationReview persists the reviewed action. The digest binds the payload
 // to the owner and session. Claim state and the result are recorded separately.
 type OperationReview struct {
-	Guidance   *Guidance  `json:"guidance,omitempty"`
-	ConsumedAt *time.Time `json:"consumedAt,omitempty"`
+	Guidance     *Guidance        `json:"guidance,omitempty"`
+	ConsumedAt   *time.Time       `json:"consumedAt,omitempty"`
 	*AgentCreation
 	Configuration  *ConfigReview     `json:"configuration,omitempty"`
 	ConfigReceipts []ConfigReceipt   `json:"configReceipts,omitempty"`
 	Workflow       *WorkflowCreation `json:"workflow,omitempty"`
 	TaskDraft      *TaskCreation     `json:"taskDraft,omitempty"`
+	TaskStart      *TaskAdmission    `json:"taskStart,omitempty"`
 	ID             string            `json:"id"`
 	ExpiresAt      time.Time         `json:"expiresAt"`
 	Digest         string            `json:"digest"`
@@ -135,27 +137,30 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 }
 
 func (r OperationReview) digest(owner, session string) (string, error) {
-	var payload any
-	if r.Guidance != nil {
-		if r.Workflow != nil || r.AgentCreation != nil || r.TaskDraft != nil || r.Configuration != nil {
-			return "", ErrReviewMismatch
+	choices := 0
+	for _, exists := range []bool{r.AgentCreation != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.Guidance != nil} {
+		if exists {
+			choices++
 		}
+	}
+	if choices != 1 {
+		return "", ErrReviewMismatch
+	}
+	var payload any
+	switch {
+	case r.Guidance != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string
 			ExpiresAt                     time.Time
 			Guidance                      *Guidance
 		}{owner, session, r.ID, GuideNode, r.ExpiresAt, r.Guidance}
-	}
-	switch {
-	case payload != nil:
-		// The reviewed message is bound separately from its later receipt.
-	case r.Configuration != nil && r.Workflow == nil && r.AgentCreation == nil && r.TaskDraft == nil:
+	case r.Configuration != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string
 			ExpiresAt                     time.Time
 			Configuration                 *ConfigReview
 		}{owner, session, r.ID, PlanInstallation, r.ExpiresAt, r.Configuration}
-	case r.Configuration == nil && r.Workflow != nil && r.AgentCreation == nil && r.TaskDraft == nil:
+	case r.Workflow != nil:
 		payload = struct {
 			Owner, Session, Operation, ID string
 			Workflow                      *WorkflowCreation
@@ -165,7 +170,7 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 			Owner: owner, Session: session, Operation: CreateWorkflow, ID: r.ID,
 			Workflow: r.Workflow, ExpectedGraphVersion: 0, ExpiresAt: r.ExpiresAt,
 		}
-	case r.Configuration == nil && r.AgentCreation != nil && r.Workflow == nil && r.TaskDraft == nil:
+	case r.AgentCreation != nil:
 		// Keep the exact digest of already persisted catalog agent reviews.
 		payload = struct {
 			Owner, Session, Operation, ID, Agent   string
@@ -176,12 +181,18 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 			Owner: owner, Session: session, Operation: CreateAgent, ID: r.ID, Agent: r.AgentID,
 			Definition: r.Definition, ExpectedCatalogRevision: 0, ModelRevision: r.ModelRevision, ExpiresAt: r.ExpiresAt,
 		}
-	case r.TaskDraft != nil && r.Configuration == nil && r.Workflow == nil && r.AgentCreation == nil:
+	case r.TaskDraft != nil:
 		payload = struct {
 			Owner, Session, Operation, ID string
 			TaskDraft                     *TaskCreation
 			ExpiresAt                     time.Time
 		}{owner, session, CreateTask, r.ID, r.TaskDraft, r.ExpiresAt}
+	case r.TaskStart != nil:
+		payload = struct {
+			Owner, Session, Operation, ID string
+			TaskStart                     *TaskAdmission
+			ExpiresAt                     time.Time
+		}{owner, session, StartTask, r.ID, r.TaskStart, r.ExpiresAt}
 	default:
 		return "", ErrReviewMismatch
 	}

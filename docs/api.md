@@ -202,6 +202,13 @@ role for the specific review. A workflow edit after review requires a new
 proposal. The response reports the authoritative task ID and initial draft
 revision. Creating a draft neither grants repository access nor admits a run.
 
+An administrator can confirm the start of a ready task that requires no
+repository, environment preparation or delivery settings. The review seals
+the task revision, workflow and current authorization. The native admission
+path rechecks budgets and gates and records its operation ID with the task
+claim. An `accepted` review proves admission was recorded. The conversation
+tracks the actual task state and outcome separately.
+
 ## Native issue connections
 
 Native Jira Data Center connections have their own credential store, independent

@@ -38,6 +38,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"workflow.create","workflowId":"editorial-check","workflowName":"Editorial check","agent":"editorial-reader","agentVersion":"1","title":"Prepare editorial workflow"}`
 	case "Create a draft task on Editorial check to summarize the style notes.":
 		content = `{"kind":"task.create","taskTitle":"Summarize style notes","workflow":"editorial-check","workflowVersion":"1","request":"Summarize the style notes.","outcome":"understand","title":"Prepare an editorial task"}`
+	case "Start the saved archive review task.":
+		content = `{"kind":"task.start","task":"Archive review task fixture","title":"Start archive review"}`
 	default:
 		return nil, errors.New("unknown Chat fixture request")
 	}

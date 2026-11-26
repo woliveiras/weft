@@ -272,15 +272,34 @@ func (m Manager) checkDraftBudget(ctx context.Context, d *taskconfig.Draft) erro
 }
 
 func (m Manager) Start(ctx context.Context, id string, revision int64, actor string) (*taskconfig.Draft, error) {
+	return m.start(ctx, id, revision, actor, "", taskauth.StartConsent{})
+}
+
+// StartForOperation records the operation with the durable admission claim.
+// The caller holds the source workflow transition while applying the review.
+func (m Manager) StartForOperation(ctx context.Context, id string, revision int64, actor, operation string, consent taskauth.StartConsent) (*taskconfig.Draft, error) {
+	if operation == "" || consent.Scope == "" {
+		return nil, taskconfig.ErrInvalid
+	}
+	return m.start(ctx, id, revision, actor, operation, consent)
+}
+
+func (m Manager) start(ctx context.Context, id string, revision int64, actor, operation string, consent taskauth.StartConsent) (*taskconfig.Draft, error) {
 	tm := taskconfig.Manager{Store: m.Store}
 	d, err := tm.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if d.Status == "environment_pending" {
+		if operation != "" {
+			return nil, storage.ErrConflict
+		}
 		return m.startPreparedEnvironment(ctx, d, revision, actor)
 	}
 	if d.Status != "draft" {
+		if operation != "" && d.StartOperation != operation {
+			return nil, storage.ErrConflict
+		}
 		return d, nil
 	} // Retries never dispatch a second start.
 	if d.Revision != revision {
@@ -307,11 +326,22 @@ func (m Manager) Start(ctx context.Context, id string, revision int64, actor str
 	if len(blockers) > 0 {
 		return nil, taskconfig.ErrInvalid
 	}
-	if err = (taskauth.Manager{Store: m.Store}).Ensure(ctx, d.ID, actor); err != nil {
-		return nil, err
+	authorization := taskauth.Manager{Store: m.Store}
+	var guards []storage.SettingRevision
+	if operation == "" {
+		if err = authorization.Ensure(ctx, d.ID, actor); err != nil {
+			return nil, err
+		}
+	} else {
+		guard, err := authorization.GuardStart(ctx, d.ID, actor, d.Revision, consent)
+		if err != nil {
+			return nil, err
+		}
+		guards = []storage.SettingRevision{guard}
+		d.StartOperation = operation
 	}
 	d.ExecutionGraphID = g.Metadata.ID
-	d, err = tm.Transition(ctx, d, "preparing", actor)
+	d, err = tm.Transition(ctx, d, "preparing", actor, guards...)
 	if err != nil {
 		return nil, err
 	}

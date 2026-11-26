@@ -3,7 +3,7 @@ import { ChatConfigurationCard } from './ChatConfigurationCard';
 import { ChatManualLink } from './ChatManualLink';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
-import type { ChatMessage, ChatOperationReview, ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview } from '../api/chat';
+import type { ChatMessage, ChatOperationReview, ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview, ChatTaskStartReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -297,6 +297,7 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   if ('guidance' in review) return <ChatGuidanceCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;
   if ('configuration' in review) return <ChatConfigurationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;
   if ('taskDraft' in review) return <TaskDraftReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('taskStart' in review) return <TaskStartReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   const workflow = review.workflow;
   const name = review.workflow ? review.workflow.graph.metadata.name : review.definition.name;
   const kind = workflow ? 'workflow' : 'agent';
@@ -371,6 +372,35 @@ function TaskDraftReviewCard({review, now, canConfirm, onDecide, onView}: {
       <p role="status">Task draft saved. Review it in Tasks before starting.</p>
       <a id={anchor} href={taskSectionLink(review.resultId,'overview')} onClick={() => onView(anchor)}>View task draft</a>
     </>}
+  </section>;
+}
+
+function TaskStartReviewCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatTaskStartReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const {taskStart:task} = review;
+  const anchor = `chat-start-${review.id}`;
+  return <section className="chat-agent-review" aria-label={`Start task ${task.title}`}>
+    <h3>{task.title}</h3>
+    <dl>
+      <dt>Task ID</dt><dd>{task.id} · Revision {task.taskRevision}</dd>
+      <dt>Workflow</dt><dd>{task.workflowId} · Version {task.workflowVersion}</dd>
+      <dt>Authorization</dt><dd>{task.consent.mode === 'ask' ? 'Ask for approval as required' : task.consent.mode}
+        {task.consent.revision === 0 ? ' · Default' : ` · Revision ${task.consent.revision}`}</dd>
+      {task.agentGrants.map(agent => <div key={agent.id}>
+        <dt>{agent.id}</dt><dd>{agent.isolation} · {agent.tools?.join(', ') || 'No tool grants'}</dd>
+      </div>)}
+    </dl>
+    {review.state === 'awaiting_confirmation' && <>
+      <p>This admits the task to run within the reviewed scope. Existing approvals still apply.</p>
+      <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm} confirmLabel="Start task" onDecide={onDecide}/>
+    </>}
+    {review.state === 'applying' && <p role="status">Start requested. Checking admission…</p>}
+    {review.state === 'conflict' && <p role="status">The task is no longer ready under this review. Check its requirements before requesting a new start.</p>}
+    {review.state === 'unknown' && <p role="status">Task admission is temporarily unknown. Inspect the saved task before trying again.</p>}
+    {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+    {review.state === 'accepted' && <p role="status">Task admission recorded. Follow its state and result in this conversation.</p>}
+    <a id={anchor} href={taskSectionLink(task.id,'overview')} onClick={() => onView(anchor)}>Open task</a>
   </section>;
 }
 

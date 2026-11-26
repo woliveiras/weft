@@ -25,8 +25,7 @@ Ask “Where can I inspect my model budget?” or “Where do I enter the MCP co
 Ask Chat to show the current state of a task or follow it until it settles.
 Use a task ID or a unique exact title. For example, “Let me know when my
 release notes review finishes.” If Weft cannot resolve a unique task, supply
-the ID from Tasks. Use the manual pages to start tasks, decide their approval
-requests or change workflow configuration.
+the ID from Tasks. Open Approvals to inspect and decide a held request.
 
 Start another chat or close the browser. Weft keeps observing active tasks.
 Recents shows the running indicator and signals an unread result, with a
@@ -72,6 +71,19 @@ Chat shows the workflow version, request, outcome and selected agents before
 settings and review what it needs to run. Use Tasks when the work requires a
 repository or an input that cannot be determined from the saved workflow.
 If someone edits the workflow before you confirm, ask for a new proposal.
+
+## Start and follow a saved task
+
+As an administrator, ask Chat to start the saved task by ID or title. Review
+the task and workflow revisions and their authorization, then choose **Start
+task**. The start goes through the task's normal budget and approval checks.
+Chat follows the admitted task in the same conversation and provides a
+separate link when its result is available.
+
+Use Tasks to configure and start work with repositories, environment
+preparation or delivery settings. If the task or its authorization changes
+while you are reviewing, inspect the updated setup and request a fresh start
+proposal.
 
 ## Guide the next turn of a running agent
 
