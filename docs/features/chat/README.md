@@ -223,3 +223,5 @@ In an authenticated installation the owner can access their conversations.
 Auth-disabled local installations show **Shared local history**. People using
 that local installation can access the same conversations. Private history is
 scoped to the authenticated static or OIDC principal.
+
+When inference fails, the saved reply identifies the next step. A budget rejection opens Budgets, an unavailable model opens Chat model settings, and a busy model can be retried after a slot becomes available. With a proposal open, **Confirm** and **Decline** and their explicit text equivalents (“confirm this proposal” or “decline this proposal”) use the reviewed operation directly. Weft still checks the current role, revision and expiry before acting.

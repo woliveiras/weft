@@ -18,7 +18,7 @@ func TestChatSessionAPIEnforcesOwnershipAndIdempotency(t *testing.T) {
 		t.Fatalf("create=%d", code)
 	}
 	// Without a selected provider, the request is saved and explicitly retryable.
-	if result.ID != id || len(result.Messages) != 2 || result.Messages[0].State != "unavailable" {
+	if result.ID != id || len(result.Messages) != 2 || result.Messages[0].State != "unavailable" || result.Messages[1].Destination != "chat-model" {
 		t.Fatalf("saved request: %+v", result)
 	}
 	if code := call(t, srv, "POST", sessions, viewerTok, "application/json", body, &result); code != http.StatusOK || len(result.Messages) != 2 {

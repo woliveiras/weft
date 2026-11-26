@@ -181,11 +181,14 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 				answer = chat.Interpretation{Text: "The review decision could not be read. Inspect the existing review before trying again."}
 			}
 		} else {
+			var callErr error
 			plan, modelErr := chat.Interpret(ctx, history, func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-				return s.callChatModel(ctx, actor, req, "chat_interpretation")
+				response, err := s.callChatModel(ctx, actor, req, "chat_interpretation")
+				callErr = err
+				return response, err
 			})
 			if modelErr != nil {
-				answer = chat.Interpretation{Text: "Chat could not interpret this request. Check the Chat model or budget, then retry the saved request.", Retryable: true}
+				answer = chatRecovery(modelErr, callErr)
 			} else {
 				answer = s.resolveChatPlan(ctx, actor, id, plan)
 			}

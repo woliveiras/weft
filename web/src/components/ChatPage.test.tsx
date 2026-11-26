@@ -272,3 +272,18 @@ it.each([true,false])('keeps a late response in its original chat (success %s)',
   expect(open.mock.calls).toEqual([[undefined,false]]);
   expect(screen.queryByRole('alert')).toBeNull();
 });
+
+it('allows an explicit review decision while model inference is unavailable', async () => {
+  const conversation = {id,title:'Saved review',messages:[]};
+  const backend = fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'unconfigured',revision:1}),
+    [`GET ${paths}`]: () => ({items:[],shared:true}),
+    [`GET ${paths}/${id}`]: () => conversation,
+    [`POST ${paths}/${id}/messages`]: () => conversation,
+  });
+  render(<ChatPage id={id} archived={false} onOpen={vi.fn()}/>);
+  await screen.findByRole('heading',{name:'Saved review'});
+  fireEvent.change(screen.getByRole('textbox',{name:'Message'}),{target:{value:'Recuse esta proposta.'}});
+  await act(async () => fireEvent.click(screen.getByRole('button',{name:'Send'})));
+  expect(backend.find('POST',`${paths}/${id}/messages`)).toHaveLength(1);
+});
