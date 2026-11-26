@@ -20,6 +20,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 	}
 	var content string
 	switch last.Content {
+	case "Start the repository checklist task.":
+		content = `{"kind":"task.start","task":"Repository checklist fixture"}`
 	case "Start the prepared release sandbox task.":
 		content = `{"kind":"task.start","task":"Release sandbox fixture"}`
 	case "Prepare the release sandbox task environment.":

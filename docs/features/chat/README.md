@@ -129,6 +129,8 @@ preparation or delivery settings. If the task or its authorization changes
 while you are reviewing, inspect the updated setup and request a fresh start
 proposal.
 
+For registered repositories, the start card shows each alias, project revision, pinned commit and declared checks. A concurrent project edit invalidates the proposal. Issue-backed drafts identify the connection and issue. For a task configured to deliver changes through SCM, inspect and start from Tasks.
+
 ## Cancel a task attempt
 
 As an administrator, name the running task to cancel. Confirm **Cancel task

@@ -407,6 +407,8 @@ function TaskStartReviewCard({review, now, canConfirm, onDecide, onView}: {
       <dt>Workflow</dt><dd>{task.workflowId} · Version {task.workflowVersion}</dd>
       <dt>Authorization</dt><dd>{task.consent.mode === 'ask' ? 'Ask for approval as required' : task.consent.mode}
         {task.consent.revision === 0 ? ' · Default' : ` · Revision ${task.consent.revision}`}</dd>
+      {task.repositories?.map(repo=><div key={repo.alias || repo.project}><dt>{repo.alias || 'Repository'}</dt><dd>{repo.project} · revision {repo.revision} · {repo.commit}{repo.checks?.length ? ' · Checks ' + repo.checks.join(', ') : ''}</dd></div>)}
+      {task.issueSource && <><dt>Issue source</dt><dd>{task.issueSource}</dd></>}
       {task.build && <><dt>Prepared environment</dt><dd>{task.build.graph} · {task.build.hash} · {task.build.completed}</dd></>}
       {task.agentGrants.map(agent => <div key={agent.id}>
         <dt>{agent.id}</dt><dd>{agent.isolation} · {agent.tools?.join(', ') || 'No tool grants'}{agent.constraints?.map(rule=><pre key={rule}>{rule}</pre>)}</dd>

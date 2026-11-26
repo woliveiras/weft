@@ -2,10 +2,9 @@ package api
 
 import (
 	"context"
-	"errors"
-
 	"encoding/json"
-
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/chat"
@@ -13,6 +12,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
+	"github.com/woliveiras/weft/server/internal/projectconfig"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskauth"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
@@ -40,7 +40,7 @@ func (s *Server) reviewChatTaskStart(ctx context.Context, actor Identity, sessio
 	}
 	draft := review.Task
 	build := review.PreparedBuild()
-	if !review.CanStart || (draft.Status != "draft" && build == nil) || (review.EnvironmentDefinition != nil && build == nil) || draft.Source != nil || draft.ProjectID != "" || len(draft.Repositories) > 0 || draft.SCMConnection != "" {
+	if !review.CanStart || (draft.Status != "draft" && build == nil) || (review.EnvironmentDefinition != nil && build == nil) {
 		out.Text, out.Destination = "Inspect this task in Tasks to review its authorization, environment, repositories or existing run.", "tasks"
 		return out
 	}
@@ -69,6 +69,19 @@ func (s *Server) reviewChatTaskStart(ctx context.Context, actor Identity, sessio
 	start := chat.TaskAdmission{
 		ID: draft.ID, Title: title, WorkflowID: draft.GraphID, Version: draft.GraphVersion,
 		Revision: draft.Revision, Consent: authorization.StartConsent(), Build: build,
+	}
+	start.Repositories, err = s.chatTaskRepositories(ctx, draft)
+	if err != nil {
+		out.Text, out.Destination = "Inspect the task repositories and any external delivery settings in Tasks before starting.", "tasks"
+		return out
+	}
+	if d := draft.Source; d != nil {
+		tool, args, err := d.ReadCall()
+		if err != nil {
+			out.Text, out.Destination = "Inspect the issue source in Tasks.", "tasks"
+			return out
+		}
+		start.IssueSource = fmt.Sprintf("%s · %s", tool, args)
 	}
 	for _, scope := range review.Agents {
 		agent := chat.AgentStartGrant{ID: scope.ID, Isolation: string(scope.Isolation)}
@@ -101,11 +114,22 @@ func (s *Server) reviewChatTaskStart(ctx context.Context, actor Identity, sessio
 func (s *Server) applyReviewedChatTaskStart(ctx context.Context, actor Identity, sessionID string, review *chat.OperationReview) (*chat.Session, error) {
 	target := review.TaskStart
 	err := s.Engine.WithGraphTransition(ctx, target.WorkflowID, func(ctx context.Context) error {
+		var guards []storage.SettingRevision
+		for _, repo := range target.Repositories {
+			project, err := (projectconfig.Manager{Store: s.Store}).Get(ctx, repo.Project)
+			if err != nil {
+				return err
+			}
+			if project.Revision != repo.Revision {
+				return storage.ErrConflict
+			}
+			guards = append(guards, projectconfig.RevisionGuard(repo.Project, repo.Revision))
+		}
 		if target.Build != nil {
-			_, err := s.taskRunner().StartPreparedForOperation(ctx, target.ID, target.Revision, actor.Name, review.ID, target.Consent, *target.Build)
+			_, err := s.taskRunner().StartPreparedForOperation(ctx, target.ID, target.Revision, actor.Name, review.ID, target.Consent, *target.Build, guards...)
 			return err
 		}
-		_, err := s.taskRunner().StartForOperation(ctx, target.ID, target.Revision, actor.Name, review.ID, target.Consent)
+		_, err := s.taskRunner().StartForOperation(ctx, target.ID, target.Revision, actor.Name, review.ID, target.Consent, guards...)
 		return err
 	})
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Second)

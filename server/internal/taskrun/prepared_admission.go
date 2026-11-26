@@ -25,7 +25,7 @@ func (r *Review) PreparedBuild() *PreparedBuild {
 	return &PreparedBuild{Graph: v.Graph, Hash: v.Hash, Completed: v.FinishedAt.UTC().Format(time.RFC3339Nano)}
 }
 
-func (m Manager) StartPreparedForOperation(ctx context.Context, id string, revision int64, actor, operation string, consent taskauth.StartConsent, build PreparedBuild) (*taskconfig.Draft, error) {
+func (m Manager) StartPreparedForOperation(ctx context.Context, id string, revision int64, actor, operation string, consent taskauth.StartConsent, build PreparedBuild, dependencies ...storage.SettingRevision) (*taskconfig.Draft, error) {
 	if operation == "" || consent.Scope == "" || build.Hash == "" {
 		return nil, taskconfig.ErrInvalid
 	}
@@ -36,5 +36,5 @@ func (m Manager) StartPreparedForOperation(ctx context.Context, id string, revis
 	if d.Status != "environment_pending" {
 		return nil, storage.ErrConflict
 	}
-	return m.startPreparedEnvironment(ctx, d, revision, actor, operation, consent, &build)
+	return m.startPreparedEnvironment(ctx, d, revision, actor, operation, consent, &build, dependencies...)
 }

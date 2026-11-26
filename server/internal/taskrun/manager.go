@@ -277,14 +277,14 @@ func (m Manager) Start(ctx context.Context, id string, revision int64, actor str
 
 // StartForOperation records the operation with the durable admission claim.
 // The caller holds the source workflow transition while applying the review.
-func (m Manager) StartForOperation(ctx context.Context, id string, revision int64, actor, operation string, consent taskauth.StartConsent) (*taskconfig.Draft, error) {
+func (m Manager) StartForOperation(ctx context.Context, id string, revision int64, actor, operation string, consent taskauth.StartConsent, dependencies ...storage.SettingRevision) (*taskconfig.Draft, error) {
 	if operation == "" || consent.Scope == "" {
 		return nil, taskconfig.ErrInvalid
 	}
-	return m.start(ctx, id, revision, actor, operation, consent)
+	return m.start(ctx, id, revision, actor, operation, consent, dependencies...)
 }
 
-func (m Manager) start(ctx context.Context, id string, revision int64, actor, operation string, consent taskauth.StartConsent) (*taskconfig.Draft, error) {
+func (m Manager) start(ctx context.Context, id string, revision int64, actor, operation string, consent taskauth.StartConsent, dependencies ...storage.SettingRevision) (*taskconfig.Draft, error) {
 	tm := taskconfig.Manager{Store: m.Store}
 	d, err := tm.Get(ctx, id)
 	if err != nil {
@@ -337,7 +337,7 @@ func (m Manager) start(ctx context.Context, id string, revision int64, actor, op
 		if err != nil {
 			return nil, err
 		}
-		guards = []storage.SettingRevision{guard}
+		guards = append(dependencies, guard)
 		d.StartOperation = operation
 	}
 	d.ExecutionGraphID = g.Metadata.ID

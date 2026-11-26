@@ -43,6 +43,12 @@ type Project struct {
 	Head      string    `json:"head"`
 	CreatedAt time.Time `json:"createdAt"`
 }
+
+// RevisionGuard binds task admission to the project definition shown in its review.
+func RevisionGuard(id string, revision int64) storage.SettingRevision {
+	return storage.SettingRevision{Key: prefix + id, Revision: revision}
+}
+
 type Manager struct{ Store storage.Store }
 
 func Validate(in Input) error {

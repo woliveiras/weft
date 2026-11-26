@@ -3249,6 +3249,18 @@ components:
                     graph: {type: string}
                     hash: {type: string}
                     completed: {type: string, format: date-time}
+                repositories:
+                  type: array
+                  items:
+                    type: object
+                    required: [project, commit, revision]
+                    properties:
+                      project: {type: string}
+                      alias: {type: string}
+                      commit: {type: string}
+                      revision: {type: integer, minimum: 1}
+                      checks: {type: array, items: {type: string}}
+                issueSource: {type: string}
                 agentGrants:
                   type: array
                   items:

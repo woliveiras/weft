@@ -125,7 +125,7 @@ func (m Manager) prepareEnvironment(ctx context.Context, id string, revision int
 	return m.buildPreparedEnvironment(ctx, d, g, actor)
 }
 
-func (m Manager) startPreparedEnvironment(ctx context.Context, d *taskconfig.Draft, revision int64, actor, operation string, consent taskauth.StartConsent, build *PreparedBuild) (*taskconfig.Draft, error) {
+func (m Manager) startPreparedEnvironment(ctx context.Context, d *taskconfig.Draft, revision int64, actor, operation string, consent taskauth.StartConsent, build *PreparedBuild, dependencies ...storage.SettingRevision) (*taskconfig.Draft, error) {
 	if d.Revision != revision {
 		return nil, storage.ErrConflict
 	}
@@ -154,7 +154,7 @@ func (m Manager) startPreparedEnvironment(ctx context.Context, d *taskconfig.Dra
 		if err != nil {
 			return nil, err
 		}
-		guards = append(guards, guard)
+		guards = append(dependencies, guard)
 		d.StartOperation = operation
 	} else if err = authorization.Ensure(ctx, d.ID, actor); err != nil {
 		return nil, err
