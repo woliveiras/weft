@@ -8,7 +8,7 @@ risk: high
 risk_domains: [authorization, secrecy, model cost, persistence, concurrency, external effects]
 reversibility: "Additive storage and routes. Older manual interfaces remain available. Owning services govern committed effects."
 change_surfaces: [web/src, server/internal/api, server/internal/app, server/internal/storage, api/openapi.yaml, schemas, docs]
-contracts: [authorized resource discovery, chat session ownership, operation review and settlement, read state, authorized event delivery]
+contracts: [end-to-end conversational operation, authorized resource discovery, chat session ownership, operation review and settlement, read state, authorized event delivery]
 review_policy: "Review proposed defaults, phase acceptance, and evidence before claiming support."
 navigation: [specs/README.md, specs/product-and-tasks/conversational-console/matrix.md, specs/product-and-tasks/conversational-console/evidence.md]
 documentation: [docs/interface-navigation.md, docs/getting-started.md, docs/features/README.md]
@@ -36,6 +36,11 @@ technology verification belong to the delivery phases. TASK-012 owns each AC
 identifier in this document.
 
 ## Maintainer decisions
+
+- The user should be able to complete every operation available to their role
+  in the Weft console from the conversation. The manual console is an optional
+  preference. AC-011 defines completion and how to account for steps that
+  currently require another Weft screen.
 
 - Chat becomes the home screen and first entry in the left menu. Existing
   destinations remain below it. The conversation sits in the center and a right
@@ -516,6 +521,37 @@ recoverable after reopening. Only reviewed and authorized domain actions
 may change Weft. Installation summaries without individual target IDs keep
 their existing inspection semantics.
 
+### AC-011 — Complete an operator journey from the conversation
+
+Starting with an objective and an authorized identity, the user can identify
+the target, inspect the evidence needed to decide, review and confirm each
+effect, and verify the outcome in the originating conversation. On failure
+or partial success they can identify the affected item, inspect its receipt
+and take an eligible recovery action there. Reopening the conversation
+restores the decision or result. A read-only request ends with the evidence.
+
+Apply this criterion to each operation offered by the manual console for
+the same role, installation and provider capability. Count a required visit
+to another Weft screen as an open gap even when Chat supplies a deep link.
+The manual pages remain available for users who choose them. The
+[remaining journeys](./matrix.md#remaining-journeys-for-conversational-parity)
+record the gaps. Extend the inventory when a new manual capability ships.
+
+Chat may open a diff viewer, a protected preview or a credential form in
+context. The owning service authorizes the interaction. A secret goes directly
+to the credential handler, outside message history, model input and telemetry.
+When another party must act (for example, the provider granting OAuth consent),
+Chat starts the transaction and restores the same conversation and pending
+step on success, denial or cancellation. The user can retry an eligible step
+without repeating completed effects. An external account must still authorize
+each requested scope.
+
+Qualify a journey with a browser run starting from the user's request, using
+the same domain services as the manual console. Verify actual saved state or
+provider receipts, including the scope of any partial result. Keep fixture
+coverage and live-provider qualification separately identified. The
+[coverage table](./matrix.md#locally-verified-coverage) records what works today.
+
 ## Delivery plan
 
 | Phase | Usable vertical slice | Completion gate |
@@ -524,6 +560,13 @@ their existing inspection semantics.
 | P2 — Build and operate work | Reuse, publish and adopt agents. Edit and operate workflows. Draft, review, prepare and start tasks, plus approvals, steering, retry and evidence. Present trigger-intent choices, enabling only available controls per the inventory. | AC-004/006/007 and environment/concurrency regression. Qualified core fixture flows; external effects remain separately gated. |
 | P3 — Installation settings and automation | Reviewed config plan/apply, project/workspace settings, budgets, instruction/catalog and admin controls, connection and OAuth handoff, trigger and PR route management. | AC-003/006/008 and admin/sanitization/partial-apply integrations. |
 | P4 — Qualified external journeys | Deliver the typed manual PR review adapter for supported targets, verify exact head and workflow, expand scoped SCM/issue actions and qualify selected providers. Handoff the remaining unsupported targets to manual inspection. | AC-007/008 parameterized integration and recovery on fixtures, then separate INT-009/RUN-005 and PROD-14 qualification on approved targets. |
+| P5 — End-to-end conversational operation | Close each [remaining journey](./matrix.md#remaining-journeys-for-conversational-parity) through the owning domain service. | AC-011 and S48–S55, with evidence for each applicable operation and separate live provider qualification. |
+
+The proposed implementation order starts with PR review through
+publication, then targeted edits to existing resources, then diagnosis,
+background observation and scoped recovery. Bring protected or visual controls
+into each journey when its decision requires them. The first three browser
+journeys cover a PR, a task and an agent in a workflow (S48–S50).
 
 Run targeted Go unit and real store/API integrations and web unit/component
 tests during each slice. Use root `make test-go`, `make test-web`, and when
@@ -542,8 +585,9 @@ gaps in the owning specification.
 This planning step adds no runtime behavior and creates no placeholder
 evidence. Global onboarding stays withdrawn. Conversation deletion, implicit
 sharing, unreviewed external effects, blanket tool access and automatic
-qualification of provider accounts are outside the defined scope. For the proposed slices, irreversible controls use the existing manual
-handoffs until typed eligibility, recovery and review contracts can be defined.
+qualification of provider accounts are outside the defined scope. During P1–P4, irreversible controls use the existing manual handoffs.
+Under AC-011 these are open gaps until each action has a reviewed scope,
+an eligibility check and a recoverable outcome in Chat.
 [The inventory](./matrix.md#operation-inventory) tracks these and other
 coverage gaps. Existing task draft
 deletion is governed by TASK-005. The release walkthrough remains separately
@@ -568,6 +612,10 @@ owned by PROD-04.
   model selection with cost accounting, and retention without automatic expiry.
 
 ## Reconciliation
+
+- AC-011 is a delivery target. S48–S55 define the planned verification.
+  Current local evidence covers earlier slices. Live external mutations
+  continue to require separate authorization and qualification.
 
 - [Behavior and oracle matrix, operation inventory and impact review](./matrix.md).
 - The console opens on Chat. Session indexing, model selection, archive/restore and background observation are in use. Scoped actions cover workflows and agent versions, task drafts and execution, approvals, declarative configuration and manual PR analysis. See the [current coverage and native handoffs](./matrix.md#locally-verified-coverage), [feature-by-feature verification record](./evidence.md) and [operator guide](../../../docs/features/chat/README.md).
