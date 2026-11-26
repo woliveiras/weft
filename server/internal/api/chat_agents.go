@@ -105,7 +105,7 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 	if candidate == nil {
 		return nil, storage.ErrNotFound
 	}
-	role := reviewDecisionRole(candidate)
+	role := candidate.DecisionRole()
 	if !actor.Role.Allows(role) {
 		return nil, fmt.Errorf("%w: role %s required for the reviewed action", tools.ErrDenied, role)
 	}
@@ -201,7 +201,7 @@ func (s *Server) decideChatReviewFromText(ctx context.Context, actor Identity, s
 	if review == nil {
 		return chat.Interpretation{Text: "This request does not identify one active proposal. Use the action on the specific review or ask for a new review."}, nil
 	}
-	if role := reviewDecisionRole(review); !actor.Role.Allows(role) {
+	if role := review.DecisionRole(); !actor.Role.Allows(role) {
 		return chat.Interpretation{Text: fmt.Sprintf("This proposal requires the %s role.", role)}, nil
 	}
 	_, err := s.decideStoredChatReview(ctx, actor, session.ID, review.ID, review.Digest, action)
@@ -212,19 +212,6 @@ func (s *Server) decideChatReviewFromText(ctx context.Context, actor Identity, s
 		return chat.Interpretation{}, err
 	}
 	return chat.Interpretation{Text: "The review card shows the recorded decision and outcome."}, nil
-}
-
-func reviewDecisionRole(review *chat.OperationReview) config.Role {
-	if review.WorkflowControl != nil || review.WorkflowScale != nil || review.ExecutionCancel != nil || review.WorkflowEnvironment != nil {
-		return config.RoleOperator
-	}
-	if review.PR != nil || review.Guidance != nil {
-		return config.RoleOperator
-	}
-	if review.TaskCorrection != nil || review.TaskDraft != nil || review.TaskRetry != nil || review.Approval != nil {
-		return config.RoleOperator
-	}
-	return config.RoleAdmin
 }
 
 func (s *Server) applyReviewedChatAgent(ctx context.Context, actor Identity, sessionID string, review *chat.OperationReview) (*chat.Session, error) {

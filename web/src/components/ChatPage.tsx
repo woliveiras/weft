@@ -28,8 +28,9 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   const settings = useAsync(api.chatModelSettings, []);
   const [cursor, setCursor] = useState<{archived:boolean; after?:string}>({archived});
   const after = cursor.archived === archived ? cursor.after : undefined;
-  const pageKey = `${archived}/${after ?? ''}`;
-  const list = useAsync(async () => ({...await api.chatSessions(archived,after),pageKey}), [archived,after], accessLost);
+  const role = canCreateAgent ? 'admin' : canOperate ? 'operator' : 'viewer';
+  const pageKey = `${role}/${archived}/${after ?? ''}`;
+  const list = useAsync(async () => ({...await api.chatSessions(archived,after),pageKey}), [pageKey], accessLost);
   const visiblePage = list.data?.pageKey === pageKey ? list.data : undefined;
   const conversation = useAsync(() => id ? api.chatSession(id) : Promise.resolve(undefined), [id], accessLost);
   const session = conversation.data?.id === id ? conversation.data : undefined;
@@ -60,7 +61,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   const headingTitle = session ? session.title || 'New chat' : 'Chat';
   const titlePending = session?.titleRetryState === 'pending' && !!session.titleRetryStarted &&
     now - Date.parse(session.titleRetryStarted) < 60_000;
-  const archivedUnread = list.data?.archivedUnread ?? 0;
+  const archivedUnread = visiblePage?.archivedUnread ?? 0;
   const archivedLabel = archivedUnread ? `Archived · ${archivedUnread} unread` : 'Archived';
 
   useEffect(() => {

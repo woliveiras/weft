@@ -187,7 +187,7 @@ func chatSessionForRole(actor Identity, session *chat.Session) *chat.Session {
 				message.Review = nil
 				message.Text = "Administrator access is required to view this installation review."
 			}
-			if message.Review != nil && !actor.Role.Allows(reviewDecisionRole(message.Review)) {
+			if message.Review != nil && !actor.Role.Allows(message.Review.DecisionRole()) {
 				message.Review = nil
 				message.Text = "Your current role does not have access to this operation review."
 			}

@@ -321,3 +321,26 @@ loopback network. The documentation check resolved 37 added local links,
 and the OpenAPI document resolved all 432 references. External SCM accounts,
 production OIDC and physical assistive technologies still require separate
 qualification.
+
+## 2026-11-26 — Role changes in Recents and Archived
+
+For S20, authenticated HTTP requests to the same SQLite-backed history
+returned one pending catalog decision as an administrator and zero as the
+same principal with the operator role. Both results held after archiving
+the conversation. A legacy SQLite index containing only expiry times also
+preserved an operator's eligible review. Unit checks covered mixed roles,
+expiry at the exact boundary and a task watch that still required attention.
+Component checks switched roles with a list request held open and verified
+that the previous decision indicator disappeared in both views.
+
+The S11 Chromium journey followed a running task in one conversation and
+created a single catalog version of **Release reader** in a second one.
+The task completed after the console closed. Recents reported one unread
+success, and reopening the first conversation led to the matching task
+result. A second Chromium journey archived an active watch, found its unread
+result in Archived and restored the conversation.
+
+All 33 Chat Chromium journeys passed with local fixtures. The final
+`make test`, `make lint` and `make build` passed, including 858 web tests.
+The first full Go run recorded failures in the budget-resume and trigger-retry
+tests. Both passed on a focused rerun and in the subsequent full suite.

@@ -2250,7 +2250,7 @@ paths:
                         unreadSuccess: {type: integer}
                         unreadFailure: {type: integer}
                         unreadCancellation: {type: integer}
-                        decisions: {type: integer}
+                        decisions: {type: integer, description: Task watches awaiting a decision plus unexpired operation reviews the current role can decide}
                         unknown: {type: integer}
     post:
       tags: [chat]

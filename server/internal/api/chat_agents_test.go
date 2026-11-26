@@ -176,4 +176,27 @@ func TestHistoricalChatOperationUsesCurrentRoleOfSamePrincipal(t *testing.T) {
 	if code := call(t, srv, "GET", route+"/"+id, adminTok, "", "", &restored); code != 200 || restored.Messages[1].Review == nil {
 		t.Fatal(code, restored)
 	}
+	checkList := func(path string) {
+		t.Helper()
+		for _, profile := range []struct {
+			server *httptest.Server
+			token  string
+			want   int
+		}{{srv, adminTok, 1}, {downgraded, operatorTok, 0}} {
+			var list struct {
+				Items []struct {
+					ID        string
+					Decisions int
+				}
+			}
+			if code := call(t, profile.server, "GET", path, profile.token, "", "", &list); code != http.StatusOK || len(list.Items) != 1 || list.Items[0].ID != id || list.Items[0].Decisions != profile.want {
+				t.Errorf("list %s: %d %+v, want %d decisions", path, code, list, profile.want)
+			}
+		}
+	}
+	checkList(route)
+	if code := call(t, srv, "POST", route+"/"+id+"/archive", adminTok, "", "", nil); code != http.StatusOK {
+		t.Fatalf("archive: %d", code)
+	}
+	checkList(route + "?archived=true")
 }

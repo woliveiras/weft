@@ -41,6 +41,32 @@ it('shows simultaneous running and unread success cues with metadata and keyboar
   expect(open).toHaveBeenCalledWith(id,false);
 });
 
+it.each([false, true])('clears decisions until the current role has refreshed the session list (archived=%s)', async archived => {
+  const title = 'Release review';
+  const page = (decisions: number) => ({items:[{id, title, running:1, decisions}]});
+  let release!: () => void;
+  const refreshed = new Promise<void>(resolve => { release = resolve; });
+  let downgraded = false;
+  fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'unconfigured',revision:0}),
+    [`GET ${paths}`]: async () => {
+      if (!downgraded) return page(1);
+      await refreshed;
+      return page(0);
+    },
+  });
+  const props = {archived, canOperate:true, onOpen:vi.fn()};
+  const view = render(<ChatPage {...props} canCreateAgent/>);
+  expect(await screen.findByRole('img',{name:/decision required/})).toBeTruthy();
+
+  downgraded = true;
+  view.rerender(<ChatPage {...props} canCreateAgent={false}/>);
+  expect(screen.queryByRole('img',{name:/decision required/})).toBeNull();
+  await act(async () => { release(); });
+  expect(await screen.findByRole('img',{name:'1 running'})).toBeTruthy();
+  expect(screen.queryByRole('img',{name:/decision required/})).toBeNull();
+});
+
 it('shows the reviewed definition and sends a scoped decline without publishing', async () => {
   const review = {
     id:'chatop-test', agentId:'release-reader',

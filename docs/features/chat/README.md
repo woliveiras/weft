@@ -257,7 +257,7 @@ Use **Archive conversation** to move a conversation out of Recents. In
 **Archived**, open it to view new results or restore it. Archiving keeps the
 watch and read state. Active and archived conversations are retained without
 automatic expiration. The Archived tab shows an unread count even while you
-are browsing Recents. Use **Older conversations** to load the next page.
+are browsing Recents. In both lists, a pending proposal contributes to the decision indicator only while your current role can decide it and the proposal remains valid. A task waiting for a decision also appears in its watch status. Use **Older conversations** to load the next page.
 
 In an authenticated installation the owner can access their conversations.
 Auth-disabled local installations show **Shared local history**. People using

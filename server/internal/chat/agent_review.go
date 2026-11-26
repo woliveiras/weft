@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/executioncontrol"
@@ -140,6 +141,20 @@ type OperationReview struct {
 	ClaimedAt         time.Time                          `json:"claimedAt,omitempty"`
 	ResultVersion     int                                `json:"resultVersion,omitempty"`
 	ResultID          string                             `json:"resultId,omitempty"`
+}
+
+// DecisionRole is the minimum role required to view and decide this review.
+func (review *OperationReview) DecisionRole() config.Role {
+	if review.WorkflowControl != nil || review.WorkflowScale != nil || review.ExecutionCancel != nil || review.WorkflowEnvironment != nil {
+		return config.RoleOperator
+	}
+	if review.PR != nil || review.Guidance != nil {
+		return config.RoleOperator
+	}
+	if review.TaskCorrection != nil || review.TaskDraft != nil || review.TaskRetry != nil || review.Approval != nil {
+		return config.RoleOperator
+	}
+	return config.RoleAdmin
 }
 
 func NewAgentReview(owner, session, agent string, definition domain.AgentDefinition, modelRevision int64, now time.Time) (*OperationReview, error) {

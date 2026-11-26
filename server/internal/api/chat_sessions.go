@@ -70,7 +70,8 @@ func (s *Server) listChats(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	archived := r.URL.Query().Get("archived") == "true"
-	page, err := s.chatStore().List(r.Context(), actor.chatOwner, archived, r.URL.Query().Get("after"))
+	store := s.chatStore()
+	page, err := store.List(r.Context(), actor.chatOwner, archived, r.URL.Query().Get("after"))
 	if err != nil {
 		return chatError(err)
 	}
@@ -85,11 +86,9 @@ func (s *Server) listChats(w http.ResponseWriter, r *http.Request) error {
 				unknown++
 			}
 		}
-		decisions := summary.Decisions
-		for _, expiry := range summary.ReviewExpiries {
-			if now.Before(expiry) {
-				decisions++
-			}
+		decisions, err := store.DecisionCount(r.Context(), actor.chatOwner, summary, actor.Role, now)
+		if err != nil {
+			return chatError(err)
 		}
 		items = append(items, chatSessionSummary{
 			ID: summary.ID, Title: summary.Title, LastActivity: summary.LastActivity, Running: running,

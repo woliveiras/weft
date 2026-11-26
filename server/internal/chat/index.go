@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
@@ -57,6 +59,29 @@ func (s Sessions) List(ctx context.Context, owner string, archived bool, after s
 	}
 	page.ArchivedUnread, err = index.ArchivedChatUnread(ctx, owner)
 	return page, err
+}
+
+// DecisionCount combines task watch attention with reviews visible to the current role.
+func (s Sessions) DecisionCount(ctx context.Context, owner string, summary storage.ChatSummary, role config.Role, now time.Time) (int, error) {
+	// Older indexes only stored expiry times. Consult the owned transcript if
+	// an unclassified review can still contribute to the indicator.
+	if len(summary.PendingReviews) == 0 && slices.ContainsFunc(summary.ReviewExpiries, now.Before) {
+		session, err := s.Get(ctx, owner, summary.ID)
+		if err != nil {
+			return 0, err
+		}
+		summary = session.summary(owner, summary.Key)
+	}
+	count := summary.Decisions
+	for _, review := range summary.PendingReviews {
+		switch need := config.Role(review.MinimumRole); need {
+		case config.RoleAdmin, config.RoleOperator, config.RoleViewer:
+			if role.Allows(need) && now.Before(review.ExpiresAt) {
+				count++
+			}
+		}
+	}
+	return count, nil
 }
 
 func (s *Session) summary(owner, key string) storage.ChatSummary {
@@ -135,6 +160,10 @@ func (s *Session) summary(owner, key string) storage.ChatSummary {
 			}
 			switch review.State {
 			case ReviewAwaiting:
+				meta.PendingReviews = append(meta.PendingReviews, storage.ChatPendingReview{
+					MinimumRole: string(review.DecisionRole()), ExpiresAt: review.ExpiresAt,
+				})
+				// Keep expiry-only summaries readable by the previous console.
 				meta.ReviewExpiries = append(meta.ReviewExpiries, review.ExpiresAt)
 			case ReviewApplying, ReviewQueued:
 				meta.Running++

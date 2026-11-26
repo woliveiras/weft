@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/storage/stores"
 )
@@ -110,5 +111,70 @@ func TestUnreadInspectionReplyStaysDistinctFromTerminalSuccess(t *testing.T) {
 	meta := s.summary("owner", "key")
 	if meta.Unread != 1 || meta.UnreadSuccess != 0 || meta.UnreadFailure != 0 || meta.Running != 0 {
 		t.Fatal(meta)
+	}
+}
+
+func TestDecisionCountUsesCurrentRoleAndExactExpiry(t *testing.T) {
+	now := time.Now().UTC()
+	future := now.Add(time.Minute)
+	session := Session{
+		Watches: []Watch{{Task: TaskSummary{DecisionNeeded: true}}},
+		Messages: []Message{
+			{Review: &OperationReview{Configuration: &ConfigReview{}, State: ReviewAwaiting, ExpiresAt: future}},
+			{Review: &OperationReview{Guidance: &Guidance{}, State: ReviewAwaiting, ExpiresAt: future}},
+			{Review: &OperationReview{TaskDraft: &TaskCreation{}, State: ReviewAwaiting, ExpiresAt: now}},
+			{Review: &OperationReview{State: ReviewDeclined, ExpiresAt: future}},
+		},
+	}
+	summary := session.summary("owner", "key")
+	summary.PendingReviews = append(summary.PendingReviews, storage.ChatPendingReview{MinimumRole: "unknown", ExpiresAt: future})
+	for role, want := range map[config.Role]int{config.RoleViewer: 1, config.RoleOperator: 2, config.RoleAdmin: 3} {
+		got, err := (Sessions{}).DecisionCount(t.Context(), "owner", summary, role, now)
+		if err != nil || got != want {
+			t.Errorf("%s decisions: got %d, %v; want %d", role, got, err, want)
+		}
+	}
+}
+
+func TestLegacyDecisionCountReadsOnlyLiveReviewsFromTheOwner(t *testing.T) {
+	store, err := stores.Open(t.Context(), stores.Config{Type: "sqlite", Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	sessions := Sessions{Store: store}
+	const owner = "old-owner"
+	const id = "ab6353dce56b4b50a83981d63b1a811b"
+	now := time.Now().UTC()
+	future := now.Add(time.Minute)
+	session := Session{ID: id, LastActivity: now, Messages: []Message{
+		{ID: id, Role: "user"},
+		{Review: &OperationReview{Guidance: &Guidance{}, State: ReviewAwaiting, ExpiresAt: future}},
+		{Review: &OperationReview{Configuration: &ConfigReview{}, State: ReviewAwaiting, ExpiresAt: future}},
+	}}
+	if err := sessions.save(t.Context(), owner, &session); err != nil {
+		t.Fatal(err)
+	}
+	legacy := session.summary(owner, sessionPrefix+owner+"/"+id)
+	legacy.PendingReviews = nil
+	if err := store.(storage.ChatIndex).IndexChatSetting(t.Context(), legacy, session.Revision); err != nil {
+		t.Fatal(err)
+	}
+	page, err := sessions.List(t.Context(), owner, false, "")
+	if err != nil || len(page.Items) != 1 || len(page.Items[0].PendingReviews) != 0 || len(page.Items[0].ReviewExpiries) != 2 {
+		t.Fatalf("listing the expiry-only index: %+v, %v", page, err)
+	}
+	legacy = page.Items[0]
+	for role, want := range map[config.Role]int{config.RoleViewer: 0, config.RoleOperator: 1, config.RoleAdmin: 2} {
+		got, err := sessions.DecisionCount(t.Context(), owner, legacy, role, now)
+		if err != nil || got != want {
+			t.Errorf("legacy %s decisions: got %d, %v; want %d", role, got, err, want)
+		}
+	}
+	if got, err := sessions.DecisionCount(t.Context(), "different-owner", legacy, config.RoleAdmin, now); got != 0 || !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("missing owned transcript: got %d, %v", got, err)
+	}
+	if got, err := (Sessions{}).DecisionCount(t.Context(), owner, legacy, config.RoleAdmin, future); err != nil || got != 0 {
+		t.Fatalf("expired legacy reviews: got %d, %v", got, err)
 	}
 }

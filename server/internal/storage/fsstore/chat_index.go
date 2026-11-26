@@ -9,6 +9,7 @@ import (
 )
 
 func cloneChatSummary(meta storage.ChatSummary) storage.ChatSummary {
+	meta.PendingReviews = slices.Clone(meta.PendingReviews)
 	meta.ReviewExpiries = slices.Clone(meta.ReviewExpiries)
 	return meta
 }
