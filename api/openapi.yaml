@@ -2324,6 +2324,30 @@ paths:
         "200": {$ref: "#/components/responses/ChatSession"}
         "404": {description: Session absent or inaccessible}
         "409": {description: Title is ineligible for retry or the Chat model is unavailable}
+  /api/v1/chat/sessions/{chatId}/operations/{operationId}/pr-diff:
+    parameters:
+      - {$ref: "#/components/parameters/ChatSessionID"}
+      - {name: operationId, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [chat]
+      operationId: inspectChatPRDiff
+      x-weft-role: operator
+      description: Read the bounded diff for an owned analysis review under the current saved SCM read grant. This does not start analysis, publish anything or persist the diff in the conversation.
+      responses:
+        "200":
+          description: Pinned diff, with response caching disabled
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [head, base, diff]
+                properties:
+                  head: {type: string}
+                  base: {type: string}
+                  diff: {type: string, description: Unified diff or structured provider diff serialized as text}
+        "403": {description: Operator access required}
+        "404": {description: Review absent or inaccessible}
+        "409": {description: Pinned revision, grant or bounded diff no longer available}
   /api/v1/chat/sessions/{chatId}/operations/{operationId}/{decision}:
     parameters:
       - {$ref: "#/components/parameters/ChatSessionID"}

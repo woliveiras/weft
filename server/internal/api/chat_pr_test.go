@@ -134,7 +134,25 @@ func verifyChatPRFixture(t *testing.T, kind string) {
 	if p.Provider != kind || p.Repository != connection.Repository || p.Head != strings.Repeat("a", 40) || p.Base != base {
 		t.Fatalf("incorrect review identity: %+v", p)
 	}
+	diffPath := "/api/v1/chat/sessions/" + stale.ID + "/operations/" + stale.Messages[1].Review.ID + "/pr-diff"
+	if code := call(t, server, "GET", diffPath, viewerTok, "", "", nil); code != 403 {
+		t.Fatalf("viewer inspected diff: %d", code)
+	}
+	before := reads.Load()
+	if code := call(t, server, "GET", diffPath, adminTok, "", "", nil); code != 404 || reads.Load() != before {
+		t.Fatalf("another owner inspected diff: %d", code)
+	}
+	var evidence struct{ Diff, Head, Base string }
+	if code := call(t, server, "GET", diffPath, operatorTok, "", "", &evidence); code != 200 || evidence.Head != p.Head || evidence.Base != p.Base || !strings.Contains(evidence.Diff, "fixture change") {
+		t.Fatalf("pinned evidence: %d %+v", code, evidence)
+	}
+	if model.analyses.Load() != 0 || writes.Load() != 0 {
+		t.Fatal("reading evidence triggered an analysis or write")
+	}
 	changed.Store(true)
+	if code := call(t, server, "GET", diffPath, operatorTok, "", "", nil); code != 409 {
+		t.Fatalf("changed head returned stale evidence: %d", code)
+	}
 	if result := confirm(stale); result.State != chat.ReviewConflict || model.analyses.Load() != 0 {
 		t.Fatalf("stale: %+v", result)
 	}

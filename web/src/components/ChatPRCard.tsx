@@ -1,15 +1,19 @@
+import { useState } from 'react';
 import type { ChatPRReview } from '../api/chat';
-import { Btn } from './common';
+import { api } from '../api/client';
+import { useAsync } from '../hooks/useData';
+import { Btn, ErrorBox } from './common';
 import { nodeLink } from './activityView';
 import { runLink } from './runPresentation';
 
-export function ChatPRCard({ review, now, canConfirm, onDecide, onView }: {
-  review: ChatPRReview; now: number; canConfirm: boolean;
+export function ChatPRCard({ sessionId, review, now, canConfirm, onDecide, onView }: {
+  sessionId: string; review: ChatPRReview; now: number; canConfirm: boolean;
   onDecide: (decision: 'confirm' | 'decline') => void;
   onView: (anchor: string) => void;
 }) {
   const { pr, state } = review;
   const anchor = `chat-pr-${review.id}`;
+  const [showDiff, setShowDiff] = useState(false);
   return <section className="chat-agent-review" aria-label={`Review PR #${pr.number}`}>
     <h3>Review PR #{pr.number}</h3>
     <p>{pr.repository} · {pr.provider} · {pr.connection}</p>
@@ -19,6 +23,11 @@ export function ChatPRCard({ review, now, canConfirm, onDecide, onView }: {
       <dt>Reviewer</dt><dd>{pr.graph} · Version {pr.version} · {pr.node}</dd>
       <dt>Model</dt><dd>{pr.modelProvider} / {pr.modelName}</dd>
     </dl>
+    {state !== 'conflict' && state !== 'declined' && <>
+      <Btn aria-expanded={showDiff} aria-controls={showDiff ? anchor + '-diff' : undefined}
+        onClick={() => setShowDiff(!showDiff)}>{showDiff ? 'Hide pinned diff' : 'Inspect pinned diff'}</Btn>
+      {showDiff && <ChatPRDiff id={anchor + '-diff'} sessionId={sessionId} review={review}/>}
+    </>}
     {state === 'awaiting_confirmation' && <>
       <p>The workflow sends the reviewed diff to this model and charges its budget. The draft appears here.</p>
       {Date.parse(review.expiresAt) <= now
@@ -36,4 +45,20 @@ export function ChatPRCard({ review, now, canConfirm, onDecide, onView }: {
     <a href={nodeLink(pr.graph, pr.node)} id={anchor} onClick={() => onView(anchor)}>View workflow</a>
     {review.resultId && <> · <a href={runLink(pr.graph, review.resultId)} id={anchor + '-run'} onClick={() => onView(anchor + '-run')}>View execution</a></>}
   </section>;
+}
+
+function ChatPRDiff({ id, sessionId, review }: { id: string; sessionId: string; review: ChatPRReview }) {
+  const evidence = useAsync(() => api.chatPRDiff(sessionId, review.id), [sessionId, review.id], () => true);
+  const diff = evidence.data;
+  return <section id={id} aria-label="Pinned pull request diff">
+    {evidence.loading && <p role="status">Loading pinned diff…</p>}
+    {evidence.error && <><ErrorBox error={evidence.error}/><Btn onClick={() => void evidence.reload()}>Retry diff</Btn></>}
+    {diff && diff.head === review.pr.head && diff.base === review.pr.base && <pre className="chat-pr-diff" tabIndex={0}>{formatDiff(diff.diff)}</pre>}
+  </section>;
+}
+
+function formatDiff(diff: string) {
+  if (!diff.startsWith('{')) return diff;
+  try { return JSON.stringify(JSON.parse(diff), null, 2); }
+  catch { return diff; }
 }

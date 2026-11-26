@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/chat"
@@ -59,26 +57,12 @@ func (s *Server) dispatchChatPR(ctx context.Context, actor Identity, session str
 	finish := func(state string) (*chat.Session, error) {
 		return s.chatStore().ObservePR(ctx, actor.chatOwner, session, r.ID, r.State, state, "", "")
 	}
-	t, err := s.selectPRTarget(ctx, chat.PRSelector{Workflow: p.Graph, Connection: p.Connection, Number: strconv.Itoa(p.Number),
-		Node: p.Node, WorkflowVersion: p.Version, Run: p.Run, ConnectionRevision: p.ConnectionRevision})
-	if errors.Is(err, errPRScope) {
+	diff, err := s.pinnedChatPRDiff(ctx, actor, p)
+	if errors.Is(err, errPRScope) || errors.Is(err, errPRRead) {
 		return finish(chat.ReviewConflict)
 	}
 	if err != nil {
 		return finish(chat.ReviewUnknown)
-	}
-	scope := p
-	scope.Head, scope.Base, scope.HeadRef, scope.BaseRef, scope.Draft = "", "", "", "", false
-	if scope != t.proposal {
-		return finish(chat.ReviewConflict)
-	}
-	snapshot, diff, err := s.readChatPR(ctx, actor, t, true)
-	if err != nil {
-		return finish(chat.ReviewConflict)
-	}
-	t.proposal.Head, t.proposal.Base, t.proposal.HeadRef, t.proposal.BaseRef, t.proposal.Draft = snapshot.HeadSHA, snapshot.BaseSHA, snapshot.Head, snapshot.Base, snapshot.Draft
-	if p != t.proposal || len(diff) > 12<<10 || strings.TrimSpace(diff) == "" || !chat.SafeReviewContent(diff) {
-		return finish(chat.ReviewConflict)
 	}
 	payload, err := json.Marshal(struct {
 		Repository, Head, Base string

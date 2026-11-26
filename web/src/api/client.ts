@@ -353,6 +353,8 @@ export const api = {
     request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/messages/${enc(message)}/retry`, {method:'POST'}),
   retryChatTitle: (id:string) =>
     request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/title/retry`, {method:'POST'}),
+  chatPRDiff: (id: string, operation: string) =>
+    request<{head: string; base: string; diff: string}>(`${V1}/chat/sessions/${enc(id)}/operations/${enc(operation)}/pr-diff`),
   decideChatReview: (id: string, operation: string, digest: string, decision: 'confirm' | 'decline') =>
     request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/operations/${enc(operation)}/${decision}`, {method:'POST',body:{digest}}),
   archiveChat: (id: string, archived: boolean) =>

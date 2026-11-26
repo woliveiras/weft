@@ -95,7 +95,7 @@ For a missing reviewer, ask for a reviewed Graph in Chat or inspect Workflows.
 Connections whose grants require interactive read approval use the existing
 manual path.
 
-The preview identifies the repository, source and base commits, model and workflow version. **View workflow** opens the selected node. **Analyze PR** checks the revisions again and sends the bounded diff to the workflow model for one billed, tool-free analysis. Existing channel and turn gates still apply. The draft appears in the conversation with **View execution**. A missing receipt leaves the outcome unknown. Requesting analysis grants no publication permission.
+The preview identifies the repository, source and base commits, model and workflow version. **Inspect pinned diff** opens the bounded provider diff in the conversation. It checks the current saved read grant and both reviewed revisions, without starting analysis. If the revisions change or the bounded diff is unavailable, request a fresh review. **View workflow** opens the selected node. **Analyze PR** checks the revisions again and sends the bounded diff to the workflow model for one billed, tool-free analysis. Existing channel and turn gates still apply. The draft appears in the conversation with **View execution**. A missing receipt leaves the outcome unknown. Requesting analysis grants no publication permission.
 
 ## Prepare a task environment
 

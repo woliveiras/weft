@@ -232,7 +232,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
         {watch.unknown && <span className="muted"> · Last seen <time dateTime={watch.observedAt}>{new Date(watch.observedAt).toLocaleString()}</time></span>}
       </p>)}
       <div className="chat-transcript" aria-label="Conversation">
-        {session?.messages.map(message => <Message key={message.id} value={message}
+        {session?.messages.map(message => <Message key={message.id} sessionId={session.id} value={message}
           now={now} canCreateAgent={canCreateAgent && !sending} canOperate={canOperate && !sending}
           onModelSettings={canCreateAgent ? openModelEditor : undefined}
           onDecide={(review, decision) => void mutate(() => api.decideChatReview(session.id, review.id, review.digest, decision))}
@@ -329,7 +329,8 @@ function SessionRow({item, current, expanded, onOpen, onDetails}: {
   </li>;
 }
 
-function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetry, onDecide, onModelSettings}: {
+function Message({sessionId, value, now, canCreateAgent, canOperate, onView, onRead, onRetry, onDecide, onModelSettings}: {
+  sessionId:string;
   onModelSettings?:()=>void;
   value:ChatMessage; now:number; canCreateAgent:boolean; canOperate:boolean; onView:(anchor:string)=>void; onRead:()=>void;
   onRetry?:()=>void; onDecide:(review:ChatOperationReview, decision:'confirm'|'decline')=>void;
@@ -362,18 +363,18 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
         onClick={() => onView(`chat-execution-${value.id}`)}>View execution</a>
     </section>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
-    {review && <OperationReviewCard review={review} now={now} canConfirm={('executionCancel' in review || 'taskCorrection' in review || 'pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'workflowScale' in review || 'workflowEnvironment' in review || 'approval' in review) ? canOperate : canCreateAgent}
+    {review && <OperationReviewCard sessionId={sessionId} review={review} now={now} canConfirm={('executionCancel' in review || 'taskCorrection' in review || 'pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'workflowScale' in review || 'workflowEnvironment' in review || 'approval' in review) ? canOperate : canCreateAgent}
       onDecide={decision => onDecide(review,decision)} onView={onView}/>}
     {value.unread && <Btn onClick={onRead}>Mark result read</Btn>}
   </article>;
 }
 
-function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
-  review:ChatOperationReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+function OperationReviewCard({sessionId, review, now, canConfirm, onDecide, onView}: {
+  sessionId:string; review:ChatOperationReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
 }) {
   if ('budgetRaise' in review) return <BudgetRaiseCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('skill' in review) return <ChatSkillCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
-  if ('pr' in review) return <ChatPRCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('pr' in review) return <ChatPRCard sessionId={sessionId} review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('instructions' in review) return <ChatInstructionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('guidance' in review) return <ChatGuidanceCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;
   if ('configuration' in review) return <ChatConfigurationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;

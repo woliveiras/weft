@@ -46,7 +46,7 @@ test('discovers duplicate PR numbers before analyzing a pinned PR and returning 
         head:{ref:'docs',sha:'c'.repeat(40),repo:{full_name:'team/docs'}},base:{ref:'main',sha:base,repo:{full_name:'team/docs'}}}));
     } else if (req.url === `/repos/team/repo/compare/${base}...${head}`) {
       diffs++;
-      res.end('diff --git a/file b/file\n+fixture change\n');
+      res.end('diff --git a/file b/file\n--- a/file\n+++ b/file\n@@ -1 +1 @@\n-original\n+fixture change\n');
     } else { res.writeHead(404).end(); }
   });
   await new Promise<void>(resolve => remote.listen(0, '127.0.0.1', resolve));
@@ -82,16 +82,20 @@ test('discovers duplicate PR numbers before analyzing a pinned PR and returning 
     await send(page,'o do mobile checksum');
     const review = page.getByRole('region', {name: 'Review PR #418'});
     await expect(review.getByText(head)).toBeVisible();
+    await review.getByRole('button', {name: 'Inspect pinned diff'}).click();
+    await expect(review.getByRole('region', {name: 'Pinned pull request diff'}).getByText(/\+fixture change/)).toBeVisible();
+    expect(writes).toBe(0);
+    expect(diffs).toBe(1);
     await review.getByRole('link', {name: 'View workflow'}).click();
     await expect(page).toHaveURL(/manual-review\/canvas/);
     await page.goBack();
-    expect(diffs).toBe(0);
+    expect(diffs).toBe(1);
     await review.getByRole('button', {name: 'Analyze PR #418'}).click();
     await expect(review.getByText('Add a boundary test for the fixture change.')).toBeVisible();
     await review.getByRole('link', {name: 'View execution'}).click();
     await expect(page).toHaveURL(/manual-review\/runs\?execution=/);
     expect(writes).toBe(0);
-    expect(diffs).toBe(1);
+    expect(diffs).toBe(2);
   } finally {
     await new Promise<void>((resolve, reject) => remote.close(err => err ? reject(err) : resolve()));
   }
