@@ -250,7 +250,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
         </div>
       </header>
 
-      <div className="chat-reading-area" ref={history} onScroll={() => {
+      <div className="chat-reading-area" role="region" aria-label="Conversation history" tabIndex={0} ref={history} onScroll={() => {
         const el = history.current;
         if (el) followLatest.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
       }}>

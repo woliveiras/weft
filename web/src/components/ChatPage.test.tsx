@@ -14,6 +14,7 @@ it('offers an offline setup path and distinguishes shared local history', async 
   });
   render(<ChatPage archived={false} onOpen={vi.fn()}/>);
   expect(await screen.findByText('Shared local history')).toBeTruthy();
+  expect(screen.getByRole('region', {name:'Conversation history'}).tabIndex).toBe(0);
   expect((await screen.findByRole('link',{name:'Open Chat model settings'})).getAttribute('href')).toBe('#/models/chat');
   fireEvent.change(screen.getByRole('textbox',{name:'Message'}),{target:{value:'Follow a task'}});
   expect((screen.getByRole('button',{name:'Send'}) as HTMLButtonElement).disabled).toBe(true);

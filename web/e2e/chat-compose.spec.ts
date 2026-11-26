@@ -43,3 +43,31 @@ test('retries a saved request in place with a distinct action below its text',as
   expect((await response).ok()).toBe(true);
   await expect(bubble).toHaveCount(1);
 });
+
+test('scrolls a long conversation with the keyboard and wheel while the scrollbar stays hidden', async ({page,request}) => {
+  const headers = {Authorization:'Bearer e2e-viewer-token'};
+  const sessions = '/api/v1/chat/sessions';
+  const id = '2ec507ed7d9e4ed38377a34a0c000001';
+  for (let i=1; i<=5; i++) {
+    const path = i === 1 ? sessions : sessions + '/' + id + '/messages';
+    const requestId = id.slice(0,-1) + i;
+    expect((await request.post(path, {headers, data:{requestId,text:'/inspect'}})).ok()).toBe(true);
+  }
+  await page.setViewportSize({width:1280,height:620});
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
+  await page.goto('/#/chat/' + id);
+  const history = page.getByRole('region',{name:'Conversation history'});
+  await expect(history.getByRole('article')).toHaveCount(10);
+  await expect(history).toHaveCSS('scrollbar-width','none');
+  const top = () => history.evaluate(el => el.scrollTop);
+  await history.focus();
+  await page.keyboard.press('Control+Home');
+  await expect.poll(top).toBe(0);
+  await page.keyboard.press('PageDown');
+  await expect.poll(top).toBeGreaterThan(0);
+  await page.keyboard.press('Control+Home');
+  await expect.poll(top).toBe(0);
+  await history.hover();
+  await page.mouse.wheel(0, 300);
+  await expect.poll(top).toBeGreaterThan(0);
+});
