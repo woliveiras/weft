@@ -164,9 +164,15 @@ export interface ChatApprovalReview extends ChatReviewState {
   };
 }
 
+export interface ChatTaskCancellationReview extends ChatReviewState {
+  taskCancel: {
+    id:string; title:string; revision:number; executionGraphId:string; executionVersion:number; runId:string; pendingApprovals:number;
+  };
+}
+
 export type ChatOperationReview = ChatCorrectionReview | ChatSkillReview | ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
   ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview |
-  ChatTaskRetryReview | ChatCatalogPublicationReview | ChatAgentAdoptionReview | ChatApprovalReview;
+  ChatTaskRetryReview | ChatCatalogPublicationReview | ChatAgentAdoptionReview | ChatApprovalReview | ChatTaskCancellationReview;
 
 export interface ChatSession {
   id: string;

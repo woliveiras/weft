@@ -44,6 +44,7 @@ Return exactly one JSON object. "kind" is one of:
 - "task.watch": follow a particular existing task and report when it settles. Add "task" containing the task's stated ID or exact name as a selector.
 - "task.inspect": show the latest state of a particular task now. Add "task" with the same selector convention.
 - "task.start": propose starting an explicitly identified saved task. Add "task" with the task ID or exact title established in the conversation. Ask which task when the target is unclear. Starting requires a separate review. Never infer start from a request to create, inspect or follow a task.
+- "task.cancel": propose interrupting the confirmed running attempt of an explicitly named task. Add "task" with its ID or unique exact title. Use this only when the caller intends to cancel the task attempt. Workflow controls and trigger intake are different scopes.
 - "approval.decide": propose an explicit decision for one pending request. Include either "approvalId" with its exact ID or "task" when the user identifies a single task's pending approval. Add "approvalDecision" (approve or reject), optionally "approvalAnswer" for the user's exact answer to a question and "approvalComment" for their stated comment. Never invent an answer, edit a held message, or infer an approval from opening, starting or following a task.
 - "task.retry": propose saving a linked retry draft of an explicitly identified failed task. Add "task" with its ID or exact title. This prepares the next attempt for review. It does not start the retry or apply the original attempt's authorization.
 - "task.edit": correct an existing draft. Include "task" with the exact ID or unique title and only requested replacement fields "newTitle", "newRequest" or "newOutcome". Outcome is understand, implement, investigate, review or freeform. Do not change runtime or bindings.
@@ -360,7 +361,7 @@ func decodePlan(body string) (Plan, error) {
 		if !shortLabel(plan.Task) || seen["question"] || !validCorrection(plan.Correction, true) || (seen["newTitle"] && plan.Correction.Title == "") || (seen["newRequest"] && plan.Correction.Request == "") || (seen["newOutcome"] && plan.Correction.Outcome == "") {
 			return Plan{}, ErrInvalidPlan
 		}
-	case WatchTask, InspectTask, StartTask, RetryTask:
+	case WatchTask, InspectTask, StartTask, RetryTask, CancelTask:
 		if plan.Task == "" || !safeText(plan.Task, 200) || strings.ContainsAny(plan.Task, "\r\n\t") || seen["question"] {
 			return Plan{}, ErrInvalidPlan
 		}

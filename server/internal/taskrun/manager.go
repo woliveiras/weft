@@ -641,10 +641,31 @@ func (m Manager) View(ctx context.Context, id string) (*View, error) {
 	return v, nil
 }
 func (m Manager) Cancel(ctx context.Context, id, actor string) (*taskconfig.Draft, error) {
+	return m.cancel(ctx, id, actor, nil)
+}
+
+type ReviewedCancellation struct {
+	Revision  int64
+	Version   int
+	RunID     string
+	Operation string
+}
+
+func (m Manager) CancelForOperation(ctx context.Context, id, actor string, reviewed ReviewedCancellation) (*taskconfig.Draft, error) {
+	if reviewed.Revision < 1 || reviewed.Version < 1 || reviewed.RunID == "" || reviewed.Operation == "" {
+		return nil, taskconfig.ErrInvalid
+	}
+	return m.cancel(ctx, id, actor, &reviewed)
+}
+
+func (m Manager) cancel(ctx context.Context, id, actor string, reviewed *ReviewedCancellation) (*taskconfig.Draft, error) {
 	tm := taskconfig.Manager{Store: m.Store}
 	d, err := tm.Get(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if reviewed != nil && (d.Revision != reviewed.Revision || (d.Status != "running" && d.Status != "starting")) {
+		return nil, storage.ErrConflict
 	}
 	if d.Status == "environment_pending" || d.Status == "environment_cancel_requested" {
 		if m.Environments == nil {
@@ -685,13 +706,31 @@ func (m Manager) Cancel(ctx context.Context, id, actor string) (*taskconfig.Draf
 	if g.Metadata.Labels["weft.task"] != d.ID || rec.RunID == "" {
 		return nil, fmt.Errorf("%w: launch has no confirmed run; inspect preparation first", storage.ErrConflict)
 	}
+	if reviewed != nil {
+		if g.Metadata.Version != reviewed.Version || rec.Version != reviewed.Version || rec.RunID != reviewed.RunID {
+			return nil, storage.ErrConflict
+		}
+		view, err := m.View(ctx, d.ID)
+		if err != nil {
+			return nil, err
+		}
+		if view.State != "running" && view.State != "starting" {
+			return nil, storage.ErrConflict
+		}
+		d.CancelOperation, d.CancelRunID = reviewed.Operation, reviewed.RunID
+	}
 	if d.Status != "cancel_requested" {
 		d, err = tm.Transition(ctx, d, "cancel_requested", actor)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if err = m.Engine.GraphAction(ctx, d.ExecutionGraphID, "kill", actor); err != nil {
+	if reviewed != nil {
+		err = m.Engine.CancelReviewedTaskRun(ctx, d.ExecutionGraphID, d.ID, d.CancelRunID, actor, d.CancelOperation)
+	} else {
+		err = m.Engine.GraphAction(ctx, d.ExecutionGraphID, "kill", actor)
+	}
+	if err != nil {
 		return nil, err
 	}
 	return d, nil

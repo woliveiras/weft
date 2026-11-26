@@ -125,6 +125,14 @@ preparation or delivery settings. If the task or its authorization changes
 while you are reviewing, inspect the updated setup and request a fresh start
 proposal.
 
+## Cancel a task attempt
+
+As an administrator, name the running task to cancel. Confirm **Cancel task
+attempt** after checking its task and run IDs. The cancellation interrupts
+work and closes pending approvals for that attempt. Chat follows the request
+until the task record confirms cancellation. Its history and captured
+workspaces remain available. Use Tasks for draft or environment controls.
+
 ## Decide a pending approval
 
 As an operator or administrator, ask to approve or reject a pending message

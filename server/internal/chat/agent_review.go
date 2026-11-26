@@ -117,6 +117,7 @@ type OperationReview struct {
 	Workflow        *WorkflowCreation                  `json:"workflow,omitempty"`
 	TaskDraft       *TaskCreation                      `json:"taskDraft,omitempty"`
 	TaskStart       *TaskAdmission                     `json:"taskStart,omitempty"`
+	TaskCancel      *TaskCancellation                  `json:"taskCancel,omitempty"`
 	TaskRetry       *TaskRetry                         `json:"taskRetry,omitempty"`
 	Approval        *ApprovalDecision                  `json:"approval,omitempty"`
 	WorkflowControl *WorkflowControl                   `json:"workflowControl,omitempty"`
@@ -154,7 +155,7 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	choices := 0
-	for _, exists := range []bool{r.TaskCorrection != nil, r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskRetry != nil, r.Approval != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
+	for _, exists := range []bool{r.TaskCorrection != nil, r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskCancel != nil, r.TaskRetry != nil, r.Approval != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
 		if exists {
 			choices++
 		}
@@ -164,6 +165,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 	}
 	var payload any
 	switch {
+	case r.TaskCancel != nil:
+		payload = struct {
+			Owner, Session, ID, Operation string
+			ExpiresAt                     time.Time
+			TaskCancel                    *TaskCancellation
+		}{owner, session, r.ID, CancelTask, r.ExpiresAt, r.TaskCancel}
 	case r.Approval != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string

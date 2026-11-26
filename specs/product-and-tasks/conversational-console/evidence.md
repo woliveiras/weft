@@ -192,6 +192,16 @@ as an operator, verified the native receipt and observed task success
 through its separate link. TypeScript, eleven component checks, OpenAPI
 parsing, `make lint`, `make build` and `git diff --check` passed.
 
+## 2026-11-26 — Reviewed task cancellation
+
+S36 passed targeted Go unit and authenticated HTTP/SQLite integration.
+The cancellation closed the selected task's held input, retained its
+history and left the other run and its approval active. A durable request
+saved before engine delivery settled through background reconciliation.
+Repeated confirmation reused the original observation. Chromium saw one
+observed cancellation and returned from the saved task. TypeScript and
+eleven focused component checks passed.
+
 Device and assistive-technology review, external provider qualification and
 production backup and restore remain open.
 

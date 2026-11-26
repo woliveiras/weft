@@ -8,7 +8,7 @@ import { ChatManualLink } from './ChatManualLink';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
 import type { ChatAgentAdoptionReview, ChatApprovalReview, ChatCatalogPublicationReview, ChatMessage, ChatOperationReview,
-  ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview,
+  ChatSession, ChatSessionSummary, ChatTask, ChatTaskCancellationReview, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview,
   ChatCorrectionReview, ChatTaskRetryReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
@@ -310,6 +310,7 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   if ('configuration' in review) return <ChatConfigurationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;
   if ('taskDraft' in review) return <TaskDraftReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskStart' in review) return <TaskStartReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('taskCancel' in review) return <TaskCancellationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('workflowControl' in review) return <WorkflowControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskCorrection' in review) return <CorrectionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskRetry' in review) return <TaskRetryReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
@@ -599,6 +600,32 @@ function ApprovalDecisionCard({review, now, canConfirm, onDecide, onView}: {
       {approval.taskId && <a id={`${anchor}-task`} href={taskSectionLink(approval.taskId,'overview')}
         onClick={() => onView(`${anchor}-task`)}>Open task</a>}
     </div>
+  </section>;
+}
+
+function TaskCancellationCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatTaskCancellationReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const {taskCancel:task} = review;
+  const anchor = `chat-cancel-${review.id}`;
+  return <section className="chat-agent-review" aria-label={`Cancel task ${task.title}`}>
+    <h3>{task.title}</h3>
+    <dl>
+      <dt>Task</dt><dd>{task.id} · Revision {task.revision}</dd>
+      <dt>Execution</dt><dd>{task.executionGraphId} · Version {task.executionVersion}</dd>
+      <dt>Run</dt><dd>{task.runId}</dd>
+      <dt>Pending approvals</dt><dd>{task.pendingApprovals}</dd>
+    </dl>
+    {review.state === 'awaiting_confirmation' && <>
+      <p>Interrupt this task attempt and close its pending approvals. Captured evidence and workspaces are retained.</p>
+      <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm} confirmLabel="Cancel task attempt" onDecide={onDecide}/>
+    </>}
+    {review.state === 'applying' && <p role="status">Cancellation requested. Checking the task record…</p>}
+    {review.state === 'accepted' && <p role="status">Cancellation request recorded. Follow the task result for the confirmed outcome.</p>}
+    {review.state === 'conflict' && <p role="status">The task or its active run changed. Inspect the task and request a fresh review.</p>}
+    {review.state === 'unknown' && <p role="status">Cancellation is temporarily unknown. Inspect the task before trying again.</p>}
+    {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+    <a id={anchor} href={taskSectionLink(task.id,'overview')} onClick={() => onView(anchor)}>Open task</a>
   </section>;
 }
 

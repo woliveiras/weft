@@ -192,6 +192,32 @@ test('records one reviewed approval for the exact held task input', async ({ pag
   await expect(decision).toBeVisible();
 });
 
+test('cancels only the reviewed task attempt and observes the final cancellation', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const id = await startTaskWaitingForApproval(request,'chat-cancel-source','Cancellation fixture task');
+  const sourcePath = `/api/v1/tasks/${id}`;
+  const before = await (await request.get(`${sourcePath}/progress`,{headers})).json();
+  expect(before.pendingApprovals).toHaveLength(1);
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.goto('/');
+  await send(page,'Follow the cancellation test task.');
+  await expect(page.getByText(/Decision required/).first()).toBeVisible();
+  await send(page,'Cancel the running cancellation test task.');
+  const card = page.getByRole('region',{name:'Cancel task Cancellation fixture task'});
+  await expect(card.getByText(/close its pending approvals/)).toBeVisible();
+  expect(await (await request.get(sourcePath,{headers})).json()).toMatchObject({status:'running'});
+  await card.getByRole('button',{name:'Cancel task attempt',exact:true}).click();
+  await expect(card.getByText(/Cancellation request recorded/)).toBeVisible();
+  await expect(page.getByText(`Task ${id}: cancelled.`,{exact:true})).toHaveCount(1);
+  const settled = await (await request.get(`${sourcePath}/progress`,{headers})).json();
+  expect(settled.task.status).toBe('cancelled');
+  expect(settled.pendingApprovals).toHaveLength(0);
+  await card.getByRole('link',{name:'Open task',exact:true}).click();
+  await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: cancelled');
+  await page.goBack();
+  await expect(card).toBeVisible();
+});
+
 test('prepares one reviewed retry from a failed task and opens the linked draft', async ({ page, request }) => {
   await selectFixtureModel(request);
   const original = await startTaskWaitingForApproval(request,'chat-retry-source','Failed documentation task fixture');

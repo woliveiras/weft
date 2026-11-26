@@ -158,6 +158,9 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		if review.TaskStart != nil {
 			return s.applyReviewedChatTaskStart(settleCtx, actor, sessionID, review)
 		}
+		if review.TaskCancel != nil {
+			return s.applyChatTaskCancel(settleCtx, actor, sessionID, review)
+		}
 		if review.TaskRetry != nil {
 			return s.applyReviewedChatTaskRetry(settleCtx, actor, sessionID, review)
 		}
@@ -308,6 +311,14 @@ func (s *Server) reconcileChatReviews(ctx context.Context, owner string, session
 		if review.TaskStart != nil {
 			var err error
 			session, err = s.reconcileChatTaskStart(ctx, owner, session, review)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if review.TaskCancel != nil {
+			var err error
+			session, err = s.reconcileChatTaskCancel(ctx, owner, session, review)
 			if err != nil {
 				return nil, err
 			}

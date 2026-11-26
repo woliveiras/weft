@@ -267,6 +267,8 @@ func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID 
 		return s.reviewChatTaskDraft(ctx, actor, sessionID, plan)
 	case chat.StartTask:
 		return s.reviewChatTaskStart(ctx, actor, sessionID, plan)
+	case chat.CancelTask:
+		return s.reviewChatTaskCancel(ctx, actor, sessionID, plan)
 	case chat.DecideApproval:
 		return s.reviewChatApproval(ctx, actor, sessionID, plan)
 	case chat.ControlWorkflow:
@@ -334,6 +336,9 @@ func (s *Server) observeChatTask(ctx context.Context, id string) (chat.TaskSumma
 		ID: id, State: view.State, GraphID: view.Task.ExecutionGraphID,
 		DecisionNeeded: len(view.PendingApprovals) > 0,
 		SettledBlock:   view.State == "blocked" && view.Task.Status == "blocked",
+	}
+	if result.State == "cancelled" && view.Task.Status != "cancelled" {
+		result.State = view.Task.Status
 	}
 	if view.Result != nil && view.Result.GraphID == result.GraphID {
 		result.ExecutionID = view.Result.ID

@@ -21,11 +21,16 @@ type TaskAdmission struct {
 // FinishTaskStart records admission separately from the observed task outcome.
 // This can recover a lost response from the task's durable dispatch receipt.
 func (s Sessions) FinishTaskStart(ctx context.Context, owner, sessionID, reviewID string, task TaskSummary) (*Session, error) {
+	return s.finishTrackedTaskAction(ctx, owner, sessionID, reviewID, task)
+}
+
+func (s Sessions) finishTrackedTaskAction(ctx context.Context, owner, sessionID, reviewID string, task TaskSummary) (*Session, error) {
 	return s.update(ctx, owner, sessionID, func(session *Session) (bool, error) {
 		for i := range session.Messages {
 			message := &session.Messages[i]
 			review := message.Review
-			if review == nil || review.ID != reviewID || review.TaskStart == nil || review.TaskStart.ID != task.ID {
+			if review == nil || review.ID != reviewID ||
+				!((review.TaskStart != nil && review.TaskStart.ID == task.ID) || (review.TaskCancel != nil && review.TaskCancel.ID == task.ID)) {
 				continue
 			}
 			if review.State != ReviewApplying && review.State != ReviewUnknown {
@@ -34,6 +39,11 @@ func (s Sessions) FinishTaskStart(ctx context.Context, owner, sessionID, reviewI
 			now := time.Now().UTC()
 			review.State, review.ResultID = ReviewAccepted, task.ID
 			message.Unread, session.LastActivity = true, now
+			for _, existing := range session.Watches {
+				if existing.Task.ID == task.ID && !existing.Complete {
+					return true, nil
+				}
+			}
 			if task.Terminal() {
 				message.Task = &task
 			} else {

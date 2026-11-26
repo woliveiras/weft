@@ -2333,7 +2333,7 @@ paths:
       tags: [chat]
       operationId: decideChatReview
       x-weft-role: operator
-      description: Decision requires session ownership and the current role for the reviewed operation. Task drafting and retry, eligible approvals, live guidance and runtime controls require operator. Task start, catalog and workflow edits and installation configuration require admin.
+      description: Decision requires session ownership and the current role for the reviewed operation. Task drafting and retry, eligible approvals, live guidance and runtime controls require operator. Task start and cancellation, catalog and workflow edits and installation configuration require admin.
       requestBody:
         required: true
         content:
@@ -3032,6 +3032,7 @@ components:
             - {$ref: "#/components/schemas/ChatCatalogPublicationReview"}
             - {$ref: "#/components/schemas/ChatAgentAdoptionReview"}
             - {$ref: "#/components/schemas/ChatApprovalReview"}
+            - {$ref: "#/components/schemas/ChatTaskCancellationReview"}
             - {$ref: "#/components/schemas/ChatConfigurationReview"}
             - {$ref: "#/components/schemas/ChatGuidanceReview"}
             - {$ref: "#/components/schemas/ChatInstructionReview"}
@@ -3384,6 +3385,23 @@ components:
                 answer: {type: string}
                 comment: {type: string}
                 fingerprint: {type: string, pattern: '^[0-9a-f]{64}$'}
+    ChatTaskCancellationReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [taskCancel]
+          properties:
+            taskCancel:
+              type: object
+              required: [id, title, revision, executionGraphId, executionVersion, runId, pendingApprovals]
+              properties:
+                id: {type: string}
+                title: {type: string}
+                revision: {type: integer, minimum: 1}
+                executionGraphId: {type: string}
+                executionVersion: {type: integer, minimum: 1}
+                runId: {type: string}
+                pendingApprovals: {type: integer, minimum: 0}
     ChatReviewState:
       type: object
       required: [id, expiresAt, digest, state]
@@ -3394,7 +3412,7 @@ components:
         state: {type: string, enum: [awaiting_confirmation, applying, created, accepted, queued, consumed, run_ended, applied, incomplete, conflict, unknown, declined]}
         claimedAt: {type: string, format: date-time}
         resultVersion: {type: integer}
-        resultId: {type: string, description: Exact ID of the saved draft, linked retry or admitted task}
+        resultId: {type: string, description: Exact ID of the saved or controlled task when available}
     ChatModelSelection:
       type: object
       additionalProperties: false
@@ -3538,6 +3556,8 @@ components:
       properties:
         creationOperation: {type: string, readOnly: true, description: ID of the confirmed operation that created this draft, when available}
         startOperation: {type: string, readOnly: true, description: ID of the confirmed operation that admitted this task, when available}
+        cancelOperation: {type: string, readOnly: true, description: Reviewed operation that requested cancellation, when available}
+        cancelRunId: {type: string, readOnly: true, description: Admitted run targeted by the reviewed cancellation}
         retryOfTaskId: {type: string, readOnly: true, description: Failed manual task from which this attempt was created}
         retryOfRevision: {type: integer, minimum: 1, readOnly: true, description: Source revision used to prepare this attempt}
         resolution:

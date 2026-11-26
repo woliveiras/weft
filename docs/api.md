@@ -212,6 +212,13 @@ path rechecks budgets and gates and records its operation ID with the task
 claim. An `accepted` review proves admission was recorded. The conversation
 tracks the actual task state and outcome separately.
 
+An administrator can cancel an admitted running task through a separate
+review of its revision, execution graph and run ID. The native task record
+stores the cancellation request and exact run before the engine interrupts it.
+Reconciliation resumes that recorded request if delivery was interrupted.
+The operation can expire pending approvals for that task attempt. The result
+appears as cancelled when the task is durably settled.
+
 An operator can review a start, pause, resume, graceful stop or immediate
 interruption on a reusable workflow or one node. Chat seals the exact graph
 version, target, run and desired control state. Confirmation takes the native

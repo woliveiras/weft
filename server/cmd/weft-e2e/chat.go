@@ -52,6 +52,10 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"task.start","task":"Archive review task fixture","title":"Start archive review"}`
 	case "Approve the pending input of the editorial gate task.":
 		content = `{"kind":"approval.decide","task":"Editorial gate task fixture","approvalDecision":"approve","title":"Review editorial gate"}`
+	case "Follow the cancellation test task.":
+		content = `{"kind":"task.watch","task":"Cancellation fixture task","title":"Follow cancellation fixture"}`
+	case "Cancel the running cancellation test task.":
+		content = `{"kind":"task.cancel","task":"Cancellation fixture task"}`
 	case "Start the publication workflow.":
 		content = `{"kind":"workflow.control","controlWorkflow":"chat-publication","controlAction":"start","title":"Control publication workflow"}`
 	case "Pause new turns for the reviewer node in the publication workflow.":

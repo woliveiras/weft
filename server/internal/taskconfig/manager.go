@@ -48,6 +48,8 @@ type Draft struct {
 	CorrectionRevision    int64        `json:"correctionRevision,omitempty"`
 	CreationOperation     string       `json:"creationOperation,omitempty"`
 	StartOperation        string       `json:"startOperation,omitempty"`
+	CancelOperation       string       `json:"cancelOperation,omitempty"`
+	CancelRunID           string       `json:"cancelRunId,omitempty"`
 	RepositoryRevision    int64        `json:"repositoryRevision,omitempty"`
 	RetryOfTaskID         string       `json:"retryOfTaskId,omitempty"`
 	RetryOfRevision       int64        `json:"retryOfRevision,omitempty"`

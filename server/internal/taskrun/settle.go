@@ -42,6 +42,19 @@ func (m Manager) Settle(ctx context.Context, graphID string) error {
 	case "draft", "preparing", "starting", "environment_pending", "environment_build_requested":
 		return nil
 	}
+	if v.Task.Status == "cancel_requested" && v.Task.CancelOperation != "" {
+		record, err := m.Store.GetGraphRecord(ctx, graphID)
+		if err != nil {
+			return err
+		}
+		if record.RunID != v.Task.CancelRunID {
+			return storage.ErrConflict
+		}
+		if record.DesiredState != domain.GraphStopped ||
+			(record.State != domain.GraphStopped && record.ControlOperation != v.Task.CancelOperation) || len(v.PendingApprovals) > 0 {
+			return m.Engine.CancelReviewedTaskRun(ctx, graphID, v.Task.ID, v.Task.CancelRunID, v.Task.UpdatedBy, v.Task.CancelOperation)
+		}
+	}
 	if !terminalOutcomeRecorded(v) {
 		return nil
 	}
