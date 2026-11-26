@@ -299,7 +299,7 @@ it('edits a fallback title in the header without repeating the original request'
   expect(screen.queryByRole('button',{name:'Retry title'})).toBeNull();
   fireEvent.click(screen.getByRole('button',{name:'Edit title'}));
   fireEvent.change(screen.getByRole('textbox',{name:'Conversation title'}),{target:{value:'Release work'}});
-  fireEvent.click(screen.getByRole('button',{name:'Save title'}));
+  fireEvent.click(screen.getByRole('button',{name:/^Save$/}));
   expect(await screen.findByRole('heading',{name:'Release work'})).toBeTruthy();
   expect(screen.getByText('Follow release work')).toBeTruthy();
   expect(backend.find('PUT',path)[0].body).toEqual({title:'Release work',previousTitle:'Untitled chat'});

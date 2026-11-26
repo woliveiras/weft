@@ -38,7 +38,7 @@ test('reads the full recent title with a mouse, keyboard and narrow touch search
   await row.getByRole('button',{name:'Rename'}).click();
   const rename=page.getByRole('dialog',{name:'Rename conversation'});
   await rename.getByRole('textbox',{name:'Conversation title'}).fill('Renamed release session');
-  await rename.getByRole('button',{name:'Save title'}).click();
+  await rename.getByRole('button',{name:'Save',exact:true}).click();
   await expect(page.getByRole('button',{name:'Renamed release session',exact:true})).toBeVisible();
   await expect(message).toHaveValue('Keep my other conversation draft');
   const renamed=page.getByRole('button',{name:'Actions for Renamed release session'});

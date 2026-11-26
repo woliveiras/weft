@@ -23,7 +23,7 @@ export function ChatTitleForm({id,previous,onSaved,onCancel}:{
   return <form className="chat-title-form" onSubmit={event=>{event.preventDefault();void save();}}>
     <label>Conversation title<input autoFocus required maxLength={120} value={title} onChange={event=>setTitle(event.target.value)}/></label>
     {error && <ErrorBox error={error}/>}
-    <div className="btn-row"><Btn type="submit" tone="primary" disabled={busy || !trimmed || trimmed===previous}>Save title</Btn>
+    <div className="btn-row"><Btn type="submit" tone="primary" disabled={busy || !trimmed || trimmed===previous}>Save</Btn>
       <Btn onClick={onCancel} disabled={busy}>Cancel</Btn></div>
   </form>;
 }
