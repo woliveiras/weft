@@ -139,6 +139,14 @@ work and closes pending approvals for that attempt. Chat follows the request
 until the task record confirms cancellation. Its history and captured
 workspaces remain available. Use Tasks for draft or environment controls.
 
+## Review task authorization
+
+As an administrator, name the task and the desired mode. Review the workflow
+version, repository scope and declared tool grants before choosing **Save
+task authorization**. This records consent for that task. A running task can
+only narrow its current authorization. Use **Open Settings & access** to
+inspect the saved scope or edit a project preference.
+
 ## Decide a pending approval
 
 As an operator or administrator, ask to approve or reject a pending message

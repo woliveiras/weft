@@ -62,6 +62,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"task.watch","task":"Cancellation fixture task","title":"Follow cancellation fixture"}`
 	case "Cancel the running cancellation test task.":
 		content = `{"kind":"task.cancel","task":"Cancellation fixture task"}`
+	case "Set the editorial authorization task to workspace access.":
+		content = `{"kind":"task.authorize","task":"Editorial authorization task fixture","taskAuthorizationMode":"workspace","title":"Review editorial task authorization"}`
 	case "Start the publication workflow.":
 		content = `{"kind":"workflow.control","controlWorkflow":"chat-publication","controlAction":"start","title":"Control publication workflow"}`
 	case "Pause new turns for the reviewer node in the publication workflow.":

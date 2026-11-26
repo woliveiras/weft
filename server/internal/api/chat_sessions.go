@@ -271,6 +271,8 @@ func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID 
 		return s.reviewChatTaskStart(ctx, actor, sessionID, plan)
 	case chat.CancelTask:
 		return s.reviewChatTaskCancel(ctx, actor, sessionID, plan)
+	case chat.AuthorizeTask:
+		return s.reviewChatTaskAuthorization(ctx, actor, sessionID, plan)
 	case chat.DecideApproval:
 		return s.reviewChatApproval(ctx, actor, sessionID, plan)
 	case chat.ControlWorkflow:

@@ -3034,6 +3034,7 @@ components:
             - {$ref: "#/components/schemas/ChatAgentAdoptionReview"}
             - {$ref: "#/components/schemas/ChatApprovalReview"}
             - {$ref: "#/components/schemas/ChatTaskCancellationReview"}
+            - {$ref: "#/components/schemas/ChatTaskAuthorizationReview"}
             - {$ref: "#/components/schemas/ChatConfigurationReview"}
             - {$ref: "#/components/schemas/ChatGuidanceReview"}
             - {$ref: "#/components/schemas/ChatInstructionReview"}
@@ -3441,6 +3442,51 @@ components:
                 executionVersion: {type: integer, minimum: 1}
                 runId: {type: string}
                 pendingApprovals: {type: integer, minimum: 0}
+    ChatTaskAuthorizationReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [taskAuthorization]
+          properties:
+            taskAuthorization:
+              type: object
+              required: [id, title, taskRevision, workflowId, workflowVersion, current, mode, agents]
+              properties:
+                id: {type: string}
+                title: {type: string}
+                taskRevision: {type: integer, minimum: 1}
+                workflowId: {type: string}
+                workflowVersion: {type: integer, minimum: 1}
+                executionMode: {type: string, enum: [workflow, local, sandbox]}
+                current:
+                  type: object
+                  required: [scope, mode, revision]
+                  properties:
+                    scope: {type: string}
+                    mode: {type: string, enum: [ask, workspace, full]}
+                    revision: {type: integer, minimum: 0}
+                mode: {type: string, enum: [ask, workspace, full]}
+                agents:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, isolation, grants]
+                    properties:
+                      id: {type: string}
+                      isolation: {type: string}
+                      grants: {type: [array, "null"], items: {type: object}}
+                repositories:
+                  type: array
+                  items:
+                    type: object
+                    required: [projectId, baseCommit]
+                    properties:
+                      alias: {type: string}
+                      projectId: {type: string}
+                      baseCommit: {type: string}
+                      scmConnection: {type: string}
+                      repository: {type: string}
+                      targetBranch: {type: string}
     ChatReviewState:
       type: object
       required: [id, expiresAt, digest, state]

@@ -219,6 +219,13 @@ Reconciliation resumes that recorded request if delivery was interrupted.
 The operation can expire pending approvals for that task attempt. The result
 appears as cancelled when the task is durably settled.
 
+An administrator can review a task's authorization mode through Chat.
+Confirmation binds the task revision, workflow scope digest, selected mode
+and native authorization revision. It writes only the task's consent and
+its operation receipt. Running tasks accept reductions under the native
+policy. Project defaults, workflow grants and mandatory approvals use
+their own controls.
+
 An operator can review a start, pause, resume, graceful stop or immediate
 interruption on a reusable workflow or one node. Chat seals the exact graph
 version, target, run and desired control state. Confirmation takes the native

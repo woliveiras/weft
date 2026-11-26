@@ -223,3 +223,13 @@ The same authenticated Chat-to-execution journey passed for GitHub, Bitbucket Cl
 ## 2026-11-26 — Task environment preparation
 
 For S16 an administrator reviewed the saved task, environment definition and workflow version. The HTTP/SQLite and Chromium journeys used a simulated container daemon and observed matching readiness. Repeated confirmation delivered the same receipt. A stale proposal conflicted, an operator received no build action, and the task still had zero executions. Unit checks rejected unsafe or oversized definitions and mixed start/build intents.
+
+## 2026-11-26 — Reviewed task authorization
+
+S37 passed targeted Go unit tests and authenticated HTTP/SQLite integration.
+The review bound the saved task and authorization revisions, mode, workflow
+version and tool scope. An operator was denied, a concurrent native change
+invalidated the proposal, and replay returned the same receipt. The running
+fixture accepted only a reduction. Chromium verified the new record and found
+the same current mode in the task's Settings & access while the task remained
+a draft. TypeScript, eleven focused component checks and OpenAPI parsing passed.

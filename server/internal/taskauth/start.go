@@ -33,7 +33,7 @@ func (m Manager) GuardStart(ctx context.Context, id, actor string, draftRevision
 	}
 	record := review.Record
 	if record == nil {
-		record, err = m.save(ctx, id, Ask, review.Scope, 0, actor, true, draftRevision)
+		record, err = m.save(ctx, id, Ask, review.Scope, 0, actor, true, draftRevision, "")
 		if err != nil {
 			return storage.SettingRevision{}, err
 		}

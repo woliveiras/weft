@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
 import type { ChatAgentAdoptionReview, ChatApprovalReview, ChatCatalogPublicationReview, ChatMessage, ChatOperationReview,
   ChatSession, ChatSessionSummary, ChatTask, ChatTaskCancellationReview, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview,
-  ChatEnvironmentReview, ChatCorrectionReview, ChatTaskRetryReview } from '../api/chat';
+  ChatEnvironmentReview, ChatCorrectionReview, ChatTaskAuthorizationReview, ChatTaskRetryReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -311,6 +311,7 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   if ('taskDraft' in review) return <TaskDraftReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskStart' in review) return <TaskStartReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskCancel' in review) return <TaskCancellationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('taskAuthorization' in review) return <TaskAuthorizationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('workflowControl' in review) return <WorkflowControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('environment' in review) return <EnvironmentPreparationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskCorrection' in review) return <CorrectionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
@@ -652,6 +653,43 @@ function TaskCancellationCard({review, now, canConfirm, onDecide, onView}: {
     {review.state === 'unknown' && <p role="status">Cancellation is temporarily unknown. Inspect the task before trying again.</p>}
     {review.state === 'declined' && <p role="status">Proposal declined.</p>}
     <a id={anchor} href={taskSectionLink(task.id,'overview')} onClick={() => onView(anchor)}>Open task</a>
+  </section>;
+}
+
+const taskModeLabels = {ask:'Ask for approval',workspace:'Workspace access',full:'Full access'};
+
+function TaskAuthorizationCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatTaskAuthorizationReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const {taskAuthorization:auth} = review;
+  const anchor = `chat-authorization-${review.id}`;
+  return <section className="chat-agent-review" aria-label={`Authorize task ${auth.title}`}>
+    <h3>{auth.title}</h3>
+    <dl>
+      <dt>Task</dt><dd>{auth.id} · Revision {auth.taskRevision}</dd>
+      <dt>Workflow</dt><dd>{auth.workflowId} · Version {auth.workflowVersion}</dd>
+      <dt>Execution environment</dt><dd>{auth.executionMode || 'Workflow default'}</dd>
+      <dt>Current mode</dt><dd>{taskModeLabels[auth.current.mode]}{auth.current.revision === 0 ? ' · Default' : ` · Revision ${auth.current.revision}`}</dd>
+      <dt>Proposed mode</dt><dd>{taskModeLabels[auth.mode]}</dd>
+    </dl>
+    {auth.repositories && <ul aria-label="Repositories">{auth.repositories.map(repo => <li key={repo.projectId}>
+      {repo.alias && `${repo.alias} · `}{repo.projectId} · {repo.baseCommit}{repo.scmConnection && ` · ${repo.scmConnection}`}
+      {repo.repository && ` · ${repo.repository}`}{repo.targetBranch && ` · ${repo.targetBranch}`}
+    </li>)}</ul>}
+    {auth.agents.map(agent => <details key={agent.id}>
+      <summary>{agent.id} · {agent.isolation} · {agent.grants?.length || 0} tool grants</summary>
+      {agent.grants?.length ? <pre>{JSON.stringify(agent.grants,null,2)}</pre> : <p>No declared tool grants.</p>}
+    </details>)}
+    {review.state === 'awaiting_confirmation' && <>
+      <p>Record this authorization for the selected task. Mandatory approvals and installation rules still apply.</p>
+      <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm} confirmLabel="Save task authorization" onDecide={onDecide}/>
+    </>}
+    {review.state === 'applying' && <p role="status">Authorization requested. Checking the task settings…</p>}
+    {review.state === 'applied' && <p role="status">Authorization revision {review.resultVersion} saved.</p>}
+    {review.state === 'conflict' && <p role="status">The reviewed task or authorization changed. Inspect its current settings before requesting a new review.</p>}
+    {review.state === 'unknown' && <p role="status">The authorization outcome is temporarily unknown. Inspect the task settings before trying again.</p>}
+    {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+    <a id={anchor} href={taskSectionLink(auth.id,'settings')} onClick={() => onView(anchor)}>Open Settings &amp; access</a>
   </section>;
 }
 

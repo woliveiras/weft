@@ -111,25 +111,26 @@ type OperationReview struct {
 	Guidance       *Guidance               `json:"guidance,omitempty"`
 	ConsumedAt     *time.Time              `json:"consumedAt,omitempty"`
 	*AgentCreation
-	Publication     *CatalogPublication                `json:"publication,omitempty"`
-	Adoption        *AgentAdoption                     `json:"adoption,omitempty"`
-	Configuration   *ConfigReview                      `json:"configuration,omitempty"`
-	ConfigReceipts  []ConfigReceipt                    `json:"configReceipts,omitempty"`
-	Workflow        *WorkflowCreation                  `json:"workflow,omitempty"`
-	TaskDraft       *TaskCreation                      `json:"taskDraft,omitempty"`
-	TaskStart       *TaskAdmission                     `json:"taskStart,omitempty"`
-	TaskCancel      *TaskCancellation                  `json:"taskCancel,omitempty"`
-	TaskRetry       *TaskRetry                         `json:"taskRetry,omitempty"`
-	Approval        *ApprovalDecision                  `json:"approval,omitempty"`
-	WorkflowControl *WorkflowControl                   `json:"workflowControl,omitempty"`
-	ControlResult   *engine.WorkflowControlObservation `json:"controlResult,omitempty"`
-	ID              string                             `json:"id"`
-	ExpiresAt       time.Time                          `json:"expiresAt"`
-	Digest          string                             `json:"digest"`
-	State           string                             `json:"state"`
-	ClaimedAt       time.Time                          `json:"claimedAt,omitempty"`
-	ResultVersion   int                                `json:"resultVersion,omitempty"`
-	ResultID        string                             `json:"resultId,omitempty"`
+	Publication       *CatalogPublication                `json:"publication,omitempty"`
+	Adoption          *AgentAdoption                     `json:"adoption,omitempty"`
+	Configuration     *ConfigReview                      `json:"configuration,omitempty"`
+	ConfigReceipts    []ConfigReceipt                    `json:"configReceipts,omitempty"`
+	Workflow          *WorkflowCreation                  `json:"workflow,omitempty"`
+	TaskDraft         *TaskCreation                      `json:"taskDraft,omitempty"`
+	TaskStart         *TaskAdmission                     `json:"taskStart,omitempty"`
+	TaskCancel        *TaskCancellation                  `json:"taskCancel,omitempty"`
+	TaskAuthorization *TaskAuthorization                 `json:"taskAuthorization,omitempty"`
+	TaskRetry         *TaskRetry                         `json:"taskRetry,omitempty"`
+	Approval          *ApprovalDecision                  `json:"approval,omitempty"`
+	WorkflowControl   *WorkflowControl                   `json:"workflowControl,omitempty"`
+	ControlResult     *engine.WorkflowControlObservation `json:"controlResult,omitempty"`
+	ID                string                             `json:"id"`
+	ExpiresAt         time.Time                          `json:"expiresAt"`
+	Digest            string                             `json:"digest"`
+	State             string                             `json:"state"`
+	ClaimedAt         time.Time                          `json:"claimedAt,omitempty"`
+	ResultVersion     int                                `json:"resultVersion,omitempty"`
+	ResultID          string                             `json:"resultId,omitempty"`
 }
 
 func NewAgentReview(owner, session, agent string, definition domain.AgentDefinition, modelRevision int64, now time.Time) (*OperationReview, error) {
@@ -156,7 +157,7 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	choices := 0
-	for _, exists := range []bool{r.Environment != nil, r.TaskCorrection != nil, r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskCancel != nil, r.TaskRetry != nil, r.Approval != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
+	for _, exists := range []bool{r.Environment != nil, r.TaskCorrection != nil, r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskCancel != nil, r.TaskAuthorization != nil, r.TaskRetry != nil, r.Approval != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
 		if exists {
 			choices++
 		}
@@ -166,6 +167,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 	}
 	var payload any
 	switch {
+	case r.TaskAuthorization != nil:
+		payload = struct {
+			Owner, Session, ID, Operation string
+			ExpiresAt                     time.Time
+			TaskAuthorization             *TaskAuthorization
+		}{owner, session, r.ID, AuthorizeTask, r.ExpiresAt, r.TaskAuthorization}
 	case r.TaskCancel != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string
@@ -356,7 +363,7 @@ func (s Sessions) finishReview(ctx context.Context, owner, sessionID, reviewID, 
 		for i := range session.Messages {
 			message := &session.Messages[i]
 			if review := message.Review; review != nil && review.ID == reviewID {
-				recovered := state == ReviewCreated || (review.Skill != nil || review.Approval != nil || review.TaskCorrection != nil) && state == ReviewApplied
+				recovered := state == ReviewCreated || (review.Skill != nil || review.Approval != nil || review.TaskCorrection != nil || review.TaskAuthorization != nil) && state == ReviewApplied
 				if review.State != ReviewApplying && !(review.State == ReviewUnknown && recovered) {
 					return false, nil
 				}

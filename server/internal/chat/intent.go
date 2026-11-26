@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/woliveiras/weft/server/internal/llm"
+	"github.com/woliveiras/weft/server/internal/taskauth"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 )
 
@@ -46,6 +47,7 @@ Return exactly one JSON object. "kind" is one of:
 - "task.prepare_environment": propose a build for the explicitly named task. Include "task" with its ID or unique title. Preparing an environment and starting task agents require separate requests.
 - "task.start": propose starting an explicitly identified saved task. Add "task" with the task ID or exact title established in the conversation. Ask which task when the target is unclear. Starting requires a separate review. Never infer start from a request to create, inspect or follow a task.
 - "task.cancel": propose interrupting the confirmed running attempt of an explicitly named task. Add "task" with its ID or unique exact title. Use this only when the caller intends to cancel the task attempt. Workflow controls and trigger intake are different scopes.
+- "task.authorize": propose an explicit authorization mode for a named task. Add "task" and "taskAuthorizationMode" (ask, workspace or full). Ask for the mode if the request is unclear. A running task can only narrow its current authorization. Never infer consent from a request to start a task. Never set a project preference or change the workflow's grants.
 - "approval.decide": propose an explicit decision for one pending request. Include either "approvalId" with its exact ID or "task" when the user identifies a single task's pending approval. Add "approvalDecision" (approve or reject), optionally "approvalAnswer" for the user's exact answer to a question and "approvalComment" for their stated comment. Never invent an answer, edit a held message, or infer an approval from opening, starting or following a task.
 - "task.retry": propose saving a linked retry draft of an explicitly identified failed task. Add "task" with its ID or exact title. This prepares the next attempt for review. It does not start the retry or apply the original attempt's authorization.
 - "task.edit": correct an existing draft. Include "task" with the exact ID or unique title and only requested replacement fields "newTitle", "newRequest" or "newOutcome". Outcome is understand, implement, investigate, review or freeform. Do not change runtime or bindings.
@@ -69,26 +71,27 @@ You may include a short, neutral "title" for the conversation based on the lates
 // Plan proposes an operation or asks for clarification. A task selector is
 // always resolved against the caller's permitted resources before it is used.
 type Plan struct {
-	Correction    taskconfig.DraftText
-	Skill         SkillDraft
-	Area          string
-	PRSelector    PRSelector
-	Kind          string `json:"kind"`
-	Task          string `json:"task,omitempty"`
-	Question      string `json:"question,omitempty"`
-	Title         string `json:"title,omitempty"`
-	Document      string
-	IntakeConsent bool
-	Destination   string `json:"destination,omitempty"`
-	Agent         AgentDraft
-	Publication   CatalogPublicationDraft
-	Adoption      AgentAdoptionDraft
-	Workflow      WorkflowDraft
-	Instructions  InstructionEdit
-	Guidance      Guidance
-	TaskDraft     TaskDraft
-	Approval      ApprovalDecisionDraft
-	Control       WorkflowControlDraft
+	Correction            taskconfig.DraftText
+	Skill                 SkillDraft
+	Area                  string
+	PRSelector            PRSelector
+	Kind                  string `json:"kind"`
+	Task                  string `json:"task,omitempty"`
+	Question              string `json:"question,omitempty"`
+	Title                 string `json:"title,omitempty"`
+	Document              string
+	IntakeConsent         bool
+	Destination           string `json:"destination,omitempty"`
+	Agent                 AgentDraft
+	Publication           CatalogPublicationDraft
+	Adoption              AgentAdoptionDraft
+	Workflow              WorkflowDraft
+	Instructions          InstructionEdit
+	Guidance              Guidance
+	TaskDraft             TaskDraft
+	TaskAuthorizationMode taskauth.Mode
+	Approval              ApprovalDecisionDraft
+	Control               WorkflowControlDraft
 }
 
 func safeText(text string, limit int) bool {
@@ -209,6 +212,8 @@ func decodePlan(body string) (Plan, error) {
 			plan.Kind = value
 		case "task":
 			plan.Task = value
+		case "taskAuthorizationMode":
+			plan.TaskAuthorizationMode = taskauth.Mode(value)
 		case "approvalId":
 			plan.Approval.Approval = value
 		case "approvalDecision":
@@ -304,6 +309,9 @@ func decodePlan(body string) (Plan, error) {
 	if plan.Kind != DecideApproval && (seen["approvalId"] || seen["approvalDecision"] || seen["approvalAnswer"] || seen["approvalComment"]) {
 		return Plan{}, ErrInvalidPlan
 	}
+	if seen["taskAuthorizationMode"] && plan.Kind != AuthorizeTask {
+		return Plan{}, ErrInvalidPlan
+	}
 	if plan.Kind != PlanInstallation && (seen["document"] || seen["intakeConsent"]) {
 		return Plan{}, ErrInvalidPlan
 	}
@@ -314,6 +322,10 @@ func decodePlan(body string) (Plan, error) {
 		return Plan{}, ErrInvalidPlan
 	}
 	switch plan.Kind {
+	case AuthorizeTask:
+		if !shortLabel(plan.Task) || !taskauth.Valid(plan.TaskAuthorizationMode) || seen["question"] {
+			return Plan{}, ErrInvalidPlan
+		}
 	case DecideApproval:
 		if !plan.Approval.valid(plan.Task) || seen["question"] || (seen["approvalId"] && seen["task"]) {
 			return Plan{}, ErrInvalidPlan

@@ -218,6 +218,31 @@ test('cancels only the reviewed task attempt and observes the final cancellation
   await expect(card).toBeVisible();
 });
 
+test('records task authorization separately and opens the native access settings', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const task = await draftTaskWithApproval(request,'chat-auth-source','Editorial authorization task fixture');
+  const path = `/api/v1/tasks/${task.id}/authorization`;
+  await page.addInitScript(() => localStorage.setItem('weftToken','e2e-admin-token'));
+  await page.goto('/');
+  await send(page,'Set the editorial authorization task to workspace access.');
+  const review = page.getByRole('region',{name:'Authorize task Editorial authorization task fixture'});
+  await expect(review.getByText('Workspace access',{exact:true})).toBeVisible();
+  expect((await(await request.get(path,{headers})).json()).record).toBeUndefined();
+  await review.getByRole('button',{name:'Save task authorization',exact:true}).click();
+  await expect(review.getByText('Authorization revision 1 saved.')).toBeVisible();
+  const native = await (await request.get(path,{headers})).json();
+  expect(native.record).toMatchObject({taskId:task.id,mode:'workspace',scope:native.scope,revision:1,operation:expect.any(String)});
+  const draft = await (await request.get(`/api/v1/tasks/${task.id}`,{headers})).json();
+  expect(draft.status).toBe('draft');
+  expect(draft.executionGraphId).toBeUndefined();
+  await review.getByRole('link',{name:'Open Settings & access',exact:true}).click();
+  await expect(page).toHaveURL(new RegExp(`#/tasks/${task.id}\\?tab=settings`));
+  await page.locator('summary').filter({hasText:'Access settings'}).click();
+  await expect(page.getByRole('region',{name:'Task authorization'})).toContainText('Current mode: workspace.');
+  await page.goBack();
+  await expect(review).toBeVisible();
+});
+
 test('prepares one reviewed retry from a failed task and opens the linked draft', async ({ page, request }) => {
   await selectFixtureModel(request);
   const original = await startTaskWaitingForApproval(request,'chat-retry-source','Failed documentation task fixture');

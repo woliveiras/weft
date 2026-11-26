@@ -1,3 +1,5 @@
+import type { AuthorizationMode, TaskAuthorization } from './tasks';
+
 export interface ChatTask {
   id: string;
   state: string;
@@ -176,9 +178,19 @@ export interface ChatTaskCancellationReview extends ChatReviewState {
   };
 }
 
+export interface ChatTaskAuthorizationReview extends ChatReviewState {
+  taskAuthorization: {
+    id:string; title:string; taskRevision:number; workflowId:string; workflowVersion:number; executionMode?:string;
+    current:{mode:AuthorizationMode; scope:string; revision:number}; mode:AuthorizationMode;
+    agents:NonNullable<TaskAuthorization['capabilities']>;
+    repositories?:{alias?:string; projectId:string; baseCommit:string; scmConnection?:string; repository?:string; targetBranch?:string}[];
+  };
+}
+
 export type ChatOperationReview = ChatEnvironmentReview | ChatCorrectionReview | ChatSkillReview | ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
   ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview |
-  ChatTaskRetryReview | ChatCatalogPublicationReview | ChatAgentAdoptionReview | ChatApprovalReview | ChatTaskCancellationReview;
+  ChatTaskRetryReview | ChatCatalogPublicationReview | ChatAgentAdoptionReview | ChatApprovalReview | ChatTaskCancellationReview |
+  ChatTaskAuthorizationReview;
 
 export interface ChatSession {
   id: string;

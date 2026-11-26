@@ -26,6 +26,7 @@ type Record struct {
 	Actor          string `json:"actor"`
 	PolicyVersion  int    `json:"policyVersion"`
 	Revision       int64  `json:"revision"`
+	Operation      string `json:"operation,omitempty"`
 }
 type AgentScope struct {
 	ID        string               `json:"id"`
@@ -112,10 +113,17 @@ func (m Manager) Review(ctx context.Context, id string) (*Review, error) {
 	return r, nil
 }
 func (m Manager) Save(ctx context.Context, id string, mode Mode, scope string, revision int64, actor string, confirm bool) (*Record, error) {
-	return m.save(ctx, id, mode, scope, revision, actor, confirm, 0)
+	return m.save(ctx, id, mode, scope, revision, actor, confirm, 0, "")
 }
 
-func (m Manager) save(ctx context.Context, id string, mode Mode, scope string, revision int64, actor string, confirm bool, draftRevision int64) (*Record, error) {
+func (m Manager) SaveReviewed(ctx context.Context, id string, mode Mode, scope string, revision, draftRevision int64, actor, operation string) (*Record, error) {
+	if operation == "" || draftRevision < 1 {
+		return nil, ErrInvalid
+	}
+	return m.save(ctx, id, mode, scope, revision, actor, true, draftRevision, operation)
+}
+
+func (m Manager) save(ctx context.Context, id string, mode Mode, scope string, revision int64, actor string, confirm bool, draftRevision int64, operation string) (*Record, error) {
 	if !Valid(mode) || actor == "" || !confirm {
 		return nil, ErrInvalid
 	}
@@ -143,7 +151,7 @@ func (m Manager) save(ctx context.Context, id string, mode Mode, scope string, r
 	if err := ValidateMode(mode, review.Agents, m.Tools); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	rec := &Record{TaskID: id, Mode: mode, Scope: scope, Actor: actor, PolicyVersion: PolicyVersion}
+	rec := &Record{TaskID: id, Mode: mode, Scope: scope, Actor: actor, PolicyVersion: PolicyVersion, Operation: operation}
 	if running {
 		rec.ExecutionScope = review.Record.ExecutionScope
 	}
