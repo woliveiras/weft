@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
 import type { ChatAgentAdoptionReview, ChatApprovalReview, ChatCatalogPublicationReview, ChatMessage, ChatOperationReview,
   ChatSession, ChatSessionSummary, ChatTask, ChatTaskCancellationReview, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview,
-  ChatCorrectionReview, ChatTaskRetryReview } from '../api/chat';
+  ChatEnvironmentReview, ChatCorrectionReview, ChatTaskRetryReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -312,6 +312,7 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   if ('taskStart' in review) return <TaskStartReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskCancel' in review) return <TaskCancellationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('workflowControl' in review) return <WorkflowControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('environment' in review) return <EnvironmentPreparationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskCorrection' in review) return <CorrectionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskRetry' in review) return <TaskRetryReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('publication' in review) return <CatalogPublicationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
@@ -464,6 +465,28 @@ function WorkflowControlCard({review, now, canConfirm, onDecide, onView}: {
     {review.state === 'unknown' && <p role="status">The control outcome is temporarily unknown. Inspect the workflow before trying again.</p>}
     {review.state === 'declined' && <p role="status">Proposal declined.</p>}
     <a id={anchor} href={`#/g/${encodeURIComponent(scope.workflowId)}/canvas${selection}`} onClick={() => onView(anchor)}>Open workflow</a>
+  </section>;
+}
+
+function EnvironmentPreparationCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatEnvironmentReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const target = review.environment;
+  const anchor = 'chat-environment-' + review.id;
+  return <section className="chat-agent-review" aria-label="Prepare task environment">
+    <h3>Prepare task environment</h3>
+    <p>{target.task} · revision {target.revision} · {target.workflow} v{target.workflowVersion}</p>
+    {target.repositories?.map(repository=><p key={repository}>{repository}</p>)}
+    <pre>{target.definition}</pre>
+    <p>Preparing the environment can build an image and run its setup. Starting task agents takes a separate decision.</p>
+    {review.state === 'awaiting_confirmation' && <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm} confirmLabel="Prepare environment" onDecide={onDecide}/>}
+    {review.state === 'applied' && <p role="status">Environment ready for the reviewed definition.</p>}
+    {(review.state === 'applying' || review.state === 'queued') && <p role="status">Checking environment preparation…</p>}
+    {review.state === 'unknown' && <p role="status">Build outcome unknown. Open the task for diagnostics.</p>}
+    {review.state === 'incomplete' && <p role="status">Preparation did not complete. Inspect the build in Tasks.</p>}
+    {review.state === 'declined' && <p role="status">Preparation declined.</p>}
+    {review.state === 'conflict' && <p role="status">The reviewed state changed. Review the task requirements again.</p>}
+    <a id={anchor} href={taskSectionLink(target.task,'overview')} onClick={()=>onView(anchor)}>Inspect task</a>
   </section>;
 }
 

@@ -120,11 +120,14 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		// The claim has already been saved. Limit the local operation
 		// separately from the browser connection and reconcile a lost reply.
 		timeout := 5 * time.Second
-		if review.TaskStart != nil || review.PR != nil {
+		if review.Environment != nil || review.TaskStart != nil || review.PR != nil {
 			timeout = 30 * time.Second
 		}
 		settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 		defer cancel()
+		if review.Environment != nil {
+			return s.applyChatEnvironment(settleCtx, actor, sessionID, review)
+		}
 		if review.TaskCorrection != nil {
 			return s.applyChatTaskCorrection(settleCtx, actor, sessionID, review)
 		}
@@ -255,6 +258,14 @@ func (s *Server) reconcileChatReviews(ctx context.Context, owner string, session
 			(review.State == chat.ReviewApplying || review.State == chat.ReviewAccepted || review.State == chat.ReviewUnknown) {
 			var err error
 			session, err = s.reconcileChatWorkflowControl(ctx, owner, session, review)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if review != nil && review.Environment != nil && (review.State == chat.ReviewApplying || review.State == chat.ReviewUnknown || review.State == chat.ReviewQueued) {
+			var err error
+			session, err = s.observeChatEnvironment(ctx, owner, session, review)
 			if err != nil {
 				return nil, err
 			}

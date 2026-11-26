@@ -218,3 +218,8 @@ For S16/S28 the HTTP and SQLite fixture preserved the workflow binding and the d
 ## 2026-11-26 — PR 418 across three local SCM adapters
 
 The same authenticated Chat-to-execution journey passed for GitHub, Bitbucket Cloud and Bitbucket Data Center against loopback HTTP fixtures. Each exposed its own metadata and immutable diff route. A viewer made zero SCM requests, a changed head invalidated the initial review and a confirmed replacement returned one analysis and its execution ID. Replaying the confirmation made no further model call. The fixtures recorded zero SCM writes. This evidence is limited to simulated providers.
+
+
+## 2026-11-26 — Task environment preparation
+
+For S16 an administrator reviewed the saved task, environment definition and workflow version. The HTTP/SQLite and Chromium journeys used a simulated container daemon and observed matching readiness. Repeated confirmation delivered the same receipt. A stale proposal conflicted, an operator received no build action, and the task still had zero executions. Unit checks rejected unsafe or oversized definitions and mixed start/build intents.

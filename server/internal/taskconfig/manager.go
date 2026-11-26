@@ -44,6 +44,7 @@ type Input struct {
 	SCMConnection string `json:"scmConnection,omitempty"`
 }
 type Draft struct {
+	EnvironmentOperation  string       `json:"environmentOperation,omitempty"`
 	CorrectionOperation   string       `json:"correctionOperation,omitempty"`
 	CorrectionRevision    int64        `json:"correctionRevision,omitempty"`
 	CreationOperation     string       `json:"creationOperation,omitempty"`

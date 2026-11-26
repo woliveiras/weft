@@ -48,6 +48,10 @@ Ask “Revise o PR 418.” If several running workflows or connections qualify, 
 
 The preview identifies the repository, source and base commits, model and workflow version. **View workflow** opens the selected node. **Analyze PR** checks the revisions again and sends the bounded diff to the workflow model for one billed, tool-free analysis. Existing channel and turn gates still apply. The draft appears in the conversation with **View execution**. A missing receipt leaves the outcome unknown. Requesting analysis grants no publication permission.
 
+## Prepare a task environment
+
+Ask to prepare the environment of a saved task by ID or unique name. An administrator can review the pinned workflow, task revision, repository commits and saved build definition before confirming. The session reports readiness when the native environment matches the reviewed definition. Use **Inspect task** for build diagnostics, existing preparations or approval holds. Task admission is a separate action.
+
 ## Correct a task draft
 
 Identify the draft by its ID or unique title and specify the replacement title, request, or outcome. Compare the current and proposed text, then select **Save draft correction**. The draft keeps its workflow and repository bindings. When it uses a generated channel payload, the title and request update there as well. Open **Tasks** to review custom payloads, resolve incomplete bindings or change repositories. A newer draft or workflow revision requires a fresh review.

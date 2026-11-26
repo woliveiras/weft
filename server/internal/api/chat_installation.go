@@ -119,6 +119,10 @@ func writeChatSession(w http.ResponseWriter, actor Identity, session *chat.Sessi
 				message.Review = nil
 				message.Text = "Operator access is required to view this pull request review."
 			}
+			if message.Review != nil && message.Review.Environment != nil {
+				message.Review = nil
+				message.Text = "Administrator access is required to view this environment review."
+			}
 			if message.Review != nil && message.Review.Configuration != nil {
 				message.Review = nil
 				message.Text = "Administrator access is required to view this installation review."

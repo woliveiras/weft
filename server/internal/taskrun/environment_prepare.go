@@ -30,6 +30,19 @@ func (m Manager) preparedEnvironmentGraph(ctx context.Context, d *taskconfig.Dra
 // PrepareEnvironment makes a durable stopped copy before a separately reviewed
 // build. Neither successful build nor a repeated request dispatches task input.
 func (m Manager) PrepareEnvironment(ctx context.Context, id string, revision int64, actor string) (*taskconfig.Draft, error) {
+	return m.prepareEnvironment(ctx, id, revision, actor, "")
+}
+
+// PrepareEnvironmentForOperation records the Chat operation in the native task
+// transition before any checkout or build. Retries need a new explicit review.
+func (m Manager) PrepareEnvironmentForOperation(ctx context.Context, id string, revision int64, actor, operation string) (*taskconfig.Draft, error) {
+	if operation == "" {
+		return nil, taskconfig.ErrInvalid
+	}
+	return m.prepareEnvironment(ctx, id, revision, actor, operation)
+}
+
+func (m Manager) prepareEnvironment(ctx context.Context, id string, revision int64, actor, operation string) (*taskconfig.Draft, error) {
 	if m.Environments == nil {
 		return nil, errors.New("environment preparation unavailable")
 	}
@@ -41,7 +54,11 @@ func (m Manager) PrepareEnvironment(ctx context.Context, id string, revision int
 	if d.Revision != revision {
 		return nil, storage.ErrConflict
 	}
+	d.EnvironmentOperation = operation
 	if d.Status == "environment_pending" {
+		if operation != "" {
+			return nil, storage.ErrConflict
+		}
 		if err := m.checkDraftBudget(ctx, d); err != nil {
 			return nil, err
 		}

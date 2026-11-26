@@ -43,6 +43,7 @@ const intentPrompt = `You interpret a Weft operator's requests. The service chec
 Return exactly one JSON object. "kind" is one of:
 - "task.watch": follow a particular existing task and report when it settles. Add "task" containing the task's stated ID or exact name as a selector.
 - "task.inspect": show the latest state of a particular task now. Add "task" with the same selector convention.
+- "task.prepare_environment": propose a build for the explicitly named task. Include "task" with its ID or unique title. Preparing an environment and starting task agents require separate requests.
 - "task.start": propose starting an explicitly identified saved task. Add "task" with the task ID or exact title established in the conversation. Ask which task when the target is unclear. Starting requires a separate review. Never infer start from a request to create, inspect or follow a task.
 - "task.cancel": propose interrupting the confirmed running attempt of an explicitly named task. Add "task" with its ID or unique exact title. Use this only when the caller intends to cancel the task attempt. Workflow controls and trigger intake are different scopes.
 - "approval.decide": propose an explicit decision for one pending request. Include either "approvalId" with its exact ID or "task" when the user identifies a single task's pending approval. Add "approvalDecision" (approve or reject), optionally "approvalAnswer" for the user's exact answer to a question and "approvalComment" for their stated comment. Never invent an answer, edit a held message, or infer an approval from opening, starting or following a task.
@@ -361,7 +362,7 @@ func decodePlan(body string) (Plan, error) {
 		if !shortLabel(plan.Task) || seen["question"] || !validCorrection(plan.Correction, true) || (seen["newTitle"] && plan.Correction.Title == "") || (seen["newRequest"] && plan.Correction.Request == "") || (seen["newOutcome"] && plan.Correction.Outcome == "") {
 			return Plan{}, ErrInvalidPlan
 		}
-	case WatchTask, InspectTask, StartTask, RetryTask, CancelTask:
+	case WatchTask, InspectTask, StartTask, RetryTask, CancelTask, PrepareTaskEnvironment:
 		if plan.Task == "" || !safeText(plan.Task, 200) || strings.ContainsAny(plan.Task, "\r\n\t") || seen["question"] {
 			return Plan{}, ErrInvalidPlan
 		}

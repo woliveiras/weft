@@ -3029,6 +3029,7 @@ components:
             - {$ref: "#/components/schemas/ChatWorkflowControlReview"}
             - {$ref: "#/components/schemas/ChatTaskRetryReview"}
             - {$ref: "#/components/schemas/ChatCorrectionReview"}
+            - {$ref: "#/components/schemas/ChatEnvironmentReview"}
             - {$ref: "#/components/schemas/ChatCatalogPublicationReview"}
             - {$ref: "#/components/schemas/ChatAgentAdoptionReview"}
             - {$ref: "#/components/schemas/ChatApprovalReview"}
@@ -3292,6 +3293,24 @@ components:
         title: {type: string}
         request: {type: string}
         outcome: {type: string, enum: [review, understand, investigate, freeform, implement]}
+    ChatEnvironmentReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [environment]
+          properties:
+            environment:
+              type: object
+              required: [task, revision, workflow, workflowVersion, workflowDigest, definitionHash, definition]
+              properties:
+                task: {type: string}
+                revision: {type: integer}
+                workflow: {type: string}
+                workflowVersion: {type: integer}
+                workflowDigest: {type: string}
+                definitionHash: {type: string}
+                definition: {type: string}
+                repositories: {type: array, items: {type: string}}
     ChatCorrectionReview:
       allOf:
         - {$ref: "#/components/schemas/ChatReviewState"}
