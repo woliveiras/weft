@@ -203,3 +203,8 @@ The native Chromium journey opened an unconfigured Chat, inspected the installed
 ## 2026-11-26 — Task draft corrections
 
 For S16/S28 the HTTP and SQLite fixture preserved the workflow binding and the draft lifecycle after a reviewed text correction. A viewer received no review. A repeated confirmation returned the same revision and a stale proposal conflicted. Unit checks covered generated and custom channel payloads, invalid fields and sensitive source text. Chromium reviewed both texts, saved the correction, checked the resulting task via HTTP and reopened it in Tasks.
+
+
+## 2026-11-26 — PR 418 across three local SCM adapters
+
+The same authenticated Chat-to-execution journey passed for GitHub, Bitbucket Cloud and Bitbucket Data Center against loopback HTTP fixtures. Each exposed its own metadata and immutable diff route. A viewer made zero SCM requests, a changed head invalidated the initial review and a confirmed replacement returned one analysis and its execution ID. Replaying the confirmation made no further model call. The fixtures recorded zero SCM writes. This evidence is limited to simulated providers.
