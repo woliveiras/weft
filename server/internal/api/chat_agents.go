@@ -125,6 +125,9 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		}
 		settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 		defer cancel()
+		if review.Skill != nil {
+			return s.applyChatSkill(settleCtx, actor, sessionID, review)
+		}
 		if review.PR != nil {
 			return s.dispatchChatPR(settleCtx, actor, sessionID, review)
 		}
@@ -243,6 +246,14 @@ func (s *Server) reconcileChatReviews(ctx context.Context, owner string, session
 			(review.State == chat.ReviewApplying || review.State == chat.ReviewAccepted || review.State == chat.ReviewUnknown) {
 			var err error
 			session, err = s.reconcileChatWorkflowControl(ctx, owner, session, review)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if review != nil && review.Skill != nil && (review.State == chat.ReviewApplying || review.State == chat.ReviewUnknown) {
+			var err error
+			session, err = s.observeChatSkill(ctx, owner, session, review)
 			if err != nil {
 				return nil, err
 			}

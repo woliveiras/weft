@@ -102,6 +102,7 @@ type AgentCreation struct {
 // OperationReview persists the reviewed action. The digest binds the payload
 // to the owner and session. Claim state and the result are recorded separately.
 type OperationReview struct {
+	Skill        *SkillChange     `json:"skill,omitempty"`
 	PR           *PRAnalysis      `json:"pr,omitempty"`
 	PRSummary    string           `json:"prSummary,omitempty"`
 	Instructions *InstructionEdit `json:"instructions,omitempty"`
@@ -147,7 +148,7 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	choices := 0
-	for _, exists := range []bool{r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskRetry != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
+	for _, exists := range []bool{r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskRetry != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
 		if exists {
 			choices++
 		}
@@ -175,6 +176,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 			ExpiresAt                     time.Time
 			WorkflowControl               *WorkflowControl
 		}{owner, session, r.ID, ControlWorkflow, r.ExpiresAt, r.WorkflowControl}
+	case r.Skill != nil:
+		payload = struct {
+			Owner, Session, ID, Operation string
+			ExpiresAt                     time.Time
+			Skill                         *SkillChange
+		}{owner, session, r.ID, SaveSkill, r.ExpiresAt, r.Skill}
 	case r.PR != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string
@@ -317,7 +324,7 @@ func (s Sessions) finishReview(ctx context.Context, owner, sessionID, reviewID, 
 		for i := range session.Messages {
 			message := &session.Messages[i]
 			if review := message.Review; review != nil && review.ID == reviewID {
-				if review.State != ReviewApplying && !(review.State == ReviewUnknown && state == ReviewCreated) {
+				if review.State != ReviewApplying && !(review.State == ReviewUnknown && (state == ReviewCreated || review.Skill != nil && state == ReviewApplied)) {
 					return false, nil
 				}
 				review.State, review.ResultVersion, review.ResultID = state, version, resultID

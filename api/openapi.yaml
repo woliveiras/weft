@@ -3034,6 +3034,7 @@ components:
             - {$ref: "#/components/schemas/ChatGuidanceReview"}
             - {$ref: "#/components/schemas/ChatInstructionReview"}
             - {$ref: "#/components/schemas/ChatPRReview"}
+            - {$ref: "#/components/schemas/ChatSkillReview"}
         task:
           type: object
           required: [id, state]
@@ -3087,6 +3088,29 @@ components:
                   key: {type: string}
                   result: {type: string, enum: [applied, unchanged, failed, not-applied, saved-revision-unknown]}
                   revision: {type: string}
+    ChatSkillText:
+      type: object
+      required: [id, title, body, description, enabled, global]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        body: {type: string}
+        description: {type: string}
+        enabled: {type: boolean}
+        global: {type: boolean}
+    ChatSkillReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [skill]
+          properties:
+            skill:
+              type: object
+              required: [revision, after]
+              properties:
+                revision: {type: integer, minimum: 0}
+                before: {$ref: "#/components/schemas/ChatSkillText"}
+                after: {$ref: "#/components/schemas/ChatSkillText"}
     ChatPRReview:
       allOf:
         - {$ref: "#/components/schemas/ChatReviewState"}

@@ -55,6 +55,7 @@ Return exactly one JSON object. "kind" is one of:
 - "node.guide": send one operator message to a later matching turn of a running workflow. Add "guideWorkflow" and "guideNode" with the stated exact IDs, "guideReplica" with a replica number or "any" only if the user explicitly selected it, and "guidance" with the requested message. Ask for any missing target. For an ambiguous change of behavior, ask whether the operator wants one-time guidance, a workflow instruction revision, or a reusable catalog change.
 - "pr.analyze": analyze one existing pull request without publishing. Add "prNumber" as a positive decimal string. Include "prWorkflow" and "prConnection" only when specified. Never infer repository, workflow, or write permission.
 - "console.inspect": read live facts in the conversation. Add "inspectArea" from tasks, workflows, agents, projects, skills, approvals, activity, triggers, review-routes, mcp, scm, issue-connections, models, chat-model, plugins, tools, network, retention, usage, prices, budgets. Use this for a question about current inventory or state. Use manual.open only for a navigation request.
+- "skill.save": create or revise a managed instruction skill. Add "skillAction" (create or revise), "skillId", "skillTitle", and "skillBody". New skills are saved disabled. Revision preserves the current audience, activation and description. Never use this intent to enable or delete a skill.
 - "manual.open": open a console page for inspection or to enter credentials. Add "destination" with one of: tasks, workflows, agents, projects, activity, approvals, models, chat-model, plugins, usage, budgets, prices, connections, connection-setup, skills, administration. Never ask for a credential. Use this for navigation requests or secure setup. Never represent navigation as performing the requested operation.
 - "clarify": ask one focused question when the target or action is unclear. Add "question". Never guess between different targets or effects.
 - "unsupported": any request outside these capabilities. Do not add a task or question.
@@ -63,6 +64,7 @@ You may include a short, neutral "title" for the conversation based on the lates
 // Plan proposes an operation or asks for clarification. A task selector is
 // always resolved against the caller's permitted resources before it is used.
 type Plan struct {
+	Skill         SkillDraft
 	Area          string
 	PRSelector    PRSelector
 	Kind          string `json:"kind"`
@@ -159,6 +161,14 @@ func decodePlan(body string) (Plan, error) {
 			plan.PRSelector.Connection = value
 		case "inspectArea":
 			plan.Area = value
+		case "skillAction":
+			plan.Skill.Action = value
+		case "skillId":
+			plan.Skill.ID = value
+		case "skillTitle":
+			plan.Skill.Title = value
+		case "skillBody":
+			plan.Skill.Body = value
 		case "instructionWorkflow":
 			plan.Instructions.Graph = value
 		case "instructionNode":
@@ -255,6 +265,9 @@ func decodePlan(body string) (Plan, error) {
 	if seen["inspectArea"] && plan.Kind != InspectConsole {
 		return Plan{}, ErrInvalidPlan
 	}
+	if plan.Kind != SaveSkill && (seen["skillAction"] || seen["skillId"] || seen["skillTitle"] || seen["skillBody"]) {
+		return Plan{}, ErrInvalidPlan
+	}
 	if plan.Kind != EditInstructions && (seen["instructionWorkflow"] || seen["instructionNode"] || seen["localInstructions"]) {
 		return Plan{}, ErrInvalidPlan
 	}
@@ -292,6 +305,10 @@ func decodePlan(body string) (Plan, error) {
 		}
 	case InspectConsole:
 		if InspectionDestination(plan.Area) == "" || seen["task"] || seen["question"] {
+			return Plan{}, ErrInvalidPlan
+		}
+	case SaveSkill:
+		if !plan.Skill.Valid() || seen["task"] || seen["question"] {
 			return Plan{}, ErrInvalidPlan
 		}
 	case EditInstructions:

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -116,7 +117,7 @@ func (s *Server) saveSkill(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	s.Bus.Publish(r.Context(), domain.NewEvent("instruction.skill.updated", "", map[string]any{"skill_id": v.ID, "revision": v.Revision, "deleted": deleted}).WithActor(v.Actor))
+	s.auditSavedSkill(r.Context(), v)
 	w.Header().Set("ETag", strconv.Quote(strconv.FormatInt(v.Revision, 10)))
 	status := 200
 	if r.Method == http.MethodPost {
@@ -125,6 +126,10 @@ func (s *Server) saveSkill(w http.ResponseWriter, r *http.Request) error {
 	writeJSON(w, status, v)
 	return nil
 }
+func (s *Server) auditSavedSkill(ctx context.Context, v *instructions.Skill) {
+	s.Bus.Publish(ctx, domain.NewEvent("instruction.skill.updated", "", map[string]any{"skill_id": v.ID, "revision": v.Revision, "deleted": v.Deleted}).WithActor(v.Actor))
+}
+
 func (s *Server) inspectInstructions(w http.ResponseWriter, r *http.Request) error {
 	g, err := s.Store.GetGraph(r.Context(), r.PathValue("id"), 0)
 	if err != nil {

@@ -48,6 +48,10 @@ Ask “Revise o PR 418.” If several running workflows or connections qualify, 
 
 The preview identifies the repository, source and base commits, model and workflow version. **View workflow** opens the selected node. **Analyze PR** checks the revisions again and sends the bounded diff to the workflow model for one billed, tool-free analysis. Existing channel and turn gates still apply. The draft appears in the conversation with **View execution**. A missing receipt leaves the outcome unknown. Requesting analysis grants no publication permission.
 
+## Save a managed skill
+
+An administrator can ask to create a skill with a name and instruction text, or revise an existing skill by ID. Compare the text and current audience on the review card, then choose **Save skill revision**. New skills start disabled. A revision preserves the skill’s activation, scope and description. **View skill** opens its saved content. Built-in skills remain read-only.
+
 ## Create a reusable agent
 
 As an administrator, describe the agent's name and what it should do. Chat

@@ -239,6 +239,8 @@ func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID 
 		return s.reviewChatPR(ctx, actor, sessionID, plan)
 	case chat.InspectConsole:
 		return s.inspectChatConsole(ctx, actor, plan)
+	case chat.SaveSkill:
+		return s.reviewChatSkill(ctx, actor, sessionID, plan)
 	case chat.EditInstructions:
 		return s.reviewChatInstructions(ctx, actor, sessionID, plan)
 	case chat.GuideNode:

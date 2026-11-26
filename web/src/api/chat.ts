@@ -103,6 +103,13 @@ export interface ChatTaskStartReview extends ChatReviewState {
   };
 }
 
+interface ManagedSkillText {
+  id: string; title: string; body: string; description: string; enabled: boolean; global: boolean;
+}
+export interface ChatSkillReview extends ChatReviewState {
+  skill: {before?: ManagedSkillText; after: ManagedSkillText; revision: number};
+}
+
 export interface ChatPRReview extends ChatReviewState {
   pr: {
     number: number; provider: string; connection: string; repository: string; head: string; base: string;
@@ -146,7 +153,7 @@ export interface ChatAgentAdoptionReview extends ChatReviewState {
   };
 }
 
-export type ChatOperationReview = ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
+export type ChatOperationReview = ChatSkillReview | ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
   ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview |
   ChatTaskRetryReview | ChatCatalogPublicationReview | ChatAgentAdoptionReview;
 

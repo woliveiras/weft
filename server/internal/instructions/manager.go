@@ -35,6 +35,7 @@ type Input struct {
 	Global      bool   `json:"global"`
 }
 type Version struct {
+	Operation string `json:"operation,omitempty"`
 	Input
 	Revision int64     `json:"revision"`
 	Actor    string    `json:"actor"`
@@ -112,6 +113,17 @@ func (m Manager) List(ctx context.Context) ([]*Skill, error) {
 // Each CAS atomically retains previous revisions and actor audit metadata.
 // Deletion is a tombstone: content and execution manifests remain readable.
 func (m Manager) Save(ctx context.Context, in Input, rev int64, actor string, deleted bool) (*Skill, error) {
+	return m.save(ctx, in, rev, actor, deleted, "")
+}
+
+func (m Manager) SaveForOperation(ctx context.Context, in Input, rev int64, actor, operation string) (*Skill, error) {
+	if operation == "" {
+		return nil, errors.New("missing skill operation identity")
+	}
+	return m.save(ctx, in, rev, actor, false, operation)
+}
+
+func (m Manager) save(ctx context.Context, in Input, rev int64, actor string, deleted bool, operation string) (*Skill, error) {
 	if IsBuiltin(in.ID) {
 		return nil, ErrBuiltinReadOnly
 	}
@@ -133,7 +145,7 @@ func (m Manager) Save(ctx context.Context, in Input, rev int64, actor string, de
 	if len(s.History) >= MaxEntries {
 		return nil, fmt.Errorf("%w: skill revision limit reached", storage.ErrConflict)
 	}
-	s.Version = Version{Input: in, Revision: rev + 1, Actor: actor, At: time.Now().UTC(), Deleted: deleted}
+	s.Version = Version{Operation: operation, Input: in, Revision: rev + 1, Actor: actor, At: time.Now().UTC(), Deleted: deleted}
 	if deleted {
 		s.Enabled = false
 	}

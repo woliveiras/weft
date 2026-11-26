@@ -5,6 +5,8 @@
 (`#/skills/inspect`). Skills are reusable Markdown guidance, not executable
 plugins or a way to grant tools, credentials or permissions.
 
+For conversational creation or revision of managed skill text, see [Save a managed skill](../chat/README.md#save-a-managed-skill).
+
 ## Find, create or edit guidance
 
 1. Search the catalogue by name/description/ID and filter status and origin.
