@@ -2333,7 +2333,7 @@ paths:
       tags: [chat]
       operationId: decideChatReview
       x-weft-role: operator
-      description: Decision requires session ownership and the current role for the reviewed operation. Task draft creation and live guidance require operator. Task start, catalog, workflow creation and installation configuration require admin.
+      description: Decision requires session ownership and the current role for the reviewed operation. Task drafting and retry, eligible approvals, live guidance and runtime controls require operator. Task start, catalog and workflow edits and installation configuration require admin.
       requestBody:
         required: true
         content:
@@ -3030,6 +3030,7 @@ components:
             - {$ref: "#/components/schemas/ChatTaskRetryReview"}
             - {$ref: "#/components/schemas/ChatCatalogPublicationReview"}
             - {$ref: "#/components/schemas/ChatAgentAdoptionReview"}
+            - {$ref: "#/components/schemas/ChatApprovalReview"}
             - {$ref: "#/components/schemas/ChatConfigurationReview"}
             - {$ref: "#/components/schemas/ChatGuidanceReview"}
             - {$ref: "#/components/schemas/ChatInstructionReview"}
@@ -3336,6 +3337,28 @@ components:
                 agentDigest: {type: string, pattern: '^[0-9a-f]{64}$'}
                 before: {type: string}
                 after: {type: string}
+    ChatApprovalReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [approval]
+          properties:
+            approval:
+              type: object
+              required: [id, title, graphId, kind, replica, decision, fingerprint]
+              properties:
+                id: {type: string}
+                title: {type: string}
+                graphId: {type: string}
+                taskId: {type: string}
+                nodeId: {type: string}
+                executionId: {type: string}
+                replica: {type: integer}
+                kind: {type: string, enum: [message, turn, question]}
+                decision: {type: string, enum: [approve, reject]}
+                answer: {type: string}
+                comment: {type: string}
+                fingerprint: {type: string, pattern: '^[0-9a-f]{64}$'}
     ChatReviewState:
       type: object
       required: [id, expiresAt, digest, state]
@@ -4208,7 +4231,7 @@ components:
         nodeId: {type: string}
         replica: {type: integer}
         executionId: {type: string}
-        kind: {enum: [tool, message, turn, question, environment, delegation]}
+        kind: {enum: [tool, message, turn, question, environment, task_environment, delegation]}
         status: {$ref: "#/components/schemas/ApprovalStatus"}
         title: {type: string}
         detail: {description: "tool: {tool,args}; message: {graphId,channel,message,onTimeout}; turn: {inputs,onTimeout}; question: {question}"}
@@ -4218,6 +4241,7 @@ components:
         createdAt: {type: string, format: date-time}
         expiresAt: {type: string, format: date-time}
         decidedAt: {type: string, format: date-time}
+        decisionOperation: {type: string, readOnly: true, description: ID of the reviewed operation that recorded this decision, when available}
     OperatorMessage:
       type: object
       properties:

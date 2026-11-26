@@ -158,6 +158,9 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		if review.TaskRetry != nil {
 			return s.applyReviewedChatTaskRetry(settleCtx, actor, sessionID, review)
 		}
+		if review.Approval != nil {
+			return s.applyChatApproval(settleCtx, actor, sessionID, review)
+		}
 		if review.WorkflowControl != nil {
 			return s.applyReviewedChatControl(settleCtx, actor, sessionID, review)
 		}
@@ -191,7 +194,7 @@ func reviewDecisionRole(review *chat.OperationReview) config.Role {
 	if review.PR != nil || review.Guidance != nil {
 		return config.RoleOperator
 	}
-	if review.TaskDraft != nil || review.TaskRetry != nil {
+	if review.TaskDraft != nil || review.TaskRetry != nil || review.Approval != nil {
 		return config.RoleOperator
 	}
 	return config.RoleAdmin
@@ -302,6 +305,14 @@ func (s *Server) reconcileChatReviews(ctx context.Context, owner string, session
 		if review.TaskRetry != nil {
 			var err error
 			session, err = s.reconcileChatTaskRetry(ctx, owner, session, review)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if review.Approval != nil {
+			var err error
+			session, err = s.reconcileChatApproval(ctx, owner, session, review)
 			if err != nil {
 				return nil, err
 			}

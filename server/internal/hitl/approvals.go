@@ -144,6 +144,22 @@ func (s *Service) Decide(ctx context.Context, id string, approve bool, by, comme
 	return a, nil
 }
 
+func (s *Service) DecideReviewed(ctx context.Context, expected *domain.Approval, approve bool, by, comment, answer, operation string) (*domain.Approval, error) {
+	status := domain.ApprovalRejected
+	if approve {
+		status = domain.ApprovalApproved
+	}
+	record, err := s.store.DecideReviewedApproval(ctx, expected, status, by, comment, answer, operation)
+	if errors.Is(err, storage.ErrConflict) {
+		return nil, ErrNotPending
+	}
+	if err != nil {
+		return nil, err
+	}
+	s.decided(ctx, record)
+	return record, nil
+}
+
 // Expire resolves a timed-out approval according to its OnTimeout policy
 // (stored in Detail.onTimeout by the requester; default reject).
 func (s *Service) Expire(ctx context.Context, a *domain.Approval) (*domain.Approval, error) {

@@ -43,6 +43,7 @@ Return exactly one JSON object. "kind" is one of:
 - "task.watch": follow a particular existing task and report when it settles. Add "task" containing the task's stated ID or exact name as a selector.
 - "task.inspect": show the latest state of a particular task now. Add "task" with the same selector convention.
 - "task.start": propose starting an explicitly identified saved task. Add "task" with the task ID or exact title established in the conversation. Ask which task when the target is unclear. Starting requires a separate review. Never infer start from a request to create, inspect or follow a task.
+- "approval.decide": propose an explicit decision for one pending request. Include either "approvalId" with its exact ID or "task" when the user identifies a single task's pending approval. Add "approvalDecision" (approve or reject), optionally "approvalAnswer" for the user's exact answer to a question and "approvalComment" for their stated comment. Never invent an answer, edit a held message, or infer an approval from opening, starting or following a task.
 - "task.retry": propose saving a linked retry draft of an explicitly identified failed task. Add "task" with its ID or exact title. This prepares the next attempt for review. It does not start the retry or apply the original attempt's authorization.
 - "task.create": prepare a saved task draft using a named workflow. Add "taskTitle", "workflow" (the stated workflow ID or exact name), "request" (the intended work), and "outcome" (understand, implement, investigate, review, freeform). Add "workflowVersion" as a string only if the user named the version. Ask for the workflow if the target is unclear. Work requiring a repository or delivery settings must be configured in Tasks. Never include grants or start a task.
 - "agent.create": propose a reusable agent for the catalog. Add "agentId" (lowercase letters, digits and hyphens), "agentName" and concise "instructions". The operator reviews the proposal before anything is created. Never interpret a confirmation as a new create request.
@@ -81,6 +82,7 @@ type Plan struct {
 	Instructions  InstructionEdit
 	Guidance      Guidance
 	TaskDraft     TaskDraft
+	Approval      ApprovalDecisionDraft
 	Control       WorkflowControlDraft
 }
 
@@ -202,6 +204,14 @@ func decodePlan(body string) (Plan, error) {
 			plan.Kind = value
 		case "task":
 			plan.Task = value
+		case "approvalId":
+			plan.Approval.Approval = value
+		case "approvalDecision":
+			plan.Approval.Decision = value
+		case "approvalAnswer":
+			plan.Approval.Answer = value
+		case "approvalComment":
+			plan.Approval.Comment = value
 		case "question":
 			plan.Question = value
 		case "taskTitle":
@@ -277,6 +287,9 @@ func decodePlan(body string) (Plan, error) {
 	if plan.Kind != CreateTask && (seen["taskTitle"] || seen["workflow"] || seen["workflowVersion"] || seen["request"] || seen["outcome"]) {
 		return Plan{}, ErrInvalidPlan
 	}
+	if plan.Kind != DecideApproval && (seen["approvalId"] || seen["approvalDecision"] || seen["approvalAnswer"] || seen["approvalComment"]) {
+		return Plan{}, ErrInvalidPlan
+	}
 	if plan.Kind != PlanInstallation && (seen["document"] || seen["intakeConsent"]) {
 		return Plan{}, ErrInvalidPlan
 	}
@@ -287,6 +300,10 @@ func decodePlan(body string) (Plan, error) {
 		return Plan{}, ErrInvalidPlan
 	}
 	switch plan.Kind {
+	case DecideApproval:
+		if !plan.Approval.valid(plan.Task) || seen["question"] || (seen["approvalId"] && seen["task"]) {
+			return Plan{}, ErrInvalidPlan
+		}
 	case AdoptAgentVersion:
 		if !plan.Adoption.valid() || seen["task"] || seen["question"] {
 			return Plan{}, ErrInvalidPlan

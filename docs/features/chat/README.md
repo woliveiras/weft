@@ -33,7 +33,7 @@ When a connection needs browser OAuth, follow the Chat link to Connections and c
 Ask Chat to show the current state of a task or follow it until it settles.
 Use a task ID or a unique exact title. For example, “Let me know when my
 release notes review finishes.” If Weft cannot resolve a unique task, supply
-the ID from Tasks. Open Approvals to inspect and decide a held request.
+the ID from Tasks. Open Approvals to inspect held requests.
 
 Start another chat or close the browser. Weft keeps observing active tasks.
 Recents shows the running indicator and signals an unread result, with a
@@ -120,6 +120,16 @@ Use Tasks to configure and start work with repositories, environment
 preparation or delivery settings. If the task or its authorization changes
 while you are reviewing, inspect the updated setup and request a fresh start
 proposal.
+
+## Decide a pending approval
+
+As an operator or administrator, ask to approve or reject a pending message
+or turn request by approval ID. You can name the task if it has exactly one
+pending request. For an agent question, give the approval ID and your answer.
+Review the exact request, decision and any response text before confirming.
+Open Approvals for the full request and for environment, delegation or tool
+decisions. A recorded decision can unblock work. Follow the task or execution
+to see its outcome.
 
 ## Prepare a retry after failure
 

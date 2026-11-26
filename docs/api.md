@@ -237,6 +237,13 @@ version. Chat can adopt versions that differ only in shared instructions.
 The native save preserves local overrides and records the new workflow
 version. An already admitted task uses its existing workflow copy.
 
+An operator can review a decision for a specific pending message or turn
+request, or answer a human question. Chat seals the exact approval record
+and the intended decision. The effective expiry is the earlier of the
+request's deadline and the confirmation deadline. The native approval
+write checks the pending request and records the operation ID. A recorded
+decision and any resulting task progress are separate observations.
+
 ## Native issue connections
 
 Native Jira Data Center connections have their own credential store, independent

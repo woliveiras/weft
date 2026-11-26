@@ -36,6 +36,7 @@ func Run(t *testing.T, newStore func(t *testing.T) storage.Store) {
 		{"Executions", testExecutions},
 		{"Approvals", testApprovals},
 		{"ApprovalRace", testApprovalRace},
+		{"ReviewedApproval", testReviewedApproval},
 		{"OperatorMessages", testOperatorMessages},
 		{"OperatorMessageOutbox", testOperatorMessageOutbox},
 		{"ReplicaStatus", testReplicaStatus},
@@ -637,6 +638,46 @@ func testApprovalRace(t *testing.T, s storage.Store) {
 	wg.Wait()
 	if wins != 1 || conflicts != n-1 {
 		t.Fatalf("concurrent decisions: %d wins, %d conflicts", wins, conflicts)
+	}
+}
+
+func testReviewedApproval(t *testing.T, s storage.Store) {
+	deadline := time.Now().Add(time.Minute).UTC()
+	want := &domain.Approval{ID: "apr_reviewed", GraphID: "fixture", Title: "Review request", Kind: domain.ApprovalTurn, ExpiresAt: &deadline}
+	must(t, s.PutApproval(ctx, want))
+	expected, err := s.GetApproval(ctx, want.ID)
+	must(t, err)
+	changed := *expected
+	changed.Title = "Different pending request"
+	must(t, s.PutApproval(ctx, &changed))
+	_, err = s.DecideReviewedApproval(ctx, expected, domain.ApprovalApproved, "operator", "", "", "reviewed-approval")
+	if !errors.Is(err, storage.ErrConflict) {
+		t.Fatalf("changed request passed approval: %v", err)
+	}
+	expected, err = s.GetApproval(ctx, want.ID)
+	must(t, err)
+	record, err := s.DecideReviewedApproval(ctx, expected, domain.ApprovalApproved, "operator", "reviewed", "", "reviewed-approval")
+	must(t, err)
+	if record.DecisionOperation != "reviewed-approval" || record.Status != domain.ApprovalApproved || record.DecidedBy != "operator" {
+		t.Fatalf("decision lacks durable proof: %+v", record)
+	}
+	persisted, err := s.GetApproval(ctx, record.ID)
+	must(t, err)
+	if persisted.DecisionOperation != record.DecisionOperation {
+		t.Fatalf("decision proof was not stored: %+v", persisted)
+	}
+	_, err = s.DecideReviewedApproval(ctx, expected, domain.ApprovalRejected, "operator", "", "", "duplicate")
+	if !errors.Is(err, storage.ErrConflict) {
+		t.Fatalf("competing decision was accepted: %v", err)
+	}
+
+	expiry := time.Now().Add(-time.Minute).UTC()
+	expired := &domain.Approval{ID: "apr_expired", GraphID: "fixture", ExpiresAt: &expiry}
+	must(t, s.PutApproval(ctx, expired))
+	expected, err = s.GetApproval(ctx, expired.ID)
+	must(t, err)
+	if _, err := s.DecideReviewedApproval(ctx, expected, domain.ApprovalApproved, "operator", "", "", "expired"); !errors.Is(err, storage.ErrConflict) {
+		t.Fatalf("expired approval was effectful: %v", err)
 	}
 }
 

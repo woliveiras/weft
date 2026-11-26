@@ -556,6 +556,17 @@ func (s *Store) ListApprovals(ctx context.Context, f storage.ApprovalFilter) ([]
 }
 
 func (s *Store) DecideApproval(ctx context.Context, id string, status domain.ApprovalStatus, by, comment, answer string) (*domain.Approval, error) {
+	return s.decideApproval(ctx, id, status, by, comment, answer, nil, "")
+}
+
+func (s *Store) DecideReviewedApproval(ctx context.Context, expected *domain.Approval, status domain.ApprovalStatus, by, comment, answer, operation string) (*domain.Approval, error) {
+	if expected == nil || operation == "" || (status != domain.ApprovalApproved && status != domain.ApprovalRejected) {
+		return nil, fmt.Errorf("fsstore: reviewed decision requires a request, operation ID and decision")
+	}
+	return s.decideApproval(ctx, expected.ID, status, by, comment, answer, expected, operation)
+}
+
+func (s *Store) decideApproval(ctx context.Context, id string, status domain.ApprovalStatus, by, comment, answer string, expected *domain.Approval, operation string) (*domain.Approval, error) {
 	if status == domain.ApprovalPending || status == "" {
 		return nil, fmt.Errorf("fsstore: cannot decide approval to %q", status)
 	}
@@ -573,7 +584,13 @@ func (s *Store) DecideApproval(ctx context.Context, id string, status domain.App
 	}
 	a := clone(cur)
 	now := time.Now().UTC()
+	if expected != nil {
+		if err := storage.ValidateReviewedApproval(a, expected, now); err != nil {
+			return nil, err
+		}
+	}
 	a.Status, a.DecidedBy, a.Comment, a.Answer, a.DecidedAt = status, by, comment, answer, &now
+	a.DecisionOperation = operation
 	if err := s.putApprovalLocked(a); err != nil {
 		return nil, err
 	}

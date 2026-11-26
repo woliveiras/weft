@@ -153,9 +153,16 @@ export interface ChatAgentAdoptionReview extends ChatReviewState {
   };
 }
 
+export interface ChatApprovalReview extends ChatReviewState {
+  approval: {
+    id:string; title:string; graphId:string; taskId?:string; nodeId?:string; executionId?:string; replica:number;
+    kind:'message'|'turn'|'question'; decision:'approve'|'reject'; answer?:string; comment?:string;
+  };
+}
+
 export type ChatOperationReview = ChatSkillReview | ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
   ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview |
-  ChatTaskRetryReview | ChatCatalogPublicationReview | ChatAgentAdoptionReview;
+  ChatTaskRetryReview | ChatCatalogPublicationReview | ChatAgentAdoptionReview | ChatApprovalReview;
 
 export interface ChatSession {
   id: string;

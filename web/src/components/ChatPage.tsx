@@ -7,7 +7,7 @@ import { ChatConfigurationCard } from './ChatConfigurationCard';
 import { ChatManualLink } from './ChatManualLink';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
-import type { ChatAgentAdoptionReview, ChatCatalogPublicationReview, ChatMessage, ChatOperationReview,
+import type { ChatAgentAdoptionReview, ChatApprovalReview, ChatCatalogPublicationReview, ChatMessage, ChatOperationReview,
   ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview,
   ChatTaskRetryReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
@@ -294,7 +294,7 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
     {onRetry && <Btn onClick={onRetry}>Retry saved request</Btn>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
-    {review && <OperationReviewCard review={review} now={now} canConfirm={('pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review) ? canOperate : canCreateAgent}
+    {review && <OperationReviewCard review={review} now={now} canConfirm={('pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'approval' in review) ? canOperate : canCreateAgent}
       onDecide={decision => onDecide(review,decision)} onView={onView}/>}
     {value.unread && <Btn onClick={onRead}>Mark result read</Btn>}
   </article>;
@@ -314,6 +314,7 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   if ('taskRetry' in review) return <TaskRetryReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('publication' in review) return <CatalogPublicationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('adoption' in review) return <AgentAdoptionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('approval' in review) return <ApprovalDecisionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   const workflow = review.workflow;
   const name = review.workflow ? review.workflow.graph.metadata.name : review.definition.name;
   const kind = workflow ? 'workflow' : 'agent';
@@ -542,6 +543,41 @@ function AgentAdoptionCard({review, now, canConfirm, onDecide, onView}: {
     {review.state === 'created' && <p role="status">Workflow version {review.resultVersion} saved with catalog version {pinned.targetVersion}.</p>}
     <a id={anchor} href={`#/g/${encodeURIComponent(pinned.workflowId)}/canvas?sel=${encodeURIComponent('node:' + pinned.nodeId)}`}
       onClick={() => onView(anchor)}>Open selected node</a>
+  </section>;
+}
+
+function ApprovalDecisionCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatApprovalReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const {approval} = review;
+  const action = approval.decision === 'approve' ? 'Approve' : 'Reject';
+  const anchor = `chat-approval-${review.id}`;
+  return <section className="chat-agent-review" aria-label={`${action} request ${approval.id}`}>
+    <h3>{approval.title || 'Pending request'}</h3>
+    <dl>
+      <dt>Approval ID</dt><dd>{approval.id}</dd>
+      <dt>Request type</dt><dd>{approval.kind}</dd>
+      <dt>Execution target</dt><dd>{approval.graphId}{approval.nodeId && ` / ${approval.nodeId}`}
+        {approval.nodeId && approval.replica >= 0 && ` · Replica ${approval.replica}`}</dd>
+      {approval.executionId && <><dt>Execution</dt><dd>{approval.executionId}</dd></>}
+      {approval.taskId && <><dt>Task</dt><dd>{approval.taskId}</dd></>}
+      {approval.answer && <><dt>Reply</dt><dd>{approval.answer}</dd></>}
+      {approval.comment && <><dt>Comment</dt><dd>{approval.comment}</dd></>}
+    </dl>
+    {review.state === 'awaiting_confirmation' && <>
+      <p>Record the decision for this exact request. Open Approvals for the full request details.</p>
+      <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm} confirmLabel={`${action} request`} onDecide={onDecide}/>
+    </>}
+    {review.state === 'applying' && <p role="status">Decision submitted. Checking the recorded outcome…</p>}
+    {review.state === 'conflict' && <p role="status">The approval expired or changed. Check its current state in Approvals.</p>}
+    {review.state === 'unknown' && <p role="status">The decision outcome is temporarily unknown. Inspect Approvals before trying again.</p>}
+    {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+    {review.state === 'applied' && <p role="status">{approval.decision === 'approve' ? 'Approval' : 'Rejection'} recorded.</p>}
+    <div className="chat-evidence">
+      <a id={anchor} href="#/approvals" onClick={() => onView(anchor)}>Open Approvals</a>
+      {approval.taskId && <a id={`${anchor}-task`} href={taskSectionLink(approval.taskId,'overview')}
+        onClick={() => onView(`${anchor}-task`)}>Open task</a>}
+    </div>
   </section>;
 }
 

@@ -168,6 +168,30 @@ test('starts a reviewed task, preserves its approval and follows the observed re
   await expect(page.getByText(`Task ${task.id}: succeeded.`)).toBeVisible();
 });
 
+test('records one reviewed approval for the exact held task input', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const task = await startTaskWaitingForApproval(request,'chat-approval-source','Editorial gate task fixture');
+  const progress = await (await request.get(`/api/v1/tasks/${task}/progress`,{headers})).json();
+  expect(progress.pendingApprovals).toHaveLength(1);
+  const target = progress.pendingApprovals[0];
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-operator-token'));
+  await page.goto('/');
+  await send(page,'Approve the pending input of the editorial gate task.');
+  const decision = page.getByRole('region',{name:`Approve request ${target.id}`});
+  await expect(decision.getByText(task,{exact:true})).toBeVisible();
+  const before = await (await request.get(`/api/v1/tasks/${task}/progress`,{headers})).json();
+  expect(before.pendingApprovals.map((approval:{id:string})=>approval.id)).toEqual([target.id]);
+  await decision.getByRole('button',{name:'Approve request',exact:true}).click();
+  await expect(decision.getByText('Approval recorded.')).toBeVisible();
+  const list = await (await request.get(`/api/v1/approvals?graph=${target.graphId}`,{headers})).json();
+  expect(list).toHaveLength(1);
+  expect(list[0]).toMatchObject({id:target.id,status:'approved',decidedBy:'e2e-operator',decisionOperation:expect.any(String)});
+  await decision.getByRole('link',{name:'Open task'}).click();
+  await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');
+  await page.goBack();
+  await expect(decision).toBeVisible();
+});
+
 test('prepares one reviewed retry from a failed task and opens the linked draft', async ({ page, request }) => {
   await selectFixtureModel(request);
   const original = await startTaskWaitingForApproval(request,'chat-retry-source','Failed documentation task fixture');

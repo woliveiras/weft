@@ -82,6 +82,8 @@ type Store interface {
 	// DecideApproval atomically moves a pending approval to a decided state;
 	// ErrConflict if it is no longer pending (two humans clicking at once).
 	DecideApproval(ctx context.Context, id string, status domain.ApprovalStatus, by, comment, answer string) (*domain.Approval, error)
+	// DecideReviewedApproval also fences the complete pending request and its deadline.
+	DecideReviewedApproval(ctx context.Context, expected *domain.Approval, status domain.ApprovalStatus, by, comment, answer, operation string) (*domain.Approval, error)
 
 	// --- operator messages ------------------------------------------------
 	PutOperatorMessage(ctx context.Context, m *domain.OperatorMessage) error

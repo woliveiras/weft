@@ -117,6 +117,7 @@ type OperationReview struct {
 	TaskDraft       *TaskCreation                      `json:"taskDraft,omitempty"`
 	TaskStart       *TaskAdmission                     `json:"taskStart,omitempty"`
 	TaskRetry       *TaskRetry                         `json:"taskRetry,omitempty"`
+	Approval        *ApprovalDecision                  `json:"approval,omitempty"`
 	WorkflowControl *WorkflowControl                   `json:"workflowControl,omitempty"`
 	ControlResult   *engine.WorkflowControlObservation `json:"controlResult,omitempty"`
 	ID              string                             `json:"id"`
@@ -137,7 +138,11 @@ func NewAgentReview(owner, session, agent string, definition domain.AgentDefinit
 func newReview(owner, session string, now time.Time, action OperationReview) (*OperationReview, error) {
 	review := action
 	review.ID = domain.NewID("chatop")
-	review.ExpiresAt, review.State = now.Add(10*time.Minute).UTC(), ReviewAwaiting
+	expiry := now.Add(10 * time.Minute)
+	if !review.ExpiresAt.IsZero() && review.ExpiresAt.Before(expiry) {
+		expiry = review.ExpiresAt
+	}
+	review.ExpiresAt, review.State = expiry.UTC(), ReviewAwaiting
 	digest, err := review.digest(owner, session)
 	if err != nil {
 		return nil, err
@@ -148,7 +153,7 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	choices := 0
-	for _, exists := range []bool{r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskRetry != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
+	for _, exists := range []bool{r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskRetry != nil, r.Approval != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
 		if exists {
 			choices++
 		}
@@ -158,6 +163,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 	}
 	var payload any
 	switch {
+	case r.Approval != nil:
+		payload = struct {
+			Owner, Session, ID, Operation string
+			ExpiresAt                     time.Time
+			Approval                      *ApprovalDecision
+		}{owner, session, r.ID, DecideApproval, r.ExpiresAt, r.Approval}
 	case r.Adoption != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string
@@ -324,7 +335,8 @@ func (s Sessions) finishReview(ctx context.Context, owner, sessionID, reviewID, 
 		for i := range session.Messages {
 			message := &session.Messages[i]
 			if review := message.Review; review != nil && review.ID == reviewID {
-				if review.State != ReviewApplying && !(review.State == ReviewUnknown && (state == ReviewCreated || review.Skill != nil && state == ReviewApplied)) {
+				recovered := state == ReviewCreated || (review.Skill != nil || review.Approval != nil) && state == ReviewApplied
+				if review.State != ReviewApplying && !(review.State == ReviewUnknown && recovered) {
 					return false, nil
 				}
 				review.State, review.ResultVersion, review.ResultID = state, version, resultID

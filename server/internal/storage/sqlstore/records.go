@@ -214,15 +214,20 @@ func (s *Store) PutApproval(ctx context.Context, a *domain.Approval) error {
 }
 
 func (s *Store) GetApproval(ctx context.Context, id string) (*domain.Approval, error) {
+	approval, _, err := s.approvalDocument(ctx, id)
+	return approval, err
+}
+
+func (s *Store) approvalDocument(ctx context.Context, id string) (*domain.Approval, []byte, error) {
 	var doc []byte
 	if err := s.db.QueryRowContext(ctx, s.q(`SELECT doc FROM approvals WHERE id = ?`), id).Scan(&doc); err != nil {
-		return nil, notFound(err)
+		return nil, nil, notFound(err)
 	}
 	var a domain.Approval
 	if err := json.Unmarshal(doc, &a); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &a, nil
+	return &a, doc, nil
 }
 
 func (s *Store) ListApprovals(ctx context.Context, f storage.ApprovalFilter) ([]*domain.Approval, error) {
@@ -246,10 +251,29 @@ func (s *Store) ListApprovals(ctx context.Context, f storage.ApprovalFilter) ([]
 // status = 'pending'. Two deciders racing both read "pending", but only one
 // UPDATE matches the guard; the other sees zero rows and gets ErrConflict.
 func (s *Store) DecideApproval(ctx context.Context, id string, status domain.ApprovalStatus, by, comment, answer string) (*domain.Approval, error) {
+	return s.decideApproval(ctx, id, status, by, comment, answer, nil, "")
+}
+
+func (s *Store) DecideReviewedApproval(ctx context.Context, expected *domain.Approval, status domain.ApprovalStatus, by, comment, answer, operation string) (*domain.Approval, error) {
+	if expected == nil || operation == "" || (status != domain.ApprovalApproved && status != domain.ApprovalRejected) {
+		return nil, fmt.Errorf("sqlstore: reviewed decision requires a request, operation ID and decision")
+	}
+	if err := storage.ValidateReviewedApproval(expected, expected, time.Now()); err != nil {
+		return nil, err
+	}
+	if expected.ExpiresAt != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, *expected.ExpiresAt)
+		defer cancel()
+	}
+	return s.decideApproval(ctx, expected.ID, status, by, comment, answer, expected, operation)
+}
+
+func (s *Store) decideApproval(ctx context.Context, id string, status domain.ApprovalStatus, by, comment, answer string, expected *domain.Approval, operation string) (*domain.Approval, error) {
 	if status == domain.ApprovalPending || status == "" {
 		return nil, fmt.Errorf("sqlstore: cannot decide approval to %q", status)
 	}
-	a, err := s.GetApproval(ctx, id)
+	a, before, err := s.approvalDocument(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -257,13 +281,24 @@ func (s *Store) DecideApproval(ctx context.Context, id string, status domain.App
 		return nil, fmt.Errorf("%w: approval %s is already %s", storage.ErrConflict, id, a.Status)
 	}
 	now := time.Now().UTC()
+	if expected != nil {
+		if err := storage.ValidateReviewedApproval(a, expected, now); err != nil {
+			return nil, err
+		}
+	}
 	a.Status, a.DecidedBy, a.Comment, a.Answer, a.DecidedAt = status, by, comment, answer, &now
+	a.DecisionOperation = operation
 	doc, err := json.Marshal(a)
 	if err != nil {
 		return nil, err
 	}
-	res, err := s.db.ExecContext(ctx, s.q(`UPDATE approvals SET status = ?, doc = ? WHERE id = ? AND status = ?`),
-		string(status), string(doc), id, string(domain.ApprovalPending))
+	query := `UPDATE approvals SET status = ?, doc = ? WHERE id = ? AND status = ?`
+	args := []any{string(status), string(doc), id, string(domain.ApprovalPending)}
+	if expected != nil {
+		query += ` AND doc = ?`
+		args = append(args, string(before))
+	}
+	res, err := s.db.ExecContext(ctx, s.q(query), args...)
 	if err != nil {
 		return nil, err
 	}

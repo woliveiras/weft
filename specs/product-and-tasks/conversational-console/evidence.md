@@ -182,5 +182,15 @@ manual editor. Chromium published a version, then adopted it after a separate
 review and returned from the selected node. TypeScript, twelve focused
 component checks, OpenAPI parsing and `git diff --check` passed.
 
+## 2026-11-26 — Reviewed pending approvals
+
+S35 passed focused Go unit, HTTP/SQLite and storage conformance checks on
+SQLite, filesystem and a disposable PostgreSQL 17 instance. The earlier native deadline bounded confirmation.
+The exact answer was recorded once, and a decision made in Approvals left
+an old Chat confirmation without effect. Chromium approved held task input
+as an operator, verified the native receipt and observed task success
+through its separate link. TypeScript, eleven component checks, OpenAPI
+parsing, `make lint`, `make build` and `git diff --check` passed.
+
 Device and assistive-technology review, external provider qualification and
 production backup and restore remain open.

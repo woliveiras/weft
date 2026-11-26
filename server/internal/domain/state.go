@@ -324,12 +324,13 @@ type Approval struct {
 	Detail      json.RawMessage `json:"detail,omitempty"`
 	// Answer carries a human's free-text response (question approvals) or an
 	// edited payload (message approvals).
-	Answer    string     `json:"answer,omitempty"`
-	DecidedBy string     `json:"decidedBy,omitempty"`
-	Comment   string     `json:"comment,omitempty"`
-	CreatedAt time.Time  `json:"createdAt"`
-	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
-	DecidedAt *time.Time `json:"decidedAt,omitempty"`
+	Answer            string     `json:"answer,omitempty"`
+	DecidedBy         string     `json:"decidedBy,omitempty"`
+	Comment           string     `json:"comment,omitempty"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	ExpiresAt         *time.Time `json:"expiresAt,omitempty"`
+	DecidedAt         *time.Time `json:"decidedAt,omitempty"`
+	DecisionOperation string     `json:"decisionOperation,omitempty"`
 }
 
 // OperatorMessage is a human message to a specific replica (or any replica
