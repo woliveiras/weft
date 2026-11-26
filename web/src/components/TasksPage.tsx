@@ -1,3 +1,4 @@
+import {RepositoryPicker,RepositoryRows,repositoryBindings} from './RepositoryPicker';
 import {taskInputIdentity,taskLaunchIdentity,type TaskLaunchReview} from './taskLaunch';
 import {TaskReadiness} from './TaskReadiness';
 import {applyTaskEntryContext,taskRepairLink,type TaskEntryContext} from './taskEntryContext';
@@ -12,11 +13,11 @@ import {TaskRequirementRepairs} from './TaskRequirementRepairs';
 import {useEffect, useRef, useState} from 'react';
 import {api, errorMessage} from '../api/client';
 import type {GraphSummary, Info} from '../api/types';
-import type {TaskDraft, TaskInput, TaskReview} from '../api/tasks';
+import type {Project, TaskDraft, TaskInput, TaskReview} from '../api/tasks';
 import {useAsync} from '../hooks/useData';
 import {Btn, ErrorBox} from './common';
 import {TasksList} from './TasksList';
-import {isTaskEnvironmentPreparationNotice,defaultTaskWorkflowVersion,workflowTaskDefaults,updateTaskInput,outcomeRequest,promptTitle,missingTaskConfiguration,projectChoiceLabel,submissionDraftFeedback,taskConfigurationFieldErrors} from './taskDefaults';
+import {isTaskEnvironmentPreparationNotice,defaultTaskWorkflowVersion,workflowTaskDefaults,updateTaskInput,outcomeRequest,promptTitle,missingTaskConfiguration,submissionDraftFeedback,taskConfigurationFieldErrors} from './taskDefaults';
 import {budgetLabel,money} from './cost';
 
 export const taskOutcomes = [
@@ -29,7 +30,7 @@ export const taskOutcomes = [
 const empty: TaskInput = {title:'',request:'',outcome:'freeform',graphId:'',graphVersion:0,nodeId:''};
 
 function editableInput(draft:TaskDraft):TaskInput {
-  return {source:draft.source,executionMode:draft.executionMode,title:draft.title,request:draft.request,outcome:draft.outcome,graphId:draft.graphId,graphVersion:draft.graphVersion,nodeId:draft.nodeId,resultNodeId:draft.resultNodeId,scmConnection:draft.scmConnection,projectId:draft.projectId,baseCommit:draft.baseCommit,channelId:draft.channelId,messageType:draft.messageType,payloadJson:draft.payloadJson};
+  return {repositories:draft.repositories,source:draft.source,executionMode:draft.executionMode,title:draft.title,request:draft.request,outcome:draft.outcome,graphId:draft.graphId,graphVersion:draft.graphVersion,nodeId:draft.nodeId,resultNodeId:draft.resultNodeId,scmConnection:draft.scmConnection,projectId:draft.projectId,baseCommit:draft.baseCommit,channelId:draft.channelId,messageType:draft.messageType,payloadJson:draft.payloadJson};
 }
 
 export function TasksPage({id,create,info,graphs,entry,graphsLoading=false,graphsError,onReloadGraphs,reviewOnLoad=false}: {id?:string;create?:boolean;info?:Info;graphs:GraphSummary[];entry?:TaskEntryContext;graphsLoading?:boolean;graphsError?:string;onReloadGraphs?:()=>void;reviewOnLoad?:boolean}) {
@@ -111,8 +112,9 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin,e
   const [preparingEnvironment,setPreparingEnvironment] = useState(false);
   const [submissionFeedback,setSubmissionFeedback] = useState<ReturnType<typeof submissionDraftFeedback>>(()=>draft?.submitted?submissionDraftFeedback(draft):undefined);
   const [confirmed,setConfirmed] = useState(false);
+  const repoConnections=useAsync(()=>input.repositories?.length?api.scmConnections():Promise.resolve([]),[!!input.repositories?.length]);
   const [dirty,setDirty] = useState(false);
-  const budgets=useAsync(()=>input.graphId?api.budgetPreview(input.graphId,input.projectId):Promise.resolve(undefined),[input.graphId,input.projectId]);
+  const budgets=useAsync(()=>input.graphId?api.budgetPreview(input.graphId,input.projectId,...(input.repositories?.length?[input.repositories]:[])):Promise.resolve(undefined),[input.graphId,input.projectId,input.repositories]);
   const review=!dirty&&reviewResult?.task.revision===saved?.revision?reviewResult:undefined;
   const selected=graphs.find(g=>g.graph.metadata.id===input.graphId)?.graph;
   useEffect(()=>{
@@ -133,7 +135,38 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin,e
     const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};
     window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);
   },[dirty]);
-  const change=(next:Partial<TaskInput>,explicit=true)=>{editEpoch.current++;setLaunchReview(undefined);if(explicit)for(const key of Object.keys(next) as (keyof TaskInput)[])contextChoices.current.add(key);setSubmissionFeedback(undefined);setInput(old=>updateTaskInput(old,next));setDirty(true);setReview(undefined);setConfirmed(false);};
+  const change = (next: Partial<TaskInput>, explicit: boolean | (keyof TaskInput)[] = true) => {
+    editEpoch.current++;
+    setLaunchReview(undefined);
+    if (explicit) {
+      const keys = Array.isArray(explicit) ? explicit : Object.keys(next) as (keyof TaskInput)[];
+      for (const key of keys) contextChoices.current.add(key);
+    }
+    setSubmissionFeedback(undefined);
+    setInput(old => updateTaskInput(old, next));
+    setDirty(true);
+    setReview(undefined);
+    setConfirmed(false);
+  };
+  const entryProject = !contextApplied.current && !contextChoices.current.has('projectId') ? entry?.project : undefined;
+  const singularId = input.projectId || entryProject;
+  const selectedIds = input.repositories?.map(row => row.projectId) ?? (singularId ? [singularId] : []);
+  function selectRepositories(ids: string[], catalog: Project[] = projects.data ?? []) {
+    // Keep the single-checkout layout for existing workflows, including process execution.
+    // Once a draft has named checkouts, retain its aliases, check pins and delivery bindings.
+    const keepEnvironment = contextChoices.current.has('executionMode') || !!saved?.executionMode;
+    if (input.repositories === undefined && ids.length <= 1) {
+      const project = catalog.find(p => p.id === ids[0]);
+      change({projectId: ids[0], baseCommit: project?.head, repositories: undefined,
+        ...(!keepEnvironment && {executionMode: project?.executionMode})}, ['projectId', 'baseCommit', 'repositories']);
+      return;
+    }
+    const previous = input.repositories ?? repositoryBindings(singularId ? [singularId] : [], catalog)
+      .map(row => ({...row, baseCommit: input.baseCommit || row.baseCommit}));
+    change({repositories: repositoryBindings(ids, catalog, previous), projectId: undefined, baseCommit: undefined,
+      scmConnection: undefined, ...(singularId && !keepEnvironment ? {executionMode: undefined} : {})},
+      ['repositories', 'projectId', 'baseCommit', 'scmConnection']);
+  }
   useEffect(()=>{
     if(contextApplied.current||!entry||projects.loading||projects.error||graphsLoading||graphsError)return;
     contextApplied.current=true;
@@ -146,6 +179,17 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin,e
     const project=projects.data.find(p=>p.id===input.projectId);
     if(project){editEpoch.current++;setInput(old=>({...old,baseCommit:project.head,executionMode:old.executionMode??project.executionMode}));}
   },[draft,input.projectId,input.baseCommit,projects.data]);
+  useEffect(()=>{
+    if(draft||saved||!projects.data||input.projectId||entry?.project)return;
+    if(input.repositories?.some(r=>!r.baseCommit && projects.data?.some(p=>p.id===r.projectId)) && !contextChoices.current.has('repositories')){
+      setInput(old=>({...old,repositories:repositoryBindings(old.repositories!.map(r=>r.projectId),projects.data!,old.repositories)}));
+      return;
+    }
+    const ids=selected?.spec.task?.projectIds;
+    if(!input.repositories && ids?.length && !contextChoices.current.has('repositories')){
+      setInput(old=>({...old,repositories:repositoryBindings(ids,projects.data!),scmConnection:undefined}));
+    }
+  },[draft,saved,projects.data,input.projectId,input.repositories,entry?.project,selected]);
   const repair=async(destination:string)=>{
     setBusy(true);setError(undefined);
     try {
@@ -165,7 +209,7 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin,e
     setBusy(true);setSubmissionFeedback(undefined);setError(undefined);
     try {
       const result=await api.resolveTaskPrompt(input,saved?.id,saved?.revision);
-      setLaunchReview(undefined);editEpoch.current++;setSaved(result);setInput({source:result.source,title:result.title,request:result.request,outcome:result.outcome,graphId:result.graphId,graphVersion:result.graphVersion,nodeId:result.nodeId,resultNodeId:result.resultNodeId,scmConnection:result.scmConnection,channelId:result.channelId,messageType:result.messageType,payloadJson:result.payloadJson,projectId:result.projectId,baseCommit:result.baseCommit,executionMode:result.executionMode});setDirty(false);setReview(undefined);setConfirmed(false);
+      setLaunchReview(undefined);editEpoch.current++;setSaved(result);setInput({repositories:result.repositories,source:result.source,title:result.title,request:result.request,outcome:result.outcome,graphId:result.graphId,graphVersion:result.graphVersion,nodeId:result.nodeId,resultNodeId:result.resultNodeId,scmConnection:result.scmConnection,channelId:result.channelId,messageType:result.messageType,payloadJson:result.payloadJson,projectId:result.projectId,baseCommit:result.baseCommit,executionMode:result.executionMode});setDirty(false);setReview(undefined);setConfirmed(false);
       if(!saved)location.hash=`#/tasks/${encodeURIComponent(result.id)}`;
     }catch(e){setError(errorMessage(e));}finally{setBusy(false);}
   };
@@ -175,7 +219,7 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin,e
     if(checked.task.id!==task.id||checked.task.revision!==task.revision||taskInputIdentity(checked.task)!==taskInputIdentity(task))throw new Error('This task changed during inspection. Reload it before running.');
     setReview(checked);
     const [authorization,budget]=await Promise.all([
-      api.taskAuthorization(task.id),api.budgetPreview(task.graphId,task.projectId),
+      api.taskAuthorization(task.id),api.budgetPreview(task.graphId,task.projectId,...(task.repositories?.length?[task.repositories]:[])),
     ]);
     if(!authorization.scope)throw new Error('Authorization review is incomplete. Retry Run task before starting.');
     return {review:checked,authorization,budget};
@@ -189,7 +233,7 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin,e
         if(disposed||editEpoch.current!==epoch)return;
         if(checked.task.id!==saved.id||checked.task.revision!==saved.revision||taskInputIdentity(checked.task)!==taskInputIdentity(saved))throw new Error('This task changed during inspection. Reload it before running.');
         setReview(checked);
-        const [authorization,budget]=await Promise.all([api.taskAuthorization(saved.id),api.budgetPreview(saved.graphId,saved.projectId)]);
+        const [authorization,budget]=await Promise.all([api.taskAuthorization(saved.id),api.budgetPreview(saved.graphId,saved.projectId,...(saved.repositories?.length?[saved.repositories]:[]))]);
         if(!authorization.scope)throw new Error('Authorization review is incomplete. Retry Run task before starting.');
         if(!disposed&&editEpoch.current===epoch)setLaunchReview({review:checked,authorization,budget});
       }catch(cause){if(!disposed&&editEpoch.current===epoch)setError(`Could not check task readiness: ${errorMessage(cause)}`);}
@@ -255,7 +299,7 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin,e
         <ErrorBox error={error}/>
         <div className="task-editor-action-row">
           <div className="row">
-            <Btn tone="primary" disabled={!input.request.trim()||busy||!canEdit} aria-busy={submitting} onClick={()=>void submit()}>{submitting?'Checking task…':'Run task'}</Btn>
+            <Btn tone="primary" disabled={!input.request.trim()||busy||!canEdit} aria-busy={submitting} onClick={()=>void submit()}>{submitting?'Checking task…':input.repositories?.length && (!launchReview || dirty || !review?.canStart)?'Review task':'Run task'}</Btn>
             <Btn disabled={!canEdit||busy} onClick={()=>void save()}>Save draft</Btn>
           </div>
           {saved&&<TaskDraftDelete task={saved} canEdit={canEdit} disabled={busy} onDeleted={()=>{setDirty(false);location.hash='#/tasks';}}/>}
@@ -270,41 +314,49 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin,e
         <HelpField label={"Request"} help={"Describe what work should be done and how to judge the result. Include file names or constraints that the agent cannot infer from the repository."}><textarea required rows={8} placeholder="Describe the work you want the agents to do and the result you expect." maxLength={16384} value={input.request} onChange={e=>editRequest(e.target.value)}/></HelpField>
         </section>
         <section ref={settingsRef} tabIndex={-1} className="card form task-editor-section" aria-labelledby="task-settings-heading">
-          <header><h2 id="task-settings-heading">Workflow &amp; repository</h2><p className="muted">Choose the workflow and files this task will use.</p></header>
+          <header><h2 id="task-settings-heading">Workflow &amp; repositories</h2><p className="muted">Choose the workflow and files this task will use.</p></header>
           <div className="task-field-grid">
         <HelpField label={"Workflow"} error={fieldErrors.graphId} help={"Choose the saved workflow to run this task. Review the agents, their versions and the permissions used by the task."}><select required value={input.graphId} onChange={e=>{
           const g=graphs.find(g=>g.graph.metadata.id===e.target.value)?.graph;
           const defaults=workflowTaskDefaults(g,input.title,input.request);
           // Selecting a workflow accepts its routing suggestions, not its repository over an explicit entry choice.
-          const projectId=contextChoices.current.has('projectId')?input.projectId:entry?.project||input.projectId||defaults.projectId;
+          const keepRepositories=input.repositories!==undefined && (contextChoices.current.has('repositories')||draft?.repositories!==undefined);
+          const keepProject=contextChoices.current.has('projectId')||!!draft;
+          const projectId=keepRepositories?undefined:keepProject?input.projectId:entry?.project||defaults.projectId;
+          const suggested=g?.spec.task?.projectIds;
+          let repositories=keepRepositories?input.repositories:undefined;
+          if(!keepRepositories&&!projectId&&suggested)repositories=repositoryBindings(suggested,projects.data??[]);
           const project=projects.data?.find(p=>p.id===projectId);
           contextChoices.current.add('graphId');
           change({...defaults,graphId:e.target.value,graphVersion:g?.metadata.version??0,projectId,
+            repositories,
             baseCommit:projectId===input.projectId?input.baseCommit:project?.head,
             executionMode:input.executionMode??project?.executionMode,
-            ...(contextChoices.current.has('scmConnection')?{scmConnection:input.scmConnection}:{})},false);
+            scmConnection:repositories?undefined:contextChoices.current.has('scmConnection')?input.scmConnection:defaults.scmConnection},false);
         }}>
           <option value="">Select workflow</option>{!selected&&input.graphId&&<option value={input.graphId}>{input.graphId} (unavailable)</option>}
           {graphs.map(({graph:g})=><option key={g.metadata.id} value={g.metadata.id}>{g.metadata.name||g.metadata.id}</option>)}
         </select></HelpField>
-        <HelpField label={"Project"} help={"Links the task to a registered repository and its preferences. Choose the project whose files the task should use."}><select value={input.projectId??''} onChange={e=>{const p=projects.data?.find(p=>p.id===e.target.value);change({projectId:p?.id,baseCommit:p?.head,executionMode:p?.executionMode??'workflow'});}}>
-          <option value="">Use workflow repository or empty managed workspace</option>{input.projectId&&!projects.data?.some(p=>p.id===input.projectId)&&<option value={input.projectId}>{input.projectId} (saved selection)</option>}{projects.data?.map(p=><option key={p.id} value={p.id}>{projectChoiceLabel(p)}</option>)}
-        </select>
-          {input.projectId&&<small className="muted">Base commit: <code>{input.baseCommit}</code>. A separate worktree will be created on the Weft server. Uncommitted source files are not copied.</small>}
-          <small className="muted">Choose the repository whose files this task should use, or import one below. Without a project, a configured workflow repository is used; otherwise the workspace starts empty.</small>
-        </HelpField>
+        <RepositoryPicker label="Repositories" help="Choose the registered repositories this task will use. An empty selection uses the workflow repository or an empty workspace."
+          ids={selectedIds} projects={projects.data ?? []} loading={projects.loading} disabled={!canEdit || busy}
+          onChange={selectRepositories}/>
           </div>
+          {input.projectId && <small className="muted">Base commit: <code>{input.baseCommit}</code></small>}
+          {input.repositories && <><RepositoryRows repos={input.repositories} projects={projects.data ?? []}
+            connections={repoConnections.data} onChange={repositories => change({repositories})}/><ErrorBox error={repoConnections.error}/></>}
           {graphsLoading&&<p role="status">Loading workflows…</p>}
           <ErrorBox error={graphsError}/>
           {graphsError&&onReloadGraphs&&<Btn onClick={onReloadGraphs}>Retry workflows</Btn>}
-          {projects.loading&&<p role="status">Loading registered projects…</p>}
+          {projects.loading&&<p role="status">Loading registered repositories…</p>}
           <ErrorBox error={projects.error}/>
-          {projects.error&&<Btn onClick={()=>void projects.reload()}>Retry projects</Btn>}
+          {projects.error&&<Btn onClick={()=>void projects.reload()}>Retry repositories</Btn>}
           <div className="task-import-entry">
             <Btn aria-expanded={importOpen} onClick={()=>setImportOpen(!importOpen)}>{importOpen?'Close repository import':'Import repository from URL'}</Btn>
             <p className="muted small">Import a Git snapshot when the repository is not registered yet. This requires administrator approval and does not start agents.</p>
           </div>
-          {importOpen&&<RepositoryImport nativeProfile={nativeProfile} canEdit={canStart&&!busy} canSelect={canEdit&&!busy} initialURL={saved?.resolution?.repository} onProject={project=>{change({projectId:project.id,baseCommit:project.head});void projects.reload();}}/>}
+          {importOpen&&<RepositoryImport nativeProfile={nativeProfile} canEdit={canStart&&!busy} canSelect={canEdit&&!busy} initialURL={saved?.resolution?.repository} onProject={project=>{
+            selectRepositories([...new Set([...selectedIds, project.id])], [project, ...(projects.data ?? [])]);
+            void projects.reload();}}/>}
         </section>
         <details className="card task-advanced" open={advancedOpen||!!input.graphId&&missing.length>0} onToggle={e=>setAdvancedOpen(e.currentTarget.open)}>
           <summary>Advanced settings <span className="muted small">Version, environment, routing and delivery</span></summary>
@@ -327,7 +379,7 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin,e
           {input.executionMode==='sandbox'&&<p>Sandbox requires all enabled agents to use Docker isolation and the configured Docker/Colima daemon to be available. Weft never falls back to local execution.</p>}
           <div className="task-interpretation">
             <Btn disabled={!input.request.trim()||busy||!canEdit} onClick={()=>void resolve()}>Resolve request</Btn>
-            <p className="muted small">Optional: ask the default model to suggest task settings and save the request. Your title, project and environment choices are retained; input bindings are rebuilt. No agents start.</p>
+            <p className="muted small">Optional: ask the default model to suggest task settings and save the request. Your title, repositories and environment choices are retained; input bindings are rebuilt. No agents start.</p>
           </div>
         {saved?.resolution&&<aside aria-label="Request interpretation"><p>{saved.resolution.message}</p>{saved.resolution.repository&&<p>Repository: {saved.resolution.repository}</p>}{['needs_model','model_error'].includes(saved.resolution.state)&&<Btn disabled={busy||!admin} onClick={()=>void repair('#/models')}>Configure models</Btn>}<p>Your original request is preserved. Resolving never grants tool access.</p>{savedMissing.length>0&&<><p>Task setup is incomplete: {savedMissing.join(', ')}. Retry Resolve request, or configure it manually without using the model.</p><Btn onClick={openSettings}>Configure task manually</Btn></>}</aside>}
           </section>
@@ -348,7 +400,7 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin,e
         </select></HelpField>
         {input.channelId&&<><HelpField label={"Message type"} error={fieldErrors.messageType} help={"Use the message type expected by the workflow\u2019s channel or routing conditions. For example, issue.opened must match the type consumed by the workflow."}><input required maxLength={128} value={input.messageType??''} onChange={e=>change({messageType:e.target.value})}/></HelpField><HelpField label={"Input payload (JSON)"} error={fieldErrors.payloadJson} help={"Additional structured data delivered with the request. Use valid JSON and fields the receiving workflow understands."}><textarea required rows={6} maxLength={16384} value={input.payloadJson??''} onChange={e=>change({payloadJson:e.target.value})}/></HelpField><p>The selected channel receives this JSON. Request text is retained for context; it is not sent separately. Check the workflow's expected message type and fields.</p></>}
         <TaskIssueSource source={input.source} grants={selected?.spec.nodes.find(n=>n.id===input.nodeId)?.tools??selected?.spec.defaults?.tools??[]} onChange={source=>change({source})}/>
-        <SCMHandOffField value={input.scmConnection??''} onChange={scmConnection=>change({scmConnection:scmConnection||undefined})}/>
+        {!input.repositories&&<SCMHandOffField value={input.scmConnection??''} onChange={scmConnection=>change({scmConnection:scmConnection||undefined})}/>}
         </section>
         </details>
       </fieldset>
@@ -358,7 +410,8 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin,e
         {launchReview&&review&&<section className="task-launch-review" aria-label="Launch review">
           <h3>{review.canStart&&taskLaunchIdentity(launchReview)?'Ready to run':'Before this task can run'}</h3>
           <p>Access: <strong>{launchReview.authorization.record?.mode==='full'?'Full access':launchReview.authorization.record?.mode==='workspace'?'Workspace access':'Ask for approval'}</strong>{!launchReview.authorization.record&&' — Ask for approval (default)'}. Mandatory approvals and installation restrictions still apply.</p>
-          <p>Workflow: <strong>{review.task.graphId} · Version {review.task.graphVersion}</strong>. Repository: {review.project?.name||review.task.projectId||selected?.spec.workspace?.repo||'Empty managed workspace'}{review.task.baseCommit&&<> · Commit <code>{review.task.baseCommit}</code></>}.</p>
+          <p>Workflow: <strong>{review.task.graphId} · Version {review.task.graphVersion}</strong>. {review.task.repositories?.length?'Repositories: '+review.task.repositories.map(r=>r.alias).join(', '):'Repository: '+(review.project?.name||review.task.projectId||selected?.spec.workspace?.repo||'Empty managed workspace')}{review.task.baseCommit&&<> · Commit <code>{review.task.baseCommit}</code></>}.</p>
+          {review.task.repositories&&<RepositoryRows repos={review.task.repositories} projects={projects.data??[]}/>}
           <p>Run task authorizes a separate execution with the request, repository and workflow version shown above. It does not grant additional tools.</p>
           <ul className="task-launch-grants" aria-label="Effective agent permissions">{(review.agents??[]).map(agent=><li key={agent.id}><strong>{agent.id}</strong> · {agent.isolation||'process'} · {agent.model?.provider||'default provider'} / {agent.model?.name||'default model'}
             <ul>{(agent.grants??[]).map((grant,index)=><li key={index}><code>{grant.name}</code>{Object.entries(grant).filter(([key])=>key!=='name').map(([key,value])=><span key={key}> · {key}: {typeof value==='object'?JSON.stringify(value):String(value)}</span>)}</li>)}</ul>

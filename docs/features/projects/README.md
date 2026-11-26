@@ -25,7 +25,7 @@ the workflow also configures a repository is rejected to avoid two owners.
    it does not execute agents.
 4. **Register project** persists the project and registered commit. Invalid
    paths/repositories and access failures leave an actionable form error.
-5. Select the project in a task's **Workflow & repository** section and review
+5. Select the project in a task's **Workflow & repositories** section and review
    its base commit. Task worktrees start from the reviewed commit; uncommitted
    source changes remain in the original checkout.
 

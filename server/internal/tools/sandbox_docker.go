@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/sandboxcapacity"
 )
 
@@ -45,6 +47,7 @@ type DockerSandboxConfig struct {
 	// workspace volume, not the path inside the platform container.
 	HostDir           string
 	WorkspaceReadOnly bool
+	Repositories      []domain.TaskRepository
 	// Network: "none" (default) or a docker network name ("bridge").
 	Network string
 	CPU     string // e.g. "1.5"
@@ -97,6 +100,9 @@ func NewDockerSandbox(cfg DockerSandboxConfig) (*DockerSandbox, error) {
 	}
 	if cfg.Name == "" || cfg.Image == "" || cfg.HostDir == "" {
 		return nil, errors.New("docker sandbox: name, image and hostDir are required")
+	}
+	if err := domain.ValidateTaskRepositories(cfg.Repositories); err != nil {
+		return nil, err
 	}
 	if cfg.DockerBin == "" {
 		cfg.DockerBin = "docker"
@@ -168,17 +174,64 @@ func (s *DockerSandbox) RunArgs() []string {
 	for _, v := range c.Volumes {
 		args = append(args, "-v", v)
 	}
-	mount := c.HostDir + ":" + c.MountPoint
-	if c.WorkspaceReadOnly {
-		mount += ":ro"
-	}
-	args = append(args, "-v", mount, "-w", c.MountPoint)
+	args = append(args, WorkspaceMountArgs(c.HostDir, c.MountPoint, c.WorkspaceReadOnly, c.Repositories)...)
+	args = append(args, "-w", c.MountPoint)
 	if len(c.Command) > 0 {
 		args = append(args, "--pids-limit", "512", "--log-opt", "max-size=1m", "--log-opt", "max-file=1", "--entrypoint", c.Command[0], c.Image)
 		return append(args, c.Command[1:]...)
 	}
 	args = append(args, "--entrypoint", "sh", c.Image, "-c", "trap 'exit 0' TERM; while :; do sleep 3600 & wait $!; done")
 	return args
+}
+
+// WorkspaceMountArgs pins the parent directory in place. Only the explicitly
+// selected checkouts may be writable inside a multi-repository sandbox.
+func WorkspaceMountArgs(host, destination string, readOnly bool, repos []domain.TaskRepository) []string {
+	mount := host + ":" + destination
+	if readOnly || len(repos) > 0 {
+		mount += ":ro"
+	}
+	args := []string{"-v", mount}
+	for _, r := range repos {
+		m := path.Join(host, r.Alias) + ":" + path.Join(destination, r.Alias)
+		if readOnly {
+			m += ":ro"
+		}
+		args = append(args, "-v", m)
+	}
+	return args
+}
+
+func (s *DockerSandbox) verifyRepositoryMounts(ctx context.Context) error {
+	raw, err := s.docker(ctx, "inspect", "--format", "{{json .Mounts}}", s.cfg.Name)
+	if err != nil {
+		return err
+	}
+	var mounts []struct {
+		Source, Destination, Type string
+		RW                        bool
+	}
+	if err = json.Unmarshal([]byte(raw), &mounts); err != nil {
+		return err
+	}
+	expected := map[string]string{s.cfg.MountPoint: s.cfg.HostDir}
+	for _, r := range s.cfg.Repositories {
+		expected[path.Join(s.cfg.MountPoint, r.Alias)] = path.Join(s.cfg.HostDir, r.Alias)
+	}
+	for _, m := range mounts {
+		if m.Destination != s.cfg.MountPoint && !strings.HasPrefix(m.Destination, s.cfg.MountPoint+"/") {
+			continue
+		}
+		source, ok := expected[m.Destination]
+		if !ok || m.Type != "bind" || m.Source != source || m.RW != (m.Destination != s.cfg.MountPoint && !s.cfg.WorkspaceReadOnly) {
+			return errors.New("repository mount differs from the reviewed workspace")
+		}
+		delete(expected, m.Destination)
+	}
+	if len(expected) != 0 {
+		return errors.New("reviewed repository mount is missing")
+	}
+	return nil
 }
 
 // Start creates (or reuses) the sandbox container. Idempotent.
@@ -240,11 +293,15 @@ func (s *DockerSandbox) startContainer(ctx context.Context) error {
 	out, err := s.docker(ctx, "inspect", "-f", "{{.State.Running}}", s.cfg.Name)
 	if err == nil {
 		s.retained = true
-	} else if !strings.Contains(out, "No such object") && !strings.Contains(out, "No such container") {
+	} else if !strings.Contains(strings.ToLower(out), "no such object") && !strings.Contains(strings.ToLower(out), "no such container") {
 		s.retained = true // ambiguous inspection must never trigger destructive cleanup
 		return fmt.Errorf("inspect sandbox: %w: %s", err, out)
 	}
-	if err == nil && s.cfg.WorkspaceReadOnly {
+	if err == nil && len(s.cfg.Repositories) > 0 {
+		if e := s.verifyRepositoryMounts(ctx); e != nil {
+			return e
+		}
+	} else if err == nil && s.cfg.WorkspaceReadOnly {
 		format := fmt.Sprintf(`{{range .Mounts}}{{if eq .Destination %q}}{{.RW}}{{end}}{{end}}`, s.cfg.MountPoint)
 		rw, inspectErr := s.docker(ctx, "inspect", "--format", format, s.cfg.Name)
 		if inspectErr != nil || strings.TrimSpace(rw) != "false" {

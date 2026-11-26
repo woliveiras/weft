@@ -89,6 +89,19 @@ func jailWrite(inv *Invocation, p string) (abs, rel string, err error) {
 	if err != nil {
 		return "", "", err
 	}
+	if inv.Principal != nil && len(inv.Principal.Repositories) > 0 {
+		owner, child, _ := strings.Cut(filepath.ToSlash(rel), "/")
+		allowed := false
+		for _, r := range inv.Principal.Repositories {
+			if owner == r.Alias && child != "" {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return "", "", fmt.Errorf("%w: select a path within a reviewed checkout", ErrDenied)
+		}
+	}
 	for _, seg := range strings.Split(filepath.ToSlash(rel), "/") {
 		if strings.EqualFold(seg, ".git") {
 			return "", "", fmt.Errorf("%w: %s is inside a .git directory; repository internals are only changed through the git tools", ErrDenied, rel)

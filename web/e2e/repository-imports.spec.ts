@@ -20,7 +20,7 @@ test('imports from the Projects setup screen and returns to the registered repos
  await section.getByRole('checkbox').check();
  await section.getByRole('button', {name:'Import repository',exact:true}).click();
  await expect(section.getByRole('status')).toContainText('ready:');
- await section.getByRole('button', {name:'Use imported project',exact:true}).click();
+ await section.getByRole('button', {name:'Use imported repository',exact:true}).click();
  await expect(page).toHaveURL(/#\/projects$/);
  const table = page.getByRole('table', {name:'Registered projects'});
  await expect(table).toContainText(source);
@@ -44,11 +44,14 @@ test('imports a public snapshot, reuses it and starts a reviewed task in its own
  await expect(section.getByRole('status')).toContainText('ready:');
  const imports=await (await page.request.get('/api/v1/repository-imports',{headers})).json();const imported=imports.find((item:{url:string})=>item.url===source);
  const reused=await (await page.request.post('/api/v1/repository-imports',{headers,data:{url:source,ref:'HEAD',confirmed:true}})).json();expect(reused.attempt).toBe(imported.attempt);
- await section.getByRole('button',{name:'Use imported project'}).click();
+ await section.getByRole('button',{name:'Use imported repository'}).click();
  await page.getByRole('textbox',{name:'Request',exact:true}).fill('Explain the imported fixture. Do not change files.');
  await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption('import-task-flow');
  await openTaskSettings(page);
- await expect(page.getByRole('combobox',{name:'Project',exact:true})).toHaveValue(imported.projectId);
+ const field=page.getByRole('combobox',{name:'Repositories',exact:true});
+ await field.click();
+ await expect(page.getByRole('listbox',{name:'Repositories'}).getByRole('option',{selected:true})).toContainText(imported.commit.slice(0,12));
+ await field.press('Escape');
  await page.getByRole('button',{name:'Save draft',exact:true}).click();
  await expect(page).toHaveURL(/#\/tasks\/tsk_/);await page.reload();
  await expect(page.getByRole('region',{name:'Launch review',exact:true})).toBeVisible();

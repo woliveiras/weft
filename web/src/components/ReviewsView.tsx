@@ -71,6 +71,8 @@ export function ReviewCard({ review: r, reload, canDecide = true }: { review: Hu
   const ready = pending && r.session === 'ready';
   return <article className="card">
     <header><strong>{r.request.title}</strong> <Badge>{r.state}</Badge> <Badge>{r.session}</Badge></header>
+    {r.repositories&&<table aria-label="Candidate repositories"><thead><tr><th>Repository</th><th>Base</th><th>Reviewed HEAD</th><th>Changes</th></tr></thead><tbody>{Object.entries(r.repositories).map(([alias,state])=><tr key={alias}><th scope="row">{alias}</th><td><code>{state.base}</code></td><td><code>{state.head}</code></td><td>{state.dirty?'Uncommitted changes':state.changed?'Committed changes':'Unchanged'}{state.changed&&<CandidateDiff id={r.id} alias={alias}/>}</td></tr>)}</tbody></table>}
+    {r.verifiedChecks&&<section aria-label="Checks for this candidate"><h4>Checks for this candidate</h4><ul>{Object.entries(r.verifiedChecks).map(([name,status])=><li key={name}>{name} · {status}</li>)}</ul></section>}
     <p className="muted small">{r.graphId} / {r.nodeId} · Candidate {r.candidate.slice(0, 12)} · Preview generation {r.generation}</p>
     <p style={{ whiteSpace: 'pre-wrap' }}>{r.request.instructions}</p>
     {!!r.request.checks?.length && <details>
@@ -126,4 +128,19 @@ export function ReviewCard({ review: r, reload, canDecide = true }: { review: Hu
     </div> : <p>Decision by {r.decidedBy || 'system'} · {r.method} · {r.comment}</p>}
     <ErrorBox error={error}/>
   </article>;
+}
+
+function CandidateDiff({id,alias}:{id:string;alias:string}){
+  const [text,setText]=useState<string>();
+  const [error,setError]=useState<string>();
+  const [loading,setLoading]=useState(false);
+  const load=async()=>{
+    setLoading(true);setError(undefined);
+    try{setText((await api.reviewRepositoryDiff(id,alias)).diff);}
+    catch(e){setError(errorMessage(e));}finally{setLoading(false);}
+  };
+  return <details onToggle={e=>{if(e.currentTarget.open&&text===undefined&&!loading)void load();}}>
+    <summary>Review {alias} diff</summary>{loading&&<p>Loading diff…</p>}{error&&<ErrorBox error={error}/>}
+    {text!==undefined&&<pre>{text||'No textual changes.'}</pre>}
+  </details>;
 }

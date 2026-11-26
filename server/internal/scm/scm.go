@@ -541,3 +541,24 @@ func (m Manager) event(ctx context.Context, p *tools.Principal, typ domain.Event
 	}
 	m.Bus.Publish(context.WithoutCancel(ctx), domain.NewEvent(typ, p.GraphID, data).WithNode(p.NodeID, p.Replica).WithExecution(p.ExecutionID))
 }
+
+// PublicRemoteURL resolves the configured clone address without opening credentials.
+func (c Connection) PublicRemoteURL() string {
+	if c.GitURL != "" {
+		return c.GitURL
+	}
+	switch c.Kind {
+	case "github":
+		return "https://github.com/" + c.Repository + ".git"
+	case "bitbucket-cloud":
+		return "https://bitbucket.org/" + c.Repository + ".git"
+	case "bitbucket-dc":
+		project, slug, ok := strings.Cut(c.Repository, "/")
+		if ok {
+			return strings.TrimRight(c.APIURL, "/") + "/scm/" + strings.ToLower(project) + "/" + slug + ".git"
+		}
+	}
+	return ""
+}
+
+func ValidBaseBranch(name string) bool { return validBranch(name) }

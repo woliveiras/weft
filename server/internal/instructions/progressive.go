@@ -149,57 +149,88 @@ func (m Manager) Prepare(ctx context.Context, g *domain.Graph, n *domain.Node, r
 		if err != nil {
 			return nil, nil, ErrWorkspaceUnavailable
 		}
-		candidates, omissions := discoverSkills(repoRoot, blocked)
-		packages := map[string]bool{}
-		names := map[string]bool{}
-		for _, c := range candidates {
-			selection := "repository:" + c.name
-			catalogue := catalogueText(selection, c.name, c.description)
-			e := Entry{Scope: "repository-skill", Source: c.alias + "/SKILL.md", Canonical: c.pkg + "/SKILL.md",
-				Stage: "catalogue", Description: c.description, DeclaredVersion: c.version, LockStatus: c.lockStatus,
-				SHA256: hash(catalogue)}
-			p := progressiveEntry{entry: e, repo: &c}
-			switch {
-			case packages[c.pkg]:
-				p.entry.Reason = "alias"
-			case names[c.name]:
-				p.entry.Reason = "shadowed_by_repository"
-			default:
-				p.entry.Selection = selection
-				p.content = catalogue
-				names[c.name] = true
+		collect := func(repoRoot *os.File, member string) {
+			candidates, omissions := discoverSkills(repoRoot, blocked)
+			packages := map[string]bool{}
+			names := map[string]bool{}
+			for _, c := range candidates {
+				c.member = member
+				selection := "repository:" + path.Join(member, c.name)
+				catalogue := catalogueText(selection, c.name, c.description)
+				e := Entry{Scope: "repository-skill", Source: path.Join(member, c.alias, "SKILL.md"), Canonical: path.Join(member, c.pkg, "SKILL.md"),
+					Stage: "catalogue", Description: c.description, DeclaredVersion: c.version, LockStatus: c.lockStatus,
+					SHA256: hash(catalogue)}
+				p := progressiveEntry{entry: e, repo: &c}
+				switch {
+				case packages[c.pkg]:
+					p.entry.Reason = "alias"
+				case names[c.name]:
+					p.entry.Reason = "shadowed_by_repository"
+				default:
+					p.entry.Selection = selection
+					p.content = catalogue
+					names[c.name] = true
+				}
+				packages[c.pkg] = true
+				repoItems = append(repoItems, p)
 			}
-			packages[c.pkg] = true
-			repoItems = append(repoItems, p)
+			for _, e := range omissions {
+				e.Source = path.Join(member, e.Source)
+				if e.Canonical != "" {
+					e.Canonical = path.Join(member, e.Canonical)
+				}
+				repoItems = append(repoItems, progressiveEntry{entry: e})
+			}
+			slices.SortStableFunc(repoItems, func(a, b progressiveEntry) int {
+				return strings.Compare(canonicalSource(a.entry), canonicalSource(b.entry))
+			})
+			chosen := false
+			for _, src := range rootInstructions {
+				e := Entry{Scope: "repository", Source: path.Join(member, src.file), Stage: "instruction"}
+				var body string
+				if blocked[src.family] {
+					e.Reason = "blocked_source"
+				} else if chosen {
+					e.Reason = "fallback_not_selected"
+				} else {
+					body, e.Reason = readRepoText(repoRoot, src.file)
+					chosen = e.Reason != "missing"
+				}
+				if body != "" {
+					e.SHA256 = hash(body)
+				}
+				repoItems = append(repoItems, progressiveEntry{entry: e, content: body})
+			}
 		}
-		for _, e := range omissions {
-			repoItems = append(repoItems, progressiveEntry{entry: e})
-		}
-		slices.SortStableFunc(repoItems, func(a, b progressiveEntry) int {
-			return strings.Compare(canonicalSource(a.entry), canonicalSource(b.entry))
-		})
-		chosen := false
-		for _, src := range rootInstructions {
-			e := Entry{Scope: "repository", Source: src.file, Stage: "instruction"}
-			var body string
-			if blocked[src.family] {
-				e.Reason = "blocked_source"
-			} else if chosen {
-				e.Reason = "fallback_not_selected"
-			} else {
-				body, e.Reason = readRepoText(repoRoot, src.file)
-				chosen = e.Reason != "missing"
+		if len(g.Spec.Workspace.Repositories) == 0 {
+			collect(repoRoot, "")
+		} else {
+			for _, binding := range g.Spec.Workspace.Repositories {
+				member, openErr := openRepoPath(repoRoot, binding.Alias, true)
+				if openErr != nil {
+					repoItems = append(repoItems, progressiveEntry{entry: Entry{Scope: "repository", Source: binding.Alias, Reason: "workspace_unavailable"}})
+					continue
+				}
+				collect(member, binding.Alias)
+				member.Close()
 			}
-			if body != "" {
-				e.SHA256 = hash(body)
-			}
-			repoItems = append(repoItems, progressiveEntry{entry: e, content: body})
 		}
 	}
 	turn.items = append(repoItems, managed...)
 	if g.Spec.Instructions.ProjectSteering {
 		all := &Snapshot{Budget: MaxEntries * (MaxBytes + 4096)}
-		project(all, steeringRoot)
+		if len(g.Spec.Workspace.Repositories) == 0 {
+			project(all, steeringRoot)
+		} else {
+			for _, binding := range g.Spec.Workspace.Repositories {
+				local := &Snapshot{Budget: all.Budget}
+				project(local, path.Join(steeringRoot, binding.Alias))
+				for _, e := range local.Entries {
+					e.Source = path.Join(binding.Alias, e.Source)
+					all.Entries = append(all.Entries, e)
+				}
+			}
+		}
 		for _, e := range all.Entries {
 			content := e.Body
 			if !safeRelative(e.Source) {
@@ -309,7 +340,7 @@ func (s *Session) OmitToolCallLimit(ctx context.Context, selection, reference st
 		e.Scope, e.Source, e.Selection = item.entry.Scope, item.entry.Source, item.entry.Selection
 		e.Order, e.Revision = item.entry.Order, item.entry.Revision
 		if reference != "" && item.repo != nil && validReference(reference) {
-			e.Source = path.Join(item.repo.pkg, reference)
+			e.Source = path.Join(item.repo.member, item.repo.pkg, reference)
 		}
 	}
 	return s.omitRequest(ctx, e, "tool_call_limit")
@@ -347,7 +378,7 @@ func (s *Session) Load(ctx context.Context, selection, reference string) (_ stri
 		if item.repo == nil || !validReference(reference) {
 			return s.omitRequest(ctx, e, "invalid_reference")
 		}
-		e.Source = path.Join(item.repo.pkg, reference)
+		e.Source = path.Join(item.repo.member, item.repo.pkg, reference)
 		e.Canonical = ""
 		if !s.applied[selection+"\x00"] {
 			return s.omitRequest(ctx, e, "body_not_loaded")
@@ -377,7 +408,7 @@ func (s *Session) Load(ctx context.Context, selection, reference string) (_ stri
 			return s.omitRequest(ctx, e, "permission_denied")
 		}
 		s.references[key] = true
-		content, reason, err = s.ReadReference(ctx, item.repo.pkg, e.Source, func() (string, string) {
+		content, reason, err = s.ReadReference(ctx, path.Join(item.repo.member, item.repo.pkg), e.Source, func() (string, string) {
 			return s.readRepository(*item.repo, reference)
 		})
 		if err != nil {
@@ -421,7 +452,7 @@ func (s *Session) offerRepositoryFallback(ctx context.Context, console progressi
 		}
 		entry := item.entry
 		entry.Record = 0
-		entry.Selection = "repository:" + item.repo.name
+		entry.Selection = "repository:" + path.Join(item.repo.member, item.repo.name)
 		cost := len(renderEntry(entry, item.content))
 		if cost > s.snapshot.Budget {
 			if _, err := s.omitRequest(ctx, entry, "token_budget"); err != nil {
@@ -469,6 +500,14 @@ func (s *Session) readRepository(c repoCandidate, reference string) (string, str
 	info, err := root.Stat()
 	if err != nil || !os.SameFile(s.rootInfo, info) {
 		return "", "source_changed"
+	}
+	if c.member != "" {
+		member, err := openRepoPath(root, c.member, true)
+		if err != nil {
+			return "", "source_changed"
+		}
+		defer member.Close()
+		root = member
 	}
 	pkg, canonical, reason := openPackage(root, c.alias, s.blocked)
 	if reason != "" {

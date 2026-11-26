@@ -80,7 +80,7 @@
         "review.session", "review.session_failed", "review.session_stopped", "sandbox.capacity",
         "sandbox.lifecycle", "scm.branch_pushed", "scm.connection_changed", "scm.pull_request_opened", "scm.review_summary_published", "scm.review_route_change_requested", "scm.review_route_recovery_requested",
         "task.authorization_decision", "task.authorization_preference_requested", "task.authorization_requested", "task.draft_save_requested", "task.prompt_resolution", "task.retry_requested",
-        "task.transition_requested", "task.workspace_cleanup_completed", "task.workspace_cleanup_requested", "tool.completed",
+        "task.repository_prepared", "task.repository_failed", "task.repository_delivery", "task.transition_requested", "task.workspace_cleanup_completed", "task.workspace_cleanup_requested", "tool.completed",
         "tool.denied", "tool.invoked", "trigger.changed", "tracker.connection_change_requested", "tracker.jira_cloud_profile_change_requested", "tracker.transition_sync_requested", "tracker.lifecycle_sync_recovery_requested", "tracker.workflow_mapping_change_requested", "trigger.failed_retry_requested", "trigger.hold_resolved",
         "trigger.note", "trigger.run", "workspace.observed"
       ]

@@ -35,6 +35,7 @@ func (s *Server) inspectGit(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	var reviewedBase []string
 	if strings.HasPrefix(g.Metadata.ID, taskrun.GraphPrefix) {
 		task, e := (taskconfig.Manager{Store: s.Store}).Get(r.Context(), g.Metadata.Labels["weft.task"])
 		if e != nil {
@@ -43,7 +44,39 @@ func (s *Server) inspectGit(w http.ResponseWriter, r *http.Request) error {
 		if !validInspectionTask(g, task) {
 			return badRequest("invalid task workspace binding")
 		}
-		if task.ProjectID != "" {
+		if len(task.Repositories) > 0 {
+			alias := r.URL.Query().Get("repository")
+			if alias == "" {
+				return badRequest("select a repository for Git inspection")
+			}
+			var projectID string
+			for _, repo := range task.Repositories {
+				if repo.Alias == alias {
+					projectID = repo.ProjectID
+					reviewedBase = []string{repo.BaseCommit}
+					break
+				}
+			}
+			if projectID == "" || root != base {
+				return badRequest("unknown repository or incompatible replica workspace")
+			}
+			project, e := (projectconfig.Manager{Store: s.Store}).Get(r.Context(), projectID)
+			if e != nil {
+				return e
+			}
+			taskRoot, e := filepath.EvalSymlinks(s.Workspaces.Root)
+			if e != nil {
+				return e
+			}
+			root = filepath.Join(taskRoot, g.Metadata.ID, alias)
+			base, e = (projectconfig.Manager{Store: s.Store}).TaskInspectionBase(r.Context(), project, g.Metadata.ID, root, alias)
+			if e != nil {
+				return e
+			}
+			if _, _, e = browsePath(root, path); e != nil {
+				return badRequest("invalid repository path")
+			}
+		} else if task.ProjectID != "" {
 			expected, e := filepath.EvalSymlinks(filepath.Join(s.Workspaces.Root, g.Metadata.ID))
 			actual, actualErr := filepath.EvalSymlinks(base)
 			if e != nil || actualErr != nil || expected != actual {
@@ -63,7 +96,7 @@ func (s *Server) inspectGit(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 	}
-	result, err := s.Workspaces.Inspect(r.Context(), root, base, view, path)
+	result, err := s.Workspaces.Inspect(r.Context(), root, base, view, path, reviewedBase...)
 	if err != nil {
 		return err
 	}

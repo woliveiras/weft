@@ -98,6 +98,26 @@ Invalid proposals retain the request and explain the missing configuration.
 Interpretation never grants tools or execution consent. The console continues
 to use save/review/start endpoints; `/tasks/submit` keeps its existing API contract.
 
+### Work across several repositories
+
+For a change spanning infrastructure, backend and frontend, use the **Repositories** dropdown beside **Workflow**. Type a name or URL
+and select each repository. Each choice updates the task immediately. The
+count includes options hidden by the search. Press Escape or click outside
+to close the list. A missing suggestion can be removed or replaced.
+
+Each selected project has a directory and a pinned commit. Expand **Repository
+details** to inspect the full commit, edit its directory, require a project
+check, or choose its PR connection and base branch. For PR delivery, configure
+a destination for every project. For local work, leave every connection empty.
+**Review task** shows the saved set, checks and destinations. **Run task** starts
+the reviewed version in a shared Docker workspace.
+
+In **Changes & checks**, choose a repository to inspect its changes. A joint
+check declared in infra can exercise backend and frontend in the same workspace.
+The review captures each diff and the check outcomes. **Overview** shows one row
+per repository with preparation, delivery status and the confirmed PR link.
+After partial delivery an administrator can retry a pending repository there.
+
 ## 3. Access modes and mandatory approvals
 
 The access review describes the receiving agents, tool grants and execution

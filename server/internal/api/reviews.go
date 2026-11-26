@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/woliveiras/weft/server/internal/review"
-	"github.com/woliveiras/weft/server/internal/storage"
-	"github.com/woliveiras/weft/server/internal/tools"
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/woliveiras/weft/server/internal/review"
+	"github.com/woliveiras/weft/server/internal/storage"
+	"github.com/woliveiras/weft/server/internal/tools"
 )
 
 func (s *Server) listReviews(w http.ResponseWriter, r *http.Request) error {
@@ -118,5 +119,24 @@ func (s *Server) reviewAction(w http.ResponseWriter, r *http.Request) error {
 	v := record.View()
 	v["revision"] = record.Generation
 	writeJSON(w, 200, v)
+	return nil
+}
+
+func (s *Server) reviewRepositoryDiff(w http.ResponseWriter, r *http.Request) error {
+	if s.Reviews == nil {
+		return badRequest("reviews unavailable")
+	}
+	record, err := s.Reviews.Get(r.Context(), r.PathValue("review"))
+	if err != nil {
+		return err
+	}
+	if !record.Allows(identityFrom(r.Context()).Name) {
+		return tools.ErrDenied
+	}
+	patch, err := record.RepositoryDiff(r.PathValue("alias"))
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"diff": patch})
 	return nil
 }

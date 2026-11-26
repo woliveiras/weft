@@ -79,11 +79,12 @@ var (
 // that Dir is, or is a subdirectory of); an enclosing repository is never
 // checkpointed.
 type CheckpointScope struct {
-	GraphID string
-	NodeID  string
-	Replica int
-	Dir     string
-	Base    string
+	Repository *domain.TaskRepository
+	GraphID    string
+	NodeID     string
+	Replica    int
+	Dir        string
+	Base       string
 }
 
 // CheckpointMeta describes why a checkpoint is recorded.
@@ -420,10 +421,11 @@ func exitCode(err error) int {
 }
 
 type checkpointRepo struct {
-	git    *checkpointGit
-	top    string // repository top level (symlinks resolved)
-	prefix string // scope directory relative to top, slash-separated; "" = top
-	format string // object format: sha1 or sha256
+	reviewedHead string
+	git          *checkpointGit
+	top          string // repository top level (symlinks resolved)
+	prefix       string // scope directory relative to top, slash-separated; "" = top
+	format       string // object format: sha1 or sha256
 }
 
 func hasGitEntry(dir string) bool {
@@ -434,6 +436,9 @@ func hasGitEntry(dir string) bool {
 func (m *Manager) openCheckpointRepo(ctx context.Context, s CheckpointScope) (*checkpointRepo, error) {
 	if !validRefPart(s.GraphID) || !validRefPart(s.NodeID) || s.Replica < 0 {
 		return nil, fmt.Errorf("invalid checkpoint scope")
+	}
+	if s.Repository != nil {
+		return m.memberCheckpointRepo(ctx, s)
 	}
 	dir, err := filepath.EvalSymlinks(s.Dir)
 	if err != nil {
@@ -526,7 +531,11 @@ func (r *checkpointRepo) record(ctx context.Context, s CheckpointScope, meta Che
 	ig := r.git.with("GIT_INDEX_FILE=" + filepath.Join(tmp, "index"))
 
 	head := ""
-	out, err := ig.run(ctx, nil, "rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+	sourceRef := "HEAD"
+	if r.reviewedHead != "" {
+		sourceRef = r.reviewedHead
+	}
+	out, err := ig.run(ctx, nil, "rev-parse", "--verify", "--quiet", sourceRef+"^{commit}")
 	switch {
 	case err == nil:
 		head = strings.TrimSpace(string(out))

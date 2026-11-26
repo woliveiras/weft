@@ -7,15 +7,15 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
-
-	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/observability"
 	"github.com/woliveiras/weft/server/internal/tools"
 	"github.com/woliveiras/weft/server/internal/workspace"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Worktree checkpoints (NAT-07). Every model call starts a round; the first
@@ -41,13 +41,29 @@ func (t *turnEnv) beforeMutation(ctx context.Context, tool string) {
 	if !due {
 		return
 	}
-	t.gr.e.recordCheckpoint(ctx, t.gr.g, t.n.ID, t.r.index, t.principal.Workdir, t.principal.Actor,
-		workspace.CheckpointMeta{ExecutionID: t.x.ID, Reason: workspace.CheckpointBeforeEdit, Tool: tool})
+	meta := workspace.CheckpointMeta{ExecutionID: t.x.ID, Reason: workspace.CheckpointBeforeEdit, Tool: tool}
+	if repos := t.gr.g.Spec.Workspace.Repositories; len(repos) > 0 {
+		for _, r := range repos {
+			t.gr.e.recordCheckpoint(ctx, t.gr.g, t.n.ID, t.r.index, filepath.Join(t.principal.Workdir, r.Alias), t.principal.Actor, meta)
+		}
+		return
+	}
+	t.gr.e.recordCheckpoint(ctx, t.gr.g, t.n.ID, t.r.index, t.principal.Workdir, t.principal.Actor, meta)
 }
 
 func (e *Engine) checkpointScope(g *domain.Graph, node string, replica int, dir string) (workspace.CheckpointScope, error) {
 	base, err := e.opt.Workspaces.GraphDir(g)
-	return workspace.CheckpointScope{GraphID: g.Metadata.ID, NodeID: node, Replica: replica, Dir: dir, Base: base}, err
+	scope := workspace.CheckpointScope{GraphID: g.Metadata.ID, NodeID: node, Replica: replica, Dir: dir, Base: base}
+	if len(g.Spec.Workspace.Repositories) > 0 {
+		for _, r := range g.Spec.Workspace.Repositories {
+			if dir == filepath.Join(base, r.Alias) {
+				scope.Repository = &r
+				return scope, err
+			}
+		}
+		return scope, fmt.Errorf("%w: select a reviewed repository for this checkpoint", ErrInvalid)
+	}
+	return scope, err
 }
 
 // recordCheckpoint records before an edit. A failure is reported (event,
@@ -138,7 +154,7 @@ func (e *Engine) restoreCheckpoint(ctx context.Context, g *domain.Graph, node st
 }
 
 // ListCheckpoints lists a graph's checkpoints, newest first.
-func (e *Engine) ListCheckpoints(ctx context.Context, graphID string) ([]workspace.Checkpoint, error) {
+func (e *Engine) ListCheckpoints(ctx context.Context, graphID string, repository ...string) ([]workspace.Checkpoint, error) {
 	g, _, err := e.GetGraph(ctx, graphID, 0)
 	if err != nil {
 		return nil, err
@@ -147,13 +163,23 @@ func (e *Engine) ListCheckpoints(ctx context.Context, graphID string) ([]workspa
 	if err != nil {
 		return nil, err
 	}
+	if len(g.Spec.Workspace.Repositories) > 0 {
+		if len(repository) != 1 {
+			return nil, fmt.Errorf("%w: select a checkpoint repository", ErrInvalid)
+		}
+		scope, err := e.checkpointScope(g, "viewer", 0, filepath.Join(base, repository[0]))
+		if err != nil || scope.Repository == nil || scope.Repository.Alias != repository[0] {
+			return nil, fmt.Errorf("%w: invalid checkpoint repository", ErrInvalid)
+		}
+		return e.opt.Workspaces.MemberCheckpoints(ctx, scope)
+	}
 	return e.opt.Workspaces.GraphCheckpoints(ctx, base, g.Metadata.ID)
 }
 
 // RestoreCheckpoint restores a replica's workspace for a person: checkpoint
 // id, or the newest checkpoint recorded before an edit of node/replica. It
 // is refused while that replica runs a turn on this instance.
-func (e *Engine) RestoreCheckpoint(ctx context.Context, graphID, node string, replica int, id, actor string) (*workspace.RestoreResult, error) {
+func (e *Engine) RestoreCheckpoint(ctx context.Context, graphID, node string, replica int, id, actor string, repository ...string) (*workspace.RestoreResult, error) {
 	if id != "" {
 		n, rep, _, err := workspace.ParseCheckpointID(id)
 		if err != nil {
@@ -181,6 +207,12 @@ func (e *Engine) RestoreCheckpoint(ctx context.Context, graphID, node string, re
 	dir, err := e.opt.Workspaces.ReplicaDir(g, n, replica)
 	if err != nil {
 		return nil, err
+	}
+	if len(g.Spec.Workspace.Repositories) > 0 {
+		if len(repository) != 1 || !domain.ValidRepositoryAlias(repository[0]) {
+			return nil, fmt.Errorf("%w: select a checkpoint repository", ErrInvalid)
+		}
+		dir = filepath.Join(dir, repository[0])
 	}
 	if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("%w: workspace of %s replica %d", ErrNotFound, node, replica)
@@ -212,21 +244,30 @@ func (e *Engine) CheckpointTools() []tools.Tool {
 	return tools.CheckpointTools(e.agentListCheckpoints, e.agentRestoreCheckpoint)
 }
 
-func (e *Engine) agentScope(ctx context.Context, p *tools.Principal) (*domain.Graph, workspace.CheckpointScope, error) {
+func (e *Engine) agentScope(ctx context.Context, inv *tools.Invocation) (*domain.Graph, workspace.CheckpointScope, error) {
 	if e.opt.Workspaces == nil {
 		return nil, workspace.CheckpointScope{}, errors.New("checkpoints are unavailable: no workspace manager")
 	}
+	p := inv.Principal
 	g, _, err := e.GetGraph(ctx, p.GraphID, p.GraphVersion)
 	if err != nil {
 		return nil, workspace.CheckpointScope{}, err
 	}
-	scope, err := e.checkpointScope(g, p.NodeID, p.Replica, p.Workdir)
+	dir := p.Workdir
+	if len(g.Spec.Workspace.Repositories) > 0 {
+		var a struct{ Repository string }
+		if json.Unmarshal(inv.Args, &a) != nil || !domain.ValidRepositoryAlias(a.Repository) {
+			return nil, workspace.CheckpointScope{}, fmt.Errorf("%w: select a checkpoint repository", ErrInvalid)
+		}
+		dir = filepath.Join(dir, a.Repository)
+	}
+	scope, err := e.checkpointScope(g, p.NodeID, p.Replica, dir)
 	return g, scope, err
 }
 
 func (e *Engine) agentListCheckpoints(ctx context.Context, inv *tools.Invocation) (*tools.Result, error) {
 	p := inv.Principal
-	_, scope, err := e.agentScope(ctx, p)
+	_, scope, err := e.agentScope(ctx, inv)
 	if err != nil {
 		return nil, err
 	}
@@ -266,11 +307,11 @@ func (e *Engine) agentRestoreCheckpoint(ctx context.Context, inv *tools.Invocati
 		return nil, fmt.Errorf("invalid arguments: %w", err)
 	}
 	p := inv.Principal
-	g, _, err := e.agentScope(ctx, p)
+	g, scope, err := e.agentScope(ctx, inv)
 	if err != nil {
 		return nil, err
 	}
-	res, err := e.restoreCheckpoint(ctx, g, p.NodeID, p.Replica, p.Workdir, args.Checkpoint, "agent", p.Actor,
+	res, err := e.restoreCheckpoint(ctx, g, p.NodeID, p.Replica, scope.Dir, args.Checkpoint, "agent", p.Actor,
 		workspace.CheckpointMeta{ExecutionID: p.ExecutionID, Tool: "checkpoint.restore"})
 	if err != nil {
 		return nil, err

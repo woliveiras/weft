@@ -513,6 +513,15 @@ as `filesystem.read` and `filesystem.search` and need no new permission.
 Tool descriptions and argument names are short so small local models can
 call them; the scripted evaluation is unchanged (4/4 scripted, 0/4 lazy).
 
+### Named checkouts
+
+A multi-repository task gives a native agent one shared Docker workspace with
+a named directory for each project. Read and edit files using paths such as
+`backend/api.go`. Supply `repository` for Git and checkpoint tools. Repository
+instructions identify their source and skills use identifiers such as
+`repository:backend/contract`. Call `check.run` with the qualified check name
+from the task. The gateway records the participating checkouts with its result.
+
 ## Verification loop (NAT-05)
 
 Projects and workflows declare **checks**: a name (`test`, `lint`, `build`

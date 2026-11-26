@@ -4,10 +4,11 @@ import type {Project} from '../api/tasks';
 import type {Graph, SCMConnection, WorkflowTaskDefaults as Defaults} from '../api/types';
 import {Btn, ErrorBox} from './common';
 import {HelpField} from './FieldHelp';
-import {projectChoiceLabel} from './taskDefaults';
+import {RepositoryPicker} from './RepositoryPicker';
+import {taskCreateLink} from './taskEntryContext';
 
 /** Suggestions join the complete workflow draft; this form never saves or starts it. */
-export function WorkflowTaskDefaults({graph,onChange,editable}:{graph:Graph;onChange:(update:(graph:Graph)=>Graph)=>void;editable:boolean}) {
+export function WorkflowTaskDefaults({graph,onChange,editable,dirty=false}:{dirty?:boolean;graph:Graph;onChange:(update:(graph:Graph)=>Graph)=>void;editable:boolean}) {
  const value=graph.spec.task??{};
  const nodes=graph.spec.nodes.filter(node=>!node.disabled);
  const inputs=(graph.spec.channels??[]).filter(channel=>!channel.from&&!channel.when&&(!channel.type||channel.type==='queue')&&channel.to?.length===1&&nodes.some(node=>node.id===channel.to?.[0]));
@@ -51,17 +52,20 @@ export function WorkflowTaskDefaults({graph,onChange,editable}:{graph:Graph;onCh
   {value.channelId&&<HelpField label="Default message type" help="A concrete type for requests sent to this ingress, for example work.request. New tasks generate an editable title/description payload; no arbitrary payload is stored here.">
    <input disabled={!editable} value={value.messageType??''} maxLength={128} required onChange={event=>change({messageType:event.target.value||undefined})}/>
   </HelpField>}
-  <HelpField label="Default project" help="Suggests this registered repository for new tasks. A project selected at task entry or explicitly in the task wins. The task captures its concrete base commit; missing projects require correction.">
-   <select disabled={!editable} value={value.projectId??''} onChange={event=>change({projectId:event.target.value||undefined})}>
-    <option value="">No project preference</option>{value.projectId&&!projects?.some(project=>project.id===value.projectId)&&<option value={value.projectId}>{value.projectId} (not available in loaded projects)</option>}{projects?.map(project=><option key={project.id} value={project.id}>{projectChoiceLabel(project)}</option>)}
-   </select>
-  </HelpField>
-  {!projects&&!projectError&&<p role="status">Loading projects…</p>}<ErrorBox error={projectError&&`Could not load projects. ${projectError}`}/>
-  <HelpField label="Default source control connection" help="Suggests the connection for PR delivery. Selecting it does not grant push/PR tools or waive approval. Admission rechecks the connection, repository and result agent's permissions.">
-   <select disabled={!editable} value={value.scmConnection??''} onChange={event=>change({scmConnection:event.target.value||undefined})}>
+  <RepositoryPicker label="Suggested repositories" help="These repositories are preselected in new tasks using this workflow version. Leave the field empty for no preference."
+    projects={projects ?? []} ids={value.projectIds ?? (value.projectId ? [value.projectId] : [])}
+    disabled={!editable || !projects} loading={!projects && !projectError} onChange={ids => {
+      if (!value.projectIds && ids.length <= 1) change({projectId: ids[0]});
+      else change({projectIds: ids, projectId: undefined, scmConnection: undefined});
+    }}/>
+  <button type="button" className="btn" disabled={dirty||!graph.metadata.version} onClick={()=>{location.hash=taskCreateLink({workflow:graph.metadata.id});}}>New task with these defaults</button>
+  {!projects&&!projectError&&<p role="status">Loading repositories…</p>}<ErrorBox error={projectError&&`Could not load repositories. ${projectError}`}/>
+  {!value.projectIds?.length&&<HelpField label="Default source control connection" help="Suggests the connection for PR delivery. Selecting it does not grant push/PR tools or waive approval. Admission rechecks the connection, repository and result agent's permissions.">
+   <select disabled={!editable} value={value.scmConnection??''} onChange={event=>change({projectIds:undefined,scmConnection:event.target.value||undefined})}>
     <option value="">No delivery preference</option>{value.scmConnection&&!connections?.some(connection=>connection.name===value.scmConnection)&&<option value={value.scmConnection}>{value.scmConnection} (not available in loaded connections)</option>}{connections?.map(connection=><option key={connection.name} value={connection.name}>{connection.name} · {connection.repository}</option>)}
    </select>
   </HelpField>
+  }
   {!connections&&!connectionError&&<p role="status">Loading source control connections…</p>}<ErrorBox error={connectionError&&`Could not load source control connections. ${connectionError}`}/>
   {(projectError||connectionError)&&<Btn small onClick={()=>setAttempt(attempt+1)}>Retry resource discovery</Btn>}
   {!editable&&<p className="muted small">An administrator can change these workflow defaults.</p>}

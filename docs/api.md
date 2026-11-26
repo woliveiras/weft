@@ -833,6 +833,36 @@ source, console revision or repository digest. New entries exclude body
 copies. A missing snapshot returns 404. The console links this manifest
 from Activity through the execution's **Guidance** section.
 
+## Multi-repository manual tasks
+
+`POST /api/v1/tasks` and revision-checked `PUT /api/v1/tasks/{tid}` accept
+`repositories`. Send the complete list on edits, including `[]` to clear it.
+The singular `projectId`, `baseCommit` and `scmConnection` fields continue to
+represent the existing single-repository layout. Combining them with an explicit
+list is a validation error. Workflow suggestions are stored as project IDs in
+`spec.task.projectIds`. Drafts pin the projects independently.
+
+| Member field | Meaning |
+| --- | --- |
+| `alias`, `projectId`, `baseCommit` | Unique portable directory name, registered project ID and full Git commit |
+| `sourceRef`, `checks`, `requiredChecks` | Source ref, registered check definitions and the subset of check names required by this task |
+| `scmConnection`, `connectionRevision`, `repository`, `targetBranch` | PR connection name, its returned `updatedAt`, repository identity and base branch. Configure every member when requesting PRs. |
+
+`GET /api/v1/tasks/{tid}/review` returns the saved bindings and admission
+blockers. `GET /api/v1/tasks/{tid}/progress` returns preparation, delivery and
+confirmed PR information under `repositories`. Current workspace fingerprints
+are available at `GET /api/v1/tasks/{tid}/repository-states`. Git inspection
+and checkpoint listing take `?repository={alias}` for these tasks. Reviewers
+can read the frozen patch for a changed member at
+`GET /api/v1/reviews/{review}/repositories/{alias}/diff`.
+
+An administrator can reconcile an outstanding delivery on a task in
+`delivery_pending` with `POST /api/v1/tasks/{tid}/repositories/{alias}/deliver`,
+the current task revision in `If-Match` and body `{"confirm":true}`. The
+gateway checks authorization, the approved candidate, current check evidence
+and the remote before applying either operation. Previous confirmed PRs
+remain attached to the original task.
+
 ## Durable application reviews
 
 These routes require an operator/admin and the review's optional reviewer allowlist.

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
@@ -22,6 +23,7 @@ var taskCheckoutID = regexp.MustCompile(`^task-run-([a-z0-9]+|h-[a-z2-7]{52})$`)
 // TaskCheckout is platform-owned admission provenance, outside the repository
 // an agent can edit. A repository marker never authorizes cleanup or inspection.
 type TaskCheckout struct {
+	Alias       string `json:"alias,omitempty"`
 	ProjectID   string `json:"projectId"`
 	GraphID     string `json:"graphId"`
 	Base        string `json:"base"`
@@ -30,22 +32,42 @@ type TaskCheckout struct {
 }
 
 func (b TaskCheckout) valid(p *Project, graphID, dir string) bool {
-	return p != nil && b.ProjectID == p.ID && b.GraphID == graphID && taskCheckoutID.MatchString(graphID) && commitPattern.MatchString(b.Base) &&
-		filepath.IsAbs(dir) && filepath.Clean(dir) == dir && b.Path == dir && filepath.Base(dir) == graphID &&
-		b.ArchivePath == filepath.Join(filepath.Dir(dir), ".task-checkouts", graphID+".git") && dir != p.Path
+	if p == nil || b.ProjectID != p.ID || b.GraphID != graphID || !taskCheckoutID.MatchString(graphID) || !commitPattern.MatchString(b.Base) || !filepath.IsAbs(dir) || filepath.Clean(dir) != dir || b.Path != dir || dir == p.Path {
+		return false
+	}
+	taskDir := dir
+	archive := graphID + ".git"
+	if b.Alias != "" {
+		if !domain.ValidRepositoryAlias(b.Alias) || filepath.Base(dir) != b.Alias {
+			return false
+		}
+		taskDir = filepath.Dir(dir)
+		archive = filepath.Join(graphID, b.Alias+".git")
+	}
+	return filepath.Base(taskDir) == graphID && b.ArchivePath == filepath.Join(filepath.Dir(taskDir), ".task-checkouts", archive)
 }
 
-func (m Manager) GetTaskCheckout(ctx context.Context, graphID string) (*TaskCheckout, error) {
+func (m Manager) GetTaskCheckout(ctx context.Context, graphID string, member ...string) (*TaskCheckout, error) {
 	if !taskCheckoutID.MatchString(graphID) {
 		return nil, ErrInvalid
 	}
-	s, err := m.Store.GetSetting(ctx, checkoutPrefix+graphID)
+	key := checkoutPrefix + graphID
+	if len(member) > 0 {
+		if len(member) != 1 || !domain.ValidRepositoryAlias(member[0]) {
+			return nil, ErrInvalid
+		}
+		key += "/" + member[0]
+	}
+	s, err := m.Store.GetSetting(ctx, key)
 	if err != nil {
 		return nil, err
 	}
 	var b TaskCheckout
 	if err = json.Unmarshal(s.Value, &b); err != nil {
 		return nil, err
+	}
+	if len(member) > 0 && b.Alias != member[0] {
+		return nil, ErrInvalid
 	}
 	return &b, nil
 }
@@ -55,7 +77,7 @@ func (m Manager) GetTaskCheckout(ctx context.Context, graphID string) (*TaskChec
 // source refs, hooks, remotes, configuration and dirty files are never copied.
 // Failed preparation retains its durable binding and partial checkout for
 // inspection; neither retry nor an existing directory is silently replaced.
-func (m Manager) CreateTaskCheckout(ctx context.Context, p *Project, commit, root, graphID, actor string) (string, error) {
+func (m Manager) CreateTaskCheckout(ctx context.Context, p *Project, commit, root, graphID, actor string, member ...string) (string, error) {
 	if err := Verify(ctx, p, commit); err != nil {
 		return "", err
 	}
@@ -68,6 +90,20 @@ func (m Manager) CreateTaskCheckout(ctx context.Context, p *Project, commit, roo
 		return "", err
 	}
 	b := TaskCheckout{ProjectID: p.ID, GraphID: graphID, Base: commit, Path: filepath.Join(root, graphID), ArchivePath: filepath.Join(root, ".task-checkouts", graphID+".git")}
+	key := checkoutPrefix + graphID
+	if len(member) > 0 {
+		if len(member) != 1 || !domain.ValidRepositoryAlias(member[0]) {
+			return "", ErrInvalid
+		}
+		b.Alias = member[0]
+		b.Path = filepath.Join(b.Path, b.Alias)
+		b.ArchivePath = filepath.Join(root, ".task-checkouts", graphID, b.Alias+".git")
+		key += "/" + b.Alias
+		parent, e := filepath.EvalSymlinks(filepath.Dir(b.Path))
+		if e != nil || parent != filepath.Dir(b.Path) {
+			return "", fmt.Errorf("%w: repository workspace parent changed", ErrInvalid)
+		}
+	}
 	if !b.valid(p, graphID, b.Path) {
 		return "", ErrInvalid
 	}
@@ -84,7 +120,7 @@ func (m Manager) CreateTaskCheckout(ctx context.Context, p *Project, commit, roo
 	if err != nil {
 		return "", err
 	}
-	if _, err = m.Store.PutSetting(ctx, checkoutPrefix+graphID, data, 0, actor); err != nil {
+	if _, err = m.Store.PutSetting(ctx, key, data, 0, actor); err != nil {
 		return "", err
 	}
 	if err = createIndependentCheckout(ctx, p.Path, commit, b.Path, "weft/"+graphID); err != nil {
@@ -153,9 +189,9 @@ func createIndependentCheckout(ctx context.Context, source, commit, dir, branch 
 
 // TaskInspectionBase chooses metadata only from platform admission provenance.
 // Existing linked worktrees keep their legacy source metadata boundary.
-func (m Manager) TaskInspectionBase(ctx context.Context, p *Project, graphID, dir string) (string, error) {
-	b, err := m.GetTaskCheckout(ctx, graphID)
-	if errors.Is(err, storage.ErrNotFound) {
+func (m Manager) TaskInspectionBase(ctx context.Context, p *Project, graphID, dir string, member ...string) (string, error) {
+	b, err := m.GetTaskCheckout(ctx, graphID, member...)
+	if len(member) == 0 && errors.Is(err, storage.ErrNotFound) {
 		return p.Path, nil
 	}
 	if err != nil {

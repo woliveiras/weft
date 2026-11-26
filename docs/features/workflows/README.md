@@ -95,6 +95,15 @@ task save and admission still capture/check the concrete workflow version,
 repository base, connection and permissions. Workflows without defaults keep
 their existing unambiguous topology inference.
 
+### Suggest repositories for new tasks
+
+In **Settings → Task defaults → Suggested repositories**, open the dropdown, search by name
+or URL and select the repositories a task usually needs. Each choice updates
+the workflow draft immediately. **Save graph**
+publishes the suggestions as part of that workflow version and enables **New
+task with these defaults**. An empty selection expresses no preference. Each
+new task can add or remove projects and select its own commits and PR targets.
+
 ## Review and save
 
 Form/canvas/Definition edits contribute to the same draft. Definition is the

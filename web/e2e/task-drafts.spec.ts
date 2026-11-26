@@ -348,14 +348,14 @@ test('prompt-first draft keeps settings visible and never starts or interprets a
  expect((await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id,name:id},spec:{nodes:[{id:'worker',runtime:{kind:'echo'},loop:{mode:'once'},tools:[]}]}}})).status()).toBe(201);
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
  await page.goto('/#/tasks/new');
- await expect(page.getByRole('combobox',{name:'Project',exact:true})).toBeVisible();
+ await expect(page.getByRole('combobox',{name:'Repositories',exact:true})).toBeVisible();
  await expect(page.getByRole('textbox',{name:'Title',exact:true})).not.toBeVisible();
  await page.getByRole('textbox',{name:'Request',exact:true}).fill('Inspect https://example.com/repository\nDo not commit or push.');
  await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption(id);
  await page.getByRole('button',{name:'Save draft',exact:true}).click();
  await expect(page).toHaveURL(/#\/tasks\/tsk_/);
  await page.reload();
- await expect(page.getByRole('combobox',{name:'Project',exact:true})).toBeVisible();
+ await expect(page.getByRole('combobox',{name:'Repositories',exact:true})).toBeVisible();
  await expect(page.getByRole('textbox',{name:'Request',exact:true})).toHaveValue('Inspect https://example.com/repository\nDo not commit or push.');
  const task=await(await page.request.get('/api/v1/tasks/'+page.url().split('/').pop(),{headers})).json();
  expect(task.title).toBe('Inspect https://example.com/repository');expect(task.status).toBe('draft');expect(task.projectId).toBeUndefined();

@@ -13,8 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
-
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/environmentpolicy"
 	"github.com/woliveiras/weft/server/internal/events"
@@ -22,6 +20,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/sandboxcapacity"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/tools"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // State of a graph's environment.
@@ -494,8 +493,9 @@ func (m *Manager) steps(ctx context.Context, g *domain.Graph, hash string, log i
 		// apt front ends) proceed instead of waiting for a confirmation.
 		run := []string{"run", "--name", name, "--network", SetupNetwork(env),
 			"--cap-drop", "ALL", "--security-opt", "no-new-privileges", "-e", "CI=true",
-			"--label", "weft.graph=" + id, "--label", "weft.environment.build=true",
-			"-v", m.opt.Workspaces.HostPath(dir) + ":/workspace", "-w", "/workspace"}
+			"--label", "weft.graph=" + id, "--label", "weft.environment.build=true"}
+		run = append(run, tools.WorkspaceMountArgs(m.opt.Workspaces.HostPath(dir), "/workspace", false, g.Spec.Workspace.Repositories)...)
+		run = append(run, "-w", "/workspace")
 		if env.CPU != "" {
 			run = append(run, "--cpus", env.CPU)
 		}

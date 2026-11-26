@@ -6,11 +6,15 @@ import {Btn,ErrorBox,fmtDateTime} from './common';
 const reasonLabel=(c:Checkpoint)=>c.reason==='before_restore'?'Before a restore':c.tool?`Before ${c.tool}`:'Before an edit';
 
 /** Worktree checkpoints of a task's agents (NAT-07). Loads only when opened; restoring is an administrator action with explicit confirmation. */
-export function TaskCheckpoints({graphId,canRestore}:{graphId:string;canRestore:boolean}) {
+export function TaskCheckpoints({graphId,canRestore,repositories=[]}:{graphId:string;canRestore:boolean;repositories?:string[]}) {
+ const [repository,setRepository]=useState(repositories[0]);
+ return <>{!!repositories.length&&<label>Repository for checkpoints<select value={repository??''} onChange={e=>setRepository(e.target.value)}>{repositories.map(alias=><option key={alias}>{alias}</option>)}</select></label>}<CheckpointList key={repository||graphId} graphId={graphId} canRestore={canRestore} repository={repository}/></>;
+}
+function CheckpointList({graphId,canRestore,repository}:{graphId:string;canRestore:boolean;repository?:string}) {
  const [list,setList]=useState<Checkpoint[]>();const [error,setError]=useState<string>();const [busy,setBusy]=useState(false);
  const [selected,setSelected]=useState('');const [confirmed,setConfirmed]=useState(false);const [restored,setRestored]=useState<CheckpointRestore>();
- const load=async()=>{setBusy(true);setError(undefined);try{const items=await api.checkpoints(graphId);setList(items);setSelected(items.find(c=>c.reason==='before_edit')?.id??'');}catch(e){setError(errorMessage(e));}finally{setBusy(false);}};
- const restore=async()=>{if(!selected||!confirmed)return;setBusy(true);setError(undefined);setRestored(undefined);try{setRestored(await api.restoreCheckpoint(graphId,selected));setConfirmed(false);await load();}catch(e){setError(errorMessage(e));setConfirmed(false);setBusy(false);}};
+ const load=async()=>{setBusy(true);setError(undefined);try{const items=await api.checkpoints(graphId,...(repository?[repository]:[]));setList(items);setSelected(items.find(c=>c.reason==='before_edit')?.id??'');}catch(e){setError(errorMessage(e));}finally{setBusy(false);}};
+ const restore=async()=>{if(!selected||!confirmed)return;setBusy(true);setError(undefined);setRestored(undefined);try{setRestored(await api.restoreCheckpoint(graphId,selected,...(repository?[repository]:[])));setConfirmed(false);await load();}catch(e){setError(errorMessage(e));setConfirmed(false);setBusy(false);}};
  const chosen=list?.find(c=>c.id===selected);
  return <details onToggle={e=>{if(e.currentTarget.open&&!list&&!busy)void load();}}><summary>Checkpoints</summary>
   <p>Before the edits of each round, the agent's workspace is recorded as a checkpoint on a hidden Git ref. Failed runs are never restored automatically: their files and checkpoints stay for inspection.</p>

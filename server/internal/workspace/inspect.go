@@ -75,8 +75,8 @@ func InspectionArgs(view, path string) ([]string, error) {
 
 // Inspect uses a bounded private copy of Git metadata so concurrent agent
 // changes cannot replace validated configuration before Git reads it.
-func (m *Manager) Inspect(ctx context.Context, dir, base, view, path string) (*Inspection, error) {
-	return m.inspect(ctx, dir, base, view, path, false)
+func (m *Manager) Inspect(ctx context.Context, dir, base, view, path string, reviewedBase ...string) (*Inspection, error) {
+	return m.inspect(ctx, dir, base, view, path, false, reviewedBase...)
 }
 
 // InspectCleanup uses the same confined metadata snapshot and inert config
@@ -86,7 +86,7 @@ func (m *Manager) InspectCleanup(ctx context.Context, dir, base string) (*Inspec
 	return m.inspect(ctx, dir, base, "status", "", true)
 }
 
-func (m *Manager) inspect(ctx context.Context, dir, base, view, path string, includeIgnored bool) (*Inspection, error) {
+func (m *Manager) inspect(ctx context.Context, dir, base, view, path string, includeIgnored bool, reviewedBase ...string) (*Inspection, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if _, err := InspectionArgs(view, path); err != nil {
@@ -153,13 +153,24 @@ func (m *Manager) inspect(ctx context.Context, dir, base, view, path string, inc
 		return nil, err
 	}
 	defer os.RemoveAll(snapshot)
-	return m.inspectSnapshot(ctx, dir, snapshot, relativeGit, view, path, includeIgnored)
+	return m.inspectSnapshot(ctx, dir, snapshot, relativeGit, view, path, includeIgnored, reviewedBase...)
 }
 
-func (m *Manager) inspectSnapshot(ctx context.Context, dir, snapshot, relativeGit, view, path string, includeIgnored bool) (*Inspection, error) {
+func (m *Manager) inspectSnapshot(ctx context.Context, dir, snapshot, relativeGit, view, path string, includeIgnored bool, reviewedBase ...string) (*Inspection, error) {
 	args, err := InspectionArgs(view, path)
 	if err != nil {
 		return nil, err
+	}
+	if len(reviewedBase) > 0 && view == "diff" {
+		if len(reviewedBase) != 1 || !validGitOID(reviewedBase[0]) {
+			return nil, errors.New("invalid reviewed base")
+		}
+		for i, arg := range args {
+			if arg == "HEAD" {
+				args[i] = reviewedBase[0]
+				break
+			}
+		}
 	}
 	if includeIgnored {
 		args = append(args[:len(args)-1], "--ignored", "--")
@@ -381,4 +392,16 @@ func copyMetadataFile(source *os.Root, rel, dest string, remaining int64) (int64
 		return n, fmt.Errorf("Git metadata exceeds 64 MiB")
 	}
 	return n, nil
+}
+
+func validGitOID(s string) bool {
+	if len(s) != 40 && len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= 'a' && c <= 'f' || c >= '0' && c <= '9') {
+			return false
+		}
+	}
+	return true
 }

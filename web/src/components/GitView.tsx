@@ -5,7 +5,7 @@ import { Btn, ErrorBox } from './common';
 
 import type { GitInspection, WeftEvent } from '../api/types';
 
-export function GitView({ graphId, node, replica, path }: { graphId: string; node: string; replica: number; path: string }) {
+export function GitView({ graphId, node, replica, path, repository }: { repository?:string; graphId: string; node: string; replica: number; path: string }) {
   const [view, setView] = useState<'status' | 'diff' | 'history'>('status');
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<GitInspection>();
@@ -17,7 +17,7 @@ export function GitView({ graphId, node, replica, path }: { graphId: string; nod
     let cancelled = false;
     setResult(undefined); setError(undefined); setLoading(true); setExecutions([]); setEvents([]);
     Promise.all([
-      api.gitInspection(graphId, view, { path, ...(node ? { node, replica } : {}) }),
+      api.gitInspection(graphId, view, { path, ...(repository ? {repository} : {}), ...(node ? { node, replica } : {}) }),
       api.executions(graphId, { ...(node ? { node } : {}), limit: 20 }),
       api.events(graphId, { types: 'tool.completed,workspace.observed', limit: 100 }),
     ]).then(([inspection, runs, operations]) => {
@@ -25,7 +25,7 @@ export function GitView({ graphId, node, replica, path }: { graphId: string; nod
     }).catch(cause => { if (!cancelled) setError(errorMessage(cause)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [graphId, node, replica, path, view, revision]);
+  }, [graphId, node, replica, path, repository, view, revision]);
   return <section aria-label="Git inspection">
     <h3>Git inspection</h3>
     <label>Git view <select value={view} onChange={event => setView(event.target.value as typeof view)}>

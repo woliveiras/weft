@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -331,6 +332,7 @@ type Target struct {
 	Execution string
 	User      string
 	Project   string
+	Projects  []string
 	Workflow  string
 }
 
@@ -384,6 +386,9 @@ func (b Budgets) applicableSnapshot(ctx context.Context, t Target, now time.Time
 			match = t.User
 		case Project:
 			match = t.Project
+			if slices.Contains(t.Projects, d.ID) {
+				match = d.ID
+			}
 		case Workflow:
 			match = t.Workflow
 		}

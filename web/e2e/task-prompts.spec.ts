@@ -114,7 +114,7 @@ test('retains a blocked submission and continues after clarification without a n
  await expect(actions.getByRole('status')).toContainText('Task has not started.');
  await expect(actions.getByRole('status')).toContainText('entry agent');
  await actions.getByRole('button',{name:'Complete task setup'}).click();
- await expect(page.getByRole('region',{name:'Workflow & repository'})).toBeFocused();
+ await expect(page.getByRole('region',{name:'Workflow & repositories'})).toBeFocused();
  expect(page.url()).toBe(address);
  const blockedId=address.split('/').pop()!;
  const blocked=await(await page.request.get(`/api/v1/tasks/${blockedId}`,{headers})).json();

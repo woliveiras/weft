@@ -67,7 +67,11 @@ func gitRun(ctx context.Context, inv *Invocation, args ...string) (*ExecResult, 
 	// can never be executed by a git command it was allowed to run.
 	argv := append([]string{"git", "-c", "core.pager=cat", "-c", "color.ui=false", "-c", "safe.directory=*",
 		"-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"}, args...)
-	return sandboxOf(inv).Exec(ctx, ExecRequest{Argv: argv, Timeout: 2 * time.Minute, Env: map[string]string{"GIT_PAGER": "cat", "GIT_EDITOR": "true"}})
+	dir, err := gitRepository(inv)
+	if err != nil {
+		return nil, err
+	}
+	return sandboxOf(inv).Exec(ctx, ExecRequest{Dir: dir, Argv: argv, Timeout: 2 * time.Minute, Env: map[string]string{"GIT_PAGER": "cat", "GIT_EDITOR": "true"}})
 }
 
 // gitResult turns a git exit status into a tool result.
@@ -103,14 +107,7 @@ func safeRef(name, v string) error {
 }
 
 func gitPath(inv *Invocation, p string) (string, error) {
-	_, rel, err := ResolvePath(workdirOf(inv), p)
-	if err != nil {
-		return "", err
-	}
-	if err := CheckPath(inv.Grant, rel); err != nil {
-		return "", err
-	}
-	return rel, nil
+	return scopedGitPath(inv, p)
 }
 
 func gitStatus(ctx context.Context, inv *Invocation) (*Result, error) {

@@ -1,12 +1,12 @@
 import {openTaskSettings,openTaskSection} from './task-settings';
 import {test,expect} from '@playwright/test';
-import {mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,realpathSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 const headers={Authorization:'Bearer e2e-admin-token'};
 test('registers a repository and reviews a separate task worktree without touching dirty source files',async({page})=>{
- const repo=mkdtempSync(join(tmpdir(),'weft-project-e2e-'));
+ const repo=realpathSync(mkdtempSync(join(tmpdir(),'weft-project-e2e-')));
  try{
   execFileSync('git',['init','-q',repo]);execFileSync('git',['-C',repo,'-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','--allow-empty','-qm','initial']);
   writeFileSync(join(repo,'dirty.txt'),'keep');
@@ -53,7 +53,11 @@ test('registers a repository and reviews a separate task worktree without touchi
   await openTaskSettings(page);
  await page.getByRole('textbox',{name:'Title',exact:true}).fill('Review local fixture');await page.getByRole('textbox',{name:'Request',exact:true}).fill('Explain the fixture');
   await openTaskSettings(page);
- await expect(page.getByRole('combobox',{name:'Project',exact:true}).locator('option:checked')).toContainText(`Local fixture · ${repo}`);
+ const field=page.getByRole('combobox',{name:'Repositories',exact:true});
+ await expect(field).toHaveValue('Local fixture');
+ await field.click();
+ await expect(page.getByRole('option',{name:/Local fixture/,selected:true})).toContainText(repo);
+ await field.press('Escape');
   await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption('project-task-flow');
   await openTaskSettings(page);
  await page.getByRole('combobox',{name:'Entry agent',exact:true}).selectOption('worker');await openTaskSettings(page);

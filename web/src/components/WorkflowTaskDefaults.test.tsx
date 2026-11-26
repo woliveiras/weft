@@ -14,11 +14,13 @@ function Editor({graph=initial,editable=true}:{graph?:Graph;editable?:boolean}) 
 it('edits reusable choices in the graph draft without publishing, granting or running',async()=>{
  const backend=fakeApi({'GET /api/v1/projects':()=>[{id:'p',name:'Repository',head:'abcdef',path:'/repo'}],'GET /api/v1/scm/connections':()=>[{name:'team-scm',repository:'team/repo'}]});
  render(<Editor/>);
- await screen.findByRole('option',{name:/Repository/});
+ await waitFor(()=>expect(screen.getByRole('combobox',{name:'Suggested repositories'})).toHaveProperty('disabled',false));
  fireEvent.change(screen.getByLabelText('Default input channel'),{target:{value:'requests'}});
  expect((screen.getByLabelText('Default entry agent') as HTMLSelectElement).value).toBe('worker');
  expect((screen.getByLabelText('Default message type') as HTMLInputElement).value).toBe('work.request');
- fireEvent.change(screen.getByLabelText('Default project'),{target:{value:'p'}});
+ fireEvent.click(screen.getByRole('combobox',{name:'Suggested repositories'}));
+ fireEvent.click(screen.getByRole('option',{name:/Repository/}));
+ fireEvent.keyDown(screen.getByRole('combobox',{name:'Suggested repositories'}),{key:'Escape'});
  fireEvent.change(screen.getByLabelText('Default source control connection'),{target:{value:'team-scm'}});
  const draft=JSON.parse(screen.getByTestId('draft').textContent!);
  expect(draft.spec.task).toEqual({nodeId:'worker',channelId:'requests',messageType:'work.request',projectId:'p',scmConnection:'team-scm'});
@@ -34,19 +36,19 @@ it('distinguishes loading and failed discovery, preserves saved unavailable defa
  let fail=true;
  fakeApi({'GET /api/v1/projects':()=>fail?apiError(503,'projects offline','unavailable'):[],'GET /api/v1/scm/connections':()=>fail?apiError(503,'connections offline','unavailable'):[{name:'saved',repository:'team/repo'}]});
  render(<Editor graph={{...initial,spec:{...initial.spec,task:{projectId:'missing',scmConnection:'saved'}}}}/>);
- expect(screen.getByText('Loading projects…')).not.toBeNull();
- await screen.findByText(/Could not load projects/);
- expect((screen.getByLabelText('Default project') as HTMLSelectElement).value).toBe('missing');
+ expect(screen.getByText('Loading repositories…')).not.toBeNull();
+ await screen.findByText(/Could not load repositories/);
+ expect((screen.getByRole('combobox',{name:'Suggested repositories'}) as HTMLSelectElement).value).toBe('missing');
  expect((screen.getByLabelText('Default source control connection') as HTMLSelectElement).value).toBe('saved');
  fail=false;fireEvent.click(screen.getByRole('button',{name:'Retry resource discovery'}));
- await waitFor(()=>expect(screen.queryByText(/Could not load projects/)).toBeNull());
+ await waitFor(()=>expect(screen.queryByText(/Could not load repositories/)).toBeNull());
  await screen.findByRole('option',{name:'saved · team/repo'});
- expect((screen.getByLabelText('Default project') as HTMLSelectElement).value).toBe('missing');
+ expect((screen.getByRole('combobox',{name:'Suggested repositories'}) as HTMLSelectElement).value).toBe('missing');
 });
 it('lets non-administrators inspect the defaults without editing them',async()=>{
  fakeApi({'GET /api/v1/projects':()=>[],'GET /api/v1/scm/connections':()=>[]});
  render(<Editor editable={false}/>);
- await waitFor(()=>expect(screen.queryByText('Loading projects…')).toBeNull());
+ await waitFor(()=>expect(screen.queryByText('Loading repositories…')).toBeNull());
  for(const select of screen.getAllByRole('combobox'))expect((select as HTMLSelectElement).disabled).toBe(true);
  expect(screen.getByText('An administrator can change these workflow defaults.')).not.toBeNull();
 });

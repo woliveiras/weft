@@ -24,25 +24,27 @@ var ErrInvalid = errors.New("invalid task")
 var scmName = regexp.MustCompile(`^[a-z0-9]([a-z0-9._-]{0,61}[a-z0-9])?$`)
 
 type Input struct {
-	Source        *IssueSource `json:"source,omitempty"`
-	ExecutionMode string       `json:"executionMode,omitempty"`
-	ChannelID     string       `json:"channelId,omitempty"`
-	MessageType   string       `json:"messageType,omitempty"`
-	PayloadJSON   string       `json:"payloadJson,omitempty"`
-	ProjectID     string       `json:"projectId,omitempty"`
-	BaseCommit    string       `json:"baseCommit,omitempty"`
-	Title         string       `json:"title"`
-	Request       string       `json:"request"`
-	Outcome       string       `json:"outcome"`
-	GraphID       string       `json:"graphId"`
-	GraphVersion  int          `json:"graphVersion"`
-	NodeID        string       `json:"nodeId"`
-	ResultNodeID  string       `json:"resultNodeId,omitempty"`
+	Repositories  []domain.TaskRepository `json:"repositories,omitzero"`
+	Source        *IssueSource            `json:"source,omitempty"`
+	ExecutionMode string                  `json:"executionMode,omitempty"`
+	ChannelID     string                  `json:"channelId,omitempty"`
+	MessageType   string                  `json:"messageType,omitempty"`
+	PayloadJSON   string                  `json:"payloadJson,omitempty"`
+	ProjectID     string                  `json:"projectId,omitempty"`
+	BaseCommit    string                  `json:"baseCommit,omitempty"`
+	Title         string                  `json:"title"`
+	Request       string                  `json:"request"`
+	Outcome       string                  `json:"outcome"`
+	GraphID       string                  `json:"graphId"`
+	GraphVersion  int                     `json:"graphVersion"`
+	NodeID        string                  `json:"nodeId"`
+	ResultNodeID  string                  `json:"resultNodeId,omitempty"`
 	// SCMConnection, when set, lets the result agent push the task branch
 	// and open a pull request through that connection.
 	SCMConnection string `json:"scmConnection,omitempty"`
 }
 type Draft struct {
+	RepositoryRevision    int64        `json:"repositoryRevision,omitempty"`
 	RetryOfTaskID         string       `json:"retryOfTaskId,omitempty"`
 	RetryOfRevision       int64        `json:"retryOfRevision,omitempty"`
 	TriggerIssueOrigin    *IssueOrigin `json:"triggerIssueOrigin,omitempty"`
@@ -69,6 +71,12 @@ type Page struct {
 type Manager struct{ Store storage.Store }
 
 func Validate(in Input) error {
+	if in.Repositories != nil && (in.ProjectID != "" || in.BaseCommit != "" || in.SCMConnection != "") {
+		return fmt.Errorf("%w: repository list conflicts with singular project or delivery settings", ErrInvalid)
+	}
+	if err := domain.ValidateTaskRepositories(in.Repositories); err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalid, err)
+	}
 	if in.Source != nil {
 		if _, _, err := in.Source.ReadCall(); err != nil {
 			return err
@@ -273,7 +281,14 @@ func (m Manager) saveWithOrigin(ctx context.Context, id string, in Input, revisi
 		if old.Status != "draft" || revision < 1 || revision != old.Revision {
 			return nil, storage.ErrConflict
 		}
-		if old.Resolution != nil && old.Resolution.Repository != "" && strings.Contains(in.Request, old.Resolution.Repository) && in.ProjectID == "" {
+		if len(old.Repositories) > 0 && in.Repositories == nil {
+			return nil, fmt.Errorf("%w: this task has a repository list; send the complete list to edit it", ErrInvalid)
+		}
+		if old.Repositories != nil && in.Repositories == nil && in.ProjectID == "" && in.SCMConnection == "" {
+			in.Repositories = []domain.TaskRepository{}
+			d.Input.Repositories = in.Repositories
+		}
+		if old.Resolution != nil && old.Resolution.Repository != "" && strings.Contains(in.Request, old.Resolution.Repository) && in.ProjectID == "" && len(in.Repositories) == 0 {
 			return nil, fmt.Errorf("%w: select a registered project for the repository URL or remove the URL from the request", ErrInvalid)
 		}
 		d.Submitted = old.Submitted
@@ -287,6 +302,9 @@ func (m Manager) saveWithOrigin(ctx context.Context, id string, in Input, revisi
 	}
 	// Audit intent before the CAS; success is represented by the persisted record.
 	// Failure to audit prevents mutation. The event includes no request content.
+	if in.Repositories != nil {
+		d.RepositoryRevision = revision + 1
+	}
 	ev := domain.NewEvent("task.draft_save_requested", in.GraphID, map[string]any{"taskId": d.ID, "expectedRevision": revision}).WithActor(actor)
 	if err := m.Store.AppendEvent(ctx, ev); err != nil {
 		return nil, err

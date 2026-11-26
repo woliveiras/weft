@@ -549,3 +549,147 @@ func TestTaskCheckoutCleanupRefusesSpecialMetadataAndArchiveCollision(t *testing
 		t.Fatal("FIFO backlink accepted")
 	}
 }
+
+func TestMultiRepositoryCheckoutAndFingerprint(t *testing.T) {
+	m, p, root, git := checkoutFixture(t)
+	ctx := t.Context()
+	graph := "task-run-three"
+	if err := os.Mkdir(filepath.Join(root, graph), 0700); err != nil {
+		t.Fatal(err)
+	}
+	var repos []domain.TaskRepository
+	for _, alias := range []string{"infra", "backend", "frontend"} {
+		source := filepath.Join(root, "source-"+alias)
+		git(root, "clone", "--quiet", "--", p.Path, source)
+		project, err := m.Create(ctx, Input{Name: alias, Path: source}, "admin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = os.WriteFile(filepath.Join(source, "file.txt"), []byte("private source edits"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		dir, err := m.CreateTaskCheckout(ctx, project, project.Head, root, graph, "operator", alias)
+		if err != nil {
+			t.Fatal(err)
+		}
+		repos = append(repos, domain.TaskRepository{Alias: alias, ProjectID: project.ID, BaseCommit: project.Head})
+		if data, err := os.ReadFile(filepath.Join(dir, "file.txt")); err != nil || string(data) != "reviewed\n" {
+			t.Fatal("checkout copied source edits", err)
+		}
+	}
+	taskRoot := filepath.Join(root, graph)
+	before, err := workspace.RepositoryStates(ctx, taskRoot, repos)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range repos {
+		if before[r.Alias].Changed || before[r.Alias].Dirty || before[r.Alias].Branch != "weft/"+graph {
+			t.Fatalf("unexpected initial %s state: %+v", r.Alias, before[r.Alias])
+		}
+	}
+	member := filepath.Join(taskRoot, "backend")
+	if err = os.WriteFile(filepath.Join(member, "file.txt"), []byte("changed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	after, err := workspace.RepositoryStates(ctx, taskRoot, repos)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after["backend"].Dirty || after["backend"].State == before["backend"].State || after["infra"] != before["infra"] || after["frontend"] != before["frontend"] {
+		t.Fatal("unexpected dirty state", after)
+	}
+	git(member, "commit", "-qam", "change API")
+	committed, err := workspace.RepositoryStates(ctx, taskRoot, repos)
+	if err != nil || committed["backend"].Dirty || !committed["backend"].Changed || committed["backend"].Head == before["backend"].Head {
+		t.Fatal("committed state", committed, err)
+	}
+	project, err := m.Get(ctx, repos[1].ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := m.PreviewTaskCleanup(ctx, project, graph, member, "backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(member, "later"), []byte("preserve me"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = m.RemoveReviewedTaskCheckout(ctx, project, graph, member, preview.Fingerprint, "backend"); err == nil {
+		t.Fatal("stale cleanup removed checkout")
+	}
+	if _, err = os.Stat(filepath.Join(taskRoot, "frontend", ".git")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMemberCheckpointUsesSeparatePrivateHistory(t *testing.T) {
+	m, p, root, _ := checkoutFixture(t)
+	graph := "task-run-checkpoint"
+	base := filepath.Join(root, graph)
+	if err := os.Mkdir(base, 0700); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := m.CreateTaskCheckout(t.Context(), p, p.Head, root, graph, "operator", "backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := workspace.NewManager(root, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := workspace.CheckpointScope{Repository: &domain.TaskRepository{Alias: "backend", ProjectID: p.ID, BaseCommit: p.Head}, Base: base, Dir: dir, GraphID: graph, NodeID: "editor"}
+	cp, created, err := manager.RecordCheckpoint(t.Context(), scope, workspace.CheckpointMeta{Reason: workspace.CheckpointBeforeEdit})
+	if err != nil || !created {
+		t.Fatal(cp, err)
+	}
+	if err = os.WriteFile(filepath.Join(dir, "file.txt"), []byte("modified"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = manager.RestoreCheckpoint(t.Context(), scope, cp.ID, workspace.CheckpointMeta{}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "file.txt"))
+	if err != nil || string(data) != "reviewed\n" {
+		t.Fatal(string(data), err)
+	}
+	if _, err = os.Stat(filepath.Join(dir, ".git", cp.Ref)); !os.IsNotExist(err) {
+		t.Fatal("checkpoint leaked to the mutable checkout", err)
+	}
+}
+
+func TestTwoMemberTasksOwnTheirChangesAndCleanup(t *testing.T) {
+	m, p, root, git := checkoutFixture(t)
+	dirs := map[string]string{}
+	for _, id := range []string{"task-run-first", "task-run-second"} {
+		if err := os.Mkdir(filepath.Join(root, id), 0700); err != nil {
+			t.Fatal(err)
+		}
+		dir, err := m.CreateTaskCheckout(t.Context(), p, p.Head, root, id, "operator", "backend")
+		if err != nil {
+			t.Fatal(err)
+		}
+		dirs[id] = dir
+	}
+	second := dirs["task-run-second"]
+	if err := os.WriteFile(filepath.Join(second, "file.txt"), []byte("second task"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	first := dirs["task-run-first"]
+	preview, err := m.PreviewTaskCleanup(t.Context(), p, "task-run-first", first, "backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = m.RemoveReviewedTaskCheckout(t.Context(), p, "task-run-first", first, preview.Fingerprint, "backend"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(second, "file.txt"))
+	if err != nil || string(data) != "second task" {
+		t.Fatal("other checkout changed", err)
+	}
+	if git(p.Path, "rev-parse", "HEAD") != p.Head || git(p.Path, "status", "--short") != "" || git(second, "rev-parse", "HEAD") != p.Head {
+		t.Fatal("foreign state changed")
+	}
+	if err = MatchDelivery(t.Context(), p, "acme/backend", "https://example.invalid/acme/backend.git", "acme/other"); err == nil {
+		t.Fatal("foreign target passed review")
+	}
+}

@@ -46,7 +46,7 @@ export function RepositoryImport({canEdit,canSelect=canEdit,initialURL='',native
   {record&&<article aria-label="Repository import status"><p role="status">{record.state}: {record.message}</p><p>Transferred: {(record.bytes/1048576).toFixed(2)} MiB</p><p>Reference: {record.ref}{record.commit&&<> · Commit: <code>{record.commit}</code></>}</p>
    {['fetching','verifying'].includes(record.state)&&<Btn disabled={!canEdit||busy} onClick={()=>void cancel()}>Cancel import</Btn>}
    {['failed','cancelled','interrupted'].includes(record.state)&&<><p>Retry retains the previous attempt and starts in a new managed directory.</p><Btn disabled={!canEdit||busy||!confirmed||(authMode==='token'&&(!username||!token))} onClick={()=>void start(true)}>Retry import</Btn></>}
-   {record.state==='ready'&&<Btn disabled={busy||!canSelect} onClick={()=>void useProject()}>Use imported project</Btn>}
+   {record.state==='ready'&&<Btn disabled={busy||!canSelect} onClick={()=>void useProject()}>Use imported repository</Btn>}
   </article>}
  </section>;
 }

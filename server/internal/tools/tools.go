@@ -41,6 +41,7 @@ type Tool interface {
 
 // Principal identifies who is calling: one replica during one execution.
 type Principal struct {
+	TaskID   string
 	Delegate func(context.Context, json.RawMessage) (*Result, error)
 
 	GraphVersion int
@@ -50,7 +51,8 @@ type Principal struct {
 	ExecutionID  string
 	Grants       []domain.ToolGrant
 	// Checks are the declared checks check.run may run (graph snapshot).
-	Checks []domain.Check
+	Checks       []domain.Check
+	Repositories []domain.TaskRepository
 	// BaseCommit is the task's reviewed base commit, when known; check
 	// evidence compares the workspace against it.
 	BaseCommit string

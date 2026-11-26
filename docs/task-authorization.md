@@ -50,6 +50,15 @@ back. Preference-save failures are reported separately from an already saved tas
 consent. Integrated qualification remains PROMPT-07.
 
 
+### Repository scope
+
+For a manual task with multiple repositories, consent covers the saved
+revision, named projects, base commits, declared and required checks, SCM
+destinations and execution environment. The gateway checks the candidate and
+current authorization again before a push or PR creation. A delivery retry
+uses the result agent's grants, repository restrictions and mandatory
+approvals. SCM credentials remain in the server's delivery gateway.
+
 ## Qualification and limits
 
 Local qualification covers the prompt interpreter fixture, real Git smart-HTTP
@@ -74,7 +83,7 @@ This delivery does not activate or migrate the user's running installation.
 A failed request interpretation can retain a draft without a workflow version or
 entry agent. This is incomplete setup, not evidence that a previously selected
 version changed. Use **Configure task manually** (or **Review task settings**)
-to focus the visible Workflow & repository section. Choose the workflow/version and entry agent, check input
+to focus the visible Workflow & repositories section. Choose the workflow/version and entry agent, check input
 delivery and the result agent, then **Save draft**. Review requirements and
 explicitly confirm authorization before starting. **Review and run** reviews a
 manually saved configuration without sending it through interpretation again.

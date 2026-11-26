@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/woliveiras/weft/server/internal/taskauth"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/domain"
-	"github.com/woliveiras/weft/server/internal/projectconfig"
 	"github.com/woliveiras/weft/server/internal/storage"
+	"github.com/woliveiras/weft/server/internal/taskauth"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 )
 
@@ -85,7 +84,9 @@ func (m Manager) PrepareEnvironment(ctx context.Context, id string, revision int
 		return nil, err
 	}
 	fail := func(cause error) (*taskconfig.Draft, error) {
-		d.LaunchError = "Environment preparation did not complete. Retained resources require inspection; preparation will not be replayed automatically."
+		if d.LaunchError == "" {
+			d.LaunchError = "Environment preparation did not complete. Retained resources require inspection; preparation will not be replayed automatically."
+		}
 		_, saveErr := tm.Transition(context.WithoutCancel(ctx), d, "interrupted", actor)
 		return nil, errors.Join(cause, saveErr)
 	}
@@ -95,17 +96,11 @@ func (m Manager) PrepareEnvironment(ctx context.Context, id string, revision int
 		}
 		return fail(err)
 	}
-	if d.ProjectID != "" {
-		project, err := (projectconfig.Manager{Store: m.Store}).Get(ctx, d.ProjectID)
-		if err != nil {
-			return fail(err)
+	if e := m.prepareCheckouts(ctx, d, g, actor); e != nil {
+		if len(d.Repositories) > 0 {
+			d.LaunchError = e.Error()
 		}
-		if m.Workspaces == nil {
-			return fail(errors.New("task workspaces unavailable"))
-		}
-		if _, err = (projectconfig.Manager{Store: m.Store}).CreateTaskCheckout(ctx, project, d.BaseCommit, m.Workspaces.Root, g.Metadata.ID, actor); err != nil {
-			return fail(err)
-		}
+		return fail(e)
 	}
 	if _, _, err = m.Engine.SaveTaskGraph(ctx, g, actor); err != nil {
 		return fail(err)

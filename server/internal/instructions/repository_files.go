@@ -32,6 +32,7 @@ var rootInstructions = []struct{ family, file string }{
 }
 
 type repoCandidate struct {
+	member                                                       string
 	alias, pkg, name, description, metadata, version, lockStatus string
 	identity                                                     os.FileInfo
 	family                                                       int

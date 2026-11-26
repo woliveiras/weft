@@ -8,9 +8,30 @@ import (
 )
 
 func validateTaskDefaults(g *domain.Graph, r *Report) {
+	if repos := g.Spec.Workspace.Repositories; len(repos) > 0 {
+		if !strings.HasPrefix(g.Metadata.ID, domain.TaskRunGraphPrefix) || domain.TaskExecutionID(g.Metadata.Labels[domain.LabelTask]) != g.Metadata.ID {
+			r.errf("spec.workspace.repositories", "repository bindings belong to an admitted task")
+		}
+		if err := domain.ValidateTaskRepositories(repos); err != nil {
+			r.errf("spec.workspace.repositories", "%s", err)
+		}
+	}
 	task := g.Spec.Task
 	if task == nil {
 		return
+	}
+	if task.ProjectIDs != nil {
+		if task.ProjectID != "" || task.SCMConnection != "" {
+			r.errf("spec.task.projectIds", "cannot combine repository suggestions with a singular project or delivery connection")
+		}
+		seen := map[string]bool{}
+		for _, id := range task.ProjectIDs {
+			if id == "" || len(id) > 128 || strings.TrimSpace(id) != id || strings.ContainsAny(id, "\r\n\x00") || seen[id] {
+				r.errf("spec.task.projectIds", "expected distinct registered project identifiers")
+				break
+			}
+			seen[id] = true
+		}
 	}
 	for _, field := range []struct{ name, value string }{
 		{"nodeId", task.NodeID}, {"resultNodeId", task.ResultNodeID},

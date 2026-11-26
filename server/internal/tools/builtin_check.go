@@ -33,14 +33,16 @@ const (
 // CheckRun is the structured result of one check.run, recorded as task
 // evidence (event check.completed) and returned as Result.Data.
 type CheckRun struct {
-	Check      string         `json:"check"`
-	Command    string         `json:"command"`
-	Passed     bool           `json:"passed"`
-	ExitCode   int            `json:"exitCode"`
-	TimedOut   bool           `json:"timedOut,omitempty"`
-	DurationMs int64          `json:"durationMs"`
-	Format     string         `json:"format,omitempty"`
-	Failures   []CheckFailure `json:"failures,omitempty"`
+	Repositories map[string]CheckWorkspace `json:"repositories,omitempty"`
+	Stale        bool                      `json:"stale,omitempty"`
+	Check        string                    `json:"check"`
+	Command      string                    `json:"command"`
+	Passed       bool                      `json:"passed"`
+	ExitCode     int                       `json:"exitCode"`
+	TimedOut     bool                      `json:"timedOut,omitempty"`
+	DurationMs   int64                     `json:"durationMs"`
+	Format       string                    `json:"format,omitempty"`
+	Failures     []CheckFailure            `json:"failures,omitempty"`
 	// FailureCount is how many failures were parsed before bounding.
 	FailureCount int  `json:"failureCount,omitempty"`
 	Truncated    bool `json:"truncated,omitempty"`
@@ -133,7 +135,7 @@ func (checkTool) Invoke(ctx context.Context, inv *Invocation) (res *Result, err 
 			}
 		}
 		observability.CheckRuns.WithLabelValues(kind, outcome).Inc()
-		if outcome == "passed" || outcome == "failed" || outcome == "timed_out" || outcome == "infra_error" {
+		if outcome == "passed" || outcome == "failed" || outcome == "timed_out" || outcome == "infra_error" || outcome == "stale" {
 			observability.CheckSeconds.WithLabelValues(kind).Observe(time.Since(start).Seconds())
 		}
 	}()
@@ -158,16 +160,38 @@ func (checkTool) Invoke(ctx context.Context, inv *Invocation) (res *Result, err 
 	sb := sandboxOf(inv)
 	// Fingerprint before running: the evidence names the tree the check
 	// saw, not build output it produced.
-	ws := fingerprintWorkspace(ctx, inv)
+	states := checkRepositoryStates(ctx, inv)
+	var ws CheckWorkspace
+	if len(states) == 0 {
+		ws = fingerprintWorkspace(ctx, inv)
+	} else if owner, _, ok := strings.Cut(c.Name, "."); ok {
+		ws = states[owner]
+	}
 	out, err := sb.Exec(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("run check %q: %w", c.Name, err)
+	runnerFailed := err != nil
+	if runnerFailed {
+		if len(states) == 0 {
+			return nil, fmt.Errorf("run check %q: %w", c.Name, err)
+		}
+		out = &ExecResult{ExitCode: -1, Duration: time.Since(start)}
 	}
 	run := CheckRun{Check: c.Name, Command: c.Command, ExitCode: out.ExitCode, TimedOut: out.TimedOut,
 		DurationMs: out.Duration.Milliseconds(), Truncated: out.Truncated, Workspace: ws}
 	run.Passed = out.ExitCode == 0 && !out.TimedOut
+	if len(states) > 0 {
+		run.Repositories = states
+		if run.Passed && !run.Current(checkRepositoryStates(ctx, inv)) {
+			run.Stale = true
+		}
+	}
 	outcome = "passed"
 	switch {
+	case runnerFailed:
+		outcome, run.InfraError = "infra_error", true
+		run.Failures = []CheckFailure{{Message: "The sandbox could not execute the declared check."}}
+		run.FailureCount = 1
+	case run.Stale:
+		outcome = "stale"
 	case run.Passed:
 	case sb.Kind() == "docker" && out.ExitCode == dockerExecFailed && !out.TimedOut:
 		outcome, run.InfraError = "infra_error", true
@@ -194,6 +218,8 @@ func (r CheckRun) Summary() string {
 	var b strings.Builder
 	status := "passed"
 	switch {
+	case r.Stale:
+		status = "stale (inputs changed or could not be verified)"
 	case r.InfraError:
 		status = "could not run"
 	case !r.Passed:

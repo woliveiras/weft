@@ -20,6 +20,10 @@ func (m Manager) prepare(ctx context.Context, d *taskconfig.Draft, source *domai
 	if err != nil {
 		return g, blockers, err
 	}
+	if len(d.Repositories) > 0 {
+		blocks, err := m.reviewRepositories(ctx, d, g)
+		return g, append(blockers, blocks...), err
+	}
 	checkBlocks, err := m.attachChecks(ctx, d, g)
 	if blockers = append(blockers, checkBlocks...); err != nil {
 		return g, blockers, err

@@ -4,17 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/woliveiras/weft/server/internal/tools"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/graph"
+	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskauth"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"github.com/woliveiras/weft/server/internal/taskrun"
+	"github.com/woliveiras/weft/server/internal/tools"
 )
 
 func taskError(err error) error {
@@ -176,6 +179,10 @@ func (s *Server) taskAction(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) taskCleanup(w http.ResponseWriter, r *http.Request) error {
+	var member []string
+	if alias := r.URL.Query().Get("repository"); alias != "" {
+		member = []string{alias}
+	}
 	node := r.URL.Query().Get("node")
 	replica := 0
 	if raw := r.URL.Query().Get("replica"); raw != "" {
@@ -186,7 +193,7 @@ func (s *Server) taskCleanup(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if r.Method == http.MethodGet {
-		preview, err := s.taskRunner().PreviewCleanup(r.Context(), r.PathValue("tid"), node, replica)
+		preview, err := s.taskRunner().PreviewCleanup(r.Context(), r.PathValue("tid"), node, replica, member...)
 		if err != nil {
 			return err
 		}
@@ -207,7 +214,7 @@ func (s *Server) taskCleanup(w http.ResponseWriter, r *http.Request) error {
 	if dec.Decode(&extra) != io.EOF {
 		return badRequest("expected one JSON object")
 	}
-	if err := s.taskRunner().Cleanup(r.Context(), r.PathValue("tid"), node, replica, in.Fingerprint, identityFrom(r.Context()).Name); err != nil {
+	if err := s.taskRunner().Cleanup(r.Context(), r.PathValue("tid"), node, replica, in.Fingerprint, identityFrom(r.Context()).Name, member...); err != nil {
 		return err
 	}
 	writeJSON(w, 200, map[string]bool{"removed": true})
@@ -313,5 +320,82 @@ func (s *Server) deleteTaskDraft(w http.ResponseWriter, r *http.Request) error {
 		return taskError(err)
 	}
 	w.WriteHeader(http.StatusNoContent)
+	return nil
+}
+
+// Recovery invokes only the result agent's two reviewed SCM tools. The
+// gateway applies the same task authorization and connection approvals.
+func (s *Server) retryRepositoryDelivery(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Confirm bool `json:"confirm"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
+	dec.DisallowUnknownFields()
+	if dec.Decode(&in) != nil || !in.Confirm || dec.Decode(&struct{}{}) != io.EOF {
+		return badRequest("confirm the repository delivery retry")
+	}
+	rev, err := ifMatchRevision(r)
+	if err != nil {
+		return err
+	}
+	ctx := r.Context()
+	v, err := s.taskRunner().View(ctx, r.PathValue("tid"))
+	if err != nil {
+		return err
+	}
+	d := v.Task
+	if d.Revision != rev || d.Status != "running" || v.State != "delivery_pending" || v.Result == nil || d.ExecutionGraphID != domain.TaskExecutionID(d.ID) {
+		return storage.ErrConflict
+	}
+	var connection string
+	for _, repo := range d.Repositories {
+		if repo.Alias == r.PathValue("alias") {
+			connection = repo.SCMConnection
+			break
+		}
+	}
+	if connection == "" {
+		return badRequest("select a repository with a reviewed delivery connection")
+	}
+	g, err := s.Store.GetGraph(ctx, d.ExecutionGraphID, 0)
+	if err != nil {
+		return err
+	}
+	n := g.Node(d.ResultNodeID)
+	if n == nil || n.Disabled || g.Metadata.Labels[domain.LabelTask] != d.ID || s.Gateway == nil || s.Workspaces == nil {
+		return storage.ErrConflict
+	}
+	p := &tools.Principal{TaskID: d.ID, GraphID: g.Metadata.ID, GraphVersion: g.Metadata.Version, NodeID: n.ID, Replica: v.Result.Replica, ExecutionID: v.Result.ID, Actor: identityFrom(ctx).Name, Repositories: g.Spec.Workspace.Repositories, Grants: n.Tools, WorkspaceReadOnly: n.Workspace.ReadOnly, Workdir: filepath.Join(s.Workspaces.Root, g.Metadata.ID)}
+	for _, name := range []string{"git.push", "scm.pull_request.create"} {
+		args := map[string]string{"connection": connection}
+		if name == "scm.pull_request.create" {
+			args["title"] = d.Title
+		}
+		raw, err := json.Marshal(args)
+		if err != nil {
+			return err
+		}
+		out, err := s.Gateway.Invoke(ctx, p, name, raw)
+		if err != nil {
+			return err
+		}
+		if out == nil || out.IsError {
+			return badRequest("repository delivery could not be confirmed; inspect the task activity")
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"repository": r.PathValue("alias"), "delivery": "confirmed"})
+	return nil
+}
+
+func (s *Server) taskRepositoryStates(w http.ResponseWriter, r *http.Request) error {
+	d, err := (taskconfig.Manager{Store: s.Store}).Get(r.Context(), r.PathValue("tid"))
+	if err != nil {
+		return err
+	}
+	states, err := s.taskRunner().CurrentRepositoryStates(r.Context(), d)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, states)
 	return nil
 }

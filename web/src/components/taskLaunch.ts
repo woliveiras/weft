@@ -10,6 +10,7 @@ export interface TaskLaunchReview {
 /** Compare effective editable input independently from server revision and authorization hashes. */
 export function taskInputIdentity(input:TaskInput):string {
  return JSON.stringify({
+  repositories:input.repositories?.map(r=>[r.alias,r.projectId,r.baseCommit,r.sourceRef||"",r.scmConnection||"",r.repository||"",r.targetBranch||"",r.connectionRevision||"",r.checks?.map(c=>[c.name,c.command,c.cwd||"",c.timeoutSec||0])||[],r.requiredChecks||[]]),
   title:input.title,request:input.request,outcome:input.outcome,graphId:input.graphId,graphVersion:input.graphVersion,
   nodeId:input.nodeId,resultNodeId:input.resultNodeId||input.nodeId,projectId:input.projectId||'',baseCommit:input.baseCommit||'',
   executionMode:input.executionMode||'workflow',scmConnection:input.scmConnection||'',channelId:input.channelId||'',

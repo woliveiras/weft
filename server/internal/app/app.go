@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/woliveiras/weft/server/internal/taskauth"
 	"log/slog"
 	"net"
 	"net/http"
@@ -17,8 +16,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/woliveiras/weft/server/internal/api"
 	"github.com/woliveiras/weft/server/internal/config"
@@ -51,10 +48,12 @@ import (
 	"github.com/woliveiras/weft/server/internal/secrets"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/storage/stores"
+	"github.com/woliveiras/weft/server/internal/taskauth"
 	"github.com/woliveiras/weft/server/internal/tools"
 	"github.com/woliveiras/weft/server/internal/trigger"
 	"github.com/woliveiras/weft/server/internal/workspace"
 	"github.com/woliveiras/weft/server/internal/workspacejournal"
+	"gopkg.in/yaml.v3"
 )
 
 // App is a running control plane.
@@ -530,6 +529,9 @@ func sandboxFactory(cfg *config.Config, envs *environment.Manager, store storage
 				DockerBin: cfg.Isolation.Docker.Bin, DockerHost: cfg.Isolation.Docker.Host,
 				Labels:  map[string]string{"weft.graph": s.Graph.Metadata.ID, "weft.node": s.Node.ID},
 				Volumes: volumes,
+			}
+			if s.Name == "" {
+				sandboxConfig.Repositories = s.Graph.Spec.Workspace.Repositories
 			}
 			if s.Name != "" {
 				sandboxConfig.Name = s.Name

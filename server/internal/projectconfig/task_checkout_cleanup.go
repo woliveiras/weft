@@ -21,9 +21,9 @@ import (
 
 // PreviewTaskCleanup selects the new representation exclusively through the
 // persisted binding. Old tasks retain linked-worktree cleanup and its fences.
-func (m Manager) PreviewTaskCleanup(ctx context.Context, p *Project, graphID, dir string) (*CleanupPreview, error) {
-	b, err := m.GetTaskCheckout(ctx, graphID)
-	if errors.Is(err, storage.ErrNotFound) {
+func (m Manager) PreviewTaskCleanup(ctx context.Context, p *Project, graphID, dir string, member ...string) (*CleanupPreview, error) {
+	b, err := m.GetTaskCheckout(ctx, graphID, member...)
+	if len(member) == 0 && errors.Is(err, storage.ErrNotFound) {
 		return PreviewCleanup(ctx, p, dir)
 	}
 	if err != nil {
@@ -34,6 +34,9 @@ func (m Manager) PreviewTaskCleanup(ctx context.Context, p *Project, graphID, di
 	}
 	if err = localTaskMetadata(b.Path); err != nil {
 		return nil, err
+	}
+	if len(member) > 0 && dir != b.Path {
+		return nil, ErrInvalid
 	}
 	if dir != b.Path {
 		return previewTaskReplicaCleanup(ctx, b, dir)
@@ -76,15 +79,15 @@ func (m Manager) PreviewTaskCleanup(ctx context.Context, p *Project, graphID, di
 	return v, nil
 }
 
-func (m Manager) RemoveReviewedTaskCheckout(ctx context.Context, p *Project, graphID, dir, fingerprint string) error {
-	b, err := m.GetTaskCheckout(ctx, graphID)
-	if errors.Is(err, storage.ErrNotFound) {
+func (m Manager) RemoveReviewedTaskCheckout(ctx context.Context, p *Project, graphID, dir, fingerprint string, member ...string) error {
+	b, err := m.GetTaskCheckout(ctx, graphID, member...)
+	if len(member) == 0 && errors.Is(err, storage.ErrNotFound) {
 		return RemoveReviewedWorktree(ctx, p, dir, fingerprint)
 	}
 	if err != nil {
 		return err
 	}
-	current, err := m.PreviewTaskCleanup(ctx, p, graphID, dir)
+	current, err := m.PreviewTaskCleanup(ctx, p, graphID, dir, member...)
 	if err != nil {
 		return err
 	}

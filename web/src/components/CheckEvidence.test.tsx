@@ -85,3 +85,23 @@ it('reports unavailable check evidence without claiming a result',async()=>{
  expect(await screen.findByText(/Check results unavailable: Events unavailable/)).toBeTruthy();
  expect(screen.queryByText(/passed/)).toBeNull();
 });
+
+it('judges shared checks against all current members across different owning repositories', async () => {
+ const states = {infra:{head:'aa',state:'1'},backend:{head:'bb',state:'2'}};
+ const members = Object.keys(states).map(alias => ({alias,checks:[{name:'test',command:'true'}]}));
+ const events = [
+   run(1,{check:'infra.test',passed:true,repositories:states,workspace:states.infra}),
+   run(2,{check:'backend.test',passed:true,repositories:states,workspace:states.backend})
+ ];
+ let current = states;
+ fakeApi({
+   'GET /api/v1/graphs/g':()=>({graph:{metadata:{labels:{'weft.task':'tsk_a'}},spec:{workspace:{repositories:members}}}}),
+   'GET /api/v1/graphs/g/events':()=>events,
+   'GET /api/v1/tasks/tsk_a/repository-states':()=>current
+ });
+ render(<CheckEvidence graphId="g"/>);
+ expect(await screen.findByText(/All 2 declared checks passed/)).toBeTruthy();
+ current = {...states,backend:{head:'bb',state:'3'}};
+ await userEvent.setup().click(screen.getByRole('button',{name:'Refresh checks'}));
+ expect(await screen.findByText(/0 of 2 declared checks passed.*2 need a rerun/)).toBeTruthy();
+});

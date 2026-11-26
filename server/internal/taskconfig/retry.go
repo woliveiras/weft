@@ -62,6 +62,9 @@ func (m Manager) RetryFailed(ctx context.Context, id string, revision int64, act
 	}
 	now := time.Now().UTC()
 	child := &Draft{Input: input, ID: childID, Status: "draft", RetryOfTaskID: id, RetryOfRevision: revision, CreatedBy: actor, UpdatedBy: actor, CreatedAt: now, UpdatedAt: now}
+	if child.Repositories != nil {
+		child.RepositoryRevision = 1
+	}
 	if err = m.Store.AppendEvent(ctx, domain.NewEvent("task.retry_requested", source.GraphID, map[string]any{"taskId": childID, "retryOfTaskId": id, "retryOfRevision": revision}).WithActor(actor)); err != nil {
 		return nil, false, err
 	}

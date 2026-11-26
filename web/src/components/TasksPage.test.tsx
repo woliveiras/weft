@@ -69,7 +69,7 @@ it('requires reviewed confirmation and admin authority before starting',async()=
 it('exposes configuration, derives an editable title and preserves errors',async()=>{
  const backend=fakeApi({'GET /api/v1/projects':()=>[],'GET /api/v1/tasks':()=>({items:[]}), 'POST /api/v1/tasks':()=>apiError(503,'Storage unavailable','unavailable')});
  render(<TasksPage create info={info} graphs={graphs}/>);
- expect(screen.getByLabelText('Project').closest('details')).toBeNull();
+ expect(screen.getByRole('combobox',{name:'Repositories'}).closest('details')).toBeNull();
  expect(screen.getByLabelText('Workflow version').closest('details')).toHaveProperty('open',true);
  await userEvent.type(screen.getByLabelText('Request'),'Fix https://example.com/repo\nDo not push');
  await userEvent.selectOptions(screen.getByLabelText('Workflow'),'factory');
@@ -89,8 +89,8 @@ it('shows project discovery errors with a retry beside visible repository select
  render(<TasksPage create info={info} graphs={graphs}/>);
  const error=await screen.findByText('Projects unavailable');
  expect(error.closest('details')).toBeNull();
- expect(screen.getByRole('button',{name:'Retry projects'})).toBeTruthy();
- expect(screen.getByLabelText('Project').closest('details')).toBeNull();
+ expect(screen.getByRole('button',{name:'Retry repositories'})).toBeTruthy();
+ expect(screen.getByRole('combobox',{name:'Repositories'}).closest('details')).toBeNull();
 });
 it('resolves a prompt through the client and exposes durable repair without granting or starting',async()=>{
  const draft={id:'tsk_prompt',revision:2,status:'draft',title:'Explain',request:'Explain',outcome:'freeform',graphId:'',graphVersion:0,nodeId:'',resolution:{state:'needs_model',message:'Configure a default model and resolve again.'}};
@@ -147,7 +147,7 @@ it('defaults the version and reports remaining missing configuration without rei
  expect(screen.getByLabelText('Workflow version').getAttribute('aria-invalid')).toBeNull();
  expect(screen.getByLabelText('Entry agent').getAttribute('aria-invalid')).toBe('true');
  await userEvent.click(within(actions).getByRole('button',{name:'Complete task setup'}));
- expect(document.activeElement).toBe(screen.getByRole('region',{name:'Workflow & repository'}));
+ expect(document.activeElement).toBe(screen.getByRole('region',{name:'Workflow & repositories'}));
  expect(screen.getByLabelText('Request')).toHaveProperty('value',draft.request);
  expect(backend.calls.filter(c=>c.method!=='GET')).toEqual([]);
  await userEvent.selectOptions(screen.getByLabelText('Entry agent'),'worker');
@@ -302,7 +302,7 @@ it('repairs incomplete interpretation manually, preserving inputs and reviewing 
  render(<TasksPage id="tsk_repair" info={{identity:{role:'admin'}} as Info} graphs={graphs}/>);
  await userEvent.click(await screen.findByRole('button',{name:'Configure task manually'}));
  expect(screen.getByLabelText('Workflow').closest('details')).toBeNull();
- expect(document.activeElement).toBe(screen.getByRole('region',{name:'Workflow & repository'}));
+ expect(document.activeElement).toBe(screen.getByRole('region',{name:'Workflow & repositories'}));
  expect(screen.queryByText(/different workflow version/)).toBeNull();
  expect(backend.find('GET','/api/v1/tasks/tsk_repair/authorization')).toHaveLength(0);
  expect(screen.queryByRole('article',{name:'Task requirements'})).toBeNull();
@@ -353,15 +353,18 @@ it('keeps repository selection through discovery failure and retries with distin
  ]:apiError(503,'Projects unavailable','unavailable')});
  render(<TasksPage id="tsk_project" info={info} graphs={graphs}/>);
  await screen.findByText('Projects unavailable');
- expect((screen.getByLabelText('Project') as HTMLSelectElement).value).toBe('second');
+ expect((screen.getByRole('combobox',{name:'Repositories'}) as HTMLSelectElement).value).toBe('second');
  available=true;
- await userEvent.click(screen.getByRole('button',{name:'Retry projects'}));
+ await userEvent.click(screen.getByRole('button',{name:'Retry repositories'}));
+ await userEvent.click(screen.getByRole('combobox',{name:'Repositories'}));
  const choices=await screen.findAllByRole('option',{name:/weft.git/});
- expect(choices.map(c=>c.textContent)).toEqual([
-  'weft.git · https://example.com/repo.git · refs/heads/main · aaaaaaaaaaaa',
-  'weft.git · https://example.com/repo.git · refs/heads/security · bbbbbbbbbbbb'
- ]);
- expect((screen.getByLabelText('Project') as HTMLSelectElement).value).toBe('second');
+ expect(choices).toHaveLength(2);
+ expect(choices[0].textContent).toContain('refs/heads/main · aaaaaaaaaaaa');
+ expect(choices[1].textContent).toContain('refs/heads/security · bbbbbbbbbbbb');
+ expect(choices[1].getAttribute('aria-selected')).toBe('true');
+ expect(choices.every(row=>row.textContent?.includes('https://example.com/repo.git'))).toBe(true);
+ await userEvent.keyboard('{Escape}');
+ expect(screen.getByRole('combobox',{name:'Repositories'})).toHaveProperty('value','weft.git');
  expect(backend.calls.filter(c=>c.method!=='GET')).toHaveLength(0);
 });
 
@@ -372,12 +375,14 @@ it('saves visible configuration together and keeps the primary execution action 
  expect(screen.queryByText('Review settings')).toBeNull();
  await userEvent.type(screen.getByLabelText('Request'),'Inspect dependencies');
  await userEvent.selectOptions(screen.getByLabelText('Workflow'),'factory');
- await userEvent.selectOptions(screen.getByLabelText('Project'),'p');
+ await userEvent.click(screen.getByRole('combobox',{name:'Repositories'}));
+ await userEvent.click(await within(screen.getByRole('listbox')).findByRole('option',{name:/Repo/i}));
+ await userEvent.keyboard('{Escape}');
  expect((screen.getByLabelText('Execution environment') as HTMLSelectElement).value).toBe('sandbox');
  expect(screen.getByLabelText('Workflow version')).toHaveProperty('value','1');
  const form=screen.getByRole('form',{name:'Task request'});
- const order=[...form.querySelectorAll('select,button')];
- expect(order.indexOf(screen.getByRole('button',{name:'Run task'}))).toBeLessThan(order.indexOf(screen.getByLabelText('Project')));
+ const order=[...form.querySelectorAll('input,select,button')];
+ expect(order.indexOf(screen.getByRole('button',{name:'Run task'}))).toBeLessThan(order.indexOf(screen.getByRole('combobox',{name:'Repositories'})));
  await userEvent.click(screen.getByRole('button',{name:'Save draft'}));
  await waitFor(()=>expect(backend.find('POST','/api/v1/tasks')).toHaveLength(1));
  expect(backend.find('POST','/api/v1/tasks')[0].body).toMatchObject({graphId:'factory',graphVersion:1,nodeId:'worker',projectId:'p',baseCommit:'a'.repeat(40),executionMode:'sandbox',request:'Inspect dependencies'});
@@ -422,7 +427,9 @@ it('continues corrected bindings without model resolution and retains the saved 
  });
  render(<TasksPage id="tsk_continue" info={{identity:{role:'admin'}} as Info} graphs={graphs}/>);
  await userEvent.selectOptions(await screen.findByLabelText('Entry agent'),'worker');
- await userEvent.selectOptions(screen.getByLabelText('Project'),'p');
+ await userEvent.click(screen.getByRole('combobox',{name:'Repositories'}));
+ await userEvent.click(await within(screen.getByRole('listbox')).findByRole('option',{name:/Repo/i}));
+ await userEvent.keyboard('{Escape}');
  await userEvent.selectOptions(screen.getByLabelText('Execution environment'),'sandbox');
  await userEvent.clear(screen.getByLabelText('Title'));await userEvent.type(screen.getByLabelText('Title'),'Corrected');
  await userEvent.click(screen.getByRole('button',{name:'Run task'}));
@@ -522,4 +529,30 @@ it('shows the preparation path to an operator while leaving the build administra
  await userEvent.click(within(screen.getByRole('region',{name:'Review task environment preparation'})).getByRole('checkbox'));
  expect(screen.getByRole('button',{name:'Prepare task environment'})).toHaveProperty('disabled',true);
  expect(backend.calls.filter(c=>c.method!=='GET')).toEqual([]);
+});
+
+it('keeps the reviewed base when adding a second repository and drops a single-project environment suggestion', async () => {
+ const first = {id:'first',name:'Backend',head:'a'.repeat(40),path:'/backend',executionMode:'local'};
+ const second = {id:'second',name:'Frontend',head:'b'.repeat(40),path:'/frontend'};
+ fakeApi({'GET /api/v1/projects':()=>[first,second]});
+ render(<TasksPage create info={info} graphs={graphs}/>);
+ const field = screen.getByRole('combobox',{name:'Repositories'});
+ expect(screen.queryByRole('combobox',{name:'Project'})).toBeNull();
+ await userEvent.click(field);
+ const list = within(screen.getByRole('listbox'));
+ await userEvent.click(await list.findByRole('option',{name:/Backend/}));
+ expect(screen.getByLabelText('Execution environment')).toHaveProperty('value','local');
+ await userEvent.click(list.getByRole('option',{name:/Frontend/}));
+ expect(screen.getByLabelText('Execution environment')).toHaveProperty('value','workflow');
+ await userEvent.keyboard('{Escape}');
+ const backend = screen.getByRole('region',{name:'Backend'});
+ await userEvent.click(within(backend).getByText('Repository details'));
+ expect(within(backend).getByLabelText('Base commit')).toHaveProperty('value',first.head);
+ await userEvent.clear(within(backend).getByLabelText('Workspace directory'));
+ await userEvent.type(within(backend).getByLabelText('Workspace directory'),'service');
+ await userEvent.click(field);
+ await userEvent.click(within(screen.getByRole('listbox')).getByRole('option',{name:/Frontend/}));
+ await userEvent.keyboard('{Escape}');
+ expect(within(backend).getByLabelText('Workspace directory')).toHaveProperty('value','service');
+ expect(field).toHaveProperty('value','Backend');
 });

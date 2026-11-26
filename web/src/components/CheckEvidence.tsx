@@ -5,7 +5,7 @@ import {Btn} from './common';
 
 /** One check.run result recorded by the gateway as event check.completed. */
 export interface CheckRunEvidence {
-  check:string;command:string;passed:boolean;exitCode:number;timedOut?:boolean;durationMs:number;format?:string;infraError?:boolean;
+  stale?:boolean;repositories?:Record<string,{state:string;head:string;partial?:boolean}>;check:string;command:string;passed:boolean;exitCode:number;timedOut?:boolean;durationMs:number;format?:string;infraError?:boolean;
   failures?:{test?:string;file?:string;line?:number;message?:string}[];failureCount?:number;truncated?:boolean;
   workspace?:{head?:string;state?:string;partial?:boolean;base?:string;checkFilesChanged?:string[]};
 }
@@ -49,9 +49,13 @@ export function latestChecks(events:WeftEvent[],scope?:CheckScope):CheckRow[] {
   for (const ev of sorted) {
     if (ev.type!=='check.completed'||!isCheckRun(ev.data)) continue;
     if (scope&&!sameScope(ev,scope.nodeId,scope.replica)) continue;
-    rows.set(JSON.stringify([ev.data.check,ev.nodeId??'',ev.replica??0]),{...ev.data,time:ev.time,nodeId:ev.nodeId,replica:ev.replica,seq:ev.seq,stale:false});
+    rows.set(JSON.stringify([ev.data.check,ev.nodeId??'',ev.replica??0]),{...ev.data,time:ev.time,nodeId:ev.nodeId,replica:ev.replica,seq:ev.seq,stale:!!ev.data.stale});
   }
-  return [...rows.values()].map(row=>({...row,stale:sorted.some(ev=>changedWorkspace(ev,row)||differentTree(ev,row))}));
+  // Multi-repository runs carry an exact fingerprint for every input. A later
+  // check owned by a different repository naturally has a different local HEAD.
+  return [...rows.values()].map(row => row.repositories ? row : {
+    ...row, stale:row.stale || sorted.some(ev => changedWorkspace(ev,row) || differentTree(ev,row))
+  });
 }
 
 function status(r:CheckRow) {
@@ -63,6 +67,7 @@ function status(r:CheckRow) {
 /** CheckEvidence lists every declared check with its recorded outcome; it never infers a result from agent output. */
 export function CheckEvidence({graphId,scope}:{graphId:string;scope?:CheckScope}) {
   const [declared,setDeclared]=useState<DeclaredCheck[]>();
+  const [current,setCurrent]=useState<Record<string,{state:string;head:string}>>();
   const [events,setEvents]=useState<WeftEvent[]>();
   const [error,setError]=useState<string>();
   const [revision,setRevision]=useState(0);
@@ -71,28 +76,51 @@ export function CheckEvidence({graphId,scope}:{graphId:string;scope?:CheckScope}
     let cancelled=false;
     setError(undefined);
     Promise.all([api.getGraph(graphId),api.events(graphId,{types:'check.completed,workspace.observed',limit:1000})])
-      .then(([summary,evs])=>{if(!cancelled){setDeclared(summary.graph.spec.checks??[]);setEvents(evs.filter(ev=>ev.graphId===graphId));}})
-      .catch(cause=>{if(!cancelled)setError(errorMessage(cause));});
+      .then(async ([summary,evs])=>{
+        const taskId=summary.graph.metadata?.labels?.['weft.task'];
+        const members = summary.graph.spec.workspace?.repositories ?? [];
+        const checks = members.flatMap(r => (r.checks ?? []).map(c => ({...c, name:r.alias + '.' + c.name})));
+        let states;
+        if (taskId && members.length) {
+          try { states = await api.taskRepositoryStates(taskId); }
+          catch (cause) { if (!cancelled) setError(errorMessage(cause)); }
+        }
+        if (!cancelled) {
+          setCurrent(states);
+          setDeclared([...(summary.graph.spec.checks ?? []), ...checks]);
+          setEvents(evs.filter(ev => ev.graphId === graphId));
+        }
+      })
+      .catch(cause => {
+        if (!cancelled) { setCurrent(undefined); setError(errorMessage(cause)); }
+      });
     const timer=setTimeout(refresh,REFRESH_MS);
     return ()=>{cancelled=true;clearTimeout(timer);};
   },[graphId,revision,refresh]);
   if (error&&!events) return <>Check results unavailable: {error}. Review recorded commands and their outcomes below. <Btn onClick={refresh}>Retry</Btn></>;
   if (!events||!declared) return <>Loading declared checks…</>;
-  const rows=latestChecks(events,scope);
+  const rows=latestChecks(events,scope).map(row=>{
+    if(!row.repositories)return row;
+    const inputs=Object.entries(row.repositories);
+    const stale=!current || inputs.length!==Object.keys(current).length || inputs.some(([alias,s])=>s.partial||!s.state||s.head!==current[alias]?.head||s.state!==current[alias]?.state);
+    return {...row,stale:row.stale||stale};
+  });
   const names=[...declared.map(c=>c.name),...rows.map(r=>r.check).filter(n=>!declared.some(c=>c.name===n))].filter((n,i,all)=>all.indexOf(n)===i);
   if (!names.length) return <>Not independently verified. This task declares no checks; review recorded commands and their outcomes below.</>;
   const verdict=(name:string)=>{
-    const runs=rows.filter(r=>r.check===name);
+    let runs=rows.filter(r=>r.check===name);
+    if (runs.some(r=>r.repositories)) runs=[runs.reduce((latest,r)=>r.seq>latest.seq?r:latest)];
     if (!runs.length) return 'not run';
+    if (runs.some(r=>r.infraError)) return 'unable to run';
     if (runs.some(r=>!r.passed)) return 'failed';
     return runs.some(r=>r.stale)?'stale':'passed';
   };
-  const counts={passed:0,failed:0,stale:0,'not run':0} as Record<string,number>;
+  const counts={passed:0,failed:0,stale:0,'not run':0,'unable to run':0} as Record<string,number>;
   names.forEach(n=>counts[verdict(n)]++);
   const changedTests=[...new Set(rows.filter(r=>r.passed).flatMap(r=>r.workspace?.checkFilesChanged??[]))];
   const summary=counts.passed===names.length
     ?`All ${names.length} declared checks passed on the current workspace.`
-    :`${counts.passed} of ${names.length} declared checks passed on the current workspace`+[['failed','failed'],['stale','need a rerun after later changes'],['not run','were not run']].filter(([k])=>counts[k]).map(([k,label])=>`; ${counts[k]} ${label}`).join('')+'.';
+    :`${counts.passed} of ${names.length} declared checks passed on the current workspace`+[['unable to run','could not run'],['failed','failed'],['stale','need a rerun after later changes'],['not run','were not run']].filter(([k])=>counts[k]).map(([k,label])=>`; ${counts[k]} ${label}`).join('')+'.';
   return <>
     {summary}{' '}<Btn onClick={refresh}>Refresh checks</Btn>
     {error&&<> Refresh failed: {error}.</>}
@@ -103,6 +131,7 @@ export function CheckEvidence({graphId,scope}:{graphId:string;scope?:CheckScope}
       return <li key={name}><strong>{name}</strong> {command&&<code>{command}</code>}
         {!runs.length?<> · not run</>:<ul aria-label={`${name} runs`}>{runs.map(r=><li key={`${r.nodeId}:${r.replica}`}>
           {status(r)} · exit {r.exitCode}{r.nodeId?` · ${r.nodeId}#${r.replica??0}`:''}{r.workspace?.head?` · at ${r.workspace.head.slice(0,10)}${r.workspace.state?`+${r.workspace.state.slice(0,8)}`:''}`:' · workspace state unknown'}
+          {r.repositories&&<ul aria-label="Check inputs">{Object.entries(r.repositories).map(([alias,state])=><li key={alias}>{alias} · {state.partial?'unverified':state.head?.slice(0,12)+' / '+state.state?.slice(0,12)}</li>)}</ul>}
           {!r.passed&&!!r.failures?.length&&<ul aria-label={`${name} failures`}>{r.failures.map((f,i)=><li key={i}>{[f.test,f.file&&(f.line?`${f.file}:${f.line}`:f.file)].filter(Boolean).join(' ')}{f.message?`: ${f.message}`:''}</li>)}{(r.failureCount??0)>r.failures.length&&<li>{(r.failureCount??0)-r.failures.length} more not shown</li>}</ul>}
         </li>)}</ul>}
       </li>;})}</ul>

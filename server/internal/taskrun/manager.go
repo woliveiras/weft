@@ -7,9 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/woliveiras/weft/server/internal/projectconfig"
-	"github.com/woliveiras/weft/server/internal/taskauth"
-	"github.com/woliveiras/weft/server/internal/workspace"
 	"path/filepath"
 	"strings"
 	"time"
@@ -19,9 +16,13 @@ import (
 	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/environment"
 	"github.com/woliveiras/weft/server/internal/graph"
+	"github.com/woliveiras/weft/server/internal/projectconfig"
+	"github.com/woliveiras/weft/server/internal/review"
 	"github.com/woliveiras/weft/server/internal/secrets"
 	"github.com/woliveiras/weft/server/internal/storage"
+	"github.com/woliveiras/weft/server/internal/taskauth"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
+	"github.com/woliveiras/weft/server/internal/workspace"
 )
 
 const GraphPrefix = domain.TaskRunGraphPrefix
@@ -124,7 +125,7 @@ func Prepare(d *taskconfig.Draft, source *domain.Graph) (*domain.Graph, []string
 	if result == nil || result.Disabled {
 		blockers = append(blockers, "Select an enabled result agent.")
 	}
-	if d.ProjectID != "" && g.Spec.Workspace.Repo != "" {
+	if (d.ProjectID != "" || len(d.Repositories) > 0) && g.Spec.Workspace.Repo != "" {
 		blockers = append(blockers, "This workflow already selects a remote repository. Use a workflow without a repository override.")
 	}
 	if g.Spec.Workspace.Path != "" {
@@ -149,6 +150,23 @@ func Prepare(d *taskconfig.Draft, source *domain.Graph) (*domain.Graph, []string
 	if d.ProjectID != "" {
 		g.Metadata.Labels[domain.LabelTaskProject] = d.ProjectID
 		g.Metadata.Labels[domain.LabelTaskBase] = d.BaseCommit
+	}
+	if len(d.Repositories) > 0 {
+		g.Spec.Workspace.Repositories = d.Repositories
+		g.Spec.Workspace.Git = false
+		for i := range g.Spec.Nodes {
+			n := &g.Spec.Nodes[i]
+			if n.Disabled {
+				continue
+			}
+			if n.Isolation.Mode != domain.IsolationDocker || n.Workspace.Mode == domain.WorkspaceWorktree || n.Workspace.Subdir != "" {
+				blockers = append(blockers, "Multi-repository tasks require a shared Docker workspace at its root for agent "+n.ID+".")
+			}
+			n.Prompt += "\nTask repositories (workspace-relative directories, each with its own Git history):"
+			for _, repo := range d.Repositories {
+				n.Prompt += "\n" + repo.Alias + "/ @ " + repo.BaseCommit
+			}
+		}
 	}
 	g.Spec.Workspace.Path = ""
 	return &g, blockers, nil
@@ -250,7 +268,7 @@ func (m Manager) Review(ctx context.Context, id string) (*Review, error) {
 }
 
 func (m Manager) checkDraftBudget(ctx context.Context, d *taskconfig.Draft) error {
-	return (cost.Budgets{Store: m.Store}).CheckAdmission(ctx, cost.Target{User: d.CreatedBy, Project: d.ProjectID, Workflow: d.GraphID})
+	return (cost.Budgets{Store: m.Store}).CheckAdmission(ctx, cost.Target{Projects: domain.RepositoryProjectIDs(d.Repositories), User: d.CreatedBy, Project: d.ProjectID, Workflow: d.GraphID})
 }
 
 func (m Manager) Start(ctx context.Context, id string, revision int64, actor string) (*taskconfig.Draft, error) {
@@ -300,7 +318,9 @@ func (m Manager) Start(ctx context.Context, id string, revision int64, actor str
 	// No compensating delete: partial resources and the durable intent remain
 	// inspectable after failure, and neither GET nor retry replays side effects.
 	fail := func(cause error) (*taskconfig.Draft, error) {
-		d.LaunchError = "Task preparation or start did not complete. Inspect diagnostics; this request will not be dispatched again."
+		if d.LaunchError == "" {
+			d.LaunchError = "Task preparation or start did not complete. Inspect diagnostics; this request will not be dispatched again."
+		}
 		_, saveErr := tm.Transition(context.WithoutCancel(ctx), d, "interrupted", actor)
 		return nil, errors.Join(cause, saveErr)
 	}
@@ -310,17 +330,11 @@ func (m Manager) Start(ctx context.Context, id string, revision int64, actor str
 		}
 		return fail(err)
 	}
-	if d.ProjectID != "" {
-		project, e := (projectconfig.Manager{Store: m.Store}).Get(ctx, d.ProjectID)
-		if e != nil {
-			return fail(e)
+	if e := m.prepareCheckouts(ctx, d, g, actor); e != nil {
+		if len(d.Repositories) > 0 {
+			d.LaunchError = e.Error()
 		}
-		if m.Workspaces == nil {
-			return fail(errors.New("task workspaces unavailable"))
-		}
-		if _, e = (projectconfig.Manager{Store: m.Store}).CreateTaskCheckout(ctx, project, d.BaseCommit, m.Workspaces.Root, g.Metadata.ID, actor); e != nil {
-			return fail(e)
-		}
+		return fail(e)
 	}
 	if _, _, err = m.Engine.SaveTaskGraph(ctx, g, actor); err != nil {
 		return fail(err)
@@ -384,6 +398,7 @@ func workspaceScopes(g *domain.Graph, st *engine.GraphStatus) []WorkspaceScope {
 }
 
 type View struct {
+	Repositories     []MemberProgress    `json:"repositories,omitempty"`
 	Decisions        []*domain.Approval  `json:"decisions"`
 	Environment      *environment.View   `json:"environment,omitempty"`
 	Workspaces       []WorkspaceScope    `json:"workspaces"`
@@ -406,7 +421,7 @@ func (m Manager) View(ctx context.Context, id string) (*View, error) {
 	if v.Delivery, err = m.delivery(ctx, d); err != nil {
 		return nil, err
 	}
-	if d.ProjectID != "" && d.ExecutionGraphID == ExecutionID(d.ID) && m.Workspaces != nil {
+	if (d.ProjectID != "" || len(d.Repositories) > 0) && d.ExecutionGraphID == ExecutionID(d.ID) && m.Workspaces != nil {
 		v.WorkspacePath = filepath.Join(m.Workspaces.Root, d.ExecutionGraphID)
 	}
 	if d.ExecutionGraphID == "" {
@@ -414,6 +429,12 @@ func (m Manager) View(ctx context.Context, id string) (*View, error) {
 	}
 	if d.ExecutionGraphID != ExecutionID(d.ID) {
 		return nil, errors.New("invalid task execution binding")
+	}
+	if len(d.Repositories) > 0 {
+		v.Repositories, err = m.repositoryProgress(ctx, d)
+		if err != nil {
+			return nil, err
+		}
 	}
 	g, err := m.Store.GetGraph(ctx, d.ExecutionGraphID, 0)
 	if errors.Is(err, storage.ErrNotFound) {
@@ -549,11 +570,41 @@ func (m Manager) View(ctx context.Context, id string) (*View, error) {
 	// resume. Only infer a terminal task if its replicas have finished.
 	active = active || (st.DesiredState == domain.GraphPaused && !st.RunFinished)
 	if !active && (len(xs) > 0 || failed) {
+		if !failed && len(d.Repositories) > 0 && v.Result != nil {
+			decision, e := review.New(review.Options{Store: m.Store}).ContinuationState(ctx, v.Result)
+			if e != nil {
+				return nil, e
+			}
+			switch decision {
+			case "pending", "approved", "changes_requested":
+				if st.State != domain.GraphStopped {
+					v.State = "running"
+					v.Blockers = append(v.Blockers, "The result agent is waiting for its review continuation.")
+					return v, nil
+				}
+			case "rejected", "expired", "cancelled":
+				blocked = true
+			}
+		}
 		state := settledOutcome(failed, blocked, v.Result, v.Delivery, d.RequiresPullRequest(), st.State)
+		if len(d.Repositories) > 0 && (state == "succeeded" || state == "failed" || state == "blocked") {
+			missing, e := m.repositoryOutcome(ctx, v)
+			if e != nil {
+				return nil, e
+			}
+			if len(missing) > 0 {
+				v.Blockers = append(v.Blockers, missing...)
+				if v.Result != nil && d.Repositories[0].SCMConnection != "" && deliveryStarted(v.Repositories) && d.Status == "running" {
+					state = "delivery_pending"
+				} else if state == "succeeded" {
+					state = "blocked"
+				}
+			}
+		}
 		if state != "" {
 			v.State = state
 		}
-		if state == "blocked" && !blocked {
+		if state == "blocked" && !blocked && len(d.Repositories) == 0 {
 			v.Blockers = append(v.Blockers, "The task finished without the required pull request.")
 		}
 	}
@@ -593,6 +644,11 @@ func (m Manager) Cancel(ctx context.Context, id, actor string) (*taskconfig.Draf
 		return nil, storage.ErrConflict
 	}
 	g, rec, err := m.Engine.GetGraph(ctx, d.ExecutionGraphID, 0)
+	if len(d.Repositories) > 0 && d.Status == "interrupted" && (errors.Is(err, storage.ErrNotFound) || errors.Is(err, engine.ErrNotFound)) {
+		// Preparation returned before deploying the graph. Its durable
+		// per-member bindings remain available for separately reviewed cleanup.
+		return tm.Transition(ctx, d, "cancelled", actor)
+	}
 	if err != nil {
 		return nil, err
 	}

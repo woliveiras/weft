@@ -52,8 +52,20 @@
         "resultNodeId": {"type": "string", "maxLength": 128},
         "channelId": {"type": "string", "maxLength": 128},
         "messageType": {"type": "string", "maxLength": 128},
+        "projectIds": {"type":"array","uniqueItems":true,"items":{"type":"string","maxLength":128}},
         "projectId": {"type": "string", "maxLength": 128},
         "scmConnection": {"type": "string", "maxLength": 128}
+      }
+    },
+    "TaskRepository": {
+      "type":"object", "additionalProperties":false, "required":["alias","projectId","baseCommit"],
+      "properties":{
+        "alias":{"type":"string","pattern":"^[a-z][a-z0-9_-]{0,39}$"},
+        "projectId":{"type":"string"}, "baseCommit":{"type":"string","pattern":"^[0-9a-f]{40}([0-9a-f]{24})?$"},
+        "sourceRef":{"type":"string"}, "scmConnection":{"type":"string"}, "connectionRevision":{"type":"string"},
+        "repository":{"type":"string"}, "targetBranch":{"type":"string"},
+        "checks":{"type":"array","items":{"$ref":"#/$defs/Check"}},
+        "requiredChecks":{"type":"array","uniqueItems":true,"items":{"type":"string"}}
       }
     },
     "Check": {
@@ -98,6 +110,7 @@
       "type": "object", "additionalProperties": false,
       "properties": {
         "path": {"type": "string", "description": "Relative to the platform workspace root (absolute only with workspaces.allowAbsolute). Default <root>/<graph-id>."},
+        "repositories": {"type":"array","items":{"$ref":"#/$defs/TaskRepository"},"description":"Task-owned repository bindings populated at admission."},
         "git": {"type": "boolean", "description": "Initialise as a git repository."},
         "repo": {"type": "string", "description": "Remote repository (https://, ssh://, git:// or user@host:path) cloned into an empty workspace on first start. Local paths and other transports are rejected."}
       }

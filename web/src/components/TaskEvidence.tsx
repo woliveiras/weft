@@ -8,9 +8,10 @@ import {Btn} from './common';
 import {GitView} from './GitView';
 import {CheckEvidence} from './CheckEvidence';
 
-export function TaskEvidence({graphId,executions,role,workspaces=[],nativeProfile=false,delivery}:{graphId:string;executions:Execution[];role?:string;workspaces?:TaskWorkspace[];nativeProfile?:boolean;delivery?:TaskDelivery}) {
+export function TaskEvidence({graphId,executions,role,workspaces=[],repositories=[],nativeProfile=false,delivery}:{graphId:string;executions:Execution[];role?:string;workspaces?:TaskWorkspace[];repositories?:string[];nativeProfile?:boolean;delivery?:TaskDelivery}) {
   const [workspaceKey,setWorkspaceKey]=useState('');
   const scope=workspaces.find(x=>JSON.stringify([x.nodeId,x.replica])===workspaceKey);
+  const [repository,setRepository]=useState(repositories[0]??'');
   const [inspect,setInspect]=useState(false);
   const [selected,setSelected]=useState('');
   const [showTree,setShowTree]=useState(false);
@@ -21,13 +22,13 @@ export function TaskEvidence({graphId,executions,role,workspaces=[],nativeProfil
     <dl aria-label="Delivery verification">
       <dt>Checks</dt><dd><CheckEvidence graphId={graphId} scope={scope?{nodeId:scope.nodeId,replica:scope.replica}:undefined}/></dd>
       <dt>Commits</dt><dd>Not inferred from task completion. Inspect local Git history for the selected workspace.</dd>
-      <dt>Push</dt><dd>{delivery?.branch ? <>Weft recorded a push of <code>{delivery.branch}</code> to {delivery.repository}. This is recorded delivery evidence, not a fresh remote check.</> : 'Remote state not verified. No automatic push is performed on task completion.'}</dd>
+      {!repositories.length&&<><dt>Push</dt><dd>{delivery?.branch ? <>Weft recorded a push of <code>{delivery.branch}</code> to {delivery.repository}. This is recorded delivery evidence, not a fresh remote check.</> : 'Remote state not verified. No automatic push is performed on task completion.'}</dd></>}
     </dl>
-    <label>Workspace to review<select value={workspaceKey} onChange={e=>{setWorkspaceKey(e.target.value);setInspect(false);}}><option value="">Shared task workspace</option>{workspaces.map(x=><option key={JSON.stringify([x.nodeId,x.replica])} value={JSON.stringify([x.nodeId,x.replica])}>{x.nodeId} · replica {x.replica}{x.branch?` · ${x.branch}`:''}</option>)}</select></label>
+    {repositories.length>0?<label>Repository to inspect<select value={repository} onChange={e=>setRepository(e.target.value)}>{repositories.map(alias=><option key={alias}>{alias}</option>)}</select></label>:<label>Workspace to review<select value={workspaceKey} onChange={e=>{setWorkspaceKey(e.target.value);setInspect(false);}}><option value="">Shared task workspace</option>{workspaces.map(x=><option key={JSON.stringify([x.nodeId,x.replica])} value={JSON.stringify([x.nodeId,x.replica])}>{x.nodeId} · replica {x.replica}{x.branch?` · ${x.branch}`:''}</option>)}</select></label>}
     {workspaceKey&&!scope&&<p>The selected workspace is absent from this snapshot. Select an available workspace before inspecting.</p>}
     {scope&&<WorkspaceHandoff key={scope.path} path={scope.path} nativeProfile={nativeProfile}/>}
     <Btn disabled={!!workspaceKey&&!scope} onClick={()=>setInspect(value=>!value)}>{inspect?'Hide changes':'Inspect changes'}</Btn>
-    {inspect&&(!workspaceKey||scope)&&<GitView key={`${graphId}:${workspaceKey}`} graphId={graphId} node={scope?.inspectionNode??""} replica={scope?.replica??0} path={scope?.subdir??""}/>}
+    {inspect&&(!workspaceKey||scope)&&<GitView key={`${graphId}:${workspaceKey}`} graphId={graphId} repository={repository||undefined} node={scope?.inspectionNode??""} replica={scope?.replica??0} path={scope?.subdir??""}/>}
     <h4>Check execution evidence</h4>
     <p>Open recorded tool calls to review commands and their outcomes. No test result is inferred from the agent summary.</p>
     {!!executions.length&&<label>Inspect execution evidence<select value={selected} onChange={e=>{setSelected(e.target.value);setShowTree(false);}}><option value="">Select an execution</option>{executions.filter(x=>x.graphId===graphId).map(x=><option key={x.id} value={x.id}>{x.nodeId} · {x.status} · {x.id}</option>)}</select></label>}

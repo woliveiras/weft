@@ -16,6 +16,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/graph"
 	"github.com/woliveiras/weft/server/internal/storage"
+	"github.com/woliveiras/weft/server/internal/tools"
 )
 
 const reuseNamespace = "environment-reuse-v1"
@@ -285,7 +286,9 @@ func (m *Manager) setupSharedWorkspace(ctx context.Context, g *domain.Graph, dir
 		return prepared, nil
 	}
 	name := buildContainer(g.Metadata.ID)
-	args := []string{"run", "--name", name, "--network", SetupNetwork(env), "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", "10001", "-e", "CI=true", "--label", "weft.graph=" + g.Metadata.ID, "-v", m.opt.Workspaces.HostPath(dir) + ":/workspace", "-w", "/workspace"}
+	args := []string{"run", "--name", name, "--network", SetupNetwork(env), "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", "10001", "-e", "CI=true", "--label", "weft.graph=" + g.Metadata.ID}
+	args = append(args, tools.WorkspaceMountArgs(m.opt.Workspaces.HostPath(dir), "/workspace", false, g.Spec.Workspace.Repositories)...)
+	args = append(args, "-w", "/workspace")
 	for _, c := range caches {
 		args = append(args, "-v", c.Volume+":"+c.Path)
 	}

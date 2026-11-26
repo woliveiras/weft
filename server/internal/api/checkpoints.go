@@ -8,7 +8,7 @@ import (
 
 // listCheckpoints lists a graph's worktree checkpoints (NAT-07), newest first.
 func (s *Server) listCheckpoints(w http.ResponseWriter, r *http.Request) error {
-	list, err := s.Engine.ListCheckpoints(r.Context(), r.PathValue("id"))
+	list, err := s.Engine.ListCheckpoints(r.Context(), r.PathValue("id"), r.URL.Query().Get("repository"))
 	if err != nil {
 		return err
 	}
@@ -26,6 +26,7 @@ func (s *Server) restoreCheckpoint(w http.ResponseWriter, r *http.Request) error
 		Checkpoint string `json:"checkpoint"`
 		Node       string `json:"node"`
 		Replica    int    `json:"replica"`
+		Repository string `json:"repository,omitempty"`
 		Confirm    bool   `json:"confirm"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1024)
@@ -40,7 +41,7 @@ func (s *Server) restoreCheckpoint(w http.ResponseWriter, r *http.Request) error
 	if !in.Confirm {
 		return badRequest("explicit restore confirmation is required")
 	}
-	res, err := s.Engine.RestoreCheckpoint(r.Context(), r.PathValue("id"), in.Node, in.Replica, in.Checkpoint, identityFrom(r.Context()).Name)
+	res, err := s.Engine.RestoreCheckpoint(r.Context(), r.PathValue("id"), in.Node, in.Replica, in.Checkpoint, identityFrom(r.Context()).Name, in.Repository)
 	if err != nil {
 		return err
 	}

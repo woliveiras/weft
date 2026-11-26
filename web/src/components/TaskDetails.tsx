@@ -111,12 +111,18 @@ export function TaskTracking({task, canControl, canDecide, canRetry = false, nat
     try {await api.cancelTask(task.id); setRefresh(x => x + 1); setConfirmed(false);}
     catch (cause) {setError(errorMessage(cause));} finally {setBusy(false);}
   };
+  const retryDelivery=async(alias:string)=>{
+    if(!progress)return;
+    setBusy(true);setError(undefined);
+    try{await api.retryRepositoryDelivery(task.id,progress.task.revision,alias);setRefresh(x=>x+1);}
+    catch(e){setError(errorMessage(e));}finally{setBusy(false);}
+  };
   const current = progress?.task ?? task;
   const graph = current.executionGraphId;
   const budget = useAsync(() => graph ? api.budget('run', graph) : Promise.resolve(undefined), [graph]);
   const reloadBudget = useThrottled(() => void budget.reload(), 300);
   useOptionalEventStream({graph, types: ['budget.raised', 'budget.graph_transition', 'budget.ledger_invalid']}, reloadBudget);
-  const active = !!progress && ['running', 'starting', 'environment_pending', 'environment_build_requested', 'preparing', 'blocked', 'interrupted'].includes(progress.state);
+  const active = !!progress && ['delivery_pending','running', 'starting', 'environment_pending', 'environment_build_requested', 'preparing', 'blocked', 'interrupted'].includes(progress.state);
   const terminal = !!progress && ['succeeded', 'failed'].includes(progress.state);
   const retainedCopy = useAsync(async () => {
     if (!canControl || !terminal || !graph) return undefined;
@@ -161,12 +167,13 @@ export function TaskTracking({task, canControl, canDecide, canRetry = false, nat
       {section === 'environment' && (progress?.environment ? <TaskEnvironment key={task.id} task={current} environment={progress.environment} canControl={canControl && !error} onChanged={() => setRefresh(x => x + 1)}/> : <section className="card" aria-label="Task environment"><h2>Environment &amp; logs</h2>{!progress ? <p role={error ? undefined : 'status'}>{error ? 'Environment snapshot unavailable. Use Refresh task to retry.' : 'Loading the task environment snapshot…'}</p> : <p>No task environment has been prepared. Build logs will appear here when preparation starts.</p>}</section>)}
       {section === 'overview' && <>
         {graph ? <TaskPlan key={`plan-${graph}`} graphId={graph}/> : <section className="card" aria-label="Agent plans"><h2>Agent plans</h2><p>No execution has started yet.</p></section>}
+        {progress?.repositories?.length ? <section aria-label="Repository results"><h3>Repositories</h3><table><thead><tr><th>Repository</th><th>Checkout</th><th>Delivery</th></tr></thead><tbody>{progress.repositories.map(r=><tr key={r.alias}><th scope="row">{r.alias}</th><td>{r.preparation}</td><td>{r.delivery||'Local only'} {r.details} {r.pullRequest&&<a href={r.pullRequest.url} target="_blank" rel="noreferrer">PR #{r.pullRequest.number}</a>} {canControl&&progress.state==="delivery_pending"&&r.delivery!=="unchanged"&&r.delivery!=="pull_request confirmed"&&<Btn disabled={busy} onClick={()=>void retryDelivery(r.alias)}>Retry delivery for {r.alias}</Btn>}</td></tr>)}</tbody></table></section>:null}
         <TaskResult key={progress?.result?.id ?? 'no-result'} result={progress?.result} delivery={progress?.delivery} changesHref={href('changes')}/>
       </>}
       {section === 'request' && <section className="card task-detail-request" aria-label="Request"><h2>Request</h2><TaskRequestContent request={task.request}/></section>}
       {section === 'changes' && <>
-        {graph ? <><section className="card"><TaskEvidence key={graph} graphId={graph} delivery={progress?.delivery} workspaces={progress?.workspaces ?? []} nativeProfile={nativeProfile} executions={progress?.executions ?? []} role={canControl ? 'admin' : canDecide ? 'operator' : 'viewer'}/></section>
-          <section className="card"><TaskCheckpoints key={`checkpoints:${graph}`} graphId={graph} canRestore={canControl && !error}/></section>
+        {graph ? <><section className="card"><TaskEvidence key={graph} graphId={graph} delivery={progress?.delivery} repositories={current.repositories?.map(r=>r.alias)} workspaces={progress?.workspaces ?? []} nativeProfile={nativeProfile} executions={progress?.executions ?? []} role={canControl ? 'admin' : canDecide ? 'operator' : 'viewer'}/></section>
+          <section className="card"><TaskCheckpoints repositories={current.repositories?.map(r=>r.alias)} key={`checkpoints:${graph}`} graphId={graph} canRestore={canControl && !error}/></section>
           <nav className="btn-row" aria-label="Task evidence"><a href={`#/g/${encodeURIComponent(graph)}/runs`}>Execution details</a><a href={`#/g/${encodeURIComponent(graph)}/files`}>Workspace files</a></nav>
         </> : <p className="empty">No execution evidence recorded yet.</p>}
         {progress?.workspacePath && <details className="card"><summary>Open workspace in your editor</summary><WorkspaceHandoff path={progress.workspacePath} nativeProfile={nativeProfile}/></details>}
@@ -177,9 +184,9 @@ export function TaskTracking({task, canControl, canDecide, canRetry = false, nat
           <dl><div><dt>Source workflow</dt><dd><a href={`#/g/${encodeURIComponent(task.graphId)}`}>{task.graphId}</a></dd></div><div><dt>Version</dt><dd>{task.graphVersion}</dd></div><div><dt>Execution copy</dt><dd>{graph || 'Not prepared'}</dd></div></dl>
           <ul>{progress?.executions.map(execution => <li key={execution.id}><a href={`#/g/${encodeURIComponent(execution.graphId)}/runs?execution=${encodeURIComponent(execution.id)}&section=result`}>{execution.nodeId}: {execution.status}</a></li>)}</ul>
         </section>
-        <TaskAuthorization taskId={task.id} canEdit={canControl && !error && ['running', 'starting', 'environment_pending'].includes(current.status)} running={current.status !== 'environment_pending'} onChanged={() => setRefresh(x => x + 1)}/>
+        <TaskAuthorization taskId={task.id} canEdit={canControl && !error && ['delivery_pending','running', 'starting', 'environment_pending'].includes(current.status)} running={current.status !== 'environment_pending'} onChanged={() => setRefresh(x => x + 1)}/>
         {graph && <section className="card" aria-label="Task run budget"><h2>Budget</h2><ErrorBox error={budget.error}/>{budget.loading && !budget.data && <p>Loading budget…</p>}{raisedBudget}{!budget.data && !budget.loading && <p>Budget unavailable. <Btn onClick={() => void budget.reload()}>Retry budget</Btn></p>}</section>}
-        {canControl && progress?.state === 'cancelled' && current.projectId && <TaskCleanup taskId={task.id} workspaces={progress.workspaces ?? []} onChanged={() => setRefresh(x => x + 1)}/>}
+        {canControl && progress?.state === 'cancelled' && (current.projectId || !!current.repositories?.length) && <TaskCleanup repositories={current.repositories?.map(r=>r.alias)} taskId={task.id} workspaces={progress.workspaces ?? []} onChanged={() => setRefresh(x => x + 1)}/>}
       </>}
     </div>
     {canControl && canStop && <details className="task-stop-controls"><summary>Stop task</summary>{terminal && <p>This task has a recorded outcome, but its execution copy has not been confirmed stopped. Cancellation retains its files and history.</p>}{terminal && retainedCopy.error && <ErrorBox error={`Execution status unavailable: ${retainedCopy.error}`}/>}<p>Requests cancellation of this task's execution copy. Files and history are retained; external effects are not undone.</p><label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)}/>Stop this task's execution copy and retain its data.</label><Btn tone="danger" disabled={busy || !confirmed || !!error} onClick={() => void cancel()}>Stop task</Btn></details>}

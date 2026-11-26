@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/url"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/events"
 	"github.com/woliveiras/weft/server/internal/observability"
 	"github.com/woliveiras/weft/server/internal/storage"
+	"github.com/woliveiras/weft/server/internal/workspace"
 )
 
 var ErrForbidden = errors.New("review access denied")
@@ -94,27 +96,30 @@ type Credential struct {
 	Used    bool      `json:"used,omitempty"`
 }
 type Record struct {
-	RunID          string     `json:"runId,omitempty"`
-	Policy         Policy     `json:"policy"`
-	ID             string     `json:"id"`
-	GraphID        string     `json:"graphId"`
-	NodeID         string     `json:"nodeId"`
-	Replica        int        `json:"replica"`
-	ExecutionID    string     `json:"executionId"`
-	Request        Request    `json:"request"`
-	Candidate      string     `json:"candidate"`
-	State          string     `json:"state"`
-	Session        string     `json:"session"`
-	Generation     int        `json:"generation"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	ExpiresAt      time.Time  `json:"expiresAt"`
-	SessionExpires time.Time  `json:"sessionExpires"`
-	DecidedAt      *time.Time `json:"decidedAt,omitempty"`
-	DecidedBy      string     `json:"decidedBy,omitempty"`
-	Method         string     `json:"method,omitempty"`
-	Comment        string     `json:"comment,omitempty"`
-	Error          string     `json:"error,omitempty"`
-	Notified       bool       `json:"notified"`
+	RepositoryDiffs map[string]string                    `json:"repositoryDiffs,omitempty"`
+	VerifiedChecks  map[string]string                    `json:"verifiedChecks,omitempty"`
+	RunID           string                               `json:"runId,omitempty"`
+	Policy          Policy                               `json:"policy"`
+	ID              string                               `json:"id"`
+	GraphID         string                               `json:"graphId"`
+	NodeID          string                               `json:"nodeId"`
+	Replica         int                                  `json:"replica"`
+	ExecutionID     string                               `json:"executionId"`
+	Request         Request                              `json:"request"`
+	Repositories    map[string]workspace.RepositoryState `json:"repositories,omitempty"`
+	Candidate       string                               `json:"candidate"`
+	State           string                               `json:"state"`
+	Session         string                               `json:"session"`
+	Generation      int                                  `json:"generation"`
+	CreatedAt       time.Time                            `json:"createdAt"`
+	ExpiresAt       time.Time                            `json:"expiresAt"`
+	SessionExpires  time.Time                            `json:"sessionExpires"`
+	DecidedAt       *time.Time                           `json:"decidedAt,omitempty"`
+	DecidedBy       string                               `json:"decidedBy,omitempty"`
+	Method          string                               `json:"method,omitempty"`
+	Comment         string                               `json:"comment,omitempty"`
+	Error           string                               `json:"error,omitempty"`
+	Notified        bool                                 `json:"notified"`
 	// Internal fields never returned by View.
 	Source      string        `json:"source"`
 	Directory   string        `json:"directory"`
@@ -124,7 +129,7 @@ type Record struct {
 }
 
 func (r *Record) View() map[string]any {
-	return map[string]any{"id": r.ID, "graphId": r.GraphID, "nodeId": r.NodeID, "replica": r.Replica, "request": r.Request, "candidate": r.Candidate, "state": r.State, "session": r.Session, "generation": r.Generation, "revision": r.Generation, "createdAt": r.CreatedAt, "expiresAt": r.ExpiresAt, "sessionExpires": r.SessionExpires, "decidedBy": r.DecidedBy, "decidedAt": r.DecidedAt, "method": r.Method, "comment": r.Comment, "error": r.Error}
+	return map[string]any{"id": r.ID, "graphId": r.GraphID, "nodeId": r.NodeID, "replica": r.Replica, "request": r.Request, "candidate": r.Candidate, "repositories": r.Repositories, "verifiedChecks": r.VerifiedChecks, "state": r.State, "session": r.Session, "generation": r.Generation, "revision": r.Generation, "createdAt": r.CreatedAt, "expiresAt": r.ExpiresAt, "sessionExpires": r.SessionExpires, "decidedBy": r.DecidedBy, "decidedAt": r.DecidedAt, "method": r.Method, "comment": r.Comment, "error": r.Error}
 }
 func (r *Record) Name() string { return fmt.Sprintf("weft-preview-%s-%d", r.ID, r.Generation) }
 func (r *Record) Work() string {
@@ -264,6 +269,17 @@ func (m *Manager) Create(ctx context.Context, g *domain.Graph, n string, replica
 	if e != nil {
 		return nil, e
 	}
+	var members map[string]workspace.RepositoryState
+	if len(g.Spec.Workspace.Repositories) > 0 {
+		members, e = workspace.RepositoryStates(ctx, source, g.Spec.Workspace.Repositories)
+		if e != nil {
+			return nil, e
+		}
+	}
+	diffs, checks, e := m.captureRepositoryEvidence(ctx, g, source, dir, members)
+	if e != nil {
+		return nil, e
+	}
 	candidate, e := Candidate(ctx, source, staging)
 	if e != nil {
 		return nil, fmt.Errorf("capture candidate: %w", e)
@@ -271,6 +287,15 @@ func (m *Manager) Create(ctx context.Context, g *domain.Graph, n string, replica
 	again, e := Fingerprint(ctx, source)
 	if e != nil {
 		return nil, e
+	}
+	if len(members) > 0 {
+		current, err := workspace.RepositoryStates(ctx, source, g.Spec.Workspace.Repositories)
+		if err != nil {
+			return nil, err
+		}
+		if !maps.Equal(current, members) {
+			return nil, ErrStale
+		}
 	}
 	if again != candidate {
 		return nil, ErrStale
@@ -297,7 +322,7 @@ func (m *Manager) Create(ctx context.Context, g *domain.Graph, n string, replica
 		}
 	}
 	now := time.Now().UTC()
-	r := &Record{Policy: policy, ID: id, GraphID: g.Metadata.ID, NodeID: n, Replica: replica, ExecutionID: execution, Request: req, Candidate: candidate, Source: source, Directory: dir, Graph: g, State: "pending", Session: "none", Generation: 1, CreatedAt: now, ExpiresAt: now.Add(24 * time.Hour), SessionExpires: now.Add(time.Duration(req.LifetimeSeconds) * time.Second)}
+	r := &Record{RepositoryDiffs: diffs, VerifiedChecks: checks, Repositories: members, Policy: policy, ID: id, GraphID: g.Metadata.ID, NodeID: n, Replica: replica, ExecutionID: execution, Request: req, Candidate: candidate, Source: source, Directory: dir, Graph: g, State: "pending", Session: "none", Generation: 1, CreatedAt: now, ExpiresAt: now.Add(24 * time.Hour), SessionExpires: now.Add(time.Duration(req.LifetimeSeconds) * time.Second)}
 	if len(req.Command) > 0 {
 		r.Session = "queued"
 	}
@@ -342,7 +367,7 @@ func (m *Manager) decide(ctx context.Context, id, state, method, actor, comment 
 		if method == "external" && r.Request.ExternalURL == "" {
 			return nil, ErrInvalid
 		}
-		hash, e := Fingerprint(ctx, r.Source)
+		hash, e := r.currentFingerprint(ctx)
 		if e != nil {
 			return nil, e
 		}
@@ -659,7 +684,7 @@ func (m *Manager) notify(ctx context.Context, r *Record) error {
 	// The decision itself is the outbox entry. Insert-once preserves a consumed
 	// message if a crash occurs between insertion and marking this entry delivered.
 	if r.State == "approved" {
-		hash, e := Fingerprint(ctx, r.Source)
+		hash, e := r.currentFingerprint(ctx)
 		if e != nil {
 			return e
 		}
@@ -742,7 +767,7 @@ func (m *Manager) AssertApproved(ctx context.Context, graph, node string, replic
 	if latest.State != "approved" {
 		return fmt.Errorf("human review %s is %s; request a new review before completing", latest.ID, latest.State)
 	}
-	hash, e := Fingerprint(ctx, latest.Source)
+	hash, e := latest.currentFingerprint(ctx)
 	if e != nil {
 		return e
 	}
@@ -779,4 +804,59 @@ func (m *Manager) stop(ctx context.Context, r *Record) error {
 		}
 	}
 	return err
+}
+
+func (r *Record) currentFingerprint(ctx context.Context) (string, error) {
+	if len(r.Repositories) > 0 {
+		if r.Graph == nil {
+			return "", ErrStale
+		}
+		current, err := workspace.RepositoryStates(ctx, r.Source, r.Graph.Spec.Workspace.Repositories)
+		if err != nil {
+			return "", err
+		}
+		if !maps.Equal(r.Repositories, current) {
+			return "", ErrStale
+		}
+	}
+	return Fingerprint(ctx, r.Source)
+}
+
+// ApprovedRepositories requires the latest task-wide decision to cover the
+// exact combined Git and filesystem state supplied to the delivery boundary.
+func (m *Manager) ApprovedRepositories(ctx context.Context, graph string, states map[string]workspace.RepositoryState) (*Record, error) {
+	rows, err := m.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var latest *Record
+	for _, r := range rows {
+		if r.GraphID == graph && (latest == nil || r.CreatedAt.After(latest.CreatedAt)) {
+			latest = r
+		}
+	}
+	if latest == nil || latest.State != "approved" || !maps.Equal(states, latest.Repositories) {
+		return nil, fmt.Errorf("%w: the combined candidate needs human review", ErrStale)
+	}
+	hash, err := latest.currentFingerprint(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if hash != latest.Candidate {
+		return nil, ErrStale
+	}
+	return latest, nil
+}
+
+// ContinuationState distinguishes a turn that yielded for a review from the
+// later turn that consumes the decision and finishes the work.
+func (m *Manager) ContinuationState(ctx context.Context, x *domain.Execution) (string, error) {
+	r, err := m.latest(ctx, x.GraphID, x.NodeID, x.Replica)
+	if err != nil {
+		return "", err
+	}
+	if r == nil || r.ExecutionID != x.ID {
+		return "", nil
+	}
+	return r.State, nil
 }

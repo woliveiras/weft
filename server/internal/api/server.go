@@ -22,11 +22,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/trace"
-	"gopkg.in/yaml.v3"
-
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
@@ -52,6 +47,10 @@ import (
 	"github.com/woliveiras/weft/server/internal/tools"
 	"github.com/woliveiras/weft/server/internal/trigger"
 	"github.com/woliveiras/weft/server/internal/workspace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+	"gopkg.in/yaml.v3"
 )
 
 // Version is set at build time (-ldflags "-X .../api.Version=...").
@@ -139,10 +138,12 @@ func (s *Server) routes() {
 		{"PUT /api/v1/tasks/{tid}", O, s.saveTask},
 		{"DELETE /api/v1/tasks/{tid}", O, s.deleteTaskDraft},
 		{"POST /api/v1/tasks/{tid}/retry", O, s.retryTask},
+		{"POST /api/v1/tasks/{tid}/repositories/{alias}/deliver", A, s.retryRepositoryDelivery},
 		{"GET /api/v1/tasks/{tid}/authorization", R, s.taskAuthorization},
 		{"PUT /api/v1/tasks/{tid}/authorization", A, s.taskAuthorization},
 		{"GET /api/v1/tasks/{tid}/review", R, s.reviewTask},
 		{"GET /api/v1/tasks/{tid}/progress", R, s.taskProgress},
+		{"GET /api/v1/tasks/{tid}/repository-states", R, s.taskRepositoryStates},
 		{"POST /api/v1/tasks/{tid}/{action}", A, s.taskAction},
 		{"GET /api/v1/tasks/{tid}/cleanup", A, s.taskCleanup},
 		{"POST /api/v1/tasks/{tid}/cleanup", A, s.taskCleanup},
@@ -171,6 +172,7 @@ func (s *Server) routes() {
 		{"POST /api/v1/mcp/connections/{connection}/test", O, s.mcpRefresh},
 		{"POST /api/v1/mcp/connections/{connection}/tools/refresh", O, s.mcpRefresh},
 		{"GET /api/v1/reviews", O, s.listReviews},
+		{"GET /api/v1/reviews/{review}/repositories/{alias}/diff", O, s.reviewRepositoryDiff},
 		{"POST /api/v1/reviews/{review}/{action}", O, s.reviewAction},
 		{"GET /healthz", "", s.healthz},
 		{"GET /readyz", "", s.readyz},

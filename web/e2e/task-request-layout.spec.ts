@@ -27,7 +27,7 @@ test('uses the available task form width and aligns visible fields and import co
   expect(title.width).toBe(goal.width);
 
   const workflow = (await form.getByRole('combobox', { name: 'Workflow', exact: true }).boundingBox())!;
-  const project = (await form.getByRole('combobox', { name: 'Project', exact: true }).boundingBox())!;
+  const project = (await form.getByRole('combobox', { name: 'Repositories', exact: true }).boundingBox())!;
   expect(project.width).toBe(workflow.width);
   expect(project.y).toBe(workflow.y);
   expect(project.x - workflow.x - workflow.width).toBeGreaterThanOrEqual(16);

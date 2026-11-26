@@ -72,7 +72,7 @@ export function GraphSettings({
     parameters: String(parameters.length),
   };
   const contents = {
-    task: section==='task'?<WorkflowTaskDefaults graph={graph} onChange={onChange} editable={role==='admin'}/>:null,
+    task: section==='task'?<WorkflowTaskDefaults dirty={dirty} graph={graph} onChange={onChange} editable={role==='admin'}/>:null,
     general: (
       <fieldset aria-label="Graph configuration">
         <HelpField label={"ID"} help={"The stable workflow identifier used in URLs and integrations. Changing a reference elsewhere does not rename a saved workflow."}>

@@ -2,6 +2,7 @@ package graph
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -86,7 +87,7 @@ func TestTaskDefaultsDocumentRoundTrip(t *testing.T) {
 				t.Fatal(err)
 			}
 			decoded, unknown, err := Decode(data, format == "yaml")
-			if err != nil || len(unknown) != 0 || decoded.Spec.Task == nil || *decoded.Spec.Task != *g.Spec.Task {
+			if err != nil || len(unknown) != 0 || decoded.Spec.Task == nil || !reflect.DeepEqual(decoded.Spec.Task, g.Spec.Task) {
 				t.Fatalf("round trip: %+v %+v %v", decoded, unknown, err)
 			}
 		})

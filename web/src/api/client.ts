@@ -190,8 +190,8 @@ export const api = {
   task: (id: string) => request<TaskDraft>(`${V1}/tasks/${enc(id)}`),
   taskAuthorization: (id:string) => request<import('./tasks').TaskAuthorization>(`${V1}/tasks/${encodeURIComponent(id)}/authorization`),
   saveTaskAuthorization: (id:string,mode:import('./tasks').AuthorizationMode,scope:string,revision:number,remember=false,preferenceRevision=0) => request(`${V1}/tasks/${encodeURIComponent(id)}/authorization`,{method:'PUT',headers:{'If-Match':String(revision)},body:{mode,scope,confirm:true,remember,preferenceRevision}}),
-  resolveTaskPrompt: (input:TaskInput,id?:string,revision?:number) => request<TaskDraft>(`${V1}/tasks/prompt`, {method:'POST',body:{request:input.request,graphId:input.graphId,id,revision,settings:{title:input.title,executionMode:input.executionMode,projectId:input.projectId,baseCommit:input.baseCommit,source:input.source}}}),
-  submitTaskPrompt: (input:TaskInput,key:string,id?:string,revision?:number) => request<{task:TaskDraft;review?:TaskReview}>(`${V1}/tasks/submit`, {method:'POST',body:{key,confirm:true,request:input.request,graphId:input.graphId,id,revision,settings:{title:input.title,executionMode:input.executionMode,projectId:input.projectId,baseCommit:input.baseCommit,source:input.source}}}),
+  resolveTaskPrompt: (input:TaskInput,id?:string,revision?:number) => request<TaskDraft>(`${V1}/tasks/prompt`, {method:'POST',body:{request:input.request,graphId:input.graphId,id,revision,settings:{repositories:input.repositories,title:input.title,executionMode:input.executionMode,projectId:input.projectId,baseCommit:input.baseCommit,source:input.source}}}),
+  submitTaskPrompt: (input:TaskInput,key:string,id?:string,revision?:number) => request<{task:TaskDraft;review?:TaskReview}>(`${V1}/tasks/submit`, {method:'POST',body:{key,confirm:true,request:input.request,graphId:input.graphId,id,revision,settings:{repositories:input.repositories,title:input.title,executionMode:input.executionMode,projectId:input.projectId,baseCommit:input.baseCommit,source:input.source}}}),
   repositoryImports: () => request<import('./tasks').RepositoryImportRecord[]>(`${V1}/repository-imports`),
   importRepository: (input:{url:string;ref:string;confirmed:boolean;retry?:boolean;revision?:number;authentication?:{mode:string;username?:string;token?:string}}) => request<import('./tasks').RepositoryImportRecord>(`${V1}/repository-imports`, {method:'POST',body:input}),
   cancelRepositoryImport: (id:string,revision:number) => request<import('./tasks').RepositoryImportRecord>(`${V1}/repository-imports/${enc(id)}/cancel`, {method:'POST',headers:{'If-Match':String(revision)}}),
@@ -199,8 +199,10 @@ export const api = {
   saveTask: (input: TaskInput, id?: string, revision?: number) => request<TaskDraft>(`${V1}/tasks${id ? '/'+enc(id) : ''}`, {method:id?'PUT':'POST',body:input,headers:id?{'If-Match':String(revision)}:undefined}),
   taskProgress: (id: string) => request<TaskProgress>(`${V1}/tasks/${enc(id)}/progress`),
   startTask: (id: string, revision: number) => request<TaskDraft>(`${V1}/tasks/${enc(id)}/start`, {method:'POST',body:{confirm:true},headers:{'If-Match':String(revision)}}),
-  previewTaskCleanup: (id:string,node='',replica=0) => request<import('./tasks').CleanupPreview>(`${V1}/tasks/${enc(id)}/cleanup?node=${enc(node)}&replica=${replica}`),
-  cleanupTaskWorkspace: (id:string,node:string,replica:number,fingerprint:string) => request<{removed:boolean}>(`${V1}/tasks/${enc(id)}/cleanup?node=${enc(node)}&replica=${replica}`,{method:'POST',body:{confirm:true,fingerprint}}),
+  taskRepositoryStates: (id:string)=>request<Record<string,{state:string;head:string}>>(`${V1}/tasks/${enc(id)}/repository-states`),
+  retryRepositoryDelivery: (id:string,revision:number,alias:string)=>request<{delivery:string}>(`${V1}/tasks/${enc(id)}/repositories/${enc(alias)}/deliver`,{method:'POST',headers:{'If-Match':String(revision)},body:{confirm:true}}),
+  previewTaskCleanup: (id:string,node='',replica=0,repository='') => request<import('./tasks').CleanupPreview>(`${V1}/tasks/${enc(id)}/cleanup?node=${enc(node)}&replica=${replica}${repository?'&repository='+enc(repository):''}`),
+  cleanupTaskWorkspace: (id:string,node:string,replica:number,fingerprint:string,repository='') => request<{removed:boolean}>(`${V1}/tasks/${enc(id)}/cleanup?node=${enc(node)}&replica=${replica}${repository?'&repository='+enc(repository):''}`,{method:'POST',body:{confirm:true,fingerprint}}),
   prepareTaskEnvironment: (id:string,revision:number)=>request<TaskDraft>(`${V1}/tasks/${enc(id)}/prepare-environment`,{method:'POST',headers:{'If-Match':String(revision)},body:{confirm:true}}),
   retryTask: (id: string, revision: number) => request<TaskDraft>(`${V1}/tasks/${enc(id)}/retry`, {method:'POST',body:{confirm:true},headers:{'If-Match':String(revision)}}),
   cancelTask: (id: string) => request<TaskDraft>(`${V1}/tasks/${enc(id)}/cancel`, {method:'POST',body:{confirm:true}}),
@@ -228,6 +230,7 @@ export const api = {
   instructions: (id: string, node: string) => request<InstructionSnapshot>(`${V1}/graphs/${enc(id)}/instructions`, {query: {node}}),
   executionInstructions: (id: string) => request<InstructionSnapshot>(`${V1}/executions/${enc(id)}/instructions`),
 
+  reviewRepositoryDiff:(id:string,alias:string)=>request<{diff:string}>(`${V1}/reviews/${enc(id)}/repositories/${enc(alias)}/diff`),
   reviews: () => request<HumanReview[]>(`${V1}/reviews`),
   reviewAction: (id: string, action: string, body: Record<string, unknown> = {}) => request<HumanReview>(`${V1}/reviews/${enc(id)}/${enc(action)}`, { method: 'POST', body }),
   previewCredential: (id: string, browser: boolean) => request<{token: string; url: string}>(`${V1}/reviews/${enc(id)}/credential`, { method: 'POST', body: {browser} }),
@@ -377,8 +380,8 @@ export const api = {
   budget: (scope: string, id: string) => request<BudgetView>(`${V1}/cost/budgets/${enc(scope)}/${enc(id)}`),
   raiseBudget: (scope: string, id: string, limitMicros: number) =>
     request<BudgetView>(`${V1}/cost/budgets/${enc(scope)}/${enc(id)}/raise`, { method: 'POST', body: { limitMicros } }),
-  budgetPreview: (workflow: string, project?: string) =>
-    request<{ taskRunBudgetMicros: number; currency: string; budgets: BudgetView[] }>(`${V1}/cost/budgets/preview`, { query: { workflow, project: project ?? '' } }),
+  budgetPreview: (workflow: string, project?: string, repositories?:TaskInput["repositories"]) =>
+    request<{ taskRunBudgetMicros: number; currency: string; budgets: BudgetView[] }>(`${V1}/cost/budgets/preview`, { query: { workflow, project: project ?? '', ...(repositories?.length?{projects:repositories.map(r=>r.projectId).join(' ')}:{}) } }),
   spend: (graph?: string) => request<SpendReport>(`${V1}/cost/spend`, { query: graph ? { graph } : undefined }),
   setProviderPluginEnabled: (id: string, enabled: boolean, revision?: number) =>
     request<ProviderPlugin>(`${V1}/provider-plugins/${enc(id)}`, {
@@ -416,12 +419,12 @@ export const api = {
     request<ProviderTestResult>(`${V1}/providers/test`, { method: 'POST', body: input }),
   tools: () => request<ToolInfo[]>(`${V1}/tools`),
 
-  gitInspection: (id: string, view: 'status' | 'diff' | 'history', f: { path?: string; node?: string; replica?: number } = {}) =>
+  gitInspection: (id: string, view: 'status' | 'diff' | 'history', f: { repository?:string; path?: string; node?: string; replica?: number } = {}) =>
     request<import('./types').GitInspection>(`${V1}/graphs/${enc(id)}/git/${view}`, { query: f }),
-  checkpoints: (id: string) =>
-    request<import('./types').Checkpoint[]>(`${V1}/graphs/${enc(id)}/checkpoints`),
-  restoreCheckpoint: (id: string, checkpoint: string) =>
-    request<import('./types').CheckpointRestore>(`${V1}/graphs/${enc(id)}/checkpoints/restore`, { method: 'POST', body: { checkpoint, confirm: true } }),
+  checkpoints: (id: string, repository?:string) =>
+    request<import('./types').Checkpoint[]>(`${V1}/graphs/${enc(id)}/checkpoints`,{query:{repository}}),
+  restoreCheckpoint: (id: string, checkpoint: string, repository?:string) =>
+    request<import('./types').CheckpointRestore>(`${V1}/graphs/${enc(id)}/checkpoints/restore`, { method: 'POST', body: { checkpoint, confirm: true,repository } }),
   files: (id: string, f: { path?: string; node?: string; replica?: number } = {}) =>
     request<FileEntry[]>(`${V1}/graphs/${enc(id)}/files`, { query: f }),
   fileContent: (id: string, f: { path: string; node?: string; replica?: number }) =>

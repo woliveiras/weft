@@ -38,9 +38,9 @@ it('preserves viewer restrictions and selects only an existing imported project'
  fakeApi({'GET /api/v1/repository-imports':()=>[ready],'GET /api/v1/projects':()=>[project]});
  const view=render(<RepositoryImport canEdit={false} initialURL={url} onProject={onProject}/>);
  await screen.findByText('ready: Snapshot imported');
- expect((screen.getByRole('button',{name:'Use imported project'}) as HTMLButtonElement).disabled).toBe(true);
+ expect((screen.getByRole('button',{name:'Use imported repository'}) as HTMLButtonElement).disabled).toBe(true);
  view.rerender(<RepositoryImport canEdit={false} canSelect initialURL={url} onProject={onProject}/>);
- await userEvent.click(screen.getByRole('button',{name:'Use imported project'}));
+ await userEvent.click(screen.getByRole('button',{name:'Use imported repository'}));
  await waitFor(()=>expect(onProject).toHaveBeenCalledWith(project));
  expect((screen.getByRole('button',{name:'Import repository'}) as HTMLButtonElement).disabled).toBe(true);
 });

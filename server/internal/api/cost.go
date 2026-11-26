@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/cost"
@@ -180,7 +181,7 @@ func (s *Server) getLedgers(w http.ResponseWriter, r *http.Request) error {
 // and project would be held to.
 func (s *Server) previewBudgets(w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
-	views, err := s.budgets().Preview(r.Context(), cost.Target{User: identityFrom(r.Context()).Name, Project: q.Get("project"), Workflow: q.Get("workflow")})
+	views, err := s.budgets().Preview(r.Context(), cost.Target{User: identityFrom(r.Context()).Name, Project: q.Get("project"), Projects: strings.Fields(q.Get("projects")), Workflow: q.Get("workflow")})
 	if err != nil {
 		return err
 	}

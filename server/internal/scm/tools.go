@@ -64,6 +64,9 @@ func (t pushTool) Invoke(ctx context.Context, inv *tools.Invocation) (*tools.Res
 	if err != nil {
 		return &tools.Result{Content: err.Error(), IsError: true}, nil
 	}
+	if inv.Principal != nil && len(inv.Principal.Repositories) > 0 {
+		return t.m.deliverRepository(ctx, inv, c, args.Branch, "", "", "push")
+	}
 	if inv.Workdir == "" {
 		return &tools.Result{Content: "git.push needs a workspace", IsError: true}, nil
 	}
@@ -130,6 +133,9 @@ func (t pullRequestTool) Invoke(ctx context.Context, inv *tools.Invocation) (*to
 	c, err := t.m.Get(ctx, args.Connection)
 	if err != nil {
 		return &tools.Result{Content: err.Error(), IsError: true}, nil
+	}
+	if inv.Principal != nil && len(inv.Principal.Repositories) > 0 {
+		return t.m.deliverRepository(ctx, inv, c, args.Branch, args.Title, args.Body, "pull_request")
 	}
 	head := args.Branch
 	if head == "" {

@@ -44,7 +44,7 @@ export function TaskEnvironment({task, environment, canControl, onChanged}: {tas
   const authorization = current?.authorization;
   const loadChecks = useCallback(async (): Promise<TaskLaunchReview> => {
     const [review, authorization, budget] = await Promise.all([
-      api.reviewTask(task.id), api.taskAuthorization(task.id), api.budgetPreview(task.graphId, task.projectId),
+      api.reviewTask(task.id), api.taskAuthorization(task.id), api.budgetPreview(task.graphId,task.projectId,...(task.repositories?.length?[task.repositories]:[])),
     ]);
     if (review.task.id !== task.id || review.task.revision !== task.revision) {
       throw new Error('The task changed while checking requirements. Refresh the task to review its latest settings.');

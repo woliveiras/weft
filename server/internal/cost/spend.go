@@ -84,6 +84,7 @@ func Spend(ctx context.Context, store storage.Store, period, graph string) (Repo
 		}
 		l.add(r)
 	}
+	members := map[string][]string{}
 	labels := map[string]map[string]string{}
 	labelsOf := func(graph string) map[string]string {
 		if l, ok := labels[graph]; ok {
@@ -94,6 +95,7 @@ func Spend(ctx context.Context, store storage.Store, period, graph string) (Repo
 			labels[graph] = nil
 			return nil
 		}
+		members[graph] = domain.RepositoryProjectIDs(g.Spec.Workspace.Repositories)
 		labels[graph] = g.Metadata.Labels
 		return g.Metadata.Labels
 	}
@@ -125,6 +127,9 @@ func Spend(ctx context.Context, store storage.Store, period, graph string) (Repo
 				l := labelsOf(ev.GraphID)
 				bump("user", l[domain.LabelTaskUser], "", r)
 				bump("project", l[domain.LabelTaskProject], "", r)
+				for _, id := range members[ev.GraphID] {
+					bump("project", id, "", r)
+				}
 				bump("workflow", l[domain.LabelTaskWorkflow], "", r)
 			}
 		}

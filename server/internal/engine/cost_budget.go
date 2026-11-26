@@ -46,7 +46,7 @@ func (t *turnEnv) reserveMoney(ctx context.Context, provider string, req *llm.Ch
 func graphBudgetTarget(g *domain.Graph) cost.Target {
 	labels := g.Metadata.Labels
 	return cost.Target{Graph: g.Metadata.ID,
-		User: labels[domain.LabelTaskUser], Project: labels[domain.LabelTaskProject], Workflow: labels[domain.LabelTaskWorkflow]}
+		Projects: domain.RepositoryProjectIDs(g.Spec.Workspace.Repositories), User: labels[domain.LabelTaskUser], Project: labels[domain.LabelTaskProject], Workflow: labels[domain.LabelTaskWorkflow]}
 }
 
 // pauseForBudget pauses the run until a person raises the budget.

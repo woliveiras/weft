@@ -106,7 +106,11 @@ func (r *Registry) Schemas(p *Principal) []llm.ToolSchema {
 			}
 			continue
 		}
-		out = append(out, llm.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: t.Schema()})
+		schema := t.Schema()
+		if t.Capability() == capGitRead || t.Capability() == capGitWrite || t.Name() == "checkpoint.list" || t.Name() == "checkpoint.restore" {
+			schema = repositorySchema(schema, p)
+		}
+		out = append(out, llm.ToolSchema{Name: t.Name(), Description: t.Description(), Parameters: schema})
 	}
 	return out
 }

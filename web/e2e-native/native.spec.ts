@@ -29,7 +29,9 @@ test('native profile authenticates, registers a local repo and executes a review
  await openTaskSettings(page);
  await page.getByRole('textbox',{name:'Title',exact:true}).fill('Synthetic native worktree task');await page.getByRole('textbox',{name:'Request',exact:true}).fill('Test plumbing only; no real model or account access.');
  await openTaskSettings(page);
- await page.getByRole('combobox',{name:'Project',exact:true}).selectOption({label:'Native repository'});await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption('native-synthetic');await openTaskSettings(page);
+ await page.getByRole('combobox',{name:'Repositories',exact:true}).click();
+ await page.getByRole('listbox',{name:'Repositories'}).getByRole('option',{name:/Native repository/}).click();
+ await page.keyboard.press('Escape');await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption('native-synthetic');await openTaskSettings(page);
  await page.getByRole('combobox',{name:'Entry agent',exact:true}).selectOption('worker');await openTaskSettings(page);
  await page.getByRole('combobox',{name:'Result agent',exact:true}).selectOption('worker');
  await expect(page.getByRole('combobox',{name:'Execution environment',exact:true})).toHaveValue('local');
@@ -213,7 +215,9 @@ test('configures a model and runs the preinstalled factory through its human han
  await page.getByRole('textbox',{name:'Title',exact:true}).fill('Native factory acceptance');
   await page.getByRole('textbox',{name:'Request',exact:true}).fill('Review the repository using the synthetic model. Do not change files.');
   await openTaskSettings(page);
- await page.getByRole('combobox',{name:'Project',exact:true}).selectOption({label:'Native repository'});
+ await page.getByRole('combobox',{name:'Repositories',exact:true}).click();
+ await page.getByRole('listbox',{name:'Repositories'}).getByRole('option',{name:/Native repository/}).click();
+ await page.keyboard.press('Escape');
   await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption('software-factory');
   await page.getByRole('button',{name:'Save draft',exact:true}).click();await expect(page).toHaveURL(/#\/tasks\/tsk_/);
   const taskId=page.url().split('/').pop()!;

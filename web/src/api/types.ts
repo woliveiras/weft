@@ -36,7 +36,7 @@ export interface GraphSpec {
   task?: WorkflowTaskDefaults;
   instructions?: import("./instructions").InstructionRefs;
   parameters?: Parameter[];
-  workspace?: { path?: string; git?: boolean; repo?: string };
+  workspace?: { path?: string; git?: boolean; repo?: string; repositories?: import("./tasks").TaskRepository[] };
   environment?: EnvironmentSpec;
   defaults?: Partial<Pick<GraphNode, 'runtime' | 'model' | 'tools' | 'isolation' | 'loop'>>;
   nodes: GraphNode[];
@@ -47,6 +47,7 @@ export interface GraphSpec {
 }
 
 export interface WorkflowTaskDefaults {
+  projectIds?: string[];
   nodeId?: string;
   resultNodeId?: string;
   channelId?: string;
@@ -933,6 +934,8 @@ export interface GitInspection {
 }
 
 export interface HumanReview {
+ verifiedChecks?:Record<string,string>;
+  repositories?:Record<string,{head:string;base:string;branch:string;state:string;dirty:boolean;changed:boolean}>;
  createdAt?: string;
  decidedAt?: string;
  id: string;

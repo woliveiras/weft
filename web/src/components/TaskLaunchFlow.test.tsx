@@ -28,7 +28,7 @@ afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 it('shows request, workflow and repository without advanced routing in the main path',async()=>{
  setup();render(<TasksPage create info={info} graphs={graphs}/>);
  await userEvent.type(screen.getByLabelText('Request'),'Inspect code');await userEvent.selectOptions(screen.getByLabelText('Workflow'),'flow');
- expect(screen.getByLabelText('Project').closest('details')).toBeNull();
+ expect(screen.getByLabelText('Repositories').closest('details')).toBeNull();
  expect(screen.getByText('Advanced settings').closest('details')).toHaveProperty('open',false);
  expect(screen.getByRole('button',{name:'Run task'})).toBeTruthy();
  expect(screen.queryByRole('button',{name:'Review requirements'})).toBeNull();

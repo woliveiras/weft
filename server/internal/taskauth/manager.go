@@ -54,7 +54,11 @@ func (m Manager) Review(ctx context.Context, id string) (*Review, error) {
 	if err != nil {
 		return nil, err
 	}
-	g, err := m.Store.GetGraph(ctx, d.GraphID, 0)
+	version := 0
+	if len(d.Repositories) > 0 && d.ExecutionGraphID != "" {
+		version = d.GraphVersion
+	}
+	g, err := m.Store.GetGraph(ctx, d.GraphID, version)
 	if err != nil {
 		return nil, err
 	}
@@ -62,10 +66,11 @@ func (m Manager) Review(ctx context.Context, id string) (*Review, error) {
 		return nil, storage.ErrConflict
 	}
 	b, err := json.Marshal(struct {
-		Input  taskconfig.Input
-		Graph  *domain.Graph
-		Policy int
-	}{d.Input, g, PolicyVersion})
+		Input              taskconfig.Input
+		Graph              *domain.Graph
+		Policy             int
+		RepositoryRevision int64 `json:",omitempty"`
+	}{d.Input, g, PolicyVersion, d.RepositoryRevision})
 	if err != nil {
 		return nil, err
 	}

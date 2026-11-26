@@ -1,6 +1,8 @@
-export interface Project {importId?:string;repositoryUrl?:string;repositoryRef?:string;executionMode?: "workflow"|"local"|"sandbox";id:string;revision:number;name:string;path:string;head:string;createdAt:string}
+export interface TaskRepository {alias:string;projectId:string;baseCommit:string;sourceRef?:string;scmConnection?:string;repository?:string;targetBranch?:string;connectionRevision?:string;checks?:import("./types").DeclaredCheck[];requiredChecks?:string[]}
+export interface Project {checks?:import("./types").DeclaredCheck[];importId?:string;repositoryUrl?:string;repositoryRef?:string;executionMode?: "workflow"|"local"|"sandbox";id:string;revision:number;name:string;path:string;head:string;createdAt:string}
 import type {Approval, ValidationResult, Execution, ToolGrant, ModelRef } from './types';
 export interface TaskInput {
+ repositories?:TaskRepository[];
  source?: {kind:"github"|"jira";connectionId:string;reference:string;cloudId?:string};
   executionMode?: "workflow"|"local"|"sandbox";
   channelId?: string;
@@ -43,7 +45,8 @@ export interface TaskReview {canPrepareEnvironment?:boolean;environmentDefinitio
 export interface TaskWorkspace {nodeId:string;replica:number;path:string;branch?:string;inspectionNode:string;subdir:string}
 /** What a task's SCM hand-off did. */
 export interface TaskDelivery {connection:string;branch?:string;repository?:string;pullRequestUrl?:string;pullRequestNumber?:number;failures?:string[]}
-export interface TaskProgress {delivery?:TaskDelivery;decisions?:Approval[];environment?:import('./types').EnvironmentView;workspaces?:TaskWorkspace[];pendingApprovals?:Approval[]|null;workspacePath?:string; task: TaskDraft; state: string; executions: Execution[]; result?: Execution; blockers: string[] }
+export interface MemberProgress {alias:string;preparation:string;delivery?:string;details?:string;pullRequest?:{url:string;number:number;headSha:string;base:string}}
+export interface TaskProgress {repositories?:MemberProgress[];delivery?:TaskDelivery;decisions?:Approval[];environment?:import('./types').EnvironmentView;workspaces?:TaskWorkspace[];pendingApprovals?:Approval[]|null;workspacePath?:string; task: TaskDraft; state: string; executions: Execution[]; result?: Execution; blockers: string[] }
 
 export interface CleanupPreview {retainedRepository?:string;path:string;branch:string;head:string;status:string;clean:boolean;fingerprint:string}
 

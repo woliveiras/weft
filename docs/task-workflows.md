@@ -10,7 +10,7 @@ The current wire contract remains [OpenAPI](../api/openapi.yaml).
 conditional submission (PROMPT-05) are implemented.
 
 **Layout update (2026-11-24).** New task starts with three visible sections:
-Describe the work, Workflow & repository, and Input & delivery. Workflow version,
+Describe the work, Workflow & repositories, and Input & delivery. Workflow version,
 repository and execution environment are visible without expanding a disclosure.
 A new draft derives an editable display title from the first prompt
 line, bounded to 200 UTF-8 bytes; explicit and loaded titles are preserved.
@@ -47,7 +47,7 @@ snapshot pins the graph version; normal pre-start validation catches later chang
 
 Pending interpretation, missing/unavailable models, invalid proposals, ambiguity
 and repository prerequisites are persisted on the same task draft. Reload Tasks
-and resolve again, or repair and save through **Workflow & repository** and **Input & delivery**. Compare-and-swap
+and resolve again, or repair and save through **Workflow & repositories** and **Input & delivery**. Compare-and-swap
 revisions prevent a slow response from overwriting a newer edit. A process/network
 failure can leave a pending draft; inspect Tasks before submitting a new task.
 The API may return a storage failure after the initial draft was persisted.
@@ -71,7 +71,7 @@ Open **Import from URL** in Projects, or **Prepare repository / Import repositor
 from URL** in a task. An administrator confirms the download and chooses `HEAD`,
 a full `refs/heads/...` or `refs/tags/...` reference, or a full commit hash. Fetching
 arbitrary commits depends on the remote server allowing that request. A ready
-import records its immutable commit and project; **Use imported project** selects
+import records its immutable commit and project; **Use imported repository** selects
 it without saving or starting the task. Review settings and explicitly start as
 before. Operators can select existing imported projects; only administrators can
 start, retry or cancel imports. No tools, grants or graph definitions are changed.
@@ -256,7 +256,7 @@ cannot grant authority merely by appearing in an agent's input.
 
 ### Configuration and approvals
 
-**Workflow & repository** and **Input & delivery** are visible immediately.
+**Workflow & repositories** and **Input & delivery** are visible immediately.
 Repository selection and the pinned workflow version are prerequisites, not hidden
 advanced options. The version dropdown defaults to the current saved workflow
 version when no version is selected. Saving pins its numeric version; publishing
@@ -822,6 +822,34 @@ permissions. No commit, push, merge, source reset or cleanup is automatic.
 The UI explains server versus container paths and links worktree background
 information. A container-mounted repository still runs commands in the container;
 this delivery does not pretend it is the user's host. Native packaging and explicit editor handoff are delivered below; reviewed project execution preferences are available. Existing file/diff inspection is linked from task progress.
+
+### Multi-repository manual tasks
+
+A workflow version may suggest registered project IDs in `spec.task.projectIds`.
+The editor resolves them into independent entries in the draft's `repositories`
+array. An explicit project at entry takes precedence. An explicitly cleared
+list stays empty on reload. API clients supply the concrete bindings in the
+task request. Each binding carries a stable directory alias, registered project
+ID, full base commit and the project's declared checks. PR delivery also binds
+the SCM connection and its configuration revision, destination and target branch.
+
+Admission prepares all checkouts before dispatching task input. Each selected
+checkout has its own Git history and branch under the execution workspace.
+The runtime requires shared Docker isolation for this layout. The parent
+workspace is mounted read-only and each checkout inherits the node's workspace
+access. Local-only tasks complete when their required checks and workflow gates
+pass. A required PR also needs an approved combined candidate and a confirmed
+PR for each changed member. An unchanged member receives no PR. A PR task
+with no changes reports the unmet requirement.
+
+Project check names are qualified, for example `infra.test` and `infra.joint`.
+The latter can run a project's declared command from `infra/` and use the
+adjacent checkouts. Its evidence records the heads and worktree fingerprints
+of every accessible member. Editing any participant makes the previous pass
+stale. The human review freezes per-repository diffs and check outcomes for
+that combination. Retried delivery reconciles each operation with the remote
+using its recorded head and target. An inconclusive remote write remains
+visible in the task until the gateway can verify its effect.
 
 ## Structured input and retained outputs (2026-10-19)
 

@@ -23,11 +23,12 @@ type Resolution struct {
 	Repository string `json:"repository,omitempty"`
 }
 type PromptSettings struct {
-	Title         string       `json:"title"`
-	ExecutionMode string       `json:"executionMode,omitempty"`
-	ProjectID     string       `json:"projectId,omitempty"`
-	BaseCommit    string       `json:"baseCommit,omitempty"`
-	Source        *IssueSource `json:"source,omitempty"`
+	Repositories  []domain.TaskRepository `json:"repositories,omitzero"`
+	Title         string                  `json:"title"`
+	ExecutionMode string                  `json:"executionMode,omitempty"`
+	ProjectID     string                  `json:"projectId,omitempty"`
+	BaseCommit    string                  `json:"baseCommit,omitempty"`
+	Source        *IssueSource            `json:"source,omitempty"`
 }
 type PromptInput struct {
 	Settings *PromptSettings `json:"settings,omitempty"`
@@ -54,7 +55,7 @@ func (m Manager) savePrompt(ctx context.Context, p PromptInput, actor, newID str
 	}
 	if p.Settings != nil {
 		settings := p.Settings
-		probe := Input{Title: settings.Title, Request: p.Request, Outcome: "freeform", GraphID: "pending", GraphVersion: 1, NodeID: "pending", ExecutionMode: settings.ExecutionMode, ProjectID: settings.ProjectID, BaseCommit: settings.BaseCommit, Source: settings.Source}
+		probe := Input{Repositories: settings.Repositories, Title: settings.Title, Request: p.Request, Outcome: "freeform", GraphID: "pending", GraphVersion: 1, NodeID: "pending", ExecutionMode: settings.ExecutionMode, ProjectID: settings.ProjectID, BaseCommit: settings.BaseCommit, Source: settings.Source}
 		if probe.Title == "" {
 			probe.Title = "New task"
 		}
@@ -91,6 +92,10 @@ func (m Manager) savePrompt(ctx context.Context, p PromptInput, actor, newID str
 		}
 	}
 	if p.Settings != nil {
+		if len(d.Repositories) > 0 && p.Settings.Repositories == nil {
+			return nil, fmt.Errorf("%w: a complete repository selection is required", ErrInvalid)
+		}
+		d.Repositories = p.Settings.Repositories
 		d.Title = p.Settings.Title
 		d.ExecutionMode = p.Settings.ExecutionMode
 		d.ProjectID = p.Settings.ProjectID
@@ -127,6 +132,9 @@ func (m Manager) savePrompt(ctx context.Context, p PromptInput, actor, newID str
 func (m Manager) persistPrompt(ctx context.Context, d *Draft, revision int64, actor string) (*Draft, error) {
 	if err := m.Store.AppendEvent(ctx, domain.NewEvent("task.prompt_resolution", d.GraphID, map[string]any{"taskId": d.ID, "state": d.Resolution.State, "expectedRevision": revision}).WithActor(actor)); err != nil {
 		return nil, err
+	}
+	if d.Repositories != nil {
+		d.RepositoryRevision = revision + 1
 	}
 	d.UpdatedAt = time.Now().UTC()
 	d.UpdatedBy = actor
@@ -224,7 +232,7 @@ func (m Manager) ResolvePrompt(ctx context.Context, d *Draft, models *llm.Regist
 	if err := Validate(d.Input); err != nil {
 		return finish("needs_input", "The proposed input needs manual review. Check Workflow & repository and Input & delivery and save the draft.")
 	}
-	if proposal.Repository != "" && d.ProjectID == "" {
+	if proposal.Repository != "" && d.ProjectID == "" && len(d.Repositories) == 0 {
 		return finish("needs_repository", "Repository URL identified. Import the repository or select a registered project, then continue the task or save the draft.")
 	}
 	return finish("resolved", "Request interpreted and draft saved. Review requirements before starting; permissions are unchanged.")

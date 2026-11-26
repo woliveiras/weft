@@ -81,12 +81,13 @@ type GraphSpec struct {
 // TaskDefaults contains no authorization, secret, moving version or payload.
 // External references are selected and revalidated when a task is saved/reviewed.
 type TaskDefaults struct {
-	NodeID        string `json:"nodeId,omitempty" yaml:"nodeId,omitempty"`
-	ResultNodeID  string `json:"resultNodeId,omitempty" yaml:"resultNodeId,omitempty"`
-	ChannelID     string `json:"channelId,omitempty" yaml:"channelId,omitempty"`
-	MessageType   string `json:"messageType,omitempty" yaml:"messageType,omitempty"`
-	ProjectID     string `json:"projectId,omitempty" yaml:"projectId,omitempty"`
-	SCMConnection string `json:"scmConnection,omitempty" yaml:"scmConnection,omitempty"`
+	ProjectIDs    []string `json:"projectIds,omitzero" yaml:"projectIds,omitempty"`
+	NodeID        string   `json:"nodeId,omitempty" yaml:"nodeId,omitempty"`
+	ResultNodeID  string   `json:"resultNodeId,omitempty" yaml:"resultNodeId,omitempty"`
+	ChannelID     string   `json:"channelId,omitempty" yaml:"channelId,omitempty"`
+	MessageType   string   `json:"messageType,omitempty" yaml:"messageType,omitempty"`
+	ProjectID     string   `json:"projectId,omitempty" yaml:"projectId,omitempty"`
+	SCMConnection string   `json:"scmConnection,omitempty" yaml:"scmConnection,omitempty"`
 }
 
 // EnvironmentOrigin identifies the repository snapshot accepted by the operator.
@@ -157,6 +158,7 @@ type Parameter struct {
 
 // WorkspaceSpec is the directory tree the agents of a graph work in.
 type WorkspaceSpec struct {
+	Repositories []TaskRepository `json:"repositories,omitempty" yaml:"repositories,omitempty"`
 	// Path is relative to the platform workspace root, or absolute.
 	// Empty means <root>/<graph-id>.
 	Path string `json:"path,omitempty" yaml:"path,omitempty"`

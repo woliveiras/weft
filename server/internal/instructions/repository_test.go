@@ -525,3 +525,42 @@ func TestRepositoryCatalogueLimitAcrossConsoleAndCheckout(t *testing.T) {
 		t.Fatalf("expected catalogue limit with budget remaining, got %d skills and %d bytes", len(turn.selected), s.Budget)
 	}
 }
+
+func TestMemberGuidanceRetainsSourceWhenSkillsShareAName(t *testing.T) {
+	root := t.TempDir()
+	g := &domain.Graph{}
+	if err := json.Unmarshal([]byte(`{"repositoryGuidance":{}}`), &g.Spec.Instructions); err != nil {
+		t.Fatal(err)
+	}
+	for _, alias := range []string{"backend", "frontend"} {
+		g.Spec.Workspace.Repositories = append(g.Spec.Workspace.Repositories, domain.TaskRepository{Alias: alias})
+		writeGuidance(t, root, alias+"/AGENTS.md", alias+" instructions")
+		writeGuidance(t, root, alias+"/.agents/skills/check/SKILL.md", "---\nname: check\ndescription: Check this project\n---\n"+alias+" details")
+	}
+	store, err := fsstore.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	m := Manager{Store: store}
+	snapshot, turn, err := m.Prepare(t.Context(), g, &domain.Node{ID: "editor"}, root, root, "task", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.ExecutionID = "member-guidance"
+	if err := m.SaveSnapshot(t.Context(), snapshot); err != nil {
+		t.Fatal(err)
+	}
+	for _, alias := range []string{"backend", "frontend"} {
+		if !strings.Contains(turn.Prompt(), alias+"/AGENTS.md") || !strings.Contains(turn.Prompt(), "repository:"+alias+"/check") {
+			t.Fatal(turn.Prompt())
+		}
+		_, err := turn.Load(t.Context(), "repository:"+alias+"/check", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(turn.Prompt(), alias+" details") {
+			t.Fatal("loaded wrong project's skill")
+		}
+	}
+}

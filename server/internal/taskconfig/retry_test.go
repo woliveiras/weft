@@ -166,3 +166,24 @@ func TestRetryFailedReplayAndFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestRetryPinsRepositorySelectionToNewDraftRevision(t *testing.T) {
+	s := retryFixture()
+	manager := Manager{Store: s}
+	source, err := manager.Get(t.Context(), "tsk_source")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source.ProjectID, source.BaseCommit, source.SCMConnection = "", "", ""
+	source.RepositoryRevision = 5
+	source.Repositories = []domain.TaskRepository{{Alias: "backend", ProjectID: "prj_backend", BaseCommit: strings.Repeat("a", 40)}}
+	raw, err := json.Marshal(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.rows[prefix+source.ID].Value = raw
+	child, _, err := manager.RetryFailed(t.Context(), source.ID, source.Revision, "operator")
+	if err != nil || child.RepositoryRevision != child.Revision || !reflect.DeepEqual(child.Repositories, source.Repositories) {
+		t.Fatal(child, err)
+	}
+}

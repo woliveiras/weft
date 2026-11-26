@@ -18,8 +18,8 @@ it('carries project/workflow context through the real API client into a reviewed
   'GET /api/v1/tasks/tsk_new/review':()=>({task:savedTask,blockers:[],canStart:true,validation:{},model:{},grants:[]}),
  });
  render(<TasksPage create entry={{project:'repo',workflow:'flow'}} info={info} graphs={[graph]}/>);
- await waitFor(()=>expect(screen.getByLabelText('Project')).toHaveProperty('value','repo'));
- expect(screen.getByLabelText('Workflow version')).toHaveProperty('value','3');
+ await waitFor(()=>expect(screen.getByRole('combobox',{name:'Repositories'})).toHaveProperty('value','Repository'));
+ await waitFor(()=>expect(screen.getByLabelText('Workflow version')).toHaveProperty('value','3'));
  expect(screen.getByLabelText('Entry agent')).toHaveProperty('value','worker');
  await userEvent.type(screen.getByLabelText('Request'),'Inspect the repository');
  expect(screen.getByRole('region',{name:'Task setup summary'}).textContent).toContain('Commit '+project.head);
@@ -63,7 +63,7 @@ it('keeps entry context when request typing precedes slow project discovery',asy
  render(<TasksPage create entry={{workflow:'flow',project:'repo'}} info={info} graphs={[graph]}/>);
  await userEvent.type(screen.getByLabelText('Request'),'Already typing');
  release([project]);
- await waitFor(()=>expect(screen.getByLabelText('Project')).toHaveProperty('value','repo'));
+ await waitFor(()=>expect(screen.getByRole('combobox',{name:'Repositories'})).toHaveProperty('value','Repository'));
  expect(screen.getByLabelText('Workflow')).toHaveProperty('value','flow');
  expect(screen.getByLabelText('Entry agent')).toHaveProperty('value','worker');
  expect(screen.getByLabelText('Request')).toHaveProperty('value','Already typing');
@@ -76,7 +76,7 @@ it('keeps project entry context ahead of a selected workflow preference during s
  render(<TasksPage create entry={{project:'repo'}} info={info} graphs={[preferred]}/>);
  fireEvent.change(screen.getByLabelText('Workflow'),{target:{value:'flow'}});
  release([project,{...project,id:'other',name:'Other repository'}]);
- await waitFor(()=>expect(screen.getByLabelText('Project')).toHaveProperty('value','repo'));
+ await waitFor(()=>expect(screen.getByRole('combobox',{name:'Repositories'})).toHaveProperty('value','Repository'));
  await waitFor(()=>expect(screen.getByRole('region',{name:'Task setup summary'}).textContent).toContain('Commit '+project.head));
 });
 
@@ -90,8 +90,8 @@ it('retries failed workflow discovery without consuming entry context or request
  expect(reload).toHaveBeenCalledTimes(1);
  view.rerender(<TasksPage create entry={{workflow:'flow',project:'repo'}} info={info} graphs={[graph]} onReloadGraphs={reload}/>);
  await waitFor(()=>expect(screen.getByLabelText('Entry agent')).toHaveProperty('value','worker'));
- expect(screen.getByLabelText('Workflow version')).toHaveProperty('value','3');
- expect(screen.getByLabelText('Project')).toHaveProperty('value','repo');
+ await waitFor(()=>expect(screen.getByLabelText('Workflow version')).toHaveProperty('value','3'));
+ expect(screen.getByRole('combobox',{name:'Repositories'})).toHaveProperty('value','Repository');
  expect(screen.getByLabelText('Request')).toHaveProperty('value','Keep this request');
 });
 
@@ -105,7 +105,7 @@ it('retains explicit environment and delivery choices while applying late workfl
  fireEvent.change(screen.getByLabelText('Source control hand-off'),{target:{value:'mine'}});
  fireEvent.change(screen.getByLabelText('Execution environment'),{target:{value:'workflow'}});
  release([project]);
- await waitFor(()=>expect(screen.getByLabelText('Project')).toHaveProperty('value','repo'));
+ await waitFor(()=>expect(screen.getByRole('combobox',{name:'Repositories'})).toHaveProperty('value','Repository'));
  expect(screen.getByLabelText('Source control hand-off')).toHaveProperty('value','mine');
  expect(screen.getByLabelText('Execution environment')).toHaveProperty('value','workflow');
 });
@@ -117,9 +117,9 @@ it('retries failed project discovery before applying task entry context',async()
  render(<TasksPage create entry={{workflow:'flow',project:'repo'}} info={info} graphs={[graph]}/>);
  await screen.findByText('Project discovery offline');
  await userEvent.type(screen.getByLabelText('Request'),'Retain after project retry');
- await userEvent.click(screen.getByRole('button',{name:'Retry projects'}));
+ await userEvent.click(screen.getByRole('button',{name:'Retry repositories'}));
  await waitFor(()=>expect(screen.getByLabelText('Entry agent')).toHaveProperty('value','worker'));
- expect(screen.getByLabelText('Project')).toHaveProperty('value','repo');
+ expect(screen.getByRole('combobox',{name:'Repositories'})).toHaveProperty('value','Repository');
  expect(screen.getByLabelText('Request')).toHaveProperty('value','Retain after project retry');
 });
 
@@ -129,10 +129,12 @@ it('retains a deliberate empty project and manual delivery choice during late di
   'GET /api/v1/scm/connections':()=>[]});
  const preferred={...graph,graph:{...graph.graph,spec:{...graph.graph.spec,task:{projectId:'repo',scmConnection:'workflow'}}}};
  render(<TasksPage create entry={{workflow:'flow',project:'repo'}} info={info} graphs={[preferred]}/>);
- fireEvent.change(screen.getByLabelText('Project'),{target:{value:''}});
+ fireEvent.click(screen.getByRole('combobox',{name:'Repositories'}));
+ fireEvent.click(within(screen.getByRole('listbox')).getByRole('option',{name:/repo/}));
+ fireEvent.keyDown(screen.getByRole('combobox',{name:'Repositories'}),{key:'Escape'});
  fireEvent.change(screen.getByLabelText('Source control hand-off'),{target:{value:''}});
  release([project]);
  await waitFor(()=>expect(screen.getByLabelText('Entry agent')).toHaveProperty('value','worker'));
- expect(screen.getByLabelText('Project')).toHaveProperty('value','');
+ expect(screen.getByRole('combobox',{name:'Repositories'})).toHaveProperty('value','');
  expect(screen.getByLabelText('Source control hand-off')).toHaveProperty('value','');
 });

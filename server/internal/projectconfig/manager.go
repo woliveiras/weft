@@ -254,3 +254,21 @@ func (m Manager) SetChecks(ctx context.Context, id string, checks []domain.Check
 	p.Revision, err = m.Store.PutSetting(ctx, prefix+id, b, revision, actor)
 	return p, err
 }
+
+// MatchDelivery checks the registered import or origin against the configured
+// clone destination. Repository text alone cannot select another SCM server.
+func MatchDelivery(ctx context.Context, p *Project, configured, remote, requested string) error {
+	source := p.RepositoryURL
+	if source == "" {
+		var err error
+		source, err = checkoutGit(ctx, p.Path, "config", "--local", "--get", "remote.origin.url")
+		if err != nil {
+			return fmt.Errorf("%w: registered source has no verifiable origin", ErrInvalid)
+		}
+	}
+	normalize := func(s string) string { return strings.TrimSuffix(strings.TrimRight(s, "/"), ".git") }
+	if requested != configured || remote == "" || normalize(source) != normalize(remote) {
+		return fmt.Errorf("%w: delivery destination does not match the registered repository", ErrInvalid)
+	}
+	return nil
+}

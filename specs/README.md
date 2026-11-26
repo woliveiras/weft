@@ -17,7 +17,7 @@ sequences. IDs and slugs remain stable after assignment.
 
 | Area directory | ID range | Capabilities |
 | --- | --- | --- |
-| `product-and-tasks` | `TASK-001`–`TASK-011` | Release contracts, console navigation, graph editing, Activity, prompt tasks, consent, admission, registered projects and failed-task recovery |
+| `product-and-tasks` | `TASK-001`–`TASK-011` | Release contracts, console navigation, graph editing, Activity, prompt tasks, consent, admission, registered projects, guided journeys, multi-repository tasks and failed-task recovery |
 | `workspaces-and-environments` | `ENV-001`–`ENV-009` | Repository imports, workspace review, journal, human review, Docker isolation, capacity, definitions, build/reuse, and network policy |
 | `providers-and-integrations` | `INT-001`–`INT-009` | Built-in inference plugins, adapters, external plugins, budgets, MCP invocation, MCP OAuth, vendor profiles, hosting, and portable issue/SCM integrations |
 | `runtime-and-delivery` | `RUN-001`–`RUN-009` | Steering, delegation, native coding, evaluation, SCM, issue triggers, issue readiness, context usage, and manual dependency security |
@@ -48,6 +48,7 @@ The [historical source map](./historical-source-map.md) records the migration of
 
 ### Implemented
 
+- [TASK-010 — Multi-repository Tasks](./product-and-tasks/multi-repository-tasks/spec.md) — `implemented`. Run one agent across several repositories, verify the combined change and track delivery per repository.
 - [TASK-011 — Failed Task Retry](./product-and-tasks/failed-task-retry/spec.md) — `implemented`. Prepare a fresh linked draft after a failed manual attempt, with independent review and approvals.
 - [TASK-001 — Release 1 Product Contracts](./product-and-tasks/release-one-product-contracts/spec.md) — `implemented`. Define shared release boundaries, observable errors, and audit identity.
 - [TASK-002 — Console Navigation and Configuration](./product-and-tasks/console-navigation-and-configuration/spec.md) — `implemented`. Organize daily work and configuration, preserving route compatibility and contextual guidance.

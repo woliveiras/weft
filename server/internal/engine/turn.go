@@ -14,9 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
-
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/executioncontrol"
 	"github.com/woliveiras/weft/server/internal/graph"
@@ -27,6 +24,8 @@ import (
 	"github.com/woliveiras/weft/server/internal/runtime"
 	"github.com/woliveiras/weft/server/internal/tools"
 	"github.com/woliveiras/weft/server/internal/workspace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type turnOutcome struct {
@@ -635,7 +634,7 @@ func newTurnEnv(r *replica, gr *graphRun, n *domain.Node, x *domain.Execution) *
 	r.mu.Unlock()
 	env := &turnEnv{budgetRootID: x.ID, r: r, gr: gr, n: n, x: x, principal: &tools.Principal{
 		GraphVersion: gr.g.Metadata.Version, GraphID: gr.g.Metadata.ID, NodeID: n.ID, Replica: r.index, ExecutionID: x.ID,
-		WorkspaceReadOnly: n.Workspace.ReadOnly, Grants: n.Tools, Checks: gr.g.Spec.Checks, BaseCommit: gr.g.Metadata.Labels[domain.LabelTaskBase], Workdir: wd, Sandbox: r.sandbox, Actor: fmt.Sprintf("agent:%s#%d", n.ID, r.index),
+		TaskID: gr.g.Metadata.Labels[domain.LabelTask], WorkspaceReadOnly: n.Workspace.ReadOnly, Grants: n.Tools, Checks: append(append([]domain.Check{}, gr.g.Spec.Checks...), domain.RepositoryChecks(gr.g.Spec.Workspace.Repositories)...), Repositories: gr.g.Spec.Workspace.Repositories, BaseCommit: gr.g.Metadata.Labels[domain.LabelTaskBase], Workdir: wd, Sandbox: r.sandbox, Actor: fmt.Sprintf("agent:%s#%d", n.ID, r.index),
 	}}
 	if delegationRuntime(n.Runtime.Kind) {
 		env.principal.Delegate = env.delegate
