@@ -2303,6 +2303,7 @@ paths:
       responses:
         "200": {$ref: "#/components/responses/ChatSession"}
         "404": {description: Request absent or inaccessible}
+        "409": {description: Restore an archived session before retrying, or wait for its pending request}
   /api/v1/chat/sessions/{chatId}/messages/{messageId}/read:
     parameters:
       - {$ref: "#/components/parameters/ChatSessionID"}

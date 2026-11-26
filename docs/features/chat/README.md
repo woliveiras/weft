@@ -120,7 +120,7 @@ Identify the draft by its ID or unique title and specify the replacement title, 
 
 ## Save a managed skill
 
-An administrator can ask to create a skill with a name and instruction text, or revise an existing skill by ID. Compare the text and current audience on the review card, then choose **Save skill revision**. New skills start disabled. A revision preserves the skill’s activation, scope and description. **View skill** opens its saved content. Built-in skills remain read-only.
+An administrator can ask to create a skill with a name and instruction text, or revise an existing skill by ID. Compare the text and current audience on the review card, then choose **Save skill revision**. New skills start disabled. A revision preserves the skill’s activation, scope and description. **View skill** opens its saved content. To enable or disable a managed skill, add it to or remove it from installation defaults, or delete it, name the skill and requested change. Check the affected audience and confirm. A workflow reference blocks deletion. Previous revisions remain available. Built-in skills remain read-only.
 
 ## Create a reusable agent
 

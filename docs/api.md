@@ -171,13 +171,14 @@ or to `POST /api/v1/chat/sessions/{id}/messages` for a follow-up. The request ID
 is 32 lowercase hexadecimal digits, stable across transport retries. Reuse
 with different text returns a conflict. An unprocessed request can be retried
 at `POST /api/v1/chat/sessions/{id}/messages/{requestId}/retry`.
+The console renames an owned session with `PUT /api/v1/chat/sessions/{id}/title`. Send the new `title` and the displayed `previousTitle` (empty while pending). A stale edit returns 409. Renaming preserves the transcript and activity time.
 An untitled session can retry its title once at
 `POST /api/v1/chat/sessions/{id}/title/retry`. This runs only a bounded title
 completion using the original request and leaves the transcript, operations
 and recency unchanged.
 
 Use `POST /api/v1/chat/sessions/{id}/archive` or `/restore` to move a session
-between lists. These operations do not cancel its watches. Use
+between lists. An archived session returns 409 for new messages and explicit message retries. Its existing watches continue to run. Use
 `POST /api/v1/chat/sessions/{id}/messages/{messageId}/read` to mark an individual
 result read. Session writes use the same authenticated ownership rule as reads.
 The user API has no conversation deletion operation.

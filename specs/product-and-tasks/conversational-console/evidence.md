@@ -362,3 +362,27 @@ failures in SharedEnvironmentsSection (selection timeout) and TaskEntryFlow
 (workflow preselection during delayed project discovery). Both passed
 on focused reruns and in the final full suite. Live SCM accounts remain
 outside this qualification.
+
+## 2026-11-26 — Session navigation, drafts and manual titles
+
+The manual title editor now supersedes the console title-retry action in the
+earlier S26 evidence. The HTTP suite checks owner isolation, idempotent saves,
+stale and invalid titles, recency and the indexed title. The archive HTTP test
+rejects a new message until restore. Component tests exercise title search
+past the first page and both submission shortcuts.
+
+In Chromium, `chat-sidebar.spec.ts` follows a long title by hover and keyboard,
+renames and archives it from another conversation, preserves that draft and
+opens a search result on a 375px touch viewport. `chat-session.spec.ts` follows
+a task in one chat while creating an agent in another and reads the result
+after returning. These checks use the local fixture installation.
+
+## 2026-11-26 — Reviewed PR publication in local fixtures
+
+For S48, the Chromium fixture resolves duplicate PR numbers, shows the selected
+repository’s pinned diff, runs analysis and publishes an explicitly selected
+subset of draft comments. It exercises a changed head and reconciliation after
+a lost response. The HTTP tests cover authorization, a revoked grant, invalid
+selections and per-comment receipts. GitHub publication was exercised against
+a local fixture. Bitbucket Cloud and Data Center fixtures cover diff inspection
+and analysis. Their inline publication remains open.
