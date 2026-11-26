@@ -27,7 +27,7 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		if observation.Mode != "count" || observation.Status != "succeeded" {
 			return nil, errors.New("unexpected task query in browser fixture")
 		}
-		return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, Content: fmt.Sprintf("Tarefas concluídas com sucesso: %d.", observation.Total)}}, nil
+		return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, Content: fmt.Sprintf("Tarefas concluídas com sucesso: **%d**.", observation.Total)}}, nil
 	}
 	if last.Role != llm.RoleUser {
 		return nil, errors.New("expected a Chat fixture user message")

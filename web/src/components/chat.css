@@ -43,6 +43,18 @@
 .chat-message { border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem; max-width: 45rem; }
 .chat-message-user { align-self: flex-end; }
 .chat-message p { margin-block: 0.3rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-markdown { min-width: 0; overflow-wrap: anywhere; margin-block: var(--space-2); }
+.chat-markdown :is(p, ol, ul, pre, blockquote) { margin-block: var(--space-2); }
+.chat-markdown :is(ol, ul) { padding-inline-start: 1.65em; }
+.chat-markdown li { white-space: pre-line; }
+.chat-markdown li + li { margin-block-start: var(--space-1); }
+.chat-markdown :is(h1, h2, h3, h4, h5, h6) { font-size: 1.05em; margin-block: var(--space-3) var(--space-1); }
+.chat-markdown code { background: var(--surface-sunken); border-radius: var(--radius-sm); padding: 0.05em 0.25em; }
+.chat-markdown pre { max-width: 100%; overflow-x: auto; padding: var(--space-3); background: var(--surface-sunken); }
+.chat-markdown pre code { padding: 0; }
+.chat-markdown blockquote { margin-inline: 0; padding-inline-start: var(--space-3); border-inline-start: 2px solid var(--border); }
+.chat-markdown > :first-child { margin-block-start: 0; }
+.chat-markdown > :last-child { margin-block-end: 0; }
 .chat-evidence { display: flex; flex-wrap: wrap; gap: 0.8rem; }
 .chat-agent-review { border-block-start: 1px solid var(--border); margin-block-start: 0.5rem; padding-block-start: 0.5rem; }
 .chat-agent-review dl { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.8rem; }

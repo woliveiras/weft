@@ -304,8 +304,7 @@ Fetch specific evidence again under current permission. Any context summary
 retains its source references and access requirements. Dropped context cannot
 be treated as authorization. Do not automatically send complete repos, raw
 diffs, logs, credentials, hidden prompts or private agent context to the model.
-Use bounded Markdown and vetted resource links, no executable UI or model-chosen
-external URLs. Redact at ingress, projection and egress. Reject known credential
+Render bounded Markdown in assistant replies, including persisted transcripts. Preserve lists, emphasis and code while displaying user input literally. Only vetted resource metadata can produce interactive links or actions. HTML and model-supplied images stay inert. Redact at ingress, projection and egress. Reject known credential
 fields and patterns, provide safe instructions to use the secret surface, and avoid
 echoing failed submissions. Arbitrary pasted secrets cannot be perfectly
 recognized, motivating retention and access limits. Store redacted messages,

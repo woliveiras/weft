@@ -1,6 +1,7 @@
 import { ChatTitleForm } from './ChatTitleForm';
 import { Search } from 'lucide-react';
 import { ChatSessionSearch } from './ChatSessionSearch';
+import { ChatMarkdown } from './ChatMarkdown';
 import { ChatComposer } from './ChatComposer';
 import { ChatModelSection } from './ChatModelSection';
 import { ChatSkillCard } from './ChatSkillCard';
@@ -445,7 +446,7 @@ function Message({sessionId, value, now, canCreateAgent, canOperate, onView, onR
 
   return <article className={`chat-message chat-message-${value.role}`} ref={panel}>
     <span className="small muted">{value.role === 'user' ? 'You' : 'Weft'}</span>
-    <p>{value.text}</p>
+    {value.role === 'assistant' ? <ChatMarkdown text={value.text}/> : <p>{value.text}</p>}
     {value.destination === 'chat-model' && onModelSettings && <Btn onClick={onModelSettings}>Choose Chat model here</Btn>}
     {value.destination && <ChatManualLink destination={value.destination} message={value.id} onView={onView}/>}
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}

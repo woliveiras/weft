@@ -21,6 +21,8 @@ When automatic naming fails, **Untitled chat** shows a notice and **Edit title**
 
 When inference fails, the saved reply identifies the next step. A budget rejection opens Budgets, an unavailable model opens Chat model settings, and a busy model can be retried after a slot becomes available. With a proposal open, **Confirm** and **Decline** and their explicit text equivalents (“confirm this proposal” or “decline this proposal”) use the reviewed operation directly. Weft still checks the current role, revision and expiry before acting.
 
+Weft replies support formatted lists, emphasis and code, including when you reopen a saved chat. Resource links and action buttons appear below the reply.
+
 ## Inspect installation state
 
 Ask which workflows are active, which providers are configured, how much the installation spent this month or which approvals are pending. The reply shows a dated snapshot from the corresponding Weft service and a link to inspect it. Lists show up to eight entries. A dependency failure leaves the result unavailable.

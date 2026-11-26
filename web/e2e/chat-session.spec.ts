@@ -875,6 +875,9 @@ test('answers a task count after inspecting the inventory in the same chat', asy
   await send(page, 'Quantas tarefas foram finalizadas com sucesso?');
   await expect(replies).toHaveCount(2);
   await expect(replies.last()).toContainText(/Tarefas concluídas com sucesso: \d+\./);
+  await expect(replies.last().locator('strong')).toHaveText(/^\d+$/);
+  await page.reload();
+  await expect(replies.last().locator('strong')).toHaveText(/^\d+$/);
   await expect(replies.last()).not.toContainText('tasks ·');
   await expect(replies.last().getByRole('link', { name: 'Open Tasks' })).toBeVisible();
 });
