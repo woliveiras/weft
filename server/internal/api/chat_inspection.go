@@ -47,14 +47,18 @@ func (s *Server) inspectChatConsole(ctx context.Context, caller Identity, plan c
 // credentials, raw errors, instruction bodies and approval payloads stay
 // in their source services.
 func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *chat.Inspection, now time.Time) error {
+	limit := chat.InspectionLimit
+	if v.Search != nil {
+		limit = 100
+	}
 	switch v.Area {
 	case "tasks":
-		rows, err := (taskconfig.Manager{Store: s.Store}).ListRecentlyUpdated(ctx, "", chat.InspectionLimit)
+		rows, err := (taskconfig.Manager{Store: s.Store}).ListRecentlyUpdated(ctx, "", limit)
 		if err != nil {
 			return err
 		}
 		for _, t := range rows.Items {
-			v.AddResource(t.ID, fmt.Sprintf("%s · %s · %s", t.ID, t.Title, t.Status))
+			v.Named(t.ID, t.Title, fmt.Sprintf("%s · %s · %s", t.ID, t.Title, t.Status))
 		}
 		v.More = rows.Next != ""
 	case "workflows":
@@ -73,7 +77,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return err
 		}
 		for _, a := range rows {
-			v.AddResource(a.ID, fmt.Sprintf("%s · %s · version %d", a.ID, a.Name, a.Latest))
+			v.Named(a.ID, a.Name, fmt.Sprintf("%s · %s · version %d", a.ID, a.Name, a.Latest))
 		}
 	case "projects":
 		rows, err := (projectconfig.Manager{Store: s.Store}).List(ctx)
@@ -81,7 +85,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return err
 		}
 		for _, p := range rows {
-			v.AddResource(p.ID, fmt.Sprintf("%s · %s · revision %d", p.ID, p.Name, p.Revision))
+			v.Named(p.ID, p.Name, fmt.Sprintf("%s · %s · revision %d", p.ID, p.Name, p.Revision))
 		}
 	case "skills":
 		rows, err := (instructions.Manager{Store: s.Store}).List(ctx)
@@ -90,16 +94,20 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 		}
 		for _, sk := range rows {
 			if !sk.Deleted {
-				v.Add(fmt.Sprintf("%s · %s · revision %d", sk.ID, sk.Title, sk.Revision))
+				v.Named(sk.ID, sk.Title, fmt.Sprintf("%s · %s · revision %d", sk.ID, sk.Title, sk.Revision))
 			}
 		}
 	case "approvals":
-		rows, err := s.Store.ListApprovals(ctx, storage.ApprovalFilter{Status: domain.ApprovalPending, Limit: chat.InspectionLimit + 1})
+		rows, err := s.Store.ListApprovals(ctx, storage.ApprovalFilter{Status: domain.ApprovalPending, Limit: limit + 1})
 		if err != nil {
 			return err
 		}
+		if len(rows) > limit {
+			v.More = true
+			rows = rows[:limit]
+		}
 		for _, a := range rows {
-			v.Add(fmt.Sprintf("%s · %s · %s · pending", a.ID, a.GraphID, a.Kind))
+			v.Named(a.ID, a.Title, fmt.Sprintf("%s · %s · %s · pending", a.ID, a.GraphID, a.Kind))
 		}
 	case "activity":
 		query, err := activity.ParseQuery(nil)
@@ -137,18 +145,18 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return err
 		}
 		for _, r := range rows {
-			v.Add(fmt.Sprintf("%s · %s · %s", r.ID, r.Workflow, r.State))
+			v.Named(r.ID, r.Name, fmt.Sprintf("%s · %s · %s · %s", r.ID, r.Name, r.Workflow, r.State))
 		}
 	case "review-routes":
 		if s.ReviewRoutes == nil {
 			return errInspectionUnavailable
 		}
-		rows, after, err := s.ReviewRoutes.ListPage(ctx, "", chat.InspectionLimit)
+		rows, after, err := s.ReviewRoutes.ListPage(ctx, "", limit)
 		if err != nil {
 			return err
 		}
 		for _, r := range rows {
-			v.Add(fmt.Sprintf("%s · %s version %d · enabled %t", r.Name, r.GraphID, r.GraphVersion, r.Enabled))
+			v.Named(r.Name, r.GraphID, fmt.Sprintf("%s · %s version %d · enabled %t", r.Name, r.GraphID, r.GraphVersion, r.Enabled))
 		}
 		v.More = after != ""
 	case "mcp":
@@ -160,7 +168,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return err
 		}
 		for _, c := range rows {
-			v.Add(fmt.Sprintf("%s · %s · %s · %d discovered tools", c.ID, c.Service, c.Status, len(c.Tools)))
+			v.Named(c.ID, c.Service, fmt.Sprintf("%s · %s · %s · %d discovered tools", c.ID, c.Service, c.Status, len(c.Tools)))
 		}
 	case "scm":
 		rows, err := s.SCM.List(ctx)
@@ -168,7 +176,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return err
 		}
 		for _, c := range rows {
-			v.Add(fmt.Sprintf("%s · %s · %s", c.Name, c.Kind, c.Repository))
+			v.Named(c.Name, c.Repository, fmt.Sprintf("%s · %s · %s", c.Name, c.Kind, c.Repository))
 		}
 	case "issue-connections":
 		rows, err := s.IssueConnections.List(ctx)
@@ -176,7 +184,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return err
 		}
 		for _, c := range rows {
-			v.Add(fmt.Sprintf("%s · %s · revision %d · enabled %t", c.Name, c.Kind, c.Revision, c.Enabled))
+			v.Named(c.Name, c.Name, fmt.Sprintf("%s · %s · revision %d · enabled %t", c.Name, c.Kind, c.Revision, c.Enabled))
 		}
 		if s.CloudProfiles != nil {
 			profiles, err := s.CloudProfiles.List(ctx)
@@ -184,7 +192,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 				return err
 			}
 			for _, c := range profiles {
-				v.Add(fmt.Sprintf("%s · Jira Cloud · revision %d", c.Name, c.Revision))
+				v.Named("jira-cloud/"+c.Name, c.Name, fmt.Sprintf("%s · Jira Cloud · revision %d", c.Name, c.Revision))
 			}
 		}
 	case "models":
@@ -192,7 +200,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return errInspectionUnavailable
 		}
 		for _, m := range s.Models.List() {
-			v.Add(fmt.Sprintf("%s · %s · %s", m.Name, m.Type, m.DefaultModel))
+			v.Named(m.Name, m.DefaultModel, fmt.Sprintf("%s · %s · %s", m.Name, m.Type, m.DefaultModel))
 		}
 	case "chat-model":
 		m, err := s.readChatModel(ctx)
@@ -208,14 +216,14 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return errInspectionUnavailable
 		}
 		for _, p := range s.Providers.Plugins() {
-			v.Add(fmt.Sprintf("%s · enabled %t · %d providers", p.ID, p.Enabled, len(p.Instances)))
+			v.Named(p.ID, p.ID, fmt.Sprintf("%s · enabled %t · %d providers", p.ID, p.Enabled, len(p.Instances)))
 		}
 	case "tools":
 		if s.Tools == nil {
 			return errInspectionUnavailable
 		}
 		for _, t := range s.Tools.List() {
-			v.Add(t.Name() + " · " + t.Capability())
+			v.Named(t.Name(), t.Capability(), t.Name()+" · "+t.Capability())
 		}
 	case "delegation":
 		current, err := (delegation.Manager{Store: s.Store}).Policy(ctx)
@@ -273,7 +281,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 		}
 		v.Add(fmt.Sprintf("Task run ceiling · %d micros · warning at %d%%", policy.TaskRunBudgetMicros, policy.WarningPercent))
 		for _, d := range defs {
-			v.Add(fmt.Sprintf("%s / %s · %d micros", d.Scope, d.ID, d.LimitMicros))
+			v.Named(d.Scope+"/"+d.ID, d.ID, fmt.Sprintf("%s / %s · %d micros", d.Scope, d.ID, d.LimitMicros))
 		}
 	default:
 		return errInspectionUnavailable

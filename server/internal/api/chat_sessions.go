@@ -169,7 +169,14 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 			lastInput = history[len(history)-1].Content
 			directive = chat.ExplicitReviewDirective(lastInput)
 		}
-		if strings.TrimSpace(lastInput) == "/export" {
+		if find, ok := chat.ExplicitFind(lastInput); ok {
+			answer = find
+			if find.Plan.Kind == chat.FindResource {
+				answer = s.resolveChatPlan(ctx, actor, id, find.Plan)
+			}
+		} else if choice, ok := s.answerChatChoice(ctx, actor, session, requestID, lastInput); ok {
+			answer = choice
+		} else if strings.TrimSpace(lastInput) == "/export" {
 			answer = chat.ManualHandoff(chat.Plan{Kind: chat.OpenManual, Destination: "configuration-export", Title: "Export configuration"}, actor.Role)
 		} else if explicit, ok := chat.ExplicitInspection(lastInput); ok {
 			answer = explicit
@@ -247,6 +254,10 @@ func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.Cha
 }
 
 func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID string, plan chat.Plan) chat.Interpretation {
+	return s.discoverChatPlan(ctx, actor, sessionID, plan)
+}
+
+func (s *Server) dispatchChatPlan(ctx context.Context, actor Identity, sessionID string, plan chat.Plan) chat.Interpretation {
 	reply := chat.Interpretation{Plan: plan}
 	switch plan.Kind {
 	case chat.AnalyzePR:

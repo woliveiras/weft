@@ -151,6 +151,8 @@ default. These routes do not contact the provider or take credentials.
 
 ### Chat sessions
 
+A Chat message containing `/find <resource> [name]` searches addressable resources. A reply in state `discovery` presents numbered choices. The next user message in the same session can select one by name, ordinal or `/choose <number>`. Selection revalidates the target and resumes the original request. Mutations still use the confirmation endpoint.
+
 Explicit `/inspect <resource>` requests read installation state through the same authenticated Chat session endpoint. Enter `/inspect` to list the supported resources. The server projects bounded, timestamped fields and links to the owning console page. This shortcut works without a configured inference provider.
 
 

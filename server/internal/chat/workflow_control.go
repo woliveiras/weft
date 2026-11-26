@@ -17,7 +17,7 @@ type WorkflowControlDraft struct {
 }
 
 func (d WorkflowControlDraft) valid() bool {
-	if !shortLabel(d.Workflow) || (d.Node != "" && !shortLabel(d.Node)) {
+	if (d.Workflow == "" && d.Node == "") || (d.Workflow != "" && !shortLabel(d.Workflow)) || (d.Node != "" && !shortLabel(d.Node)) {
 		return false
 	}
 	switch d.Action {

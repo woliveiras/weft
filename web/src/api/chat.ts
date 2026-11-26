@@ -21,7 +21,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
-  state?: 'pending' | 'interpreting' | 'interpreted' | 'unavailable' | 'clarification';
+  state?: 'pending' | 'interpreting' | 'interpreted' | 'unavailable' | 'clarification' | 'discovery';
   attempt?: string;
   destination?: string;
   task?: ChatTask;

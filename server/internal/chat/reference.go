@@ -3,6 +3,7 @@ package chat
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 // A reference carries a confirmed identifier into the next model turn.
@@ -13,9 +14,25 @@ func validReferenceID(id string) bool {
 	return contextID.MatchString(id) && !credentialPattern.MatchString(id)
 }
 
+func validDiscoveryReference(id string) bool {
+	parts := strings.Split(id, "/")
+	if len(parts) > 2 {
+		return false
+	}
+	for _, part := range parts {
+		if !validReferenceID(part) {
+			return false
+		}
+	}
+	return true
+}
+
 func observedReference(message Message) string {
 	if message.Role != "assistant" {
 		return ""
+	}
+	if pick := message.Selection; pick != nil && validDiscoveryReference(pick.ID) && SearchableArea(pick.Area) {
+		return fmt.Sprintf("The user explicitly selected %s %s in this conversation. Use only for an explicit reference to that selection.", pick.Area, pick.ID)
 	}
 	if message.Inventory != nil {
 		return message.Inventory.Context()

@@ -45,3 +45,24 @@ test('opens the exact delegation section from its stored policy snapshot', async
   await page.goBack();
   await expect(policy).toBeFocused();
 });
+
+test('selects a workflow from the search shown before reloading the chat', async ({page,request}) => {
+  const headers = {Authorization: 'Bearer e2e-admin-token'};
+  for (const id of ['find-payments','find-mobile']) {
+    const created = await request.post('/api/v1/graphs',{headers,data:{metadata:{id,name:'Find fixture'},spec:{nodes:[{id:'reader',runtime:{kind:'echo'}}]}}});
+    expect(created.status()).toBe(201);
+  }
+  await page.addInitScript(() => localStorage.setItem('weftToken','e2e-viewer-token'));
+  await page.goto('/');
+  const input = page.getByRole('textbox',{name:'Message',exact:true});
+  const send = page.getByRole('button',{name:'Send',exact:true});
+  await input.fill('/find workflows Find fixture');
+  await send.click();
+  await expect(page.locator('.chat-message-assistant').last()).toContainText('Reply with the number');
+  await page.reload();
+  await input.fill('o do payments');
+  await send.click();
+  const selected = page.locator('.chat-message-assistant').last();
+  await expect(selected).toContainText('find-payments');
+  await expect(selected).not.toContainText('find-mobile');
+});

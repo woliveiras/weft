@@ -96,7 +96,7 @@ func (s *Session) Context(requestID string) []llm.ChatMessage {
 			}
 		} else if ref := observedReference(message); ref != "" {
 			history = append(history, llm.ChatMessage{Role: llm.RoleAssistant, Content: ref})
-		} else if message.Role == "assistant" && message.Text != "" && message.State == "clarification" {
+		} else if message.Role == "assistant" && message.Text != "" && message.State == "clarification" && message.Discovery == nil {
 			history = append(history, llm.ChatMessage{Role: llm.RoleAssistant, Content: message.Text})
 		}
 	}
@@ -104,6 +104,8 @@ func (s *Session) Context(requestID string) []llm.ChatMessage {
 }
 
 type Interpretation struct {
+	Discovery   *Discovery
+	Selection   *Selection
 	Inventory   *Inventory
 	Execution   *ExecutionSummary
 	Plan        Plan
@@ -142,6 +144,10 @@ func (s Sessions) FinishInterpretation(ctx context.Context, owner, id, requestID
 			reply.Destination = outcome.Destination
 			reply.Execution = outcome.Execution
 			reply.Inventory = outcome.Inventory
+			reply.Discovery, reply.Selection = outcome.Discovery, outcome.Selection
+			if reply.Discovery != nil {
+				reply.State = "discovery"
+			}
 			// A continuing watch announces its terminal result separately. Reviews
 			// already expose a decision or a receipt in the index.
 			reply.Unread = outcome.Review == nil && (outcome.Plan.Kind != WatchTask || outcome.Task == nil || outcome.Task.Terminal())

@@ -153,7 +153,13 @@ func hydrateChatProjectSettings(docs []installation.Document, snapshot map[strin
 // The owner may have changed role since a proposal was prepared. All routes
 // returning a session use this projection, including read and title updates.
 func writeChatSession(w http.ResponseWriter, actor Identity, session *chat.Session) {
-	writeJSON(w, http.StatusOK, chatSessionForRole(actor, session))
+	projected := *chatSessionForRole(actor, session)
+	projected.Messages = slices.Clone(projected.Messages)
+	for i := range projected.Messages {
+		projected.Messages[i].Discovery = nil
+		projected.Messages[i].Selection = nil
+	}
+	writeJSON(w, http.StatusOK, &projected)
 }
 
 func chatSessionForRole(actor Identity, session *chat.Session) *chat.Session {
@@ -163,6 +169,17 @@ func chatSessionForRole(actor Identity, session *chat.Session) *chat.Session {
 		session = &projection
 		for i := range session.Messages {
 			message := &session.Messages[i]
+			if d := message.Discovery; d != nil && !actor.Role.Allows(d.Plan.DiscoveryRole()) {
+				message.Discovery, message.Selection = nil, nil
+				message.Text = "Your current role cannot view these choices."
+				message.State = ""
+			}
+			if p := message.Selection; p != nil && !actor.Role.Allows(p.Role) {
+				message.Text = "Your current role cannot view this selection."
+				message.Destination = ""
+				message.Inventory = nil
+				message.Selection = nil
+			}
 			if message.Review != nil && message.Review.TriggerControl != nil {
 				message.Review = nil
 				message.Text = "Administrator access is required to view this issue intake review."

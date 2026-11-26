@@ -389,6 +389,8 @@ The endpoint contract is in [OpenAPI](../api/openapi.yaml); see the
 
 Chat is the console entry point. The API authenticates the caller, resolves conversation ownership and submits bounded context to the explicitly selected Chat model. Its response proposes a typed operation. The server resolves the target, checks the caller’s role and uses the owning domain service. Reads such as `/inspect` and background observation use stored Weft state directly.
 
+Resource discovery uses the caller's authorized services to resolve IDs and names. A numbered question stores the original typed request and bounded choices with its assistant message in the owner's transcript. The HTTP response contains their presentation. A choice resumes only the preceding discovery in that conversation, and the server looks up the selected ID again under current permissions. Repository discovery reads PR metadata through scoped SCM access before selecting an eligible reviewer.
+
 A consequential action begins with a review tied to its target, inputs, expiry and relevant revisions. On confirmation the API claims that review, rechecks authorization and dispatches the operation. The transcript records the native receipt and subsequent observed outcome. Workflow control distinguishes a requested state from runtime convergence. The installer and Chat share the declarative plan and apply service, including per-object results on partial failure.
 
 The configured store persists transcripts and their owner-scoped session index together. The background worker uses the index to find active observations and recover results after restart. The browser can switch conversations while other requests and watches progress.

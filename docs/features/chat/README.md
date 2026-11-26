@@ -30,6 +30,21 @@ An operator can ask to cancel an execution tree or only a particular delegated c
 
 Ask about the delegation policy or type `/inspect delegation` for the saved approval mode, limits and policy revision. Open **Delegation** to inspect or edit the full policy.
 
+## Find a resource by name
+
+Ask “Which workflows mention release?” or type `/find workflows release`.
+Enter `/find` for the available resource types. Use `/find nodes reviewer`
+to search workflow agents across reusable workflows. Each node result names
+its parent workflow. A numbered reply shows up to eight matches. Answer
+`2`, `o segundo`, a distinguishing part of the displayed name, or
+`/choose 2`. You can reopen the conversation before answering.
+
+When a request such as “follow the release task” identifies several tasks,
+the choice resumes that request. For an operation that changes Weft,
+inspect the review and confirm it separately. If the search is incomplete,
+narrow the name or choose an entry that was actually found. The explicit
+`/find` and `/choose` commands work without a configured Chat model.
+
 ## Open a console page from a conversation
 
 Ask “Where can I inspect my model budget?” or “Where do I enter the MCP connection credentials?” Follow the link in the reply to the relevant console page. Enter credentials in its setup form. Use browser Back to return to the same conversation. Opening a page leaves decisions, saves and execution to the controls on that page.

@@ -22,6 +22,8 @@ var (
 // Message stores the text and safe operation references rendered in the chat.
 // Raw provider responses and task evidence remain outside the transcript.
 type Message struct {
+	Discovery   *Discovery        `json:"discovery,omitempty"`
+	Selection   *Selection        `json:"selection,omitempty"`
 	Inventory   *Inventory        `json:"inventory,omitempty"`
 	Execution   *ExecutionSummary `json:"execution,omitempty"`
 	ID          string            `json:"id"`

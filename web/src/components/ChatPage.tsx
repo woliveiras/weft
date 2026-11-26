@@ -102,7 +102,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   };
 
   const textDecision = /^(confirm this proposal|confirme esta proposta|decline this proposal|recuse esta proposta)$/i.test(draft.trim().replace(/\.$/, '').trim());
-  const canSend = modelAvailable || (!MOCK && (draft.trim() === '/export' || /^\s*\/inspect(?:\s|$)/.test(draft) || (!!session && textDecision)));
+  const canSend = modelAvailable || (!MOCK && (draft.trim() === '/export' || /^\s*\/(?:inspect|find|choose)(?:\s|$)/.test(draft) || (!!session && (textDecision || session.messages.at(-1)?.state === 'discovery'))));
 
   async function send() {
     if (!canSend || !draft.trim() || sending || waiting) return;

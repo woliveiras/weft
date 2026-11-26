@@ -36,6 +36,7 @@ type Inventory struct {
 	Items []InventoryReference `json:"items"`
 }
 type Inspection struct {
+	Search     *ResourceSearch
 	References []InventoryReference
 	Area       string
 	Lines      []string
@@ -62,10 +63,16 @@ func (v *Inspection) AddResource(id, line string) {
 	}
 }
 
+func (v *Inspection) Named(id, name, line string) {
+	if v.Search != nil {
+		v.Search.Add(id, name, line)
+		return
+	}
+	v.AddResource(id, line)
+}
+
 func (v Inventory) Context() string {
-	switch v.Area {
-	case "tasks", "workflows", "agents", "projects":
-	default:
+	if !SearchableArea(v.Area) {
 		return ""
 	}
 	if len(v.Items) == 0 || len(v.Items) > InspectionLimit {
@@ -74,7 +81,7 @@ func (v Inventory) Context() string {
 	parts := []string{}
 	last := 0
 	for _, item := range v.Items {
-		if !validReferenceID(item.ID) || item.Position <= last || item.Position > InspectionLimit {
+		if !validDiscoveryReference(item.ID) || item.Position <= last || item.Position > InspectionLimit {
 			return ""
 		}
 		parts = append(parts, fmt.Sprintf("%d=%s", item.Position, item.ID))

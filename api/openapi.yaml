@@ -3015,7 +3015,7 @@ components:
         id: {type: string}
         role: {type: string, enum: [user, assistant]}
         text: {type: string}
-        state: {type: string, enum: [pending, interpreting, interpreted, unavailable, clarification]}
+        state: {type: string, enum: [pending, interpreting, interpreted, unavailable, clarification, discovery]}
         createdAt: {type: string, format: date-time}
         attempt: {type: string, format: date-time}
         unread: {type: boolean}
