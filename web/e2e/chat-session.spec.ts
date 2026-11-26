@@ -64,6 +64,41 @@ async function approvePendingTaskInput(request: APIRequestContext, taskId: strin
   expect(decision.ok()).toBe(true);
 }
 
+test('reviews runtime controls and observes a pause limited to the named node', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const graphPath = '/api/v1/graphs/chat-publication';
+  const graph = await request.post('/api/v1/graphs', {
+    headers,
+    data: {
+      metadata: {id:'chat-publication', name:'Publication workflow'},
+      spec:{nodes:[
+        {id:'reviewer',runtime:{kind:'echo'},loop:{mode:'event'}},
+        {id:'reader',runtime:{kind:'echo'},loop:{mode:'event'}},
+      ]},
+    },
+  });
+  expect(graph.status()).toBe(201);
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-operator-token'));
+  await page.goto('/');
+  await send(page, 'Start the publication workflow.');
+  const start = page.getByRole('region', {name:'Start chat-publication', exact:true});
+  await expect(start.getByText('chat-publication · Version 1')).toBeVisible();
+  expect(await (await request.get(graphPath,{headers})).json()).toMatchObject({record:{desiredState:'stopped'}});
+  await start.getByRole('button',{name:'Start',exact:true}).click();
+  await expect(start.getByText('The runtime reached the requested state.')).toBeVisible();
+  await send(page, 'Pause new turns for the reviewer node in the publication workflow.');
+  const pause = page.getByRole('region',{name:'Pause new turns chat-publication / reviewer'});
+  await expect(pause.getByText('chat-publication / reviewer · Version 1')).toBeVisible();
+  await pause.getByRole('button',{name:'Pause new turns'}).click();
+  await expect(pause.getByText('The runtime reached the requested state.')).toBeVisible();
+  const status = await (await request.get(`${graphPath}/status`,{headers})).json();
+  expect(status).toMatchObject({desiredState:'running',nodes:[{nodeId:'reviewer',paused:true},{nodeId:'reader',paused:false}]});
+  await pause.getByRole('link',{name:'Open workflow'}).click();
+  await expect(page).toHaveURL(/#\/g\/chat-publication\/canvas\?sel=node%3Areviewer/);
+  await page.goBack();
+  await expect(pause).toBeVisible();
+});
+
 test('starts a reviewed task, preserves its approval and follows the observed result', async ({ page, request }) => {
   await selectFixtureModel(request);
   const task = await draftTaskWithApproval(request, 'chat-start-approval', 'Archive review task fixture');

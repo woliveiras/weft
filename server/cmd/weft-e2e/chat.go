@@ -42,6 +42,10 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"task.create","taskTitle":"Summarize style notes","workflow":"editorial-check","workflowVersion":"1","request":"Summarize the style notes.","outcome":"understand","title":"Prepare an editorial task"}`
 	case "Start the saved archive review task.":
 		content = `{"kind":"task.start","task":"Archive review task fixture","title":"Start archive review"}`
+	case "Start the publication workflow.":
+		content = `{"kind":"workflow.control","controlWorkflow":"chat-publication","controlAction":"start","title":"Control publication workflow"}`
+	case "Pause new turns for the reviewer node in the publication workflow.":
+		content = `{"kind":"workflow.control","controlWorkflow":"chat-publication","controlNode":"reviewer","controlAction":"pause"}`
 	default:
 		return nil, errors.New("unknown Chat fixture request")
 	}

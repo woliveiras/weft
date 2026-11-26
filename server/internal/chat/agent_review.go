@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
@@ -105,18 +106,20 @@ type OperationReview struct {
 	Guidance     *Guidance        `json:"guidance,omitempty"`
 	ConsumedAt   *time.Time       `json:"consumedAt,omitempty"`
 	*AgentCreation
-	Configuration  *ConfigReview     `json:"configuration,omitempty"`
-	ConfigReceipts []ConfigReceipt   `json:"configReceipts,omitempty"`
-	Workflow       *WorkflowCreation `json:"workflow,omitempty"`
-	TaskDraft      *TaskCreation     `json:"taskDraft,omitempty"`
-	TaskStart      *TaskAdmission    `json:"taskStart,omitempty"`
-	ID             string            `json:"id"`
-	ExpiresAt      time.Time         `json:"expiresAt"`
-	Digest         string            `json:"digest"`
-	State          string            `json:"state"`
-	ClaimedAt      time.Time         `json:"claimedAt,omitempty"`
-	ResultVersion  int               `json:"resultVersion,omitempty"`
-	ResultID       string            `json:"resultId,omitempty"`
+	Configuration   *ConfigReview                      `json:"configuration,omitempty"`
+	ConfigReceipts  []ConfigReceipt                    `json:"configReceipts,omitempty"`
+	Workflow        *WorkflowCreation                  `json:"workflow,omitempty"`
+	TaskDraft       *TaskCreation                      `json:"taskDraft,omitempty"`
+	TaskStart       *TaskAdmission                     `json:"taskStart,omitempty"`
+	WorkflowControl *WorkflowControl                   `json:"workflowControl,omitempty"`
+	ControlResult   *engine.WorkflowControlObservation `json:"controlResult,omitempty"`
+	ID              string                             `json:"id"`
+	ExpiresAt       time.Time                          `json:"expiresAt"`
+	Digest          string                             `json:"digest"`
+	State           string                             `json:"state"`
+	ClaimedAt       time.Time                          `json:"claimedAt,omitempty"`
+	ResultVersion   int                                `json:"resultVersion,omitempty"`
+	ResultID        string                             `json:"resultId,omitempty"`
 }
 
 func NewAgentReview(owner, session, agent string, definition domain.AgentDefinition, modelRevision int64, now time.Time) (*OperationReview, error) {
@@ -139,7 +142,7 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	choices := 0
-	for _, exists := range []bool{r.AgentCreation != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.Guidance != nil, r.Instructions != nil} {
+	for _, exists := range []bool{r.AgentCreation != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
 		if exists {
 			choices++
 		}
@@ -149,6 +152,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 	}
 	var payload any
 	switch {
+	case r.WorkflowControl != nil:
+		payload = struct {
+			Owner, Session, ID, Operation string
+			ExpiresAt                     time.Time
+			WorkflowControl               *WorkflowControl
+		}{owner, session, r.ID, ControlWorkflow, r.ExpiresAt, r.WorkflowControl}
 	case r.Instructions != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string

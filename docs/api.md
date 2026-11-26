@@ -209,6 +209,13 @@ path rechecks budgets and gates and records its operation ID with the task
 claim. An `accepted` review proves admission was recorded. The conversation
 tracks the actual task state and outcome separately.
 
+An operator can review a start, pause, resume, graceful stop or immediate
+interruption on a reusable workflow or one node. Chat seals the exact graph
+version, target, run and desired control state. Confirmation takes the native
+workflow transition lease and reuses its budget and execution checks. A saved
+operation receipt proves the control was recorded. The response reports the
+requested and observed state separately while the runtime settles.
+
 ## Native issue connections
 
 Native Jira Data Center connections have their own credential store, independent

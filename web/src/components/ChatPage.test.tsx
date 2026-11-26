@@ -156,6 +156,34 @@ it('shows task admission separately from the outcome following confirmation', as
   expect(backend.find('POST',confirmPath).map(request => request.body)).toEqual([{digest:'start-digest'}]);
 });
 
+it('displays the reviewed node and a recorded control while runtime is still draining', async () => {
+  const review = {
+    id:'node-pause', digest:'bound-control', expiresAt:'2999-11-26T08:00:00Z',
+    workflowControl:{action:'pause',scope:{workflowId:'publication',nodeId:'reviewer',version:2,runId:'run-first',desiredState:'running'}},
+  };
+  const session = (state:string) => ({
+    id, archived:false, messages:[{id:'reply',role:'assistant',text:'Review this control.',review:{...review,state,
+      controlResult:state==='accepted' ? {runId:'run-first',desired:'paused',observed:'running',settled:false} : undefined}}],
+  });
+  const path = `${paths}/${id}/operations/node-pause/confirm`;
+  const backend = fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'configured',revision:1}),
+    [`GET ${paths}`]: () => ({items:[],shared:false}),
+    [`GET ${paths}/${id}`]: () => session('awaiting_confirmation'),
+    [`POST ${path}`]: () => session('accepted'),
+  });
+  render(<ChatPage id={id} archived={false} canOperate onOpen={vi.fn()}/>);
+  const card = await screen.findByRole('region',{name:'Pause new turns publication / reviewer'});
+  expect(within(card).getByText('publication / reviewer · Version 2')).toBeTruthy();
+  expect(within(card).getByText(/while active turns continue/)).toBeTruthy();
+  fireEvent.click(within(card).getByRole('button',{name:'Pause new turns'}));
+  expect(await within(card).findByText(/Control recorded. Waiting/)).toBeTruthy();
+  expect(within(card).getByText('paused')).toBeTruthy();
+  expect(within(card).getByText('Observed runtime state')).toBeTruthy();
+  expect(within(card).queryByText('The runtime reached the requested state.')).toBeNull();
+  expect(backend.find('POST',path).map(request => request.body)).toEqual([{digest:'bound-control'}]);
+});
+
 it('shows archived novelty from Recents and navigates across bounded pages', async () => {
   const open = vi.fn();
   const item = {

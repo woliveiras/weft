@@ -46,6 +46,7 @@ Return exactly one JSON object. "kind" is one of:
 - "task.create": prepare a saved task draft using a named workflow. Add "taskTitle", "workflow" (the stated workflow ID or exact name), "request" (the intended work), and "outcome" (understand, implement, investigate, review, freeform). Add "workflowVersion" as a string only if the user named the version. Ask for the workflow if the target is unclear. Work requiring a repository or delivery settings must be configured in Tasks. Never include grants or start a task.
 - "agent.create": propose a reusable agent for the catalog. Add "agentId" (lowercase letters, digits and hyphens), "agentName" and concise "instructions". The operator reviews the proposal before anything is created. Never interpret a confirmation as a new create request.
 - "workflow.create": propose a stopped task workflow with one existing catalog agent. Add "workflowId" (lowercase letters, digits and hyphens), "workflowName" and "agent" (the stated catalog ID or exact name). Add "agentVersion" as a string only if the user requested that version or explicitly requested "latest". Ask which agent when the request is ambiguous. This capability never creates an agent or starts a workflow.
+- "workflow.control": propose a workflow runtime control. Add "controlWorkflow" with the exact workflow ID or name, "controlAction" (start, pause, resume, stop or kill), and "controlNode" only when the user identifies one agent in that workflow. Pause stops new turns and allows active work to finish. Stop requests a graceful drain. Kill interrupts active turns and must be explicitly intended. For a request like "disable the reviewer", clarify whether the intent is to pause future trigger intake, pause new turns, drain work or immediately interrupt active work. A workflow control cannot change trigger intake or a task-owned run.
 - "installation.plan": propose installation configuration using one or more weft.io/v1 YAML documents in "document". Use only supported installation kinds: InferencePlugin, ModelProvider, PriceCatalog, CostPolicy, Budget, NetworkPolicy, MCPConnection, SCMConnection, IssueConnection, IssueWorkflowMapping, JiraCloudProfile, JiraCloudWorkflowMapping, Project, Graph, PullRequestReviewRoute, IssueTrigger. Ask about missing consequential settings. For requested issue or PR intake activation, include "intakeConsent":"review" to show its separate scope to the administrator. Credential input goes to manual setup. Never set force, claim consent, or report a change as applied.
 - "workflow.instructions": replace the local instructions of one node in a saved workflow. Add "instructionWorkflow" and "instructionNode" (exact IDs) and "localInstructions" with the complete proposed replacement (empty only for an explicit request to clear local instructions). Ask which scope is intended if the request could mean a one-time message or reusable catalog publication.
 - "node.guide": send one operator message to a later matching turn of a running workflow. Add "guideWorkflow" and "guideNode" with the stated exact IDs, "guideReplica" with a replica number or "any" only if the user explicitly selected it, and "guidance" with the requested message. Ask for any missing target. For an ambiguous change of behavior, ask whether the operator wants one-time guidance, a workflow instruction revision, or a reusable catalog change.
@@ -69,6 +70,7 @@ type Plan struct {
 	Instructions  InstructionEdit
 	Guidance      Guidance
 	TaskDraft     TaskDraft
+	Control       WorkflowControlDraft
 }
 
 func safeText(text string, limit int) bool {
@@ -163,6 +165,12 @@ func decodePlan(body string) (Plan, error) {
 			plan.IntakeConsent = true
 		case "destination":
 			plan.Destination = value
+		case "controlWorkflow":
+			plan.Control.Workflow = value
+		case "controlNode":
+			plan.Control.Node = value
+		case "controlAction":
+			plan.Control.Action = value
 		case "kind":
 			plan.Kind = value
 		case "task":
@@ -223,7 +231,14 @@ func decodePlan(body string) (Plan, error) {
 	if seen["destination"] && plan.Kind != OpenManual {
 		return Plan{}, ErrInvalidPlan
 	}
+	if plan.Kind != ControlWorkflow && (seen["controlWorkflow"] || seen["controlNode"] || seen["controlAction"]) {
+		return Plan{}, ErrInvalidPlan
+	}
 	switch plan.Kind {
+	case ControlWorkflow:
+		if !plan.Control.valid() || seen["task"] || seen["question"] {
+			return Plan{}, ErrInvalidPlan
+		}
 	case EditInstructions:
 		if !seen["localInstructions"] || !plan.Instructions.ValidInput() || seen["task"] || seen["question"] {
 			return Plan{}, ErrInvalidPlan

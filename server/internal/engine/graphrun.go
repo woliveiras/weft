@@ -44,9 +44,10 @@ func newGraphRun(e *Engine, g *domain.Graph, runID string) (*graphRun, error) {
 // nodeControl is the per-node operator override, persisted in KV so that it
 // survives restarts and is shared by every instance.
 type nodeControl struct {
-	Stopped  bool `json:"stopped,omitempty"`
-	Paused   bool `json:"paused,omitempty"`
-	Replicas int  `json:"replicas,omitempty"` // scale override for fixed clusters
+	Stopped   bool   `json:"stopped,omitempty"`
+	Paused    bool   `json:"paused,omitempty"`
+	Replicas  int    `json:"replicas,omitempty"` // scale override for fixed clusters
+	Operation string `json:"operation,omitempty"`
 }
 
 func controlNS(graphID string) string { return "_control/" + graphID }

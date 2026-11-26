@@ -381,30 +381,35 @@ func (e *Engine) graphAction(ctx context.Context, id, action, actor string, admi
 		if err != nil {
 			return err
 		}
-		firstAdmittedStart := admitted && rec.RunID == "" && strings.HasPrefix(id, domain.TaskRunGraphPrefix) &&
-			(rec.DesiredState == "" || rec.DesiredState == domain.GraphStopped)
-		starting := action == "start" && rec.DesiredState != domain.GraphRunning && !firstAdmittedStart
-		if starting || (action == "resume" && rec.DesiredState == domain.GraphPaused) {
+		return e.applyGraphAction(ctx, g, rec, action, actor, admitted, "")
+	})
+}
+
+func (e *Engine) applyGraphAction(ctx context.Context, g *domain.Graph, rec *domain.GraphRecord, action, actor string, admitted bool, operation string) error {
+	id := g.Metadata.ID
+	firstAdmittedStart := admitted && rec.RunID == "" && strings.HasPrefix(id, domain.TaskRunGraphPrefix) &&
+		(rec.DesiredState == "" || rec.DesiredState == domain.GraphStopped)
+	starting := action == "start" && rec.DesiredState != domain.GraphRunning && !firstAdmittedStart
+	if starting || (action == "resume" && rec.DesiredState == domain.GraphPaused) {
+		if err := e.checkManualBudgetResume(ctx, g, rec.RunID, actor, action, ""); err != nil {
+			return err
+		}
+	}
+	if action == "start" {
+		if rep := e.preflight(ctx, g, ""); !rep.Valid {
+			return &ValidationError{Report: rep}
+		}
+		if starting {
+			// Preflight can run external checks. Revalidate at the write.
 			if err := e.checkManualBudgetResume(ctx, g, rec.RunID, actor, action, ""); err != nil {
 				return err
 			}
 		}
-		if action == "start" {
-			if rep := e.preflight(ctx, g, ""); !rep.Valid {
-				return &ValidationError{Report: rep}
-			}
-			if starting {
-				// Preflight can run external checks. Revalidate at the write.
-				if err := e.checkManualBudgetResume(ctx, g, rec.RunID, actor, action, ""); err != nil {
-					return err
-				}
-			}
-		}
-		return e.recordGraphAction(ctx, rec, action, actor, "")
-	})
+	}
+	return e.recordGraphAction(ctx, rec, action, actor, "", operation)
 }
 
-func (e *Engine) recordGraphAction(ctx context.Context, rec *domain.GraphRecord, action, actor, budgetResumeID string, guards ...storage.SettingRevision) error {
+func (e *Engine) recordGraphAction(ctx context.Context, rec *domain.GraphRecord, action, actor, budgetResumeID, operation string, guards ...storage.SettingRevision) error {
 	id := rec.ID
 	now := time.Now().UTC()
 	var ev domain.EventType
@@ -458,6 +463,7 @@ func (e *Engine) recordGraphAction(ctx context.Context, rec *domain.GraphRecord,
 		return fmt.Errorf("%w: unknown action %q", ErrInvalid, action)
 	}
 	rec.UpdatedAt = now
+	rec.ControlOperation = operation
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -497,6 +503,7 @@ func (e *Engine) clearNodeStops(ctx context.Context, id string) error {
 			node := strings.TrimPrefix(k, "node/")
 			c := e.getNodeControl(ctx, id, node)
 			c.Stopped, c.Paused = false, false
+			c.Operation = ""
 			if err := e.putNodeControl(ctx, id, node, c); err != nil {
 				return err
 			}
@@ -527,6 +534,11 @@ func (e *Engine) nodeAction(ctx context.Context, id, node, action, actor string)
 		return fmt.Errorf("%w: node %q", ErrNotFound, node)
 	}
 	c := e.getNodeControl(ctx, id, node)
+	return e.applyNodeAction(ctx, g, rec, n, c, action, actor, "")
+}
+
+func (e *Engine) applyNodeAction(ctx context.Context, g *domain.Graph, rec *domain.GraphRecord, n *domain.Node, c nodeControl, action, actor, operation string) error {
+	id, node := g.Metadata.ID, n.ID
 	switch action {
 	case "start":
 		if n.Disabled {
@@ -548,13 +560,14 @@ func (e *Engine) nodeAction(ctx context.Context, id, node, action, actor string)
 		if rec.DesiredState == domain.GraphStopped {
 			// Starting one node of a stopped graph starts the graph with only
 			// that node running.
-			if err := e.recordGraphAction(ctx, rec, "start", actor, ""); err != nil {
+			if err := e.recordGraphAction(ctx, rec, "start", actor, "", ""); err != nil {
 				return err
 			}
 			for _, other := range g.Spec.Nodes {
 				if other.ID != node {
 					oc := e.getNodeControl(ctx, id, other.ID)
 					oc.Stopped = true
+					oc.Operation = ""
 					_ = e.putNodeControl(ctx, id, other.ID, oc)
 				}
 			}
@@ -578,6 +591,7 @@ func (e *Engine) nodeAction(ctx context.Context, id, node, action, actor string)
 	default:
 		return fmt.Errorf("%w: unknown action %q", ErrInvalid, action)
 	}
+	c.Operation = operation
 	if err := e.putNodeControl(ctx, id, node, c); err != nil {
 		return err
 	}

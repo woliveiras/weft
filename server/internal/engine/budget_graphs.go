@@ -164,12 +164,12 @@ func (e *Engine) applyBudgetGraphTransition(ctx context.Context, target cost.Bud
 		if actor == "" {
 			actor = "system:budget"
 		}
-		if err := e.recordGraphAction(ctx, rec, "pause", actor, "", guards...); err != nil {
+		if err := e.recordGraphAction(ctx, rec, "pause", actor, "", "", guards...); err != nil {
 			return "", err
 		}
 		outcome = "paused"
 	case "resume":
-		if err := e.recordGraphAction(ctx, rec, "resume", target.Actor, target.GraphAction.ID, guards...); err != nil {
+		if err := e.recordGraphAction(ctx, rec, "resume", target.Actor, target.GraphAction.ID, "", guards...); err != nil {
 			// A write can commit while its caller loses the reply.
 			verify, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 			defer cancel()
@@ -285,7 +285,7 @@ func (e *Engine) checkBudgetGraphTransition(ctx context.Context, target cost.Bud
 				guards[i].Revision++
 			}
 		}
-		if err := e.recordGraphAction(ctx, rec, "pause", "system:budget", "", guards...); err != nil {
+		if err := e.recordGraphAction(ctx, rec, "pause", "system:budget", "", "", guards...); err != nil {
 			return "", false, nil, err
 		}
 	}

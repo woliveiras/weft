@@ -94,6 +94,12 @@ func (s *Session) summary(owner, key string) storage.ChatSummary {
 			if review.TaskStart != nil && review.State == ReviewApplying {
 				meta.WatchCount++
 			}
+			if review.WorkflowControl != nil && (review.State == ReviewApplying || review.State == ReviewAccepted) {
+				meta.WatchCount++
+				if review.State == ReviewAccepted {
+					meta.Running++
+				}
+			}
 			switch review.State {
 			case ReviewAwaiting:
 				meta.ReviewExpiries = append(meta.ReviewExpiries, review.ExpiresAt)

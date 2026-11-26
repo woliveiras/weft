@@ -85,6 +85,20 @@ preparation or delivery settings. If the task or its authorization changes
 while you are reviewing, inspect the updated setup and request a fresh start
 proposal.
 
+## Control a workflow or agent
+
+Name the workflow and, for a single-agent change, the node. Choose **Pause
+new turns** to let current work continue, **Drain and stop** for a graceful
+stop, or **Interrupt now** to cancel active turns in the selected scope.
+Start and resume go through the workflow's usual runtime and budget checks.
+Chat shows the target, requested state and observed runtime state. An
+ambiguous request such as “Deactivate the reviewer” needs a choice about
+trigger intake, new turns, draining or immediate interruption.
+
+If the workflow or run changed during review, open the workflow to inspect
+its current state before confirming a fresh proposal. Trigger intake has
+separate configuration controls.
+
 ## Change instructions for one workflow
 
 Name the workflow and node, then describe the replacement for that node’s **local instructions**. Review the old and proposed text and the pinned catalog version. **Save workflow instructions** creates a new workflow version. The reusable agent’s instructions and existing task copies stay on their recorded versions. Future turns use the normal workflow rollout. **View workflow** opens the selected node in the editor.

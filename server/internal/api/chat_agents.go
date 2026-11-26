@@ -143,6 +143,9 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		if review.TaskStart != nil {
 			return s.applyReviewedChatTaskStart(settleCtx, actor, sessionID, review)
 		}
+		if review.WorkflowControl != nil {
+			return s.applyReviewedChatControl(settleCtx, actor, sessionID, review)
+		}
 		return s.applyReviewedChatAgent(settleCtx, actor, sessionID, review)
 	}
 	return s.reconcileChatReviews(ctx, actor.chatOwner, session)
@@ -167,6 +170,9 @@ func (s *Server) decideChatReviewFromText(ctx context.Context, actor Identity, s
 }
 
 func reviewDecisionRole(review *chat.OperationReview) config.Role {
+	if review.WorkflowControl != nil {
+		return config.RoleOperator
+	}
 	if review.Guidance != nil {
 		return config.RoleOperator
 	}
@@ -221,6 +227,15 @@ func (s *Server) chatAgentReceipt(ctx context.Context, review *chat.OperationRev
 func (s *Server) reconcileChatReviews(ctx context.Context, owner string, session *chat.Session) (*chat.Session, error) {
 	for _, message := range session.Messages {
 		review := message.Review
+		if review != nil && review.WorkflowControl != nil &&
+			(review.State == chat.ReviewApplying || review.State == chat.ReviewAccepted || review.State == chat.ReviewUnknown) {
+			var err error
+			session, err = s.reconcileChatWorkflowControl(ctx, owner, session, review)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if review != nil && review.Guidance != nil {
 			switch review.State {
 			case chat.ReviewQueued, chat.ReviewConsumed, chat.ReviewRunEnded, chat.ReviewApplying, chat.ReviewUnknown:

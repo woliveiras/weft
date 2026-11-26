@@ -107,7 +107,24 @@ export interface ChatInstructionReview extends ChatReviewState {
   instructions: {graph: string; node: string; version: number; before: string; after: string; catalogId?: string; catalogVersion?: number};
 }
 
-export type ChatOperationReview = ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview | ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview;
+export interface ChatWorkflowControlReview extends ChatReviewState {
+  workflowControl: {
+    action: 'start' | 'pause' | 'resume' | 'stop' | 'kill';
+    scope: {
+      workflowId: string;
+      nodeId?: string;
+      version: number;
+      runId: string;
+      desiredState: string;
+      nodePaused?: boolean;
+      nodeStopped?: boolean;
+    };
+  };
+  controlResult?: {runId: string; desired: string; observed: string; settled: boolean};
+}
+
+export type ChatOperationReview = ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
+  ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview;
 
 export interface ChatSession {
   id: string;

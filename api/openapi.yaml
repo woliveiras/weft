@@ -3026,6 +3026,7 @@ components:
             - {$ref: "#/components/schemas/ChatWorkflowReview"}
             - {$ref: "#/components/schemas/ChatTaskDraftReview"}
             - {$ref: "#/components/schemas/ChatTaskStartReview"}
+            - {$ref: "#/components/schemas/ChatWorkflowControlReview"}
             - {$ref: "#/components/schemas/ChatConfigurationReview"}
             - {$ref: "#/components/schemas/ChatGuidanceReview"}
             - {$ref: "#/components/schemas/ChatInstructionReview"}
@@ -3190,6 +3191,41 @@ components:
                       id: {type: string}
                       isolation: {type: string}
                       tools: {type: array, items: {type: string}}
+    ChatWorkflowControlReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [workflowControl]
+          properties:
+            workflowControl:
+              type: object
+              required: [action, scope]
+              properties:
+                action: {type: string, enum: [start, pause, resume, stop, kill]}
+                scope:
+                  type: object
+                  required: [workflowId, version, runId, createdAt, desiredState]
+                  properties:
+                    workflowId: {type: string}
+                    nodeId: {type: string}
+                    version: {type: integer, minimum: 1}
+                    runId: {type: string}
+                    createdAt: {type: string, format: date-time}
+                    desiredState: {type: string}
+                    stoppedAndIdle: {type: boolean}
+                    nodePaused: {type: boolean}
+                    nodeStopped: {type: boolean}
+                    nodeDisabled: {type: boolean}
+                    replicaOverride: {type: integer}
+            controlResult:
+              type: object
+              required: [runId, desired, observed, settled]
+              properties:
+                runId: {type: string}
+                desired: {type: string}
+                observed: {type: string}
+                settled: {type: boolean}
+                incomplete: {type: boolean}
     ChatReviewState:
       type: object
       required: [id, expiresAt, digest, state]
@@ -3880,6 +3916,7 @@ components:
         desiredState: {$ref: "#/components/schemas/GraphState"}
         state: {$ref: "#/components/schemas/GraphState"}
         runId: {type: string}
+        controlOperation: {type: string, readOnly: true, description: ID of the reviewed operation recorded by the latest workflow control}
         startedAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}
     GraphSummary:

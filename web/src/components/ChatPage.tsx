@@ -4,7 +4,7 @@ import { ChatConfigurationCard } from './ChatConfigurationCard';
 import { ChatManualLink } from './ChatManualLink';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
-import type { ChatMessage, ChatOperationReview, ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview, ChatTaskStartReview } from '../api/chat';
+import type { ChatMessage, ChatOperationReview, ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -286,7 +286,7 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
     {onRetry && <Btn onClick={onRetry}>Retry saved request</Btn>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
-    {review && <OperationReviewCard review={review} now={now} canConfirm={('taskDraft' in review || 'guidance' in review) ? canOperate : canCreateAgent}
+    {review && <OperationReviewCard review={review} now={now} canConfirm={('taskDraft' in review || 'guidance' in review || 'workflowControl' in review) ? canOperate : canCreateAgent}
       onDecide={decision => onDecide(review,decision)} onView={onView}/>}
     {value.unread && <Btn onClick={onRead}>Mark result read</Btn>}
   </article>;
@@ -300,6 +300,7 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   if ('configuration' in review) return <ChatConfigurationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;
   if ('taskDraft' in review) return <TaskDraftReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskStart' in review) return <TaskStartReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('workflowControl' in review) return <WorkflowControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   const workflow = review.workflow;
   const name = review.workflow ? review.workflow.graph.metadata.name : review.definition.name;
   const kind = workflow ? 'workflow' : 'agent';
@@ -403,6 +404,50 @@ function TaskStartReviewCard({review, now, canConfirm, onDecide, onView}: {
     {review.state === 'declined' && <p role="status">Proposal declined.</p>}
     {review.state === 'accepted' && <p role="status">Task admission recorded. Follow its state and result in this conversation.</p>}
     <a id={anchor} href={taskSectionLink(task.id,'overview')} onClick={() => onView(anchor)}>Open task</a>
+  </section>;
+}
+
+const workflowControlCopy = {
+  start: ['Start', 'Request execution in this scope. Starting a stopped workflow creates a new run.'],
+  pause: ['Pause new turns', 'Pause new turns in this scope while active turns continue.'],
+  resume: ['Resume', 'Allow new turns in this scope under the existing budget and runtime policy.'],
+  stop: ['Drain and stop', 'Stop taking new work and let active turns drain. Pending reviews in this scope can be canceled.'],
+  kill: ['Interrupt now', 'Interrupt active turns immediately in this scope. Pending reviews in this scope can be canceled.'],
+};
+
+function WorkflowControlCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatWorkflowControlReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const {scope, action} = review.workflowControl;
+  const [command, effect] = workflowControlCopy[action];
+  const target = scope.nodeId ? `${scope.workflowId} / ${scope.nodeId}` : scope.workflowId;
+  const anchor = `chat-control-${review.id}`;
+  const selection = scope.nodeId ? `?sel=${encodeURIComponent('node:' + scope.nodeId)}` : '';
+  const current = scope.nodeStopped ? 'stopped' : scope.nodePaused ? 'paused' : scope.desiredState;
+  return <section className="chat-agent-review" aria-label={`${command} ${target}`}>
+    <h3>{command} {scope.nodeId ? 'agent' : 'workflow'}</h3>
+    <dl>
+      <dt>Target</dt><dd>{target} · Version {scope.version}</dd>
+      <dt>Current desired state</dt><dd>{current}</dd>
+      {scope.runId && <><dt>Reviewed run</dt><dd>{scope.runId}</dd></>}
+      {review.controlResult && <>
+        <dt>Requested state</dt><dd>{review.controlResult.desired}</dd>
+        <dt>Observed runtime state</dt><dd>{review.controlResult.observed}</dd>
+        <dt>Run</dt><dd>{review.controlResult.runId}</dd>
+      </>}
+    </dl>
+    {review.state === 'awaiting_confirmation' && <>
+      <p>{effect} Trigger intake has separate controls.</p>
+      <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm} confirmLabel={command} onDecide={onDecide}/>
+    </>}
+    {review.state === 'applying' && <p role="status">Control requested. Checking the recorded response…</p>}
+    {review.state === 'accepted' && <p role="status">Control recorded. Waiting for the runtime to reach the requested state.</p>}
+    {review.state === 'applied' && <p role="status">The runtime reached the requested state.</p>}
+    {review.state === 'conflict' && <p role="status">The reviewed workflow or runtime changed. Inspect the current state and request a fresh review.</p>}
+    {review.state === 'incomplete' && <p role="status">The control was recorded. Inspect the workflow for unfinished work.</p>}
+    {review.state === 'unknown' && <p role="status">The control outcome is temporarily unknown. Inspect the workflow before trying again.</p>}
+    {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+    <a id={anchor} href={`#/g/${encodeURIComponent(scope.workflowId)}/canvas${selection}`} onClick={() => onView(anchor)}>Open workflow</a>
   </section>;
 }
 

@@ -135,5 +135,15 @@ Chromium replayed the task start through the independent approval and
 execution evidence. TypeScript, eleven focused component checks and OpenAPI
 parsing passed.
 
+## 2026-11-26 — Reviewed workflow runtime controls
+
+S30 passed targeted Go unit and HTTP/SQLite checks. A reviewed workflow
+started one run; pausing one node left the workflow and sibling active. A
+manual graph save invalidated the old resume proposal. A fresh proposal
+resumed the node, and the graceful stop settled through the native engine.
+Chromium opened the reviewed runtime controls as an operator, verified the
+observed state, inspected the exact node and returned to the conversation.
+TypeScript, ten focused component checks and OpenAPI parsing passed.
+
 Device and assistive-technology review, external provider qualification and
 production backup and restore remain open.
