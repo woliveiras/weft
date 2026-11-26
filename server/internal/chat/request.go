@@ -94,7 +94,9 @@ func (s *Session) Context(requestID string) []llm.ChatMessage {
 			if message.ID == requestID {
 				break
 			}
-		} else if message.Text != "" && message.State == "clarification" {
+		} else if ref := observedReference(message); ref != "" {
+			history = append(history, llm.ChatMessage{Role: llm.RoleAssistant, Content: ref})
+		} else if message.Role == "assistant" && message.Text != "" && message.State == "clarification" {
 			history = append(history, llm.ChatMessage{Role: llm.RoleAssistant, Content: message.Text})
 		}
 	}
