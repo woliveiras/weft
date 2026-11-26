@@ -1,3 +1,5 @@
+import { Search } from 'lucide-react';
+import { ChatSessionSearch } from './ChatSessionSearch';
 import { ChatComposer } from './ChatComposer';
 import { ChatModelSection } from './ChatModelSection';
 import { ChatSkillCard } from './ChatSkillCard';
@@ -16,7 +18,7 @@ import type { ChatAgentAdoptionReview, ChatApprovalReview, ChatCatalogPublicatio
   ChatBudgetRaiseReview, ChatEnvironmentReview, ChatCorrectionReview, ChatTaskAuthorizationReview, ChatTaskRetryReview,
   ChatWorkflowScaleReview, ChatTriggerReview, ChatWorkflowEnvironmentReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
-import { Btn, ErrorBox, Modal } from './common';
+import { Btn, ErrorBox } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
 import { settingsPath } from './graphSettingsSections';
 import './chat.css';
@@ -67,7 +69,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   }, [session?.id, session?.messages.length]);
   const heading = useRef<HTMLHeadingElement>(null);
   const drawerButton = useRef<HTMLButtonElement>(null);
-  const drawerClose = useRef<HTMLButtonElement>(null);
+
   const evidence = useRef<string | undefined>(undefined);
   const requestedRead = useRef(new Set<string>());
   const draftKey = id ?? `new-${newDraft}`;
@@ -98,7 +100,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       focus.focus();
     }
   }, [id, session?.id]);
-  useEffect(() => { if (drawer) drawerClose.current?.focus(); }, [drawer]);
+
 
   const closeDrawer = () => {
     setDrawer(false);
@@ -187,6 +189,8 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       <button type="button" aria-current={archived ? 'page' : undefined} onClick={() => filterList(true)}>
         {archivedLabel}
       </button>
+      <button ref={drawerButton} type="button" className="chat-search-button" title="Search conversations" aria-label="Search conversations"
+        aria-haspopup="dialog" onClick={() => setDrawer(true)}><Search size={16} aria-hidden="true"/></button>
     </nav>
     {list.loading && !visiblePage && <p role="status">Loading sessions…</p>}
     {list.error && <ErrorBox error={list.error}/>}
@@ -213,8 +217,6 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
               onClick={() => void mutate(() => api.retryChatTitle(session.id))}>Retry title</Btn>}
           </>}
         </div>
-        <button ref={drawerButton} className="btn chat-sessions-toggle" type="button"
-          aria-expanded={drawer} onClick={() => setDrawer(!drawer)}>Sessions</button>
         {session && <Btn disabled={sending}
           onClick={() => void mutate(() => api.archiveChat(session.id,!session.archived), next => onOpen(next.id,next.archived))}>
           {session.archived ? 'Restore conversation' : 'Archive conversation'}
@@ -276,12 +278,9 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
     </section>
 
     <aside className="chat-panel" aria-label="Chat sessions">
-      {!drawer && <section aria-label={archived ? 'Archived' : 'Recents'}>{sessionList}</section>}
+      <section aria-label={archived ? 'Archived' : 'Recents'}>{sessionList}</section>
     </aside>
-    {drawer && <Modal title="Sessions" onClose={closeDrawer} keyboard>
-      <button ref={drawerClose} className="btn" type="button" onClick={closeDrawer}>Close sessions</button>
-      {sessionList}
-    </Modal>}
+    {drawer && <ChatSessionSearch key={role} archived={archived} onClose={closeDrawer} onSelect={navigate}/>}
   </div>;
 }
 

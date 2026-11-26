@@ -129,7 +129,7 @@ export function Modal({ title, onClose, children, keyboard = false }: {
           onClose();
         }
         if (event.key === 'Tab') {
-          const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
+          const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]'));
           const first = buttons[0];
           const last = buttons.at(-1);
           if (event.shiftKey && event.target === first && last) {

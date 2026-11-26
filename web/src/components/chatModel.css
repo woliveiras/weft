@@ -20,7 +20,3 @@
 .chat-setup-notice h2, .chat-setup-notice p, .chat-welcome h2, .chat-welcome p { margin: 0; }
 .chat-welcome { margin-block: clamp(1.25rem, 6vh, 4.5rem) var(--space-4); }
 .chat-welcome p { margin-block-start: var(--space-2); }
-.chat-page .chat-sessions-toggle { display: none; }
-@media (max-width: 850px) {
-  .chat-page .chat-sessions-toggle { display: inline-flex; }
-}

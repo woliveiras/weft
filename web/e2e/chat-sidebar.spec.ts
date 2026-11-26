@@ -1,6 +1,6 @@
 import {expect,test} from '@playwright/test';
 
-test('reads the full recent title with a mouse, keyboard and narrow touch drawer', async ({page,request,browser})=>{
+test('reads the full recent title with a mouse, keyboard and narrow touch search', async ({page,request,browser})=>{
   const headers={Authorization:'Bearer e2e-admin-token'};
   const settings=await(await request.get('/api/v1/chat/settings',{headers})).json();
   expect((await request.put('/api/v1/chat/settings',{headers:{...headers,'If-Match':String(settings.revision)},data:{provider:'e2e',name:'fixture'}})).ok()).toBe(true);
@@ -33,19 +33,20 @@ test('reads the full recent title with a mouse, keyboard and narrow touch drawer
     await mobile.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
     const phone=await mobile.newPage();
     await phone.goto('/');
-    const sessions=phone.getByRole('button',{name:'Sessions',exact:true});
-    await sessions.tap();
-    const drawer=phone.getByRole('dialog',{name:'Sessions'});
-    const details=drawer.getByRole('button',{name:'Details for '+title});
-    await details.tap();
-    await expect(drawer.getByText(title,{exact:true}).last()).toBeVisible();
-    await expect(details).toHaveAttribute('aria-expanded','true');
-    expect(await phone.locator('[id="chat-row-'+input.requestId+'"]').count()).toBe(1);
+    const search=phone.getByRole('button',{name:'Search conversations'});
+    await search.tap();
+    const dialog=phone.getByRole('dialog',{name:'Search conversations'});
+    const query=dialog.getByRole('searchbox',{name:'Session title'});
+    await expect(query).toBeFocused();
+    await query.fill('missing title fixture');
+    await expect(dialog.getByText('No matching conversations.')).toBeVisible();
+    await query.fill(title.slice(0,20));
+    await expect(dialog.getByRole('button',{name:title})).toBeVisible();
+    await query.press('Escape');
+    await expect(search).toBeFocused();
+    await search.tap();
+    await dialog.getByRole('button',{name:title}).tap();
+    await expect(phone.getByRole('heading',{name:title})).toBeVisible();
     expect(await phone.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
-    await details.press('Escape');
-    await expect(details).toHaveAttribute('aria-expanded','false');
-    await expect(drawer).toBeVisible();
-    await drawer.getByRole('button',{name:'Close sessions'}).tap();
-    await expect(sessions).toBeFocused();
   } finally {await mobile.close();}
 });

@@ -118,11 +118,10 @@ drawers trap focus while open. The main landmarks, DOM/tab order, sent message
 and status announcements, and selected-session indicator work in both expanded
 and compact left navigation.
 
-At narrow widths, keep the conversation and composer in the main column and
-expose the right-hand session list from a labeled **Sessions** control. The
-drawer includes **New chat**, **Recents**, and access to archived sessions.
-Opening it moves focus to its heading or selected row, Escape or Close restores
-focus, and selecting a different session focuses the new conversation heading.
+Place the search button beside Recents and Archived. Search titles across the
+selected list, including older pages. On narrow screens the list sits above
+the conversation. The search dialog focuses the query, Escape returns focus
+to the opener, and selecting a result opens its conversation.
 Use the existing narrow-screen navigation, predictable wrapping and no horizontal
 page overflow. Reuse the console theme, focus and interaction primitives.
 Check text scaling, zoom, contrast, screen-reader announcements and touch
