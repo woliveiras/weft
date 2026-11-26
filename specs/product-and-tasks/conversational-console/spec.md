@@ -549,8 +549,8 @@ owned by PROD-04.
 
 - [Behavior and oracle matrix, operation inventory and impact review](./matrix.md).
 - Model selection, conversational task inspection and monitoring, indexed
-  session summaries, and reviewed catalog agent creation are delivered.
-  Independent title retry and further P1 qualification remain open.
+  session summaries, reviewed catalog agent creation, and independent title
+  retry are delivered. Further P1 qualification remains open.
   Preserve baseline and historical oracles.
   When P1 is delivered, cross-link TASK-002 AC-001 and AC-003 to the new default
   in TASK-012 AC-001 while keeping deep links, retained drafts and contextual

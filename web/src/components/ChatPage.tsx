@@ -35,6 +35,9 @@ export function ChatPage({id, archived, canCreateAgent = false, onOpen}: {id?: s
   const draft = drafts[draftKey] ?? '';
   const modelAvailable = !MOCK && settings.data?.status === 'configured';
   const waiting = session?.messages.some(message => message.state === 'pending' || message.state === 'interpreting');
+  const headingTitle = session ? session.title || 'New chat' : 'Chat';
+  const titlePending = session?.titleRetryState === 'pending' && !!session.titleRetryStarted &&
+    now - Date.parse(session.titleRetryStarted) < 60_000;
   const archivedUnread = list.data?.archivedUnread ?? 0;
   const archivedLabel = archivedUnread ? `Archived · ${archivedUnread} unread` : 'Archived';
 
@@ -145,9 +148,13 @@ export function ChatPage({id, archived, canCreateAgent = false, onOpen}: {id?: s
     <section className="chat-conversation" aria-labelledby="chat-heading">
       <header className="page-head chat-header">
         <div>
-          <h1 id="chat-heading" tabIndex={-1} ref={heading}>{id ? session?.title || 'Chat' : 'Chat'}</h1>
+          <h1 id="chat-heading" tabIndex={-1} ref={heading}>{headingTitle}</h1>
           {list.data?.shared && <p className="muted">Shared local history</p>}
-          {session?.title === 'Untitled chat' && <p className="muted">A title could not be generated.</p>}
+          {session?.title === 'Untitled chat' && <>
+            <p className="muted" role="status">{titlePending ? 'Generating a title…' : 'A title could not be generated.'}</p>
+            {!session.titleRetryState && modelAvailable && !waiting && <Btn disabled={sending}
+              onClick={() => void mutate(() => api.retryChatTitle(session.id))}>Retry title</Btn>}
+          </>}
         </div>
         <button ref={drawerButton} className="btn chat-sessions-toggle" type="button"
           aria-expanded={drawer} onClick={() => setDrawer(!drawer)}>Sessions</button>

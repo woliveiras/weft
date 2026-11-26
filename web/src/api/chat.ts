@@ -39,6 +39,8 @@ export interface ChatSession {
   id: string;
   title?: string;
   archived: boolean;
+  titleRetryState?: 'pending' | 'completed' | 'failed';
+  titleRetryStarted?: string;
   messages: ChatMessage[];
   watches?: { task: ChatTask; complete?: boolean; observedAt: string; unknown?: boolean; requestId: string }[];
 }

@@ -89,3 +89,20 @@ it('shows archived novelty from Recents and navigates across bounded pages', asy
   expect(screen.queryByRole('button',{name:'Most recent'})).toBeNull();
   expect(backend.fetch.mock.calls.some(([url]) => new URL(String(url),'http://localhost').searchParams.get('after') === '123~'+id)).toBe(true);
 });
+
+it('offers title-only retry after an untitled conversation', async () => {
+  const original = {id,title:'Untitled chat',archived:false,messages:[{id:'request',role:'user',text:'Follow release work'}]};
+  const path = `${paths}/${id}/title/retry`;
+  const backend = fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'configured',revision:1}),
+    [`GET ${paths}`]: () => ({items:[],shared:false}),
+    [`GET ${paths}/${id}`]: () => original,
+    [`POST ${path}`]: () => ({...original,title:'Release work',titleRetryState:'completed'}),
+  });
+  render(<ChatPage id={id} archived={false} onOpen={vi.fn()}/>);
+  expect(await screen.findByText('A title could not be generated.')).toBeTruthy();
+  fireEvent.click(await screen.findByRole('button',{name:'Retry title'}));
+  expect(await screen.findByRole('heading',{name:'Release work'})).toBeTruthy();
+  expect(screen.getByText('Follow release work')).toBeTruthy();
+  expect(backend.calls.filter(request => request.method === 'POST').map(request => request.path)).toEqual([path]);
+});

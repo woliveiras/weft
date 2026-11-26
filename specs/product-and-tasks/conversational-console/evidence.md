@@ -37,6 +37,11 @@ ownership, monitoring and session presentation require their own evidence.
 
 This slice verifies the task-monitoring portion of S11.
 
+A later full Chromium comparison recorded 162 passed, 18 failed and 7 skipped
+on the session commit (1542352). Its pre-implementation baseline (140bb61)
+recorded 159 passed, the same 18 failures and 7 skipped. This comparison
+found no additional failures. The broad browser suite remains failing.
+
 ## 2026-11-26 — Reviewed catalog agent creation
 
 - Targeted Go unit and HTTP/SQLite integration passed. The checks covered the
@@ -69,5 +74,13 @@ This slice verifies the task-monitoring portion of S11.
   selector count and paging.
 - `make lint`, `make build`, the OpenAPI parse and `git diff --check` passed.
 
-Independent title retry, device and assistive-technology review, external
-provider qualification and production backup and restore remain open.
+## 2026-11-26 — Independent title retry
+
+S26 passed targeted Go unit and HTTP/SQLite integration. A title-only model
+call used the first request, preserved the approved review and recency, and
+left the catalog unchanged. A repeat returned the recorded title without a
+second model call. Filtered or malformed model output could not introduce an
+operation. TypeScript, five focused component tests and OpenAPI parsing passed.
+
+Device and assistive-technology review, external provider qualification and
+production backup and restore remain open.

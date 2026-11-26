@@ -129,9 +129,7 @@ func decodePlan(body string) (Plan, error) {
 		case "question":
 			plan.Question = value
 		case "title":
-			if safeText(value, 120) && !strings.Contains(value, "://") && !strings.ContainsAny(value, "\r\n\t") {
-				plan.Title = value
-			}
+			plan.Title = cleanTitle(value)
 		case "agentId":
 			plan.Agent.ID = value
 		case "agentName":

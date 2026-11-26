@@ -166,6 +166,10 @@ or to `POST /api/v1/chat/sessions/{id}/messages` for a follow-up. The request ID
 is 32 lowercase hexadecimal digits, stable across transport retries. Reuse
 with different text returns a conflict. An unprocessed request can be retried
 at `POST /api/v1/chat/sessions/{id}/messages/{requestId}/retry`.
+An untitled session can retry its title once at
+`POST /api/v1/chat/sessions/{id}/title/retry`. This runs only a bounded title
+completion using the original request and leaves the transcript, operations
+and recency unchanged.
 
 Use `POST /api/v1/chat/sessions/{id}/archive` or `/restore` to move a session
 between lists. These operations do not cancel its watches. Use

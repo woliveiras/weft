@@ -350,6 +350,8 @@ export const api = {
     request<ChatSession>(id ? `${V1}/chat/sessions/${enc(id)}/messages` : `${V1}/chat/sessions`, {method:'POST', body:{requestId,text}}),
   retryChat: (id: string, message: string) =>
     request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/messages/${enc(message)}/retry`, {method:'POST'}),
+  retryChatTitle: (id:string) =>
+    request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/title/retry`, {method:'POST'}),
   decideChatAgent: (id: string, operation: string, digest: string, decision: 'confirm' | 'decline') =>
     request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/operations/${enc(operation)}/${decision}`, {method:'POST',body:{digest}}),
   archiveChat: (id: string, archived: boolean) =>

@@ -2313,6 +2313,17 @@ paths:
       x-weft-role: viewer
       responses:
         "200": {$ref: "#/components/responses/ChatSession"}
+  /api/v1/chat/sessions/{chatId}/title/retry:
+    parameters:
+      - {$ref: "#/components/parameters/ChatSessionID"}
+    post:
+      tags: [chat]
+      operationId: retryChatTitle
+      x-weft-role: viewer
+      responses:
+        "200": {$ref: "#/components/responses/ChatSession"}
+        "404": {description: Session absent or inaccessible}
+        "409": {description: Title is ineligible for retry or the Chat model is unavailable}
   /api/v1/chat/sessions/{chatId}/operations/{operationId}/{decision}:
     parameters:
       - {$ref: "#/components/parameters/ChatSessionID"}
@@ -2944,6 +2955,8 @@ components:
             properties:
               id: {type: string}
               title: {type: string}
+              titleRetryState: {type: string, enum: [pending, completed, failed]}
+              titleRetryStarted: {type: string, format: date-time}
               archived: {type: boolean}
               lastActivity: {type: string, format: date-time}
               messages:

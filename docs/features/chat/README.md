@@ -12,6 +12,10 @@ pages without a usable model. If interpretation becomes unavailable, use
 **Retry saved request** after restoring the model or budget. Supply provider
 credentials only in the existing Models configuration form.
 
+When a saved conversation stays **Untitled chat**, use **Retry title** to
+generate a title from the first request. The transcript and any open reviews
+remain available while the title is generated.
+
 ## Follow a task
 
 Ask Chat to show the current state of a task or follow it until it settles.

@@ -166,7 +166,7 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 			}
 		} else {
 			plan, modelErr := chat.Interpret(ctx, history, func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-				return s.callChatModel(ctx, actor, req)
+				return s.callChatModel(ctx, actor, req, "chat_interpretation")
 			})
 			if modelErr != nil {
 				answer = chat.Interpretation{Text: "Chat could not interpret this request. Check the Chat model or budget, then retry the saved request.", Retryable: true}
@@ -185,7 +185,7 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 	return nil
 }
 
-func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.ChatRequest, operation string) (*llm.ChatResponse, error) {
 	settings, err := s.readChatModel(ctx)
 	if err != nil || settings.Status != "configured" {
 		return nil, chat.ErrModelUnavailable
@@ -200,7 +200,7 @@ func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.Cha
 	}
 	req.Model = settings.Model.Name
 	// Use a correlation reference distinct from task executions and transcript IDs.
-	req.Metadata = map[string]string{"execution": domain.NewID("chat"), "operation": "chat_interpretation"}
+	req.Metadata = map[string]string{"execution": domain.NewID("chat"), "operation": operation}
 	provider := settings.Model.Provider
 	typ := s.Models.Type(provider)
 	prices := cost.Prices{Store: s.Store}

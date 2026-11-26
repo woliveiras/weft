@@ -51,13 +51,15 @@ type Watch struct {
 }
 
 type Session struct {
-	ID           string    `json:"id"`
-	Title        string    `json:"title,omitempty"`
-	Archived     bool      `json:"archived"`
-	LastActivity time.Time `json:"lastActivity"`
-	Messages     []Message `json:"messages"`
-	Watches      []Watch   `json:"watches,omitempty"`
-	Revision     int64     `json:"-"`
+	ID                string    `json:"id"`
+	Title             string    `json:"title,omitempty"`
+	Archived          bool      `json:"archived"`
+	LastActivity      time.Time `json:"lastActivity"`
+	Messages          []Message `json:"messages"`
+	Watches           []Watch   `json:"watches,omitempty"`
+	Revision          int64     `json:"-"`
+	TitleRetryState   string    `json:"titleRetryState,omitempty"`
+	TitleRetryStarted time.Time `json:"titleRetryStarted,omitzero"`
 }
 
 // Sessions uses revisioned settings so each conversation mutation is atomic
