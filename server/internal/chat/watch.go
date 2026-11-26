@@ -76,7 +76,7 @@ func (s Sessions) recordObservation(ctx context.Context, owner, id string, prior
 // ReconcilePage bounds the number of persisted sessions visited per tick.
 // Only eligible owners get detached observations. An absent cursor resumes
 // from the beginning. Reads by an authorized owner may reconcile immediately.
-func (s Sessions) ReconcilePage(ctx context.Context, cursor string, allowed func(string) bool, observe ObserveTask) (string, error) {
+func (s Sessions) ReconcilePage(ctx context.Context, cursor string, allowed func(string) bool, observe ObserveTask, review func(context.Context, string, *Session) (*Session, error)) (string, error) {
 	const pageSize = 32
 	index, err := s.index()
 	if err != nil {
@@ -92,7 +92,10 @@ func (s Sessions) ReconcilePage(ctx context.Context, cursor string, allowed func
 		if !allowed(summary.Owner) {
 			continue
 		}
-		_, err := s.Reconcile(ctx, summary.Owner, summary.ID, observe)
+		session, err := s.Reconcile(ctx, summary.Owner, summary.ID, observe)
+		if err == nil && review != nil {
+			_, err = review(ctx, summary.Owner, session)
+		}
 		if err != nil && !errors.Is(err, storage.ErrNotFound) {
 			passErr = errors.Join(passErr, err)
 		}

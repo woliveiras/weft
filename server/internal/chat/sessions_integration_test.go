@@ -165,7 +165,7 @@ func TestArchivedWatchSettlesOnceFromCanonicalTaskAfterRestart(t *testing.T) {
 		return TaskSummary{ID: draft.ID, State: draft.Status}, nil
 	}
 	for range 2 {
-		if _, err := sessions.ReconcilePage(ctx, "", func(owner string) bool { return owner == "owner-a" }, observe); err != nil {
+		if _, err := sessions.ReconcilePage(ctx, "", func(owner string) bool { return owner == "owner-a" }, observe, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

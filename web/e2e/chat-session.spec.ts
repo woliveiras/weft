@@ -89,6 +89,38 @@ test('an administrator reviews the installation budget in chat before applying i
   }
 });
 
+test('one-time guidance records pickup on the reviewed workflow run', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const graph = '/api/v1/graphs/guidance-sample';
+  const created = await request.post('/api/v1/graphs', {headers,data:{
+    metadata:{id:'guidance-sample'},spec:{
+      nodes:[{id:'reader',runtime:{kind:'echo'},loop:{mode:'event'}}],
+      channels:[{id:'requests',to:['reader']}],
+    },
+  }});
+  expect(created.status()).toBe(201);
+  expect((await request.post(graph+'/start',{headers})).ok()).toBe(true);
+  try {
+    await page.addInitScript(() => localStorage.setItem('weftToken','e2e-admin-token'));
+    await page.goto('/');
+    await send(page, 'Tell replica zero of the reader in the guidance sample to summarize the warnings on its next turn.');
+    const card = page.getByRole('region', {name:'One-time agent guidance'});
+    await expect(card).toContainText('Summarize the warnings.');
+    const history = graph+'/nodes/reader/chat';
+    const before = await request.get(history,{headers});
+    expect(await before.json()).toHaveLength(0);
+    await card.getByRole('button',{name:'Send guidance'}).click();
+    await expect(card.getByRole('status')).toContainText('runtime picked up the message', {timeout:20000});
+    const after = await request.get(history,{headers});
+    const messages = await after.json();
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({graphId:'guidance-sample',nodeId:'reader',replica:0,text:'Summarize the warnings.'});
+    expect(messages[0].consumedAt).toBeTruthy();
+  } finally {
+    expect((await request.post(graph+'/stop',{headers})).ok()).toBe(true);
+  }
+});
+
 test('a console link opens Budgets and returns to its originating chat message', async ({ page, request }) => {
   await selectFixtureModel(request);
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));

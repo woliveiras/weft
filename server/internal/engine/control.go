@@ -649,6 +649,11 @@ func (e *Engine) SendOperatorMessage(ctx context.Context, id, node string, repli
 		return nil, err
 	}
 	e.bus.Publish(ctx, domain.NewEvent(domain.EvOperatorMsg, id, m).WithNode(node, replica).WithActor(actor))
+	e.wakeOperatorMessage(id, node, replica)
+	return m, nil
+}
+
+func (e *Engine) wakeOperatorMessage(id, node string, replica int) {
 	// Wake local replicas waiting for work; remote ones see it on their next poll.
 	if run := e.graphRun(id); run != nil {
 		for _, rep := range run.nodeReplicas(node) {
@@ -660,7 +665,6 @@ func (e *Engine) SendOperatorMessage(ctx context.Context, id, node string, repli
 			}
 		}
 	}
-	return m, nil
 }
 
 // --- status ---------------------------------------------------------------
@@ -835,13 +839,8 @@ func (e *Engine) runFinished(ctx context.Context, g *domain.Graph, run string) (
 		if node.Disabled {
 			continue
 		}
-		var ctl nodeControl
-		raw, err := e.store.KVGet(ctx, controlNS(g.Metadata.ID), "node/"+node.ID)
-		if err == nil {
-			if err := json.Unmarshal(raw, &ctl); err != nil {
-				return false, &invalidNodeControl{node: node.ID, err: err}
-			}
-		} else if !errors.Is(err, storage.ErrNotFound) {
+		ctl, err := e.readNodeControl(ctx, g.Metadata.ID, node.ID)
+		if err != nil {
 			return false, err
 		}
 		if ctl.Stopped {

@@ -228,6 +228,8 @@ func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.Cha
 func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID string, plan chat.Plan) chat.Interpretation {
 	reply := chat.Interpretation{Plan: plan}
 	switch plan.Kind {
+	case chat.GuideNode:
+		return s.reviewChatGuidance(ctx, actor, sessionID, plan)
 	case chat.PlanInstallation:
 		return s.reviewChatInstallation(ctx, actor, sessionID, plan)
 	case chat.OpenManual:
@@ -344,7 +346,7 @@ func (s *Server) RunChatWatches(ctx context.Context) {
 	defer ticker.Stop()
 	cursor := ""
 	for ctx.Err() == nil {
-		next, err := s.chatStore().ReconcilePage(ctx, cursor, s.Auth.mayObserveChatOwner, s.observeChatTask)
+		next, err := s.chatStore().ReconcilePage(ctx, cursor, s.Auth.mayObserveChatOwner, s.observeChatTask, s.reconcileChatReviews)
 		if err != nil && ctx.Err() == nil {
 			s.Log.Warn("chat watch reconciliation failed", "error", err)
 		}

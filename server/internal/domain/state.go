@@ -333,6 +333,7 @@ type Approval struct {
 // OperatorMessage is a human message to a specific replica (or any replica
 // of a node when Replica < 0). It wakes a waiting loop.
 type OperatorMessage struct {
+	RunID     string     `json:"runId,omitempty"`
 	ID        string     `json:"id"`
 	GraphID   string     `json:"graphId"`
 	NodeID    string     `json:"nodeId"`

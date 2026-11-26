@@ -83,6 +83,10 @@ for the viewer and administrator. Chromium followed the link to Budgets and
 returned by browser Back to the same message with focus restored. TypeScript
 and seven component tests passed.
 
+## 2026-11-26 — One-time guidance to a running node
+
+S15 now has fixture evidence for reviewed, run-scoped messages. A viewer could not prepare a send. Changing the run invalidated confirmation. Postgres 17, SQLite and filesystem conformance verified single pickup and exclusion of other runs and replicas. Chromium followed a live fixture from review through actual pickup and checked the durable node-chat receipt. The shared event carries message and run identifiers.
+
 ## 2026-11-26 — Installation configuration review
 
 An HTTP and SQLite fixture exercised S18 with a three-object plan. Fault injection after the first write preserved the applied, failed and untouched outcomes. Replaying confirmation left the previous results in place. A manual edit invalidated the next review, and a fresh review then applied successfully. Chromium kept the task budget unchanged until confirmation and displayed the object receipt. No provider, external account or persistent installation was used.

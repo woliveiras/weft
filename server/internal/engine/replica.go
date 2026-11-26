@@ -322,7 +322,7 @@ func (r *replica) run() {
 			return
 		}
 
-		ops, err := e.store.ConsumeOperatorMessages(ctx, gr.g.Metadata.ID, r.nodeID, r.index)
+		ops, err := e.store.ConsumeOperatorMessagesForRun(ctx, gr.g.Metadata.ID, r.nodeID, r.index, gr.runID)
 		if err != nil && ctx.Err() == nil {
 			log.Warn("operator messages", "err", err)
 		}

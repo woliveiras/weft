@@ -100,6 +100,8 @@ type AgentCreation struct {
 // OperationReview persists the reviewed action. The digest binds the payload
 // to the owner and session. Claim state and the result are recorded separately.
 type OperationReview struct {
+	Guidance   *Guidance  `json:"guidance,omitempty"`
+	ConsumedAt *time.Time `json:"consumedAt,omitempty"`
 	*AgentCreation
 	Configuration  *ConfigReview     `json:"configuration,omitempty"`
 	ConfigReceipts []ConfigReceipt   `json:"configReceipts,omitempty"`
@@ -134,7 +136,19 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	var payload any
+	if r.Guidance != nil {
+		if r.Workflow != nil || r.AgentCreation != nil || r.TaskDraft != nil || r.Configuration != nil {
+			return "", ErrReviewMismatch
+		}
+		payload = struct {
+			Owner, Session, ID, Operation string
+			ExpiresAt                     time.Time
+			Guidance                      *Guidance
+		}{owner, session, r.ID, GuideNode, r.ExpiresAt, r.Guidance}
+	}
 	switch {
+	case payload != nil:
+		// The reviewed message is bound separately from its later receipt.
 	case r.Configuration != nil && r.Workflow == nil && r.AgentCreation == nil && r.TaskDraft == nil:
 		payload = struct {
 			Owner, Session, ID, Operation string

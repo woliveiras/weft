@@ -288,10 +288,10 @@ func (s *Store) PutOperatorMessage(ctx context.Context, m *domain.OperatorMessag
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, s.q(`INSERT INTO operator_messages (id, graph_id, node_id, replica, created_at, consumed_at, doc) VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (id) DO UPDATE SET graph_id = excluded.graph_id, node_id = excluded.node_id, replica = excluded.replica,
+	_, err = s.db.ExecContext(ctx, s.q(`INSERT INTO operator_messages (id, graph_id, node_id, replica, created_at, consumed_at, doc, run_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (id) DO UPDATE SET graph_id = excluded.graph_id, node_id = excluded.node_id, replica = excluded.replica, run_id = excluded.run_id,
 		created_at = excluded.created_at, consumed_at = excluded.consumed_at, doc = excluded.doc`),
-		m.ID, m.GraphID, m.NodeID, m.Replica, s.ts(m.CreatedAt), s.tsPtr(m.Consumed), string(doc))
+		m.ID, m.GraphID, m.NodeID, m.Replica, s.ts(m.CreatedAt), s.tsPtr(m.Consumed), string(doc), m.RunID)
 	return err
 }
 
@@ -299,9 +299,13 @@ func (s *Store) PutOperatorMessage(ctx context.Context, m *domain.OperatorMessag
 // ("consumed_at IS NULL"), so a message addressed to any replica (-1) is
 // handed to exactly one of the replicas asking concurrently.
 func (s *Store) ConsumeOperatorMessages(ctx context.Context, graph, node string, replica int) ([]*domain.OperatorMessage, error) {
+	return s.ConsumeOperatorMessagesForRun(ctx, graph, node, replica, "")
+}
+
+func (s *Store) ConsumeOperatorMessagesForRun(ctx context.Context, graph, node string, replica int, run string) ([]*domain.OperatorMessage, error) {
 	rows, err := s.db.QueryContext(ctx, s.q(`SELECT doc FROM operator_messages
-		WHERE graph_id = ? AND node_id = ? AND consumed_at IS NULL AND (replica = ? OR replica = -1)
-		ORDER BY created_at, id`), graph, node, replica)
+		WHERE graph_id = ? AND node_id = ? AND consumed_at IS NULL AND (replica = ? OR replica = -1) AND (run_id = '' OR run_id = ?)
+		ORDER BY created_at, id`), graph, node, replica, run)
 	if err != nil {
 		return nil, err
 	}
@@ -327,6 +331,18 @@ func (s *Store) ConsumeOperatorMessages(ctx context.Context, graph, node string,
 		}
 	}
 	return out, nil
+}
+
+func (s *Store) GetOperatorMessage(ctx context.Context, id string) (*domain.OperatorMessage, error) {
+	var doc []byte
+	if err := s.db.QueryRowContext(ctx, s.q(`SELECT doc FROM operator_messages WHERE id = ?`), id).Scan(&doc); err != nil {
+		return nil, notFound(err)
+	}
+	var m domain.OperatorMessage
+	if err := json.Unmarshal(doc, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
 }
 
 // ListOperatorMessages returns the latest limit messages in chronological
@@ -531,6 +547,6 @@ func (s *Store) PutOperatorMessageOnce(ctx context.Context, m *domain.OperatorMe
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, s.q(`INSERT INTO operator_messages (id, graph_id, node_id, replica, created_at, consumed_at, doc) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`), m.ID, m.GraphID, m.NodeID, m.Replica, s.ts(m.CreatedAt), s.tsPtr(m.Consumed), string(doc))
+	_, err = s.db.ExecContext(ctx, s.q(`INSERT INTO operator_messages (id, graph_id, node_id, replica, created_at, consumed_at, doc, run_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`), m.ID, m.GraphID, m.NodeID, m.Replica, s.ts(m.CreatedAt), s.tsPtr(m.Consumed), string(doc), m.RunID)
 	return err
 }

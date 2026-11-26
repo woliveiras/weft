@@ -3026,6 +3026,7 @@ components:
             - {$ref: "#/components/schemas/ChatWorkflowReview"}
             - {$ref: "#/components/schemas/ChatTaskDraftReview"}
             - {$ref: "#/components/schemas/ChatConfigurationReview"}
+            - {$ref: "#/components/schemas/ChatGuidanceReview"}
         task:
           type: object
           required: [id, state]
@@ -3079,6 +3080,23 @@ components:
                   key: {type: string}
                   result: {type: string, enum: [applied, unchanged, failed, not-applied, saved-revision-unknown]}
                   revision: {type: string}
+    ChatGuidanceReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [guidance]
+          properties:
+            guidance:
+              type: object
+              required: [graph, node, replica, text, run, version]
+              properties:
+                graph: {type: string}
+                node: {type: string}
+                replica: {type: string, pattern: '^(any|0|[1-9][0-9]*)$'}
+                text: {type: string, maxLength: 2000}
+                run: {type: string}
+                version: {type: integer, minimum: 1}
+            consumedAt: {type: string, format: date-time}
     ChatWorkflowReview:
       allOf:
         - {$ref: "#/components/schemas/ChatReviewState"}
@@ -3128,7 +3146,7 @@ components:
         id: {type: string}
         expiresAt: {type: string, format: date-time}
         digest: {type: string, pattern: '^[0-9a-f]{64}$'}
-        state: {type: string, enum: [awaiting_confirmation, applying, created, applied, incomplete, conflict, unknown, declined]}
+        state: {type: string, enum: [awaiting_confirmation, applying, created, queued, consumed, run_ended, applied, incomplete, conflict, unknown, declined]}
         claimedAt: {type: string, format: date-time}
         resultVersion: {type: integer}
         resultId: {type: string, description: Exact ID of a saved task draft when the review completed}

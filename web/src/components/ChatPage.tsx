@@ -1,3 +1,4 @@
+import { ChatGuidanceCard } from './ChatGuidanceCard';
 import { ChatConfigurationCard } from './ChatConfigurationCard';
 import { ChatManualLink } from './ChatManualLink';
 import { useEffect, useRef, useState } from 'react';
@@ -284,7 +285,7 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
     {onRetry && <Btn onClick={onRetry}>Retry saved request</Btn>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
-    {review && <OperationReviewCard review={review} now={now} canConfirm={'taskDraft' in review ? canOperate : canCreateAgent}
+    {review && <OperationReviewCard review={review} now={now} canConfirm={('taskDraft' in review || 'guidance' in review) ? canOperate : canCreateAgent}
       onDecide={decision => onDecide(review,decision)} onView={onView}/>}
     {value.unread && <Btn onClick={onRead}>Mark result read</Btn>}
   </article>;
@@ -293,6 +294,7 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
 function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   review:ChatOperationReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
 }) {
+  if ('guidance' in review) return <ChatGuidanceCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;
   if ('configuration' in review) return <ChatConfigurationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;
   if ('taskDraft' in review) return <TaskDraftReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   const workflow = review.workflow;

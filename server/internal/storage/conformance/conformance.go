@@ -1130,6 +1130,33 @@ func testSettingsRace(t *testing.T, s storage.Store) {
 }
 
 func testOperatorMessageOutbox(t *testing.T, s storage.Store) {
+	scoped := &domain.OperatorMessage{ID: "run-bound", GraphID: "review", RunID: "first-run", NodeID: "agent", Replica: 1, Text: "one-time guidance"}
+	must(t, s.PutOperatorMessageOnce(ctx, scoped))
+	for _, target := range []struct {
+		run     string
+		replica int
+	}{{"second-run", 1}, {"first-run", 0}, {"", 1}} {
+		wrong, err := s.ConsumeOperatorMessagesForRun(ctx, "review", "agent", target.replica, target.run)
+		must(t, err)
+		if len(wrong) != 0 {
+			t.Fatalf("delivered to wrong run/replica: %+v", target)
+		}
+	}
+	match, err := s.ConsumeOperatorMessagesForRun(ctx, "review", "agent", 1, "first-run")
+	must(t, err)
+	if len(match) != 1 || match[0].ID != scoped.ID {
+		t.Fatal("run-bound message was not delivered")
+	}
+	must(t, s.PutOperatorMessageOnce(ctx, scoped))
+	receipt, err := s.GetOperatorMessage(ctx, scoped.ID)
+	must(t, err)
+	if receipt.Consumed == nil || receipt.RunID != "first-run" {
+		t.Fatal("receipt lost during replay")
+	}
+	if _, err := s.GetOperatorMessage(ctx, "missing-guidance"); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("missing receipt: %v", err)
+	}
+
 	ctx := context.Background()
 	m := &domain.OperatorMessage{ID: "outbox", GraphID: "g", NodeID: "n", Replica: 0, Text: "decision"}
 	if err := s.PutOperatorMessageOnce(ctx, nil); err == nil {

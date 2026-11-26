@@ -90,6 +90,8 @@ type Store interface {
 	// ConsumeOperatorMessages atomically marks and returns unconsumed messages
 	// addressed to this replica (or to any replica: Replica == -1).
 	ConsumeOperatorMessages(ctx context.Context, graph, node string, replica int) ([]*domain.OperatorMessage, error)
+	ConsumeOperatorMessagesForRun(ctx context.Context, graph, node string, replica int, run string) ([]*domain.OperatorMessage, error)
+	GetOperatorMessage(ctx context.Context, id string) (*domain.OperatorMessage, error)
 	ListOperatorMessages(ctx context.Context, graph, node string, limit int) ([]*domain.OperatorMessage, error)
 
 	// --- replica status ---------------------------------------------------

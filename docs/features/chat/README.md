@@ -73,6 +73,12 @@ settings and review what it needs to run. Use Tasks when the work requires a
 repository or an input that cannot be determined from the saved workflow.
 If someone edits the workflow before you confirm, ask for a new proposal.
 
+## Guide the next turn of a running agent
+
+Specify the workflow ID, node ID and replica, or explicitly select any replica. Ask for one message on the next turn and choose **Send guidance** after checking the run and message. The node’s operator chat receives the message. A queued message can only be picked up by a matching replica in the selected run. Current turns continue with their existing input.
+
+The card shows when the runtime picked up the message. The runtime can return it to the queue after an interrupted delivery. A pickup receipt establishes delivery to the runtime. Inspect the execution separately to determine what the agent did.
+
 ## Review installation configuration
 
 As an administrator, ask for a concrete change such as “Set the task budget to two dollars with an eighty percent warning.” Review the object names, current revisions, field changes and any intake consent before choosing **Apply configuration**. A plan can include up to eight objects. The installation service validates the complete plan before applying its first change.

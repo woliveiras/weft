@@ -617,6 +617,10 @@ func sortOperator(ms []*domain.OperatorMessage) {
 }
 
 func (s *Store) ConsumeOperatorMessages(ctx context.Context, graph, node string, replica int) ([]*domain.OperatorMessage, error) {
+	return s.ConsumeOperatorMessagesForRun(ctx, graph, node, replica, "")
+}
+
+func (s *Store) ConsumeOperatorMessagesForRun(ctx context.Context, graph, node string, replica int, run string) ([]*domain.OperatorMessage, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.check(); err != nil {
@@ -624,7 +628,7 @@ func (s *Store) ConsumeOperatorMessages(ctx context.Context, graph, node string,
 	}
 	var cands []*domain.OperatorMessage
 	for _, m := range s.operator {
-		if m.GraphID == graph && m.NodeID == node && m.Consumed == nil && (m.Replica == replica || m.Replica == -1) {
+		if (m.RunID == "" || m.RunID == run) && m.GraphID == graph && m.NodeID == node && m.Consumed == nil && (m.Replica == replica || m.Replica == -1) {
 			cands = append(cands, m)
 		}
 	}
@@ -640,6 +644,19 @@ func (s *Store) ConsumeOperatorMessages(ctx context.Context, graph, node string,
 		out = append(out, clone(m))
 	}
 	return out, nil
+}
+
+func (s *Store) GetOperatorMessage(ctx context.Context, id string) (*domain.OperatorMessage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.check(); err != nil {
+		return nil, err
+	}
+	m, ok := s.operator[id]
+	if !ok {
+		return nil, storage.ErrNotFound
+	}
+	return clone(m), nil
 }
 
 func (s *Store) ListOperatorMessages(ctx context.Context, graph, node string, limit int) ([]*domain.OperatorMessage, error) {

@@ -88,16 +88,19 @@ func (s *Session) summary(owner, key string) storage.ChatSummary {
 			}
 		}
 		if review := message.Review; review != nil {
+			if review.Guidance != nil && (review.State == ReviewQueued || review.State == ReviewApplying) {
+				meta.WatchCount++
+			}
 			switch review.State {
 			case ReviewAwaiting:
 				meta.ReviewExpiries = append(meta.ReviewExpiries, review.ExpiresAt)
-			case ReviewApplying:
+			case ReviewApplying, ReviewQueued:
 				meta.Running++
-			case ReviewCreated, ReviewApplied:
+			case ReviewCreated, ReviewApplied, ReviewConsumed:
 				if message.Unread {
 					meta.UnreadSuccess++
 				}
-			case ReviewConflict, ReviewIncomplete:
+			case ReviewConflict, ReviewIncomplete, ReviewRunEnded:
 				if message.Unread {
 					meta.UnreadFailure++
 				}
