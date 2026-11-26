@@ -92,3 +92,53 @@ func TestChatGuidanceObservesOperatorReceiptAndRefusesAReplacedRun(t *testing.T)
 		t.Fatalf("unexpected sends: %d %v", len(messages), err)
 	}
 }
+
+func TestChatGuidanceSelectsANodeWithinTheOriginalWorkflow(t *testing.T) {
+	srv, app := setupApp(t, nil)
+	if err := app.Models.ReplaceProviders([]llm.Entry{{Config: llm.ProviderConfig{Name: "chat-fixture", Type: "mock"}, Provider: chatGuidanceFixture{}}}, "chat-fixture"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Store.PutSetting(t.Context(), "chat/model", []byte(`{"provider":"chat-fixture","name":"fixture"}`), 0, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	const path = "/api/v1/graphs/review-queue"
+	body := `{"metadata":{"id":"review-queue"},"spec":{"nodes":[{"id":"reader-a","runtime":{"kind":"echo"},"loop":{"mode":"event"}},{"id":"reader-b","runtime":{"kind":"echo"},"loop":{"mode":"event"}}]}}`
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", body, nil); c != 201 {
+		t.Fatal(c)
+	}
+	const sessions = "/api/v1/chat/sessions"
+	ask := func(path, text string, n int) chat.Session {
+		t.Helper()
+		var s chat.Session
+		if c := call(t, srv, "POST", path, operatorTok, "application/json", fmt.Sprintf(`{"requestId":"%032x","text":%q}`, n, text), &s); c != 200 {
+			t.Fatal(c)
+		}
+		return s
+	}
+	stale := ask(sessions, "Tell the reader in review-queue to focus on tests", 22)
+	if c := call(t, srv, "DELETE", path, adminTok, "", "", nil); c != 200 && c != 204 {
+		t.Fatal(c)
+	}
+	replacement := strings.Replace(body, `"id":"review-queue"`, `"id":"replacement","name":"review-queue"`, 1)
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", replacement, nil); c != 201 {
+		t.Fatal(c)
+	}
+	after := ask(sessions+"/"+stale.ID+"/messages", "reader-b", 24)
+	if m := after.Messages[3]; m.Review != nil || !strings.Contains(m.Text, "previously selected resource") {
+		t.Fatal(m)
+	}
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", body, nil); c != 201 {
+		t.Fatal(c)
+	}
+	if c := call(t, srv, "POST", path+"/start", adminTok, "", "", nil); c != 200 {
+		t.Fatal(c)
+	}
+	first := ask(sessions, "Tell the reader in review-queue to focus on tests", 21)
+	if m := first.Messages[1]; m.State != "discovery" || !strings.Contains(m.Text, "review-queue/reader-b") {
+		t.Fatal(m)
+	}
+	picked := ask(sessions+"/"+first.ID+"/messages", "reader-b", 23)
+	if r := picked.Messages[3].Review; r == nil || r.Guidance == nil || r.Guidance.Node != "reader-b" || r.Guidance.Graph != "review-queue" {
+		t.Fatal(picked.Messages[3])
+	}
+}

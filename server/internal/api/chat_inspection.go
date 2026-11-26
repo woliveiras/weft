@@ -107,7 +107,13 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			rows = rows[:limit]
 		}
 		for _, a := range rows {
-			v.Named(a.ID, a.Title, fmt.Sprintf("%s · %s · %s · pending", a.ID, a.GraphID, a.Kind))
+			if v.Search != nil {
+				if a.ExpiresAt == nil || now.Before(*a.ExpiresAt) {
+					v.Search.Add(a.ID, a.Title, fmt.Sprintf("%s · %s · %s · %s", a.Title, a.GraphID, a.Kind, a.ID))
+				}
+				continue
+			}
+			v.AddResource(a.ID, fmt.Sprintf("%s · %s · %s · pending", a.ID, a.GraphID, a.Kind))
 		}
 	case "activity":
 		query, err := activity.ParseQuery(nil)

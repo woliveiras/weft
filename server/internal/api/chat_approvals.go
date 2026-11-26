@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/chat"
@@ -37,12 +38,22 @@ func (s *Server) reviewChatApproval(ctx context.Context, actor Identity, session
 			out.Text, out.Retryable = "Could not inspect the task's approvals. Retry the request.", true
 			return out
 		}
-		if len(progress.PendingApprovals) != 1 {
-			out.Text, out.Plan.Kind = "This task does not identify one pending decision. Enter the exact approval ID.", chat.Clarify
-			out.Destination = "approvals"
+		if approvalID != "" && id != plan.Task {
+			out.Text = "The selected task is no longer available. Search again."
 			return out
 		}
-		taskID, approvalID = id, progress.PendingApprovals[0].ID
+		pending := pendingTaskApprovalChoices(progress.PendingApprovals, time.Now(), approvalID)
+		switch {
+		case len(pending.Choices) == 0 && (pending.Incomplete() || (progress.PendingApprovals == nil && progress.Task.ExecutionGraphID != "")):
+			return chat.AskDiscovery(plan, "task-approvals", nil, "Could not establish the pending decisions in this task.", true)
+		case len(pending.Choices) == 0 || (approvalID != "" && pending.Choices[0].ID != approvalID):
+			out.Text = "There is no matching pending approval in this task."
+			return out
+		case len(pending.Choices) > 1 || pending.Incomplete():
+			plan.Task = id
+			return chat.AskDiscovery(plan, "task-approvals", pending.Choices, "Which pending approval in this task should I use?", pending.Incomplete())
+		}
+		taskID, approvalID = id, pending.Choices[0].ID
 	}
 	native, err := s.Store.GetApproval(ctx, approvalID)
 	if errors.Is(err, storage.ErrNotFound) {
@@ -84,6 +95,17 @@ func (s *Server) reviewChatApproval(ctx context.Context, actor Identity, session
 	}
 	out.Text, out.Review = "Review the exact pending approval and the proposed decision.", review
 	return out
+}
+
+func pendingTaskApprovalChoices(approvals []*domain.Approval, now time.Time, selected string) chat.ResourceSearch {
+	search := chat.ResourceSearch{Query: selected}
+	for _, a := range approvals {
+		if a.Status != domain.ApprovalPending || (selected != "" && a.ID != selected) || (a.ExpiresAt != nil && !now.Before(*a.ExpiresAt)) {
+			continue
+		}
+		search.Add(a.ID, a.Title, fmt.Sprintf("%s · %s · %s", a.Title, a.Kind, a.ID))
+	}
+	return search
 }
 
 func (s *Server) applyChatApproval(ctx context.Context, actor Identity, sessionID string, review *chat.OperationReview) (*chat.Session, error) {

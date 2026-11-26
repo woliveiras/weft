@@ -85,6 +85,13 @@ func discoverySlots(p *chat.Plan) []discoverySlot {
 	return slots
 }
 
+func (b discoverySlot) canonicalID() string {
+	if b.workflow != nil && *b.workflow != "" {
+		return *b.workflow + "/" + *b.value
+	}
+	return *b.value
+}
+
 func (b discoverySlot) bind(id string) {
 	if b.workflow != nil {
 		graph, node, ok := strings.Cut(id, "/")
@@ -146,6 +153,16 @@ func (s *Server) searchChatResources(ctx context.Context, actor Identity, b disc
 			add(e)
 		}
 		return result, nil
+	case "approvals":
+		if query != "" {
+			a, err := s.Store.GetApproval(ctx, query)
+			if err == nil {
+				return pendingTaskApprovalChoices([]*domain.Approval{a}, time.Now(), query), nil
+			}
+			if !errors.Is(err, storage.ErrNotFound) {
+				return result, err
+			}
+		}
 	case "tasks":
 		// A canonical task ID remains directly addressable beyond the search window.
 		if query != "" {
@@ -178,11 +195,16 @@ func (s *Server) discoverChatPlan(ctx context.Context, actor Identity, id string
 	var native chat.Interpretation
 	if plan.Kind != chat.FindResource && !(plan.Kind == chat.ControlWorkflow && plan.Control.Workflow == "") {
 		native = s.dispatchChatPlan(ctx, actor, id, plan)
-		if native.Review != nil || native.Task != nil || native.Execution != nil || native.Retryable {
+		if native.Discovery != nil || native.Review != nil || native.Task != nil || native.Execution != nil || native.Retryable {
 			return native
 		}
-		if native.Plan.Kind != chat.Clarify && plan.Kind != chat.RaiseBudget && plan.Kind != chat.InspectExecution && plan.Kind != chat.CancelExecution {
-			return native
+		switch plan.Kind {
+		case chat.RaiseBudget, chat.InspectExecution, chat.CancelExecution, chat.GuideNode, chat.EditInstructions:
+			// These handlers preserve the requested kind even when the target is unresolved.
+		default:
+			if native.Plan.Kind != chat.Clarify {
+				return native
+			}
 		}
 	}
 	changed := false
@@ -209,9 +231,9 @@ func (s *Server) discoverChatPlan(ctx context.Context, actor Identity, id string
 		if plan.Kind == chat.FindResource {
 			return foundResource(plan, b.area, c)
 		}
-		before := *b.value
+		before := b.canonicalID()
 		b.bind(c.ID)
-		changed = changed || *b.value != before || b.workflow != nil
+		changed = changed || b.canonicalID() != before
 	}
 	if !changed && native.Text != "" {
 		return native
@@ -232,9 +254,25 @@ func (s *Server) resumeDiscoveryChoice(ctx context.Context, actor Identity, sess
 		return s.resolveChatPRChoice(ctx, actor, sessionID, d.Plan, d.Area, choice.ID)
 	}
 	plan := d.Plan
+	if d.Area == "task-approvals" && plan.Kind == chat.DecideApproval {
+		plan.Approval.Approval = choice.ID
+		return s.reviewChatApproval(ctx, actor, sessionID, plan)
+	}
 	slots := discoverySlots(&plan)
 	if d.Field < 0 || d.Field >= len(slots) || slots[d.Field].area != d.Area {
 		return chat.Interpretation{Text: "This choice is unavailable. Search again."}
+	}
+	// Earlier choices are canonical IDs. Require each parent to still exist
+	// before allowing native services to resolve later fields by name.
+	for _, parent := range slots[:d.Field] {
+		id := parent.canonicalID()
+		current, err := s.searchChatResources(ctx, actor, parent, id)
+		if err != nil {
+			return discoveryUnavailable(plan)
+		}
+		if len(current.Choices) != 1 || current.Choices[0].ID != id {
+			return chat.Interpretation{Text: "A previously selected resource is no longer available. Search again."}
+		}
 	}
 	slot := slots[d.Field]
 	current, err := s.searchChatResources(ctx, actor, slot, choice.ID)
