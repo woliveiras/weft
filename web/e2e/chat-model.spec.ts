@@ -1,6 +1,15 @@
 import { expect, test } from '@playwright/test';
 
-test('an administrator selects the Chat model and a viewer sees the persisted choice', async ({ page, browser }) => {
+test('an administrator selects the Chat model and a viewer sees the persisted choice', async ({ page, browser, request }) => {
+  const headers = {Authorization: 'Bearer e2e-admin-token'};
+  const settings = await request.get('/api/v1/chat/settings', {headers});
+  expect(settings.ok()).toBe(true);
+  const {revision} = await settings.json();
+  const initial = await request.put('/api/v1/chat/settings', {
+    headers: {...headers, 'If-Match': String(revision)},
+    data: {provider: 'e2e', name: 'fixture-before-selection'},
+  });
+  expect(initial.ok()).toBe(true);
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
   await page.goto('/#/models');
   await page.getByRole('link', { name: 'Chat model', exact: true }).click();
