@@ -291,8 +291,8 @@ sequenceDiagram
   participant A as Agent catalog
   U->>C: Describe the agent
   C->>S: Save the owner's request
-  C->>M: Interpret bounded conversation context
-  M-->>C: Propose an agent definition
+  C->>M: Conversation context and tool schemas
+  M-->>C: create_catalog_agent with the proposed definition
   C->>S: Save the reviewed definition and its expiry
   C-->>U: Show instructions, model, access and target
   U->>C: Confirm this review

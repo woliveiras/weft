@@ -2,14 +2,16 @@ package api_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/woliveiras/weft/server/internal/api"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/woliveiras/weft/server/internal/agentcatalog"
+	"github.com/woliveiras/weft/server/internal/api"
 	"github.com/woliveiras/weft/server/internal/chat"
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/llm"
@@ -22,7 +24,7 @@ func (chatAgentFixture) Name() string { return "chat-fixture" }
 func (chatAgentFixture) Models(context.Context) ([]llm.ModelInfo, error) { return nil, nil }
 
 func (chatAgentFixture) Chat(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	if len(req.Tools) == 0 || req.Metadata["operation"] != "chat_interpretation" || req.Model != "fixture" || len(req.Messages) == 0 {
+	if !slices.ContainsFunc(req.Tools, func(tool llm.ToolSchema) bool { return tool.Name == "create_catalog_agent" }) || req.Metadata["operation"] != "chat_interpretation" || req.Model != "fixture" || len(req.Messages) == 0 {
 		return nil, fmt.Errorf("unexpected request for the Chat fixture")
 	}
 	id := "release-reader"
@@ -30,8 +32,10 @@ func (chatAgentFixture) Chat(_ context.Context, req *llm.ChatRequest) (*llm.Chat
 		id = "calendar-reader"
 	}
 	return &llm.ChatResponse{
-		Message: llm.ChatMessage{Role: llm.RoleAssistant, Content: fmt.Sprintf(
-			`{"kind":"agent.create","agentId":%q,"agentName":"Reader","instructions":"Summarize the reviewed notes."}`, id)},
+		Message: llm.ChatMessage{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{
+			ID: "propose-agent", Name: "create_catalog_agent",
+			Arguments: json.RawMessage(fmt.Sprintf(`{"agentId":%q,"agentName":"Reader","instructions":"Summarize the reviewed notes."}`, id)),
+		}}},
 		Usage: llm.Usage{InputTokens: 30, OutputTokens: 20},
 	}, nil
 }

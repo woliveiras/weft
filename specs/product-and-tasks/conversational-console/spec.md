@@ -260,9 +260,7 @@ The explicit `/inspect tasks` shortcut remains available without a model.
 Extend this agent through named capabilities backed by the owning service. Each
 read tool declares the arguments the model can choose, the role required and the
 bounded observation it returns. A write capability can prepare a typed review.
-Execution of that review uses the existing confirmation and receipt path. Task
-inventory is the first native read tool. Other natural-language operations
-currently reach their service through the structured proposal interpreter. A native `prepare_operation` handoff gives that interpreter the original conversation and its full operation contract.
+Execution of that review uses the existing confirmation and receipt path. The model receives a native tool for each supported conversation operation, including resource discovery, inspection, navigation, clarification and review preparation. A valid proposal is resolved by the owning service. Only read tools are available when the model synthesizes task observations. The inventory and parity matrix define which console operations are available.
 Qualify each migrated capability with an end-to-end journey in the matrix.
 
 For a consequential write, persist a server-rendered review with operation ID,

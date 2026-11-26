@@ -399,3 +399,9 @@ and analysis. Their inline publication remains open.
 On the local installation, the selected `gemini-3.6-flash` answered three Portuguese requests in one authenticated Chat conversation. Its count was two successful tasks, its current running count was zero, and its list contained the two successful task IDs in last-update order. The native Tasks view showed twelve records and confirmed the statuses, IDs and order. The abbreviated list request used the original wording, including its typo.
 
 Follow-up regression tests cover the prior visible answer reaching the model alongside its verified task snapshot, a bounded combined answer, legacy records with unknown provenance, and exclusion of unsafe text and review material.
+
+## 2026-11-26 — Native conversation operations
+
+- The catalog unit tests exercise all 31 operation schemas, their typed proposals and rejected arguments. Turn tests cover isolated proposals, bounded correction, rejecting mixed read/write calls and restricting follow-up reads after an observation.
+- The HTTP and SQLite agent-creation journey receives a native function call, verifies that the catalog remains unchanged until confirmation and checks that repeats produce one catalog version. All 39 existing Chromium Chat journeys passed using the native-function fixture.
+- On the configured local Gemini, a two-turn Portuguese query first returned the two successful tasks. “E quais falharam? Utilize o mesmo padrão de resposta” returned the three failed tasks in last-update order, with titles and IDs matching the Tasks view. A separate navigation request for spending limits returned the Budgets link.

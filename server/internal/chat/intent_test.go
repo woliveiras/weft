@@ -18,14 +18,28 @@ func TestInterpretUsesModelAndKeepsTheTaskSelectorAdvisory(t *testing.T) {
 		{Role: llm.RoleUser, Content: question},
 	}, []ReadTool{{Schema: TaskQuerySchema()}}, func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 		called++
-		if len(req.Messages) != 2 || req.Messages[1].Content != question || req.JSON || len(req.Tools) != 2 || req.Tools[0].Name != "query_tasks" || req.MaxTokens <= 0 {
+		if len(req.Messages) != 2 || req.Messages[1].Content != question || req.JSON || !toolOffered(req, "query_tasks") || !toolOffered(req, "watch_task") || req.MaxTokens <= 0 {
 			t.Fatalf("request = %+v", req)
 		}
-		return answer(`{"kind":"task.watch","task":"Reorganizar documentação","title":"Acompanhar documentação"}`), nil
+		return nativeTestCall("watch", "watch_task", `{"task":"Reorganizar documentação","title":"Acompanhar documentação"}`), nil
 	})
 	plan := turn.Plan
 	if err != nil || called != 1 || plan.Kind != WatchTask || plan.Task != "Reorganizar documentação" || plan.Title != "Acompanhar documentação" {
 		t.Fatalf("plan=%+v calls=%d err=%v", plan, called, err)
+	}
+}
+
+func TestInterpretAcceptsOneCompatibleTypedPlanWithoutASeparatePlanner(t *testing.T) {
+	calls := 0
+	got, err := RunTurn(t.Context(), []llm.ChatMessage{{Role: llm.RoleUser, Content: "Abra modelos."}}, nil, func(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
+		calls++
+		if calls != 1 || r.JSON || !toolOffered(r, "open_console_page") || toolOffered(r, "prepare_operation") || strings.Contains(r.System, "one JSON object") {
+			t.Fatalf("the initial request did not use the native operation contract: %+v", r)
+		}
+		return answer(`{"kind":"manual.open","destination":"models"}`), nil
+	})
+	if err != nil || got.Plan.Kind != OpenManual || got.Plan.Destination != "models" || calls != 1 {
+		t.Fatal(got, err, calls)
 	}
 }
 
