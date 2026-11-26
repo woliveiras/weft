@@ -627,7 +627,10 @@ test('a reviewed workflow keeps the requested catalog version and opens in the m
     graphVersion: 1, nodeId: 'worker', resultNodeId: 'worker', channelId: 'requests', revision: 1,
   });
   await viewDraft.click();
-  await expect(page.getByRole('heading', { name: 'Summarize style notes', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`#/tasks/${id}(?:[?]|$)`));
+  await expect(page.getByRole('heading', { name: 'Task draft', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Title', {exact: true})).toHaveValue('Summarize style notes');
+  await expect(page.getByRole('textbox', {name:'Request', exact:true})).toHaveValue('Summarize the style notes.');
   await page.goBack();
   await expect(viewDraft).toBeVisible();
 });
