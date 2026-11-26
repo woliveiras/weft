@@ -393,3 +393,19 @@ it('filters archived sessions without losing the selected chat or its draft',asy
   view.rerender(<ChatPage id={id} archived onOpen={open}/>);
   expect(field).toHaveProperty('value','A draft');
 });
+
+it('retries the saved message from its own bubble',async () => {
+  const session = {id,archived:false,messages:[{id:'saved',role:'user',state:'unavailable',text:'Read release tasks'}]};
+  const path = `${paths}/${id}/messages/saved/retry`;
+  const backend=fakeApi({
+    'GET /api/v1/chat/settings':()=>({status:'configured',revision:1}),
+    [`GET ${paths}`]:()=>({items:[]}),
+    [`GET ${paths}/${id}`]:()=>session,
+    [`POST ${path}`]:()=>({...session,messages:[{...session.messages[0],state:'interpreted'}]}),
+  });
+  render(<ChatPage id={id} archived={false} onOpen={vi.fn()}/>);
+  fireEvent.click(await screen.findByRole('button',{name:'Retry'}));
+  await act(async()=>{});
+  expect(backend.find('POST',path)).toHaveLength(1);
+  expect(screen.queryByRole('button',{name:'Retry'})).toBeNull();
+});

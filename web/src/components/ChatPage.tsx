@@ -380,7 +380,7 @@ function Message({sessionId, value, now, canCreateAgent, canOperate, onView, onR
     {value.destination === 'chat-model' && onModelSettings && <Btn onClick={onModelSettings}>Choose Chat model here</Btn>}
     {value.destination && <ChatManualLink destination={value.destination} message={value.id} onView={onView}/>}
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
-    {onRetry && <Btn onClick={onRetry}>Retry saved request</Btn>}
+    {onRetry && <Btn className="chat-message-retry" onClick={onRetry}>Retry</Btn>}
     {value.execution && <section aria-label="Execution evidence">
       <p>{value.execution.id} · {value.execution.state} · {value.execution.active} of {value.execution.nodes} executions active</p>
       <p>Tree root · {value.execution.root}</p>

@@ -16,7 +16,7 @@ Choose **Choose Chat model here** during first use, or send `/inspect chat-model
 and use that action in the reply. **Save Chat model** keeps the current conversation
 and unsent message. The same setting is available in **Models → Chat model**. The console opens stored conversations and manual
 pages without a usable model. If interpretation becomes unavailable, use
-**Retry saved request** after restoring the model or budget. Supply provider
+**Retry** after restoring the model or budget. Supply provider
 credentials only in the existing Models configuration form.
 
 When a saved conversation stays **Untitled chat**, use **Retry title** to
