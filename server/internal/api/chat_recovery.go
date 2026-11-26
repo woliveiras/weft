@@ -13,6 +13,9 @@ import (
 func chatRecovery(modelErr, callErr error) chat.Interpretation {
 	result := chat.Interpretation{Retryable: true}
 	switch {
+	case errors.Is(callErr, cost.ErrUnpriced):
+		result.Text = "The Chat model needs a price under the current budget policy. Review model prices before retrying this saved request."
+		result.Destination = "prices"
 	case errors.Is(callErr, cost.ErrBudgetReached):
 		result.Text = "The current budget prevented Chat from calling its model. Review the budget before retrying this saved request."
 		result.Destination = "budgets"

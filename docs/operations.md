@@ -328,3 +328,5 @@ from ciphertext; restore the key or re-enter/re-authorize affected credentials.
   gap; never infer an author solely from timing or file ownership.
 
 Chat exposes `weft_chat_operation_duration_seconds` for interpretation calls, title retries and background reconciliation. Its histogram count can be grouped by operation and outcome to distinguish provider availability, budget rejection, saturation and timeout. `weft_chat_watch_schedule_delay_seconds` measures how late the worker starts a scheduled pass. A healthy scheduler can still be waiting for a task's canonical outcome. Chat operation labels and span status contain bounded categories only.
+
+Each control-plane process admits up to four simultaneous Chat model calls and up to two for a single conversation owner. Natural-language requests and title retries share this limit. Read-only inspection, export and durable monitoring use their native services directly.

@@ -23,6 +23,8 @@ func chatTelemetryOutcome(err error) string {
 		return "timeout"
 	case errors.Is(err, chat.ErrModelUnavailable):
 		return "model_unavailable"
+	case errors.Is(err, cost.ErrUnpriced):
+		return "price_required"
 	case errors.Is(err, cost.ErrBudgetReached):
 		return "budget_rejected"
 	case errors.Is(err, tools.ErrRateLimited):

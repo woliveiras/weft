@@ -90,14 +90,14 @@ type Deps struct {
 
 type Server struct {
 	configurationMu sync.Mutex
-	chatInference   chan struct{}
+	chatInference   chatAdmission
 	Deps
 	mux      *http.ServeMux
 	internal *http.ServeMux // callback API; == mux unless server.internalAddr is set
 }
 
 func New(d Deps) *Server {
-	s := &Server{Deps: d, mux: http.NewServeMux(), chatInference: make(chan struct{}, 4)}
+	s := &Server{Deps: d, mux: http.NewServeMux()}
 	s.internal = s.mux
 	if d.Config.Server.InternalAddr != "" {
 		s.internal = http.NewServeMux()

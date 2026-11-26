@@ -213,14 +213,13 @@ func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.Cha
 	if err != nil || settings.Status != "configured" {
 		return nil, chat.ErrModelUnavailable
 	}
-	select {
-	case s.chatInference <- struct{}{}:
-		defer func() { <-s.chatInference }()
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if !s.chatInference.acquire(actor.chatOwner) {
 		return nil, tools.ErrRateLimited
 	}
+	defer s.chatInference.release(actor.chatOwner)
 	req.Model = settings.Model.Name
 	// Use a correlation reference distinct from task executions and transcript IDs.
 	req.Metadata = map[string]string{"execution": domain.NewID("chat"), "operation": operation}
