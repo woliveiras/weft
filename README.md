@@ -18,6 +18,7 @@ production blockers.
 
 | Capability | How Weft provides it |
 |---|---|
+| **Conversational console** | Use Chat to inspect the installation, configure agents and workflows, review actions and follow tasks in the background. Each conversation retains its decisions and links to evidence. [Chat guide](docs/features/chat/README.md). |
 | **Graph of agents** | Nodes are agents, edges are durable channels. Cycles (review → rework loops), parallel branches and **dynamic branching** (`when:` expressions, type filters, per-message `target`) are first-class. Graph documents are versioned YAML/JSON and can be edited while running. |
 | **Visual graph editor** | Add and remove agents, connect channels, edit channel routing, arrange nodes, validate, save and discard changes from the canvas. YAML remains available for advanced graph settings. |
 | **Agent loops** | Every node runs `once`, `continuous`, `scheduled` (cron / `@every`) or `event`-triggered (wait for work). Stop policies: `never`, `auto` (two-turn "no further work" handshake), `iterations`, `duration`, `idle`. |
@@ -45,8 +46,7 @@ Choose an installation path:
 Example workflows are initially stopped. Follow the
 [model setup](docs/getting-started.md#3-use-a-real-model) before running real
 work, or explicitly enable the development mock for synthetic runs.
-See [console navigation](docs/interface-navigation.md) for Tasks, Projects,
-Workflows, Models and Approvals.
+The console opens on Chat. Select a provider under **Models → Chat model** for natural-language requests, or type `/inspect` to explore the installation. The left navigation also opens Tasks, Projects, Workflows and Approvals directly. [Console navigation](docs/interface-navigation.md).
 
 ## Execution modes and security
 

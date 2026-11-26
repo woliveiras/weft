@@ -187,6 +187,8 @@ limits and failure recovery, use the [operations runbook](operations.md).
 Graph documents are versioned in the store (`GET /api/v1/graphs/{id}/versions`);
 any version can be exported with `weft get <id>` / `?version=N`.
 
+The control plane stores Chat transcripts, session indexes, review receipts and observation state in the installation store. Include that store in the backup and restore it before starting the control plane. When validating a restore, reopen an archived conversation and inspect its retained results. Watches resume from the restored state.
+
 ## Upgrades and schema migrations
 
 - Storage migrations are embedded, versioned SQL (`schema_migrations` table),

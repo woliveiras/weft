@@ -152,7 +152,7 @@ Each replica also has a scratch folder `<workdir>/.weft/<node>/r<n>` (`@loop`) f
 
 | Action | Effect |
 |---|---|
-| Operator message (`POST /nodes/{n}/chat`, `replica` −1 = any) | Persisted, then consumed atomically by the next turn of a matching replica. Wakes local event-mode replicas; remote replicas notice within one poll cycle. Withdraws a pending auto-stop declaration. Re-queued if that turn fails. |
+| Operator message (`POST /nodes/{n}/chat`, `replica` −1 = any) | Persisted, then consumed atomically by the next turn of a matching replica. Wakes local event-mode replicas; remote replicas notice within one poll cycle. Withdraws a pending auto-stop declaration. A saved receipt identifies when a matching replica consumed the message. Later turn failure and the effect on the agent’s behavior require separate evidence. |
 | Inject (`POST /channels/{c}/messages`) | New message with `source = external:<user>` and `injected_by`; channel gates apply. |
 | Pause / resume (graph or node) | No new turns; the current turn finishes. |
 | Stop / kill (graph or node) | Graceful drain or immediate cancellation (inputs nacked). |

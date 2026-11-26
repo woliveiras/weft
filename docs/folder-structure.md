@@ -15,6 +15,7 @@ weft/
 │   │   ├── weftd/             control plane binary (API, engine, gateways, console)
 │   │   └── weft/              CLI (graphs, lifecycle, inject, approvals, events, k8s render)
 │   └── internal/
+│       ├── chat/               conversation state, typed operations, review claims, session indexing and task observations
 │       ├── domain/             vocabulary: Graph, Node, Channel, Message, Execution, Approval,
 │       │                       Event; state machines (graph, replica, execution, message)
 │       ├── graph/              normalisation, validation, routing (`when` via expr), schedules,

@@ -98,6 +98,8 @@ Common forms and controls remain usable at narrow widths and in the supported th
 
 ## Reconciliation
 
+- [TASK-012 AC-001](../conversational-console/spec.md#ac-001--chat-entry-and-manual-compatibility) defines the current Chat-first entry point for TASK-002 AC-001/003. Manual deep links, retained drafts and contextual setup continue under TASK-002.
+
 - [interface-navigation.md](../../../docs/interface-navigation.md), [getting-started.md](../../../docs/getting-started.md), [brand/brand-guidelines.md](../../../docs/brand/brand-guidelines.md).
 - [Behavior and oracle matrix](./matrix.md).
 - [Historical evidence](./evidence.md).

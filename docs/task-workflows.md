@@ -216,9 +216,11 @@ blocked submissions can be repaired with a new attempt against the same draft/re
 No background auto-resume is implied by configuration changes. Synthetic integration
 and browser evidence does not qualify live model interpretation or external accounts.
 
-### Primary experience
+### Manual task entry
 
-New task starts with a request and visible configuration sections. The user can include a repository URL,
+Chat can draft, correct, prepare and start a task, then follow its progress after the browser closes. See the [Chat guide](features/chat/README.md).
+
+The manual New task form starts with a request and visible configuration sections. The user can include a repository URL,
 the requested change, a workflow name and constraints, for example:
 
 > In https://github.com/example/project, implement GitHub authentication using

@@ -144,6 +144,10 @@ A node that selects a provider that does not exist or cannot be used (for
 example, its credential cannot be decrypted) is reported as a warning when
 the graph is saved, and the graph or node is refused with `422` when started.
 
+### Model used by Chat
+
+Under **Models → Chat model**, an administrator selects a configured provider and model for conversation interpretation and title generation. Weft stores that selection in installation state and accounts for those calls through the cost service. Operator requests survive a provider outage. Restore the provider or budget and explicitly retry the saved request. [Chat guide](features/chat/README.md).
+
 ### Installation key
 
 Credentials entered in the console are encrypted (AES-256-GCM) with the

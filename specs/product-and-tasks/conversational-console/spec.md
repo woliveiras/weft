@@ -548,11 +548,6 @@ owned by PROD-04.
 ## Reconciliation
 
 - [Behavior and oracle matrix, operation inventory and impact review](./matrix.md).
-- Model selection, conversational task inspection and monitoring, indexed
-  session summaries, reviewed catalog agent creation, and independent title
-  retry are delivered. Further P1 qualification remains open.
-  Preserve baseline and historical oracles.
-  When P1 is delivered, cross-link TASK-002 AC-001 and AC-003 to the new default
-  in TASK-012 AC-001 while keeping deep links, retained drafts and contextual
-  first use under TASK-002. Update the PROD-04 walkthrough criteria of its own
-  scope during release reconciliation rather than transferring their ownership.
+- The console opens on Chat. Session indexing, model selection, archive/restore and background observation are in use. Scoped actions cover workflows and agent versions, task drafts and execution, approvals, declarative configuration and manual PR analysis. See the [feature-by-feature verification record](./evidence.md) and [operator guide](../../../docs/features/chat/README.md).
+- [TASK-002](../console-navigation-and-configuration/spec.md#reconciliation) retains manual deep links, editor drafts and contextual first use. PROD-04 owns release walkthrough qualification.
+- The maintainer selected local fixtures for PR 418. GitHub, Bitbucket Cloud and Bitbucket Data Center adapters have fixture evidence. Live integrations, production restore and assistive-device testing require independent qualification.

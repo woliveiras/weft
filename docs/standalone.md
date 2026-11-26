@@ -88,6 +88,8 @@ reported and remaining connections closed. Wait for the final stopped message
 before restarting the same profile. Existing profiles need no reinitialization:
 run the updated binary with `--local` and the same optional `--data-dir`.
 
+The native console opens on Chat. In an authentication-disabled installation the session panel identifies the shared local history. Sessions and archived conversations live in the installation store and are included in its offline backup. [Chat guide](features/chat/README.md).
+
 ## Software Factory on first launch
 
 The native launcher seeds Software Factory once, stopped, before serving the UI.

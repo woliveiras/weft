@@ -387,13 +387,11 @@ The endpoint contract is in [OpenAPI](../api/openapi.yaml); see the
 
 ### 5.10 Web console (`web/`)
 
-The console opens on Chat. A conversation can follow a task across browser
-sessions or present an agent definition for review. The Go API authenticates
-the caller and submits bounded conversation context to the model selected for
-Chat. It resolves the model's proposed action against domain services. The task
-runner owns the observed outcome and the agent catalog owns published versions.
-The installer and Chat share the declarative planner and apply service. Chat binds the proposed documents, changes, consent and reviewed revisions to a single administrator’s confirmation. Partial application records object-level receipts in the session.
-The browser reads the session and its results through the caller's Chat API.
+Chat is the console entry point. The API authenticates the caller, resolves conversation ownership and submits bounded context to the explicitly selected Chat model. Its response proposes a typed operation. The server resolves the target, checks the caller’s role and uses the owning domain service. Reads such as `/inspect` and background observation use stored Weft state directly.
+
+A consequential action begins with a review tied to its target, inputs, expiry and relevant revisions. On confirmation the API claims that review, rechecks authorization and dispatches the operation. The transcript records the native receipt and subsequent observed outcome. Workflow control distinguishes a requested state from runtime convergence. The installer and Chat share the declarative plan and apply service, including per-object results on partial failure.
+
+The configured store persists transcripts and their owner-scoped session index together. The background worker uses the index to find active observations and recover results after restart. The browser can switch conversations while other requests and watches progress.
 See the [operator guide](features/chat/README.md) and [interaction sequences](diagrams/sequences.md#11-chat-actions-and-background-observation).
 
 The manual console uses React 19, TypeScript, `@xyflow/react` and dagre. Its views include

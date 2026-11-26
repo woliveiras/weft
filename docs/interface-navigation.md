@@ -1,16 +1,18 @@
 # Console navigation
 
-The console groups daily work and configuration for the same user. This does not
-introduce roles or change API permissions.
+Chat is the home screen. The conversation occupies the center. The right panel has **New chat**, a flat **Recents** list and access to **Archived**. Hover, focus or open a row’s details to read a truncated title. On narrow screens, use **Sessions** to open the list. Running activity, unread results and requests for a decision have independent indicators.
+
+The left navigation opens Chat and the manual destinations below. A link in a message can open the exact task, workflow or execution. Use browser Back to return to that conversation. Write actions appear as separate, labeled buttons on review cards and use the same authorization as their manual equivalents.
 
 | Group | Destination | Scope |
 | --- | --- | --- |
-| Work | Chat (`#/chat`) | Start a conversation, inspect or follow an existing task, and return to its result. See the [Chat guide](features/chat/README.md). |
+| Work | Chat (`#/chat`) | Inspect, configure or operate Weft, follow tasks in the background and review outcomes. See the [Chat guide](features/chat/README.md). |
 | Work | Activity (`#/activity`) | What is running, what needs a person and recent executions across all workflows, and per agent/workflow health; see below |
 | Work | Tasks (`#/tasks`) | Find saved requests in the task history table. Search by title, ID or issue and filter the current page by status or workflow. Open a row's task link for requirements, execution and progress. See [task workflows](task-workflows.md). |
 | Work | Approvals | Existing approval and application-review flows, including pending count |
 | Configuration | Projects (`#/projects`) | Registered repositories and task worktrees; see [registered projects](task-workflows.md#registered-project-worktrees-2026-10-19). |
 | Configuration | Workflows (`#/graphs`) | Existing graph editor, activity, files, messages and advanced YAML |
+| Configuration | Agents (`#/agents`) | Inspect reusable definitions and their immutable versions. |
 | Configuration | Connections (`#/connections`) | Installation MCP connections, OAuth setup, discovered tools and call history |
 | Configuration | Models (`#/models`) | Model providers, credentials and explicit connection/inference tests |
 | Configuration | Skills & instructions (`#/skills`) | Existing installation instruction management |

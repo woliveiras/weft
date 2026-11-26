@@ -7,14 +7,7 @@ implementation and pending maintainer review. **C** is implementation-aware
 baseline compatibility, identified by its existing criterion or contract.
 **X** is an external adapter contract, with independent live qualification
 required. The new oracles must be reviewed before tests are implemented.
-Delivery evidence covers [model selection](./evidence.md#2026-11-26--explicit-chat-model-selection),
-[task tracking](./evidence.md#2026-11-26--conversational-task-tracking) and
-[reviewed agent creation](./evidence.md#2026-11-26--reviewed-catalog-agent-creation).
-[Indexed session lists and watches](./evidence.md#2026-11-26--indexed-session-lists-and-watches)
-have SQLite, FS, PostgreSQL and browser evidence. S11 has full fixture coverage.
-[Installation configuration review](./evidence.md#2026-11-26--installation-configuration-review) records the S18 fault, stale revision and browser checks.
-Remaining P1 qualifications are open.
-Existing tests cited in the impact review describe the baseline.
+[Delivery evidence](./evidence.md) records local verification by feature, including the monitor → second chat → return journey, review races, native restore and PR 418 across three SCM fixtures. The operation inventory records the design baseline. Consult the [operator guide](../../../docs/features/chat/README.md) for available actions and handoffs. External and device qualifications remain open.
 
 ## Behavior and oracle matrix
 
