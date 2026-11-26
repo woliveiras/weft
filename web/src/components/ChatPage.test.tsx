@@ -310,3 +310,18 @@ it('announces an unread reply while preserving the running indicator', async () 
   render(<ChatPage archived={false} onOpen={vi.fn()}/>);
   expect(await screen.findByRole('img',{name:/1 unread repl.*1 running/})).toBeTruthy();
 });
+
+it('dismisses a full title with Escape without opening the conversation', async () => {
+  const open=vi.fn();
+  fakeApi({
+    'GET /api/v1/chat/settings':()=>({status:'configured',revision:1}),
+    [`GET ${paths}`]:()=>({items:[{id,title:'Inspect release evidence',running:0,unread:0,unreadSuccess:0,unreadFailure:0,unreadCancellation:0}]}),
+  });
+  const {container}=render(<ChatPage archived={false} onOpen={open}/>);
+  const title=await screen.findByRole('button',{name:'Inspect release evidence'});
+  fireEvent.pointerEnter(title,{pointerType:'mouse'});
+  expect(container.querySelector('.chat-session-preview')?.textContent).toContain('Inspect release evidence');
+  fireEvent.keyDown(document.body,{key:'Escape'});
+  expect(container.querySelector('.chat-session-preview')).toBeNull();
+  expect(open).not.toHaveBeenCalled();
+});

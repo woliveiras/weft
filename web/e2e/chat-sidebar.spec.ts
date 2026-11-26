@@ -1,0 +1,51 @@
+import {expect,test} from '@playwright/test';
+
+test('reads the full recent title with a mouse, keyboard and narrow touch drawer', async ({page,request,browser})=>{
+  const headers={Authorization:'Bearer e2e-admin-token'};
+  const settings=await(await request.get('/api/v1/chat/settings',{headers})).json();
+  expect((await request.put('/api/v1/chat/settings',{headers:{...headers,'If-Match':String(settings.revision)},data:{provider:'e2e',name:'fixture'}})).ok()).toBe(true);
+  const input={requestId:'ab0638046ab84b14a571c6fe2116b397',text:'Open the session detail fixture.'};
+  const saved=await request.post('/api/v1/chat/sessions',{headers,data:input});
+  expect(saved.ok()).toBe(true);
+  const {title}=await saved.json();
+  expect(title.length).toBeGreaterThan(90);
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+  await page.goto('/');
+  const row=page.getByRole('listitem').filter({has:page.getByRole('button',{name:title,exact:true})});
+  const opener=row.getByRole('button',{name:title,exact:true});
+  expect(await opener.evaluate(el=>el.scrollWidth>el.clientWidth)).toBe(true);
+  await opener.hover();
+  const preview=row.locator('.chat-session-preview');
+  await expect(preview).toHaveText(new RegExp(title));
+  await preview.hover();
+  await expect(preview).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(preview).toHaveCount(0);
+  await page.mouse.move(0,0);
+  await row.getByRole('button',{name:'Details for '+title}).focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(opener).toBeFocused();
+  await expect(preview).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(preview).toHaveCount(0);
+  const mobile=await browser.newContext({baseURL:new URL(page.url()).origin,viewport:{width:375,height:800},hasTouch:true,reducedMotion:'reduce'});
+  try{
+    await mobile.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+    const phone=await mobile.newPage();
+    await phone.goto('/');
+    const sessions=phone.getByRole('button',{name:'Sessions',exact:true});
+    await sessions.tap();
+    const drawer=phone.getByRole('dialog',{name:'Sessions'});
+    const details=drawer.getByRole('button',{name:'Details for '+title});
+    await details.tap();
+    await expect(drawer.getByText(title,{exact:true}).last()).toBeVisible();
+    await expect(details).toHaveAttribute('aria-expanded','true');
+    expect(await phone.locator('[id="chat-row-'+input.requestId+'"]').count()).toBe(1);
+    expect(await phone.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+    await details.press('Escape');
+    await expect(details).toHaveAttribute('aria-expanded','false');
+    await expect(drawer).toBeVisible();
+    await drawer.getByRole('button',{name:'Close sessions'}).tap();
+    await expect(sessions).toBeFocused();
+  } finally {await mobile.close();}
+});

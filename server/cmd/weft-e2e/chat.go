@@ -22,6 +22,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 	}
 	var content string
 	switch last.Content {
+    case "Open the session detail fixture.":
+        content = `{"kind":"manual.open","destination":"agents","title":"Review the registered workflows and retained evidence for the quarterly editorial release across multiple repositories"}`
 	case "Draft a comparison of the registered chat project.":
 		content = `{"kind":"task.create","taskTitle":"Compare registered project","workflow":"draft-project-fixture","request":"Compare the examples.","outcome":"understand","repositories":[{"project":"Draft repository fixture","alias":"examples"}]}`
 	case "Start the repository checklist task.":

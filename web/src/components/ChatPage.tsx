@@ -235,7 +235,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
     </section>
 
     <aside className="chat-panel" aria-label="Chat sessions">
-      <section aria-label={archived ? 'Archived' : 'Recents'}>{sessionList}</section>
+      {!drawer && <section aria-label={archived ? 'Archived' : 'Recents'}>{sessionList}</section>}
     </aside>
     {drawer && <Modal title="Sessions" onClose={closeDrawer} keyboard>
       <button ref={drawerClose} className="btn" type="button" onClick={closeDrawer}>Close sessions</button>
@@ -252,6 +252,21 @@ function canRetry(message: ChatMessage, now: number) {
 function SessionRow({item, current, expanded, onOpen, onDetails}: {
   item: ChatSessionSummary; current: boolean; expanded: boolean; onOpen: () => void; onDetails: () => void;
 }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const preview = !expanded && !dismissed && (hovered || focused);
+  useEffect(() => {
+    if (!preview) return;
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        setDismissed(true);
+      }
+    };
+    document.addEventListener('keydown', dismiss, true);
+    return () => document.removeEventListener('keydown', dismiss, true);
+  }, [preview]);
   const otherUnread = Math.max(0,item.unread - item.unreadSuccess - item.unreadFailure - item.unreadCancellation);
   const status = [
     otherUnread ? `${otherUnread} unread ${otherUnread === 1 ? "reply" : "replies"}` : '',
@@ -265,11 +280,18 @@ function SessionRow({item, current, expanded, onOpen, onDetails}: {
   const title = item.title || 'New chat';
   const lastActive = new Date(item.lastActivity).toLocaleString();
   const description = [!item.title ? 'Generating title' : item.title === 'Untitled chat' ? 'Title unavailable' : '', lastActive, status].filter(Boolean).join(' · ');
-  return <li className="chat-session-row" onKeyDown={event => {
-    if (event.key === 'Escape' && expanded) onDetails();
+  return <li className="chat-session-row" onPointerLeave={() => setHovered(false)} onKeyDown={event => {
+    if (event.key === 'Escape' && expanded) {
+      event.stopPropagation();
+      setDismissed(true);
+      onDetails();
+    }
   }}>
     <div className="chat-session-line">
-      <button type="button" className="chat-session-title" onClick={onOpen} aria-describedby={`chat-row-${item.id}`}
+      <button type="button" className="chat-session-title" onClick={onOpen}
+        onPointerEnter={event => { if (event.pointerType !== 'touch') { setHovered(true); setDismissed(false); } }}
+        onFocus={event => { setFocused(event.currentTarget.matches(':focus-visible')); setDismissed(false); }}
+        onBlur={() => setFocused(false)} aria-describedby={`chat-row-${item.id}`}
         aria-current={current?'page':undefined}>{title}</button>
       <span className="chat-session-indicators" role={status ? 'img' : undefined} aria-label={status || undefined}>
         {!!item.running && <span className="chat-running" aria-hidden="true"/>}
@@ -285,7 +307,7 @@ function SessionRow({item, current, expanded, onOpen, onDetails}: {
       {status && <div>{status}</div>}
     </div>}
     <span className="chat-session-description" id={`chat-row-${item.id}`}>{description}</span>
-    {!expanded && <div className="chat-session-preview" aria-hidden="true" data-title={title} data-description={description}/>}
+    {preview && <div className="chat-session-preview" aria-hidden="true"><strong>{title}</strong><div>{description}</div></div>}
   </li>;
 }
 

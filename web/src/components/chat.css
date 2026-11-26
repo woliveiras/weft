@@ -30,7 +30,6 @@
 .chat-session-details { padding: 0.5rem; overflow-wrap: anywhere; }
 .chat-session-description { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(100%); }
 .chat-session-preview {
-  display: none;
   position: absolute;
   z-index: 2;
   inset-inline: 0;
@@ -39,11 +38,7 @@
   border-radius: 0.5rem;
   background: var(--surface-raised);
   overflow-wrap: anywhere;
-  pointer-events: none;
 }
-.chat-session-preview::before { content: attr(data-title); display: block; font-weight: 700; }
-.chat-session-preview::after { content: attr(data-description); display: block; }
-.chat-session-row:has(.chat-session-title:is(:hover,:focus-visible)) .chat-session-preview { display: block; }
 .chat-transcript { display: flex; flex-direction: column; gap: 0.8rem; }
 .chat-message { border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem; max-width: 45rem; }
 .chat-message-user { align-self: flex-end; }
