@@ -60,6 +60,9 @@ func newChatEval(t *testing.T, scripted func(*llm.ChatRequest) (*llm.ChatRespons
 	srv, a := setupApp(t, nil)
 	client := &evalProvider{t: t, chat: func(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) { return scripted(r) }}
 	e := &chatEval{srv: srv, app: a, client: client, provider: client.Name(), model: "fixture"}
+	if *useEvalCodex {
+		useCodexForEval(t, e)
+	}
 	entry := llm.Entry{Config: llm.ProviderConfig{Name: e.provider, Type: "mock", DefaultModel: e.model}, Provider: client}
 	if err := a.Models.ReplaceProviders([]llm.Entry{entry}, e.provider); err != nil {
 		t.Fatal(err)

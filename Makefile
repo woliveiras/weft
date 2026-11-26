@@ -154,3 +154,7 @@ test-native-upgrade: ## Disposable format-1 native binary upgrade and safe failu
 .PHONY: eval-chat
 eval-chat: ## Exercise conversational Chat evals against isolated local fixtures
 	$(GO) test -count=1 -v ./internal/api -run '^TestChatEval'
+
+.PHONY: eval-chat-codex
+eval-chat-codex: ## Run Chat evals with the host Codex CLI and its ChatGPT login
+	./scripts/eval-chat-codex.sh
