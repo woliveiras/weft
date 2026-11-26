@@ -242,4 +242,23 @@ test('a reviewed workflow keeps the requested catalog version and opens in the m
   expect(saved.record.state).toBe('stopped');
   await page.goBack();
   await expect(page.getByRole('heading', { name: 'Prepare editorial workflow', exact: true })).toBeVisible();
+
+  await send(page, 'Create a draft task on Editorial check to summarize the style notes.');
+  const draftReview = page.getByRole('region', { name: 'Task draft Summarize style notes' });
+  await expect(draftReview.getByText('editorial-check · Version 1')).toBeVisible();
+  await draftReview.getByRole('button', { name: 'Create task draft' }).click();
+  const viewDraft = draftReview.getByRole('link', { name: 'View task draft' });
+  const link = await viewDraft.getAttribute('href');
+  expect(link).toMatch(/^#\/tasks\/tsk_[a-z0-9]+/);
+  const id = link?.split('/')[2].split('?')[0];
+  const draft = await request.get(`/api/v1/tasks/${id}`, { headers });
+  expect(draft.ok()).toBe(true);
+  expect(await draft.json()).toMatchObject({
+    title: 'Summarize style notes', status: 'draft', graphId: 'editorial-check',
+    graphVersion: 1, nodeId: 'worker', resultNodeId: 'worker', channelId: 'requests', revision: 1,
+  });
+  await viewDraft.click();
+  await expect(page.getByRole('heading', { name: 'Summarize style notes', exact: true })).toBeVisible();
+  await page.goBack();
+  await expect(viewDraft).toBeVisible();
 });

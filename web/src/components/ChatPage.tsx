@@ -2,7 +2,7 @@ import { ChatConfigurationCard } from './ChatConfigurationCard';
 import { ChatManualLink } from './ChatManualLink';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
-import type { ChatMessage, ChatOperationReview, ChatSession, ChatSessionSummary, ChatTask } from '../api/chat';
+import type { ChatMessage, ChatOperationReview, ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -12,7 +12,9 @@ type OpenChat = (id?: string, archived?: boolean) => void;
 
 const accessLost = (error: unknown) => error instanceof ApiError && [401,403,404].includes(error.status);
 
-export function ChatPage({id, archived, canCreateAgent = false, onOpen}: {id?: string; archived:boolean; canCreateAgent?:boolean; onOpen:OpenChat}) {
+export function ChatPage({id, archived, canCreateAgent = false, canOperate = false, onOpen}: {
+  id?: string; archived:boolean; canCreateAgent?:boolean; canOperate?:boolean; onOpen:OpenChat;
+}) {
   const settings = useAsync(api.chatModelSettings, []);
   const [cursor, setCursor] = useState<{archived:boolean; after?:string}>({archived});
   const after = cursor.archived === archived ? cursor.after : undefined;
@@ -181,14 +183,14 @@ export function ChatPage({id, archived, canCreateAgent = false, onOpen}: {id?: s
       {id && !session && conversation.loading && <p role="status">Loading conversation…</p>}
       {id && conversation.error && <><ErrorBox error={session ? conversation.error : 'Conversation unavailable.'}/>
         <Btn onClick={() => void conversation.reload()}>Retry loading conversation</Btn></>}
-      {!id && !archived && <p className="muted">Ask for a task’s current state, follow its work, or prepare a reusable catalog agent.</p>}
+      {!id && !archived && <p className="muted">Ask to prepare a task, follow its progress, or create a reusable agent or workflow.</p>}
       {session?.watches?.filter(watch => !watch.complete).map(watch => <p className="chat-watch" key={watch.requestId}>
         {watch.unknown ? 'Status temporarily unknown' : watch.task.decisionNeeded ? 'Decision required' : `Following task: ${watch.task.state}`} · <a href={taskSectionLink(watch.task.id,'overview')}>{watch.task.id}</a>
         {watch.unknown && <span className="muted"> · Last seen <time dateTime={watch.observedAt}>{new Date(watch.observedAt).toLocaleString()}</time></span>}
       </p>)}
       <div className="chat-transcript" aria-label="Conversation">
         {session?.messages.map(message => <Message key={message.id} value={message}
-          now={now} canCreateAgent={canCreateAgent && !sending}
+          now={now} canCreateAgent={canCreateAgent && !sending} canOperate={canOperate && !sending}
           onDecide={(review, decision) => void mutate(() => api.decideChatReview(session.id, review.id, review.digest, decision))}
           onView={anchor => { evidence.current = anchor; }}
           onRead={() => void markRead(message.id)}
@@ -258,8 +260,8 @@ function SessionRow({item, current, expanded, onOpen, onDetails}: {
   </li>;
 }
 
-function Message({value, now, canCreateAgent, onView, onRead, onRetry, onDecide}: {
-  value:ChatMessage; now:number; canCreateAgent:boolean; onView:(anchor:string)=>void; onRead:()=>void;
+function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetry, onDecide}: {
+  value:ChatMessage; now:number; canCreateAgent:boolean; canOperate:boolean; onView:(anchor:string)=>void; onRead:()=>void;
   onRetry?:()=>void; onDecide:(review:ChatOperationReview, decision:'confirm'|'decline')=>void;
 }) {
   const panel = useRef<HTMLElement>(null);
@@ -282,7 +284,7 @@ function Message({value, now, canCreateAgent, onView, onRead, onRetry, onDecide}
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
     {onRetry && <Btn onClick={onRetry}>Retry saved request</Btn>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
-    {review && <OperationReviewCard review={review} now={now} canConfirm={canCreateAgent}
+    {review && <OperationReviewCard review={review} now={now} canConfirm={'taskDraft' in review ? canOperate : canCreateAgent}
       onDecide={decision => onDecide(review,decision)} onView={onView}/>}
     {value.unread && <Btn onClick={onRead}>Mark result read</Btn>}
   </article>;
@@ -292,10 +294,10 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   review:ChatOperationReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
 }) {
   if ('configuration' in review) return <ChatConfigurationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;
+  if ('taskDraft' in review) return <TaskDraftReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   const workflow = review.workflow;
   const name = review.workflow ? review.workflow.graph.metadata.name : review.definition.name;
   const kind = workflow ? 'workflow' : 'agent';
-  const expired = now >= Date.parse(review.expiresAt);
   const anchor = `chat-${kind}-${review.id}`;
   const href = review.workflow ? `#/g/${encodeURIComponent(review.workflow.graph.metadata.id)}/canvas`
     : `#/agents/${encodeURIComponent(review.agentId)}`;
@@ -322,14 +324,8 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
     {review.state === 'awaiting_confirmation' && <>
       <p>{workflow ? 'This saves a stopped workflow with one agent. Tasks are created and started separately.'
         : 'This creates a reusable catalog definition. No workflow starts.'}</p>
-      {expired
-        ? <p role="status">Confirmation expired. Ask for a new review.</p>
-        : <><p>Review expires at <time dateTime={review.expiresAt}>{new Date(review.expiresAt).toLocaleTimeString()}</time>.</p>
-          <div className="btn-row">
-            <Btn tone="primary" disabled={!canConfirm} onClick={() => onDecide('confirm')}>Create {kind}</Btn>
-            <Btn disabled={!canConfirm} onClick={() => onDecide('decline')}>Decline</Btn>
-          </div>
-          {canConfirm && <p className="small muted">When this is the only pending review, you can type “Confirm this proposal” or “Decline this proposal”.</p>}</>}
+      <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm}
+        confirmLabel={`Create ${kind}`} onDecide={onDecide}/>
     </>}
     {review.state === 'applying' && <p role="status">Creation accepted. Checking the result…</p>}
     {review.state === 'conflict' && <p role="status">The reviewed configuration changed. Ask for a new review.</p>}
@@ -342,6 +338,52 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
       <a id={anchor} href={href} onClick={() => onView(anchor)}>View {kind}</a>
     </>}
   </section>;
+}
+
+function TaskDraftReviewCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatTaskDraftReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const {input} = review.taskDraft;
+  const anchor = `chat-task-draft-${review.id}`;
+  return <section className="chat-agent-review" aria-label={`Task draft ${input.title}`}>
+    <h3>{input.title}</h3>
+    <dl>
+      <dt>Workflow</dt><dd>{input.graphId} · Version {input.graphVersion}</dd>
+      <dt>Entry agent</dt><dd>{input.nodeId}</dd>
+      <dt>Result agent</dt><dd>{input.resultNodeId}</dd>
+      <dt>Input</dt><dd>{input.channelId ? `${input.channelId} · ${input.messageType}` : 'Direct agent request'}</dd>
+      <dt>Outcome</dt><dd>{input.outcome}</dd>
+    </dl>
+    <h4>Request</h4>
+    <p>{input.request}</p>
+    {review.state === 'awaiting_confirmation' && <>
+      <p>This saves a draft without repository access or execution authorization. Starting it requires a separate review.</p>
+      <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm}
+        confirmLabel="Create task draft" onDecide={onDecide}/>
+    </>}
+    {review.state === 'applying' && <p role="status">Request accepted. Checking the saved draft…</p>}
+    {review.state === 'conflict' && <p role="status">The reviewed workflow changed. Ask for a new task draft proposal.</p>}
+    {review.state === 'unknown' && <p role="status">The draft outcome is temporarily unknown. Check <a id={anchor} href="#/tasks" onClick={() => onView(anchor)}>Tasks</a> before trying again.</p>}
+    {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+    {review.state === 'created' && review.resultId && <>
+      <p role="status">Task draft saved. Review it in Tasks before starting.</p>
+      <a id={anchor} href={taskSectionLink(review.resultId,'overview')} onClick={() => onView(anchor)}>View task draft</a>
+    </>}
+  </section>;
+}
+
+function ReviewDecisionControls({expiresAt, now, canConfirm, confirmLabel, onDecide}: {
+  expiresAt:string; now:number; canConfirm:boolean; confirmLabel:string; onDecide:(decision:'confirm'|'decline')=>void;
+}) {
+  if (now >= Date.parse(expiresAt)) return <p role="status">Confirmation expired. Ask for a new review.</p>;
+  return <>
+    <p>Review expires at <time dateTime={expiresAt}>{new Date(expiresAt).toLocaleTimeString()}</time>.</p>
+    <div className="btn-row">
+      <Btn tone="primary" disabled={!canConfirm} onClick={() => onDecide('confirm')}>{confirmLabel}</Btn>
+      <Btn disabled={!canConfirm} onClick={() => onDecide('decline')}>Decline</Btn>
+    </div>
+    {canConfirm && <p className="small muted">When this is the only pending review, you can type “Confirm this proposal” or “Decline this proposal”.</p>}
+  </>;
 }
 
 function TaskLink({task, message, onView}: {task:ChatTask; message:string; onView:(anchor:string)=>void}) {

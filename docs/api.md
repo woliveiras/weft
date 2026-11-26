@@ -195,6 +195,13 @@ workflow transition lock. A successful result records the saved graph version.
 The workflow is stopped and no task is created. If an outcome cannot be
 verified, the review stays unknown and repeats do not apply it again.
 
+An operator can review and save a task draft against the current version of
+a named workflow. The review seals the request, outcome, entry and result
+agents, input and workflow fingerprint. The decision endpoint rechecks the
+role for the specific review. A workflow edit after review requires a new
+proposal. The response reports the authoritative task ID and initial draft
+revision. Creating a draft neither grants repository access nor admits a run.
+
 ## Native issue connections
 
 Native Jira Data Center connections have their own credential store, independent

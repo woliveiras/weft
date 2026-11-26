@@ -105,5 +105,16 @@ Chromium followed the review through the real API and store, opened the saved
 canvas, and returned to the original conversation. TypeScript, nine focused
 component tests, OpenAPI parsing, `make lint` and `git diff --check` passed.
 
+## 2026-11-26 — Reviewed task drafts
+
+S28 passed targeted Go unit and HTTP/SQLite integration checks. The operator
+confirmed one task draft, replay returned its original ID, and the workflow
+revision and input remained pinned. The test tried a concurrent editor save,
+a viewer decision and a different owner's token. None admitted a task. The
+Chromium journey saved a workflow, returned from its canvas, reviewed a task
+on that version, and opened the saved draft in Tasks. The full Go suites for
+`chat`, `taskconfig` and `api` passed. TypeScript, ten focused component
+checks, OpenAPI parsing, `make lint`, `make build` and `git diff --check` passed.
+
 Device and assistive-technology review, external provider qualification and
 production backup and restore remain open.

@@ -240,6 +240,8 @@ func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID 
 		return s.reviewChatAgent(ctx, actor, sessionID, plan)
 	case chat.CreateWorkflow:
 		return s.reviewChatWorkflow(ctx, actor, sessionID, plan)
+	case chat.CreateTask:
+		return s.reviewChatTaskDraft(ctx, actor, sessionID, plan)
 	case chat.InspectTask, chat.WatchTask:
 		id, err := s.resolveChatTask(ctx, plan.Task)
 		if errors.Is(err, storage.ErrNotFound) {

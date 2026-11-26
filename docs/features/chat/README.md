@@ -64,6 +64,15 @@ shows a conflict and you can ask for a fresh proposal with a different ID.
 If the creation outcome is temporarily unknown, inspect Workflows before
 asking to try again.
 
+## Prepare a task draft
+
+As an operator or administrator, name the workflow and describe the task.
+Chat shows the workflow version, request, outcome and selected agents before
+**Create task draft** saves anything. Open **View task draft** to inspect its
+settings and review what it needs to run. Use Tasks when the work requires a
+repository or an input that cannot be determined from the saved workflow.
+If someone edits the workflow before you confirm, ask for a new proposal.
+
 ## Review installation configuration
 
 As an administrator, ask for a concrete change such as “Set the task budget to two dollars with an eighty percent warning.” Review the object names, current revisions, field changes and any intake consent before choosing **Apply configuration**. A plan can include up to eight objects. The installation service validates the complete plan before applying its first change.

@@ -23,6 +23,7 @@ const (
 	OpenManual     = "manual.open"
 	WatchTask      = "task.watch"
 	InspectTask    = "task.inspect"
+	CreateTask     = "task.create"
 	CreateAgent    = "agent.create"
 	CreateWorkflow = "workflow.create"
 	Clarify        = "clarify"
@@ -40,6 +41,7 @@ const intentPrompt = `You interpret a Weft operator's requests. The service chec
 Return exactly one JSON object. "kind" is one of:
 - "task.watch": follow a particular existing task and report when it settles. Add "task" containing the task's stated ID or exact name as a selector.
 - "task.inspect": show the latest state of a particular task now. Add "task" with the same selector convention.
+- "task.create": prepare a saved task draft using a named workflow. Add "taskTitle", "workflow" (the stated workflow ID or exact name), "request" (the intended work), and "outcome" (understand, implement, investigate, review, freeform). Add "workflowVersion" as a string only if the user named the version. Ask for the workflow if the target is unclear. Work requiring a repository or delivery settings must be configured in Tasks. Never include grants or start a task.
 - "agent.create": propose a reusable agent for the catalog. Add "agentId" (lowercase letters, digits and hyphens), "agentName" and concise "instructions". The operator reviews the proposal before anything is created. Never interpret a confirmation as a new create request.
 - "workflow.create": propose a stopped task workflow with one existing catalog agent. Add "workflowId" (lowercase letters, digits and hyphens), "workflowName" and "agent" (the stated catalog ID or exact name). Add "agentVersion" as a string only if the user requested that version or explicitly requested "latest". Ask which agent when the request is ambiguous. This capability never creates an agent or starts a workflow.
 - "installation.plan": propose installation configuration using one or more weft.io/v1 YAML documents in "document". Use only supported installation kinds: InferencePlugin, ModelProvider, PriceCatalog, CostPolicy, Budget, NetworkPolicy, MCPConnection, SCMConnection, IssueConnection, IssueWorkflowMapping, JiraCloudProfile, JiraCloudWorkflowMapping, Project, Graph, PullRequestReviewRoute, IssueTrigger. Ask about missing consequential settings. For requested issue or PR intake activation, include "intakeConsent":"review" to show its separate scope to the administrator. Credential input goes to manual setup. Never set force, claim consent, or report a change as applied.
@@ -60,6 +62,7 @@ type Plan struct {
 	Destination   string `json:"destination,omitempty"`
 	Agent         AgentDraft
 	Workflow      WorkflowDraft
+	TaskDraft     TaskDraft
 }
 
 func safeText(text string, limit int) bool {
@@ -146,6 +149,16 @@ func decodePlan(body string) (Plan, error) {
 			plan.Task = value
 		case "question":
 			plan.Question = value
+		case "taskTitle":
+			plan.TaskDraft.Title = value
+		case "workflow":
+			plan.TaskDraft.Workflow = value
+		case "workflowVersion":
+			plan.TaskDraft.WorkflowVersion = value
+		case "request":
+			plan.TaskDraft.Request = value
+		case "outcome":
+			plan.TaskDraft.Outcome = value
 		case "title":
 			plan.Title = cleanTitle(value)
 		case "agentId":
@@ -175,6 +188,9 @@ func decodePlan(body string) (Plan, error) {
 	if plan.Kind != CreateWorkflow && (seen["workflowId"] || seen["workflowName"] || seen["agent"] || seen["agentVersion"]) {
 		return Plan{}, ErrInvalidPlan
 	}
+	if plan.Kind != CreateTask && (seen["taskTitle"] || seen["workflow"] || seen["workflowVersion"] || seen["request"] || seen["outcome"]) {
+		return Plan{}, ErrInvalidPlan
+	}
 	if plan.Kind != PlanInstallation && (seen["document"] || seen["intakeConsent"]) {
 		return Plan{}, ErrInvalidPlan
 	}
@@ -192,6 +208,10 @@ func decodePlan(body string) (Plan, error) {
 		}
 	case WatchTask, InspectTask:
 		if plan.Task == "" || !safeText(plan.Task, 200) || strings.ContainsAny(plan.Task, "\r\n\t") || seen["question"] {
+			return Plan{}, ErrInvalidPlan
+		}
+	case CreateTask:
+		if seen["task"] || seen["question"] || plan.TaskDraft.validate() != nil {
 			return Plan{}, ErrInvalidPlan
 		}
 	case Clarify:

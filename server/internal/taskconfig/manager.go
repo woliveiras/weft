@@ -44,6 +44,7 @@ type Input struct {
 	SCMConnection string `json:"scmConnection,omitempty"`
 }
 type Draft struct {
+	CreationOperation     string       `json:"creationOperation,omitempty"`
 	RepositoryRevision    int64        `json:"repositoryRevision,omitempty"`
 	RetryOfTaskID         string       `json:"retryOfTaskId,omitempty"`
 	RetryOfRevision       int64        `json:"retryOfRevision,omitempty"`
@@ -243,10 +244,10 @@ func (m Manager) SaveTriggered(ctx context.Context, in Input, actor, githubIssue
 }
 
 func (m Manager) save(ctx context.Context, id string, in Input, revision int64, actor, githubIssueKey string) (*Draft, error) {
-	return m.saveWithOrigin(ctx, id, in, revision, actor, githubIssueKey, nil)
+	return m.saveDraft(ctx, id, in, revision, actor, githubIssueKey, nil, "")
 }
 
-func (m Manager) saveWithOrigin(ctx context.Context, id string, in Input, revision int64, actor, githubIssueKey string, origin *IssueOrigin) (*Draft, error) {
+func (m Manager) saveDraft(ctx context.Context, id string, in Input, revision int64, actor, githubIssueKey string, origin *IssueOrigin, operation string) (*Draft, error) {
 	if in.ResultNodeID == "" {
 		in.ResultNodeID = in.NodeID
 	}
@@ -268,11 +269,15 @@ func (m Manager) saveWithOrigin(ctx context.Context, id string, in Input, revisi
 	}
 	now := time.Now().UTC()
 	d := &Draft{TriggerIssueOrigin: origin, Input: in, ID: id, TriggerGitHubIssue: githubIssueKey, Status: "draft", CreatedBy: actor, UpdatedBy: actor, CreatedAt: now, UpdatedAt: now}
-	if id == "" {
+	if id == "" || operation != "" {
 		if revision != 0 {
 			return nil, storage.ErrConflict
 		}
-		d.ID = domain.NewID("tsk")
+		if operation != "" {
+			d.ID, d.CreationOperation = operationDraftID(operation), operation
+		} else {
+			d.ID = domain.NewID("tsk")
+		}
 	} else {
 		old, err := m.Get(ctx, id)
 		if err != nil {
@@ -292,6 +297,7 @@ func (m Manager) saveWithOrigin(ctx context.Context, id string, in Input, revisi
 			return nil, fmt.Errorf("%w: select a registered project for the repository URL or remove the URL from the request", ErrInvalid)
 		}
 		d.Submitted = old.Submitted
+		d.CreationOperation = old.CreationOperation
 		d.RetryOfTaskID = old.RetryOfTaskID
 		d.RetryOfRevision = old.RetryOfRevision
 		d.TriggerGitHubIssue = old.TriggerGitHubIssue

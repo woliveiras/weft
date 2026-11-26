@@ -2332,7 +2332,8 @@ paths:
     post:
       tags: [chat]
       operationId: decideChatReview
-      x-weft-role: admin
+      x-weft-role: operator
+      description: Decision requires session ownership and the current role for the reviewed operation. Task draft creation requires operator. Catalog, workflow creation and installation configuration require admin.
       requestBody:
         required: true
         content:
@@ -2345,6 +2346,7 @@ paths:
                 digest: {type: string, pattern: '^[0-9a-f]{64}$'}
       responses:
         "200": {$ref: "#/components/responses/ChatSession"}
+        "403": {description: Current role cannot decide the reviewed operation}
         "404": {description: Review absent or inaccessible}
         "409": {description: Review digest mismatch or confirmation expired}
   /api/v1/providers/{name}/models:
@@ -3022,6 +3024,7 @@ components:
           oneOf:
             - {$ref: "#/components/schemas/ChatAgentReview"}
             - {$ref: "#/components/schemas/ChatWorkflowReview"}
+            - {$ref: "#/components/schemas/ChatTaskDraftReview"}
             - {$ref: "#/components/schemas/ChatConfigurationReview"}
         task:
           type: object
@@ -3093,6 +3096,31 @@ components:
                 toolNames:
                   type: array
                   items: {type: string}
+    ChatTaskDraftReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [taskDraft]
+          properties:
+            taskDraft:
+              type: object
+              required: [input, workflowRevision]
+              properties:
+                workflowRevision: {type: string, pattern: '^[0-9a-f]{64}$'}
+                input:
+                  type: object
+                  required: [title, request, outcome, graphId, graphVersion, nodeId, resultNodeId]
+                  properties:
+                    title: {type: string}
+                    request: {type: string}
+                    outcome: {type: string, enum: [understand, implement, investigate, review, freeform]}
+                    graphId: {type: string}
+                    graphVersion: {type: integer, minimum: 1}
+                    nodeId: {type: string}
+                    resultNodeId: {type: string}
+                    channelId: {type: string}
+                    messageType: {type: string}
+                    payloadJson: {type: string}
     ChatReviewState:
       type: object
       required: [id, expiresAt, digest, state]
@@ -3103,6 +3131,7 @@ components:
         state: {type: string, enum: [awaiting_confirmation, applying, created, applied, incomplete, conflict, unknown, declined]}
         claimedAt: {type: string, format: date-time}
         resultVersion: {type: integer}
+        resultId: {type: string, description: Exact ID of a saved task draft when the review completed}
     ChatModelSelection:
       type: object
       additionalProperties: false
@@ -3244,6 +3273,7 @@ components:
       type: object
       required: [id, revision, status, title, request, outcome, graphId, graphVersion, nodeId, createdBy, updatedBy, createdAt, updatedAt]
       properties:
+        creationOperation: {type: string, readOnly: true, description: ID of the confirmed operation that created this draft, when available}
         retryOfTaskId: {type: string, readOnly: true, description: Failed manual task from which this attempt was created}
         retryOfRevision: {type: integer, minimum: 1, readOnly: true, description: Source revision used to prepare this attempt}
         resolution:

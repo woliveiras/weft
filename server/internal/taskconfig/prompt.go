@@ -294,8 +294,7 @@ func bindPrompt(d *Draft, g *domain.Graph) {
 		if len(c.Types) == 1 && !strings.ContainsAny(c.Types[0], "*?") {
 			d.MessageType = c.Types[0]
 		}
-		b, _ := json.Marshal(map[string]string{"title": d.Title, "description": d.Request})
-		d.PayloadJSON = string(b)
+		d.PayloadJSON = taskRequestPayload(d.Title, d.Request)
 	} else if len(nodes) == 1 && len(inputs) == 0 {
 		d.NodeID = nodes[0].ID
 	}
@@ -313,4 +312,9 @@ func bindPrompt(d *Draft, g *domain.Graph) {
 	if len(terminals) == 1 {
 		d.ResultNodeID = terminals[0]
 	}
+}
+
+func taskRequestPayload(title, request string) string {
+	body, _ := json.Marshal(map[string]string{"title": title, "description": request})
+	return string(body)
 }

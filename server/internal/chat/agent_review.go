@@ -104,12 +104,14 @@ type OperationReview struct {
 	Configuration  *ConfigReview     `json:"configuration,omitempty"`
 	ConfigReceipts []ConfigReceipt   `json:"configReceipts,omitempty"`
 	Workflow       *WorkflowCreation `json:"workflow,omitempty"`
+	TaskDraft      *TaskCreation     `json:"taskDraft,omitempty"`
 	ID             string            `json:"id"`
 	ExpiresAt      time.Time         `json:"expiresAt"`
 	Digest         string            `json:"digest"`
 	State          string            `json:"state"`
 	ClaimedAt      time.Time         `json:"claimedAt,omitempty"`
 	ResultVersion  int               `json:"resultVersion,omitempty"`
+	ResultID       string            `json:"resultId,omitempty"`
 }
 
 func NewAgentReview(owner, session, agent string, definition domain.AgentDefinition, modelRevision int64, now time.Time) (*OperationReview, error) {
@@ -133,13 +135,13 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 func (r OperationReview) digest(owner, session string) (string, error) {
 	var payload any
 	switch {
-	case r.Configuration != nil && r.Workflow == nil && r.AgentCreation == nil:
+	case r.Configuration != nil && r.Workflow == nil && r.AgentCreation == nil && r.TaskDraft == nil:
 		payload = struct {
 			Owner, Session, ID, Operation string
 			ExpiresAt                     time.Time
 			Configuration                 *ConfigReview
 		}{owner, session, r.ID, PlanInstallation, r.ExpiresAt, r.Configuration}
-	case r.Configuration == nil && r.Workflow != nil && r.AgentCreation == nil:
+	case r.Configuration == nil && r.Workflow != nil && r.AgentCreation == nil && r.TaskDraft == nil:
 		payload = struct {
 			Owner, Session, Operation, ID string
 			Workflow                      *WorkflowCreation
@@ -149,7 +151,7 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 			Owner: owner, Session: session, Operation: CreateWorkflow, ID: r.ID,
 			Workflow: r.Workflow, ExpectedGraphVersion: 0, ExpiresAt: r.ExpiresAt,
 		}
-	case r.Configuration == nil && r.AgentCreation != nil && r.Workflow == nil:
+	case r.Configuration == nil && r.AgentCreation != nil && r.Workflow == nil && r.TaskDraft == nil:
 		// Keep the exact digest of already persisted catalog agent reviews.
 		payload = struct {
 			Owner, Session, Operation, ID, Agent   string
@@ -160,6 +162,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 			Owner: owner, Session: session, Operation: CreateAgent, ID: r.ID, Agent: r.AgentID,
 			Definition: r.Definition, ExpectedCatalogRevision: 0, ModelRevision: r.ModelRevision, ExpiresAt: r.ExpiresAt,
 		}
+	case r.TaskDraft != nil && r.Configuration == nil && r.Workflow == nil && r.AgentCreation == nil:
+		payload = struct {
+			Owner, Session, Operation, ID string
+			TaskDraft                     *TaskCreation
+			ExpiresAt                     time.Time
+		}{owner, session, CreateTask, r.ID, r.TaskDraft, r.ExpiresAt}
 	default:
 		return "", ErrReviewMismatch
 	}
@@ -219,7 +227,11 @@ func (s Sessions) ClaimReview(ctx context.Context, owner, sessionID, reviewID, d
 }
 
 func (s Sessions) FinishReview(ctx context.Context, owner, sessionID, reviewID, state string, version int) (*Session, error) {
-	return s.finishReview(ctx, owner, sessionID, reviewID, state, version, nil)
+	return s.finishReview(ctx, owner, sessionID, reviewID, state, version, "", nil)
+}
+
+func (s Sessions) FinishTaskReview(ctx context.Context, owner, sessionID, reviewID, taskID string) (*Session, error) {
+	return s.finishReview(ctx, owner, sessionID, reviewID, ReviewCreated, 1, taskID, nil)
 }
 
 func (s Sessions) FinishConfigReview(ctx context.Context, owner, sessionID, reviewID string, receipts []ConfigReceipt, ok bool) (*Session, error) {
@@ -227,10 +239,10 @@ func (s Sessions) FinishConfigReview(ctx context.Context, owner, sessionID, revi
 	if !ok {
 		state = ReviewIncomplete
 	}
-	return s.finishReview(ctx, owner, sessionID, reviewID, state, 0, receipts)
+	return s.finishReview(ctx, owner, sessionID, reviewID, state, 0, "", receipts)
 }
 
-func (s Sessions) finishReview(ctx context.Context, owner, sessionID, reviewID, state string, version int, receipts []ConfigReceipt) (*Session, error) {
+func (s Sessions) finishReview(ctx context.Context, owner, sessionID, reviewID, state string, version int, resultID string, receipts []ConfigReceipt) (*Session, error) {
 	return s.update(ctx, owner, sessionID, func(session *Session) (bool, error) {
 		for i := range session.Messages {
 			message := &session.Messages[i]
@@ -238,7 +250,7 @@ func (s Sessions) finishReview(ctx context.Context, owner, sessionID, reviewID, 
 				if review.State != ReviewApplying && !(review.State == ReviewUnknown && state == ReviewCreated) {
 					return false, nil
 				}
-				review.State, review.ResultVersion = state, version
+				review.State, review.ResultVersion, review.ResultID = state, version, resultID
 				review.ConfigReceipts = receipts
 				message.Unread = true
 				session.LastActivity = time.Now().UTC()

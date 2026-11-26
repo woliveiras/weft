@@ -16,6 +16,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/storage"
+	"github.com/woliveiras/weft/server/internal/tools"
 )
 
 var reviewDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -87,6 +88,27 @@ func (s *Server) decideChatReview(w http.ResponseWriter, r *http.Request) error 
 
 func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, sessionID, reviewID, digest, action string) (*chat.Session, error) {
 	store := s.chatStore()
+	// Both decision entry points serialize with native administrative writes.
+	s.configurationMu.Lock()
+	defer s.configurationMu.Unlock()
+	session, err := store.Get(ctx, actor.chatOwner, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	var candidate *chat.OperationReview
+	for _, message := range session.Messages {
+		if message.Review != nil && message.Review.ID == reviewID {
+			candidate = message.Review
+			break
+		}
+	}
+	if candidate == nil {
+		return nil, storage.ErrNotFound
+	}
+	role := reviewDecisionRole(candidate)
+	if !actor.Role.Allows(role) {
+		return nil, fmt.Errorf("%w: role %s required for the reviewed action", tools.ErrDenied, role)
+	}
 	if action == "decline" {
 		return store.DeclineReview(ctx, actor.chatOwner, sessionID, reviewID, digest)
 	}
@@ -105,23 +127,22 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		if review.Workflow != nil {
 			return s.applyReviewedChatWorkflow(settleCtx, actor, sessionID, review)
 		}
+		if review.TaskDraft != nil {
+			return s.applyReviewedChatTaskDraft(settleCtx, actor, sessionID, review)
+		}
 		return s.applyReviewedChatAgent(settleCtx, actor, sessionID, review)
 	}
 	return s.reconcileChatReviews(ctx, actor.chatOwner, session)
 }
 
 func (s *Server) decideChatReviewFromText(ctx context.Context, actor Identity, session *chat.Session, action string) (chat.Interpretation, error) {
-	if !actor.Role.Allows(config.RoleAdmin) {
-		return chat.Interpretation{Text: "An administrator must decide this proposal."}, nil
-	}
 	review := session.SinglePendingReview(time.Now())
 	if review == nil {
 		return chat.Interpretation{Text: "This request does not identify one active proposal. Use the action on the specific review or ask for a new review."}, nil
 	}
-	// The message route has viewer privileges for ordinary conversations.
-	// Use the same administrative serialization as the button route.
-	s.configurationMu.Lock()
-	defer s.configurationMu.Unlock()
+	if role := reviewDecisionRole(review); !actor.Role.Allows(role) {
+		return chat.Interpretation{Text: fmt.Sprintf("This proposal requires the %s role.", role)}, nil
+	}
 	_, err := s.decideStoredChatReview(ctx, actor, session.ID, review.ID, review.Digest, action)
 	if errors.Is(err, chat.ErrExpiredReview) {
 		return chat.Interpretation{Text: "Confirmation expired. Ask for a new review."}, nil
@@ -130,6 +151,13 @@ func (s *Server) decideChatReviewFromText(ctx context.Context, actor Identity, s
 		return chat.Interpretation{}, err
 	}
 	return chat.Interpretation{Text: "The review card shows the recorded decision and outcome."}, nil
+}
+
+func reviewDecisionRole(review *chat.OperationReview) config.Role {
+	if review.TaskDraft != nil {
+		return config.RoleOperator
+	}
+	return config.RoleAdmin
 }
 
 func (s *Server) applyReviewedChatAgent(ctx context.Context, actor Identity, sessionID string, review *chat.OperationReview) (*chat.Session, error) {
@@ -178,6 +206,14 @@ func (s *Server) reconcileChatReviews(ctx context.Context, owner string, session
 	for _, message := range session.Messages {
 		review := message.Review
 		if review == nil || (review.State != chat.ReviewApplying && review.State != chat.ReviewUnknown) {
+			continue
+		}
+		if review.TaskDraft != nil {
+			var err error
+			session, err = s.reconcileChatTaskDraft(ctx, owner, session, review)
+			if err != nil {
+				return nil, err
+			}
 			continue
 		}
 		var version int

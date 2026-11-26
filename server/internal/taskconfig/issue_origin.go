@@ -86,5 +86,5 @@ func (m Manager) SaveTriggeredIssue(ctx context.Context, in Input, actor string,
 	if origin.Kind == "github" {
 		legacy = origin.Key
 	}
-	return m.saveWithOrigin(ctx, "", in, 0, actor, legacy, &origin)
+	return m.saveDraft(ctx, "", in, 0, actor, legacy, &origin, "")
 }

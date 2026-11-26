@@ -101,6 +101,33 @@ it.each([
   expect(backend.find('POST',confirmPath).map(request => request.body)).toEqual([{digest:'workflow-digest'}]);
 });
 
+it('lets an operator submit the reviewed draft and inspect the persisted task', async () => {
+  const idOfTask = 'tsk_chatreviewed';
+  const review = {
+    id:'task-review', digest:'task-digest', expiresAt:'2999-11-26T08:00:00Z',
+    taskDraft:{input:{title:'Summarize notes',request:'Read the notes.',outcome:'understand',graphId:'editorial-check',
+      graphVersion:2,nodeId:'reader',resultNodeId:'reader',channelId:'requests',messageType:'work.request'}},
+  };
+  const session = (state:string, resultId?:string) => ({
+    id, archived:false, messages:[{id:'reply',role:'assistant',text:'Review the draft.',review:{...review,state,resultId}}],
+  });
+  const confirmPath = `${paths}/${id}/operations/task-review/confirm`;
+  const backend = fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'configured',revision:1}),
+    [`GET ${paths}`]: () => ({items:[],shared:false}),
+    [`GET ${paths}/${id}`]: () => session('awaiting_confirmation'),
+    [`POST ${confirmPath}`]: () => session('created',idOfTask),
+  });
+  render(<ChatPage id={id} archived={false} canOperate onOpen={vi.fn()}/>);
+  const reviewPanel = await screen.findByRole('region',{name:'Task draft Summarize notes'});
+  expect(within(reviewPanel).getByText('editorial-check · Version 2')).toBeTruthy();
+  expect(within(reviewPanel).getByText('Read the notes.')).toBeTruthy();
+  expect(within(reviewPanel).getByText(/without repository access or execution authorization/)).toBeTruthy();
+  fireEvent.click(within(reviewPanel).getByRole('button',{name:'Create task draft'}));
+  expect((await within(reviewPanel).findByRole('link',{name:'View task draft'})).getAttribute('href')).toContain(`#/tasks/${idOfTask}`);
+  expect(backend.find('POST',confirmPath).map(request => request.body)).toEqual([{digest:'task-digest'}]);
+});
+
 it('shows archived novelty from Recents and navigates across bounded pages', async () => {
   const open = vi.fn();
   const item = {
