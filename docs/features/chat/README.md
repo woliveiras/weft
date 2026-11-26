@@ -34,6 +34,12 @@ their own accessible status. Open the original conversation and follow the
 task result link to its evidence. If the provider is down, the monitor
 continues to read task state without calling that provider.
 
+## Review a pull request
+
+Ask “Revise o PR 418.” If several running workflows or connections qualify, name the workflow and connection. The reviewer needs a native event node, one exclusive ingress, a single input per turn, an explicit model and a named repository read grant. Connections with interactive read approval require the existing manual path.
+
+The preview identifies the repository, source and base commits, model and workflow version. **View workflow** opens the selected node. **Analyze PR** checks the revisions again and sends the bounded diff to the workflow model for one billed, tool-free analysis. Existing channel and turn gates still apply. The draft appears in the conversation with **View execution**. A missing receipt leaves the outcome unknown. Requesting analysis grants no publication permission.
+
 ## Create a reusable agent
 
 As an administrator, describe the agent's name and what it should do. Chat

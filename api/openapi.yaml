@@ -3030,6 +3030,7 @@ components:
             - {$ref: "#/components/schemas/ChatConfigurationReview"}
             - {$ref: "#/components/schemas/ChatGuidanceReview"}
             - {$ref: "#/components/schemas/ChatInstructionReview"}
+            - {$ref: "#/components/schemas/ChatPRReview"}
         task:
           type: object
           required: [id, state]
@@ -3083,6 +3084,34 @@ components:
                   key: {type: string}
                   result: {type: string, enum: [applied, unchanged, failed, not-applied, saved-revision-unknown]}
                   revision: {type: string}
+    ChatPRReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [pr]
+          properties:
+            prSummary: {type: string, description: "Bounded draft from the correlated execution."}
+            pr:
+              type: object
+              required: [number, provider, repository, connection, connectionRevision, head, base, headRef, baseRef, graph, node, channel, version, run, modelProvider, modelName]
+              properties:
+                number: {type: integer}
+                provider: {type: string}
+                repository: {type: string}
+                connection: {type: string}
+                connectionRevision: {type: string}
+                head: {type: string}
+                base: {type: string}
+                headRef: {type: string}
+                baseRef: {type: string}
+                draft: {type: boolean}
+                graph: {type: string}
+                node: {type: string}
+                channel: {type: string}
+                version: {type: integer}
+                run: {type: string}
+                modelProvider: {type: string}
+                modelName: {type: string}
     ChatInstructionReview:
       allOf:
         - {$ref: "#/components/schemas/ChatReviewState"}

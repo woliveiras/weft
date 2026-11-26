@@ -88,6 +88,9 @@ func (s *Session) summary(owner, key string) storage.ChatSummary {
 			}
 		}
 		if review := message.Review; review != nil {
+			if review.PR != nil && (review.State == ReviewQueued || review.State == ReviewApplying) {
+				meta.WatchCount++
+			}
 			if review.Guidance != nil && (review.State == ReviewQueued || review.State == ReviewApplying) {
 				meta.WatchCount++
 			}

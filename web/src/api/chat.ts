@@ -103,6 +103,14 @@ export interface ChatTaskStartReview extends ChatReviewState {
   };
 }
 
+export interface ChatPRReview extends ChatReviewState {
+  pr: {
+    number: number; provider: string; connection: string; repository: string; head: string; base: string;
+    graph: string; node: string; version: number; modelProvider: string; modelName: string;
+  };
+  prSummary?: string;
+}
+
 export interface ChatInstructionReview extends ChatReviewState {
   instructions: {graph: string; node: string; version: number; before: string; after: string; catalogId?: string; catalogVersion?: number};
 }
@@ -123,7 +131,7 @@ export interface ChatWorkflowControlReview extends ChatReviewState {
   controlResult?: {runId: string; desired: string; observed: string; settled: boolean};
 }
 
-export type ChatOperationReview = ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
+export type ChatOperationReview = ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
   ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview;
 
 export interface ChatSession {

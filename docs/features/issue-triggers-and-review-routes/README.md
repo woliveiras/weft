@@ -4,6 +4,8 @@ These connect external work to saved workflows. They are independent resources:
 an issue trigger creates tasks, a lifecycle mapping translates provider states,
 and a review route dispatches a workflow after a Weft-created PR.
 
+For an on-demand draft on an existing PR, use the [Chat review procedure](../chat/README.md#review-a-pull-request). It uses a distinct reviewed action and returns an execution receipt.
+
 ## Configure an issue trigger
 
 1. Prepare the issue integration, appropriate saved workflow, model for readiness

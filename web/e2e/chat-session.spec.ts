@@ -1,4 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type { ChatList } from '../src/api/chat';
 import type { GraphSummary } from '../src/api/types';
 
@@ -27,6 +29,55 @@ async function draftTaskWithApproval(request: APIRequestContext, graphId: string
   expect(draft.status()).toBe(201);
   return await draft.json() as {id: string; revision: number};
 }
+
+test('analyzes a pinned PR and returns a draft with its execution', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const base = 'b'.repeat(40), head = 'a'.repeat(40);
+  let writes = 0;
+  const remote = createServer((req, res) => {
+    if (req.method !== 'GET') { writes++; res.writeHead(405).end(); return; }
+    if (req.url === '/repos/team/repo/pulls/418') {
+      res.end(JSON.stringify({number: 418, html_url: 'https://fixture.example/repo/pull/418', state: 'open',
+        head: {ref: 'feature', sha: head, repo: {full_name: 'team/repo'}},
+        base: {ref: 'main', sha: base, repo: {full_name: 'team/repo'}}}));
+    } else if (req.url === `/repos/team/repo/compare/${base}...${head}`) {
+      res.end('diff --git a/file b/file\n+fixture change\n');
+    } else { res.writeHead(404).end(); }
+  });
+  await new Promise<void>(resolve => remote.listen(0, '127.0.0.1', resolve));
+  try {
+    const port = (remote.address() as AddressInfo).port;
+    const connection = await request.post('/api/v1/scm/connections', {headers, data: {
+      name: 'pr-fixture', kind: 'github', repository: 'team/repo', token: 'synthetic-browser-fixture',
+      apiUrl: `http://127.0.0.1:${port}`,
+    }});
+    expect(connection.ok()).toBe(true);
+    const graph = await request.post('/api/v1/graphs', {headers, data: {
+      metadata: {id: 'manual-review'}, spec: {
+        nodes: [{id: 'reader', prompt: 'Review the change.', runtime: {kind: 'native'}, model: {provider: 'e2e', name: 'fixture'},
+          loop: {mode: 'event'}, tools: [{name: 'scm.pull_request.read', repositories: ['pr-fixture']}]}],
+        channels: [{id: 'in', to: ['reader']}],
+      },
+    }});
+    expect(graph.status()).toBe(201);
+    expect((await request.post('/api/v1/graphs/manual-review/start', {headers})).ok()).toBe(true);
+    await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-operator-token'));
+    await page.goto('/');
+    await send(page, 'Revise o PR 418.');
+    const review = page.getByRole('region', {name: 'Review PR #418'});
+    await expect(review.getByText(head)).toBeVisible();
+    await review.getByRole('link', {name: 'View workflow'}).click();
+    await expect(page).toHaveURL(/manual-review\/canvas/);
+    await page.goBack();
+    await review.getByRole('button', {name: 'Analyze PR #418'}).click();
+    await expect(review.getByText('Add a boundary test for the fixture change.')).toBeVisible();
+    await review.getByRole('link', {name: 'View execution'}).click();
+    await expect(page).toHaveURL(/manual-review\/runs\?execution=/);
+    expect(writes).toBe(0);
+  } finally {
+    await new Promise<void>((resolve, reject) => remote.close(err => err ? reject(err) : resolve()));
+  }
+});
 
 async function startTaskWaitingForApproval(request: APIRequestContext, graphId: string, title: string) {
   const task = await draftTaskWithApproval(request, graphId, title);

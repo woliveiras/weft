@@ -50,6 +50,7 @@ Return exactly one JSON object. "kind" is one of:
 - "installation.plan": propose installation configuration using one or more weft.io/v1 YAML documents in "document". Use only supported installation kinds: InferencePlugin, ModelProvider, PriceCatalog, CostPolicy, Budget, NetworkPolicy, MCPConnection, SCMConnection, IssueConnection, IssueWorkflowMapping, JiraCloudProfile, JiraCloudWorkflowMapping, Project, Graph, PullRequestReviewRoute, IssueTrigger. Ask about missing consequential settings. For requested issue or PR intake activation, include "intakeConsent":"review" to show its separate scope to the administrator. Credential input goes to manual setup. Never set force, claim consent, or report a change as applied.
 - "workflow.instructions": replace the local instructions of one node in a saved workflow. Add "instructionWorkflow" and "instructionNode" (exact IDs) and "localInstructions" with the complete proposed replacement (empty only for an explicit request to clear local instructions). Ask which scope is intended if the request could mean a one-time message or reusable catalog publication.
 - "node.guide": send one operator message to a later matching turn of a running workflow. Add "guideWorkflow" and "guideNode" with the stated exact IDs, "guideReplica" with a replica number or "any" only if the user explicitly selected it, and "guidance" with the requested message. Ask for any missing target. For an ambiguous change of behavior, ask whether the operator wants one-time guidance, a workflow instruction revision, or a reusable catalog change.
+- "pr.analyze": analyze one existing pull request without publishing. Add "prNumber" as a positive decimal string. Include "prWorkflow" and "prConnection" only when specified. Never infer repository, workflow, or write permission.
 - "manual.open": open a console page for inspection or to enter credentials. Add "destination" with one of: tasks, workflows, agents, projects, activity, approvals, models, chat-model, plugins, usage, budgets, prices, connections, connection-setup, skills, administration. Never ask for a credential. Use this for navigation requests or secure setup. Never represent navigation as performing the requested operation.
 - "clarify": ask one focused question when the target or action is unclear. Add "question". Never guess between different targets or effects.
 - "unsupported": any request outside these capabilities. Do not add a task or question.
@@ -58,6 +59,7 @@ You may include a short, neutral "title" for the conversation based on the lates
 // Plan proposes an operation or asks for clarification. A task selector is
 // always resolved against the caller's permitted resources before it is used.
 type Plan struct {
+	PRSelector    PRSelector
 	Kind          string `json:"kind"`
 	Task          string `json:"task,omitempty"`
 	Question      string `json:"question,omitempty"`
@@ -142,6 +144,12 @@ func decodePlan(body string) (Plan, error) {
 		}
 		value := strings.TrimSpace(*input)
 		switch key {
+		case "prNumber":
+			plan.PRSelector.Number = value
+		case "prWorkflow":
+			plan.PRSelector.Workflow = value
+		case "prConnection":
+			plan.PRSelector.Connection = value
 		case "instructionWorkflow":
 			plan.Instructions.Graph = value
 		case "instructionNode":
@@ -216,6 +224,9 @@ func decodePlan(body string) (Plan, error) {
 	if plan.Kind != CreateWorkflow && (seen["workflowId"] || seen["workflowName"] || seen["agent"] || seen["agentVersion"]) {
 		return Plan{}, ErrInvalidPlan
 	}
+	if plan.Kind != AnalyzePR && (seen["prNumber"] || seen["prWorkflow"] || seen["prConnection"]) {
+		return Plan{}, ErrInvalidPlan
+	}
 	if plan.Kind != EditInstructions && (seen["instructionWorkflow"] || seen["instructionNode"] || seen["localInstructions"]) {
 		return Plan{}, ErrInvalidPlan
 	}
@@ -237,6 +248,10 @@ func decodePlan(body string) (Plan, error) {
 	switch plan.Kind {
 	case ControlWorkflow:
 		if !plan.Control.valid() || seen["task"] || seen["question"] {
+			return Plan{}, ErrInvalidPlan
+		}
+	case AnalyzePR:
+		if !plan.PRSelector.Valid() || seen["task"] || seen["question"] {
 			return Plan{}, ErrInvalidPlan
 		}
 	case EditInstructions:

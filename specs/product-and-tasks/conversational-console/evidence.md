@@ -83,6 +83,10 @@ for the viewer and administrator. Chromium followed the link to Budgets and
 returned by browser Back to the same message with focus restored. TypeScript
 and seven component tests passed.
 
+## 2026-11-26 — S17 manual PR analysis
+
+An authenticated HTTP/SQLite fixture verified that a viewer could not trigger an SCM read. A new PR head invalidated confirmation. A fresh proposal dispatched the pinned diff to one native workflow execution, and the chat returned its draft and execution ID. Repeated confirmation generated no additional analysis. The synthetic SCM received only GET requests. Native runtime tests rejected tool calls in review responses. External targets are outside this validation by maintainer decision.
+
 ## 2026-11-26 — Workflow-local instructions
 
 For S14, HTTP and SQLite checks retained the catalog pin and prior graph version. An intervening edit invalidated confirmation. Two confirmations produced a single new revision. Chromium reviewed both instruction texts, saved the change and returned from the selected node to the originating chat.

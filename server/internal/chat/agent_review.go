@@ -102,6 +102,8 @@ type AgentCreation struct {
 // OperationReview persists the reviewed action. The digest binds the payload
 // to the owner and session. Claim state and the result are recorded separately.
 type OperationReview struct {
+	PR           *PRAnalysis      `json:"pr,omitempty"`
+	PRSummary    string           `json:"prSummary,omitempty"`
 	Instructions *InstructionEdit `json:"instructions,omitempty"`
 	Guidance     *Guidance        `json:"guidance,omitempty"`
 	ConsumedAt   *time.Time       `json:"consumedAt,omitempty"`
@@ -142,7 +144,7 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	choices := 0
-	for _, exists := range []bool{r.AgentCreation != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
+	for _, exists := range []bool{r.PR != nil, r.AgentCreation != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
 		if exists {
 			choices++
 		}
@@ -158,6 +160,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 			ExpiresAt                     time.Time
 			WorkflowControl               *WorkflowControl
 		}{owner, session, r.ID, ControlWorkflow, r.ExpiresAt, r.WorkflowControl}
+	case r.PR != nil:
+		payload = struct {
+			Owner, Session, ID, Operation string
+			ExpiresAt                     time.Time
+			PR                            *PRAnalysis
+		}{owner, session, r.ID, AnalyzePR, r.ExpiresAt, r.PR}
 	case r.Instructions != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string

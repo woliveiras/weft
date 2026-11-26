@@ -217,12 +217,18 @@ func (r *replica) turn(loopCtx context.Context, n *domain.Node, dels []queue.Del
 	}
 
 	env := newTurnEnv(r, gr, n, x)
+	analysisOnly := len(inputs) == 1 && inputs[0].Metadata[analysisOnlyMeta] == true && inputs[0].Metadata[reviewDispatchMeta] == true
+	if analysisOnly {
+		env.principal.Grants = nil
+		env.principal.Delegate = nil
+	}
 	env.executionCtx = turnCtx
 	env.span = trace.SpanContextFromContext(turnCtx)
 	token := e.execs.register(x.ID, env)
 	defer e.execs.unregister(x.ID)
 
 	in := r.buildInput(turnCtx, gr, n, x, inputs, ops, pendingStop, env.principal)
+	in.AnalysisOnly = analysisOnly
 	instructionStart := time.Now()
 	manager := instructions.Manager{Store: e.store}
 	rt := e.opt.Runtimes[n.Runtime.Kind]

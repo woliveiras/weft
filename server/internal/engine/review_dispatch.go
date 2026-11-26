@@ -15,6 +15,7 @@ import (
 )
 
 const reviewDispatchMeta = "review_dispatch"
+const analysisOnlyMeta = "review_analysis_only"
 
 var (
 	ErrReviewDispatchStale    = fmt.Errorf("%w: review destination revision or run changed", ErrConflict)
@@ -25,6 +26,7 @@ var (
 // The caller must reserve its durable receipt before dispatch and must not
 // automatically replay an uncertain publication. Message.ID must remain stable.
 type ReviewDispatch struct {
+	AnalysisOnly  bool
 	GraphID       string
 	Version       int
 	Channel       string
@@ -74,6 +76,12 @@ func (e *Engine) DispatchReview(ctx context.Context, in ReviewDispatch) (string,
 		}
 		m.Source, m.Target = "system:review-router", in.Node
 		m.SetMeta(reviewDispatchMeta, true)
+		if in.AnalysisOnly {
+			if n.Runtime.Kind != domain.RuntimeNative || n.Loop.BatchSize > 1 || len(gr.g.Outgoing(n.ID)) != 0 {
+				return fmt.Errorf("%w: review requires a single-input native analysis destination", ErrInvalid)
+			}
+			m.SetMeta(analysisOnlyMeta, true)
+		}
 		m.SetMeta(domain.MetaGraph, in.GraphID)
 		m.SetMeta(domain.MetaGraphVersion, in.Version)
 		m.SetMeta(domain.MetaRunID, in.ExpectedRunID)

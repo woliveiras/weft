@@ -20,8 +20,8 @@ const UnroutedChannel = "_unrouted"
 
 // reserved metadata keys an agent may not set through Emit.Metadata.
 var reservedMeta = map[string]bool{
-	reviewDispatchMeta: true,
-	domain.MetaGraph:   true, domain.MetaGraphVersion: true, domain.MetaChannel: true, domain.MetaRunID: true,
+	reviewDispatchMeta: true, analysisOnlyMeta: true,
+	domain.MetaGraph: true, domain.MetaGraphVersion: true, domain.MetaChannel: true, domain.MetaRunID: true,
 	domain.MetaCausationID: true, domain.MetaExecutionID: true, domain.MetaHops: true, domain.MetaCreatedAt: true,
 	domain.MetaTraceParent: true, domain.MetaTraceState: true, domain.MetaInjectedBy: true, domain.MetaAttempt: true,
 	domain.MetaReplica: true, domain.MetaHeldFor: true,

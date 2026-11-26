@@ -51,6 +51,8 @@ type ProgressiveRuntime interface {
 }
 
 type TurnInput struct {
+	// AnalysisOnly is set internally for a reviewed, immutable PR input.
+	AnalysisOnly bool                        `json:"-"`
 	Guidance     ProgressiveGuidance         `json:"-"`
 	Instructions *domain.InstructionSnapshot `json:"instructions,omitempty"`
 

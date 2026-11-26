@@ -42,6 +42,10 @@ migrate the running GitHub pilot, change credentials or activate a route.
    for the selected scope. Do not run both paths and assume they deduplicate each
    other's external comments. This example does not stop that bridge for you.
 
+## On-demand analysis in Chat
+
+For a draft on an existing open PR, use a running native event reviewer with a repository read grant and a dedicated ingress. Open Chat and ask to review the PR. Confirm the pinned source and base commits, then follow the draft to its execution. The fixture journey uses a loopback SCM adapter. Automatic delivery routes and remote comment publication have their own grants and receipts.
+
 ## What to observe
 
 Inspect `GET /api/v1/review-routes` and the paginated

@@ -92,6 +92,9 @@ var platformTools = []llm.ToolSchema{
 }
 
 func (r *Runtime) Turn(ctx context.Context, in *runtime.TurnInput, env runtime.TurnEnv) (*runtime.TurnResult, error) {
+	if in.AnalysisOnly {
+		return analyzePullRequest(ctx, in, env)
+	}
 	res := &runtime.TurnResult{}
 	toolset := append(append([]llm.ToolSchema(nil), in.Tools...), platformTools...)
 	if in.Guidance != nil {

@@ -26,6 +26,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"node.guide","guideWorkflow":"guidance-sample","guideNode":"reader","guideReplica":"0","guidance":"Summarize the warnings.","title":"Guide the reader"}`
 	case "Set local instructions for reader in instruction-sample to review test changes.":
 		content = `{"kind":"workflow.instructions","instructionWorkflow":"instruction-sample","instructionNode":"reader","localInstructions":"Review test changes.","title":"Review workflow instructions"}`
+	case "Revise o PR 418.":
+		content = `{"kind":"pr.analyze","prNumber":"418","prWorkflow":"manual-review","prConnection":"pr-fixture","title":"Review a pull request"}`
 	case "Where can I inspect the model budget?":
 		content = `{"kind":"manual.open","destination":"budgets","title":"Inspect model budget"}`
 	case "Let me know when the release notes review is complete.":
