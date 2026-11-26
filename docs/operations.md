@@ -326,3 +326,5 @@ from ciphertext; restore the key or re-enter/re-authorize affected credentials.
   snapshots. Terminal reconciliation must not charge a settled reservation twice.
 - **Missing workspace attribution:** preserve journal evidence and report the
   gap; never infer an author solely from timing or file ownership.
+
+Chat exposes `weft_chat_operation_duration_seconds` for interpretation calls, title retries and background reconciliation. Its histogram count can be grouped by operation and outcome to distinguish provider availability, budget rejection, saturation and timeout. `weft_chat_watch_schedule_delay_seconds` measures how late the worker starts a scheduled pass. A healthy scheduler can still be waiting for a task's canonical outcome. Chat operation labels and span status contain bounded categories only.

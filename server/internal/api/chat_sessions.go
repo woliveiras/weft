@@ -14,6 +14,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/llm"
+	"github.com/woliveiras/weft/server/internal/observability"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"github.com/woliveiras/weft/server/internal/tools"
@@ -200,7 +201,9 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 	return nil
 }
 
-func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.ChatRequest, operation string) (*llm.ChatResponse, error) {
+func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.ChatRequest, operation string) (_ *llm.ChatResponse, retErr error) {
+	ctx, finish := observeChatOperation(ctx, operation)
+	defer func() { finish(retErr) }()
 	settings, err := s.readChatModel(ctx)
 	if err != nil || settings.Status != "configured" {
 		return nil, chat.ErrModelUnavailable
@@ -393,7 +396,9 @@ func (s *Server) RunChatWatches(ctx context.Context) {
 	defer ticker.Stop()
 	cursor := ""
 	for ctx.Err() == nil {
-		next, err := s.chatStore().ReconcilePage(ctx, cursor, s.Auth.mayObserveChatOwner, s.observeChatTask, s.reconcileChatReviews)
+		passCtx, finish := observeChatOperation(ctx, "reconcile")
+		next, err := s.chatStore().ReconcilePage(passCtx, cursor, s.Auth.mayObserveChatOwner, s.observeChatTask, s.reconcileChatReviews)
+		finish(err)
 		if err != nil && ctx.Err() == nil {
 			s.Log.Warn("chat watch reconciliation failed", "error", err)
 		}
@@ -401,7 +406,8 @@ func (s *Server) RunChatWatches(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case tick := <-ticker.C:
+			observability.ChatWatchDelay.Observe(time.Since(tick).Seconds())
 		}
 	}
 }
