@@ -28,6 +28,7 @@ import { useAsync, useThrottled } from './hooks/useData';
 import { EventStreamProvider, useEventStream } from './hooks/useEventStream';
 import { BrandMark } from './components/BrandMark';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
+import { leaveConnections } from './components/chatConnectionReturn';
 import { ChatPage } from './components/ChatPage';
 
 /**
@@ -193,6 +194,7 @@ function Shell() {
   const [route, setRoute] = useState<Route>(() => parseRoute(location.hash));
   const [lastChatRoute, setLastChatRoute] = useState(() => route.view === 'chat' ? route : undefined);
   useEffect(() => { if (route.view === 'chat') setLastChatRoute(route); }, [route]);
+  useEffect(() => { if (route.view !== 'connections') leaveConnections(); }, [route.view]);
   const chatRoute = route.view === 'chat' ? route : lastChatRoute;
   const configurationDraft=useRef({dirty:false,busy:false});
   const onConfigurationDraft=useCallback((value:{dirty:boolean;busy:boolean})=>{configurationDraft.current=value;},[]);

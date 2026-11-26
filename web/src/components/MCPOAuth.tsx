@@ -1,3 +1,4 @@
+import { focusOnChatReturn, saveChatOAuthReturn, takeChatOAuthReturn } from './chatConnectionReturn';
 import { useAsync } from '../hooks/useData';
 import { useState } from 'react';
 import { api, errorMessage } from '../api/client';
@@ -5,6 +6,8 @@ import type { MCPConnection } from '../api/types';
 import { Btn, ErrorBox, fmtDateTime } from './common';
 
 export function MCPOAuthReturn({query,canManage,onChanged}:{query:string;canManage:boolean;onChanged:()=>Promise<void>}) {
+ const [chatReturn, setChatReturn] = useState<{chat:string; message:string; href:string}>();
+ const [returnError, setReturnError] = useState<string>();
  const params=new URLSearchParams(query);
  const state=params.get('state')??'';
  const valid=/^[A-Za-z0-9_-]{43}$/.test(state)&&params.size===1;
@@ -14,11 +17,22 @@ export function MCPOAuthReturn({query,canManage,onChanged}:{query:string;canMana
   setResult(connection.status==='ready'?'OAuth connected. Select tools for agents explicitly.':'OAuth authorized, but tool discovery failed. Test the connection to retry discovery.');
   window.history.replaceState(null,'',`${location.pathname}${location.search}#/integrations`);
   await onChanged();
+  const from = await takeChatOAuthReturn(connection.id, state);
+  if (from) {
+    try {
+      const session = await api.chatSession(from.chat);
+      if (session.id === from.chat && session.messages.some(m => m.id === from.message)) {
+        setChatReturn({...from, href: `#/chat/${from.chat}${session.archived ? '?archived=1' : ''}`});
+      }
+    } catch { setReturnError('The originating chat is unavailable for this login.'); }
+  }
  }catch(e){setError(errorMessage(e));}finally{setBusy(false);}}
  return <section aria-label="OAuth return"><h3>Return from OAuth provider</h3>
   {!valid?<ErrorBox error="Invalid OAuth return. Start authorization again from the connection."/>:<>
    <p>Complete the connection using the same Weft login that started authorization.</p>
    <ErrorBox error={error}/>{error&&<p>Check the registered callback, MCP scopes and corporate access policy. Restart authorization from the connection after correcting configuration; do not reuse an expired or denied return.</p>}{result?<p role="status">{result}</p>:canManage?<Btn disabled={busy} onClick={()=>void complete()}>Complete OAuth connection</Btn>:<p>Sign in as the administrator who started this connection.</p>}
+   {returnError && <p role="status">{returnError}</p>}
+   {chatReturn && <a href={chatReturn.href} onClick={() => focusOnChatReturn(chatReturn)}>Return to chat</a>}
   </>}
  </section>;
 }
@@ -51,7 +65,7 @@ export function MCPOAuthActions({connection,canManage,onChanged}:{connection:MCP
  const canRecover=automatic&&oauth.effectiveRegistrationMode==='dcr'&&oauth.registrationStatus==='uncertain'&&!(recoverySaved?.id===connection.id&&connection.revision<=recoverySaved.revision);
  const fields=registrationFieldLabels(oauth.registrationDiagnostic?.fields);
  const status=error||oauth.registrationStatus==='uncertain'?'Error — last OAuth action failed':oauth.status==='revoked'?'Revoked':oauth.status==='reauthorization_required'||connection.status==='unavailable'?'Error — authorization or discovery needs attention':oauth.status==='authorized'?'Authorized':oauth.status==='authorization_required'?'Authorization required':'Authorization in progress';
- async function start(){setBusy(true);setError(undefined);try{const result=await api.startMCPOAuth(connection.id,plan?.mode);window.location.assign(result.url);}catch(e){setError(errorMessage(e));setPlan(undefined);setBusy(false);try{await onChanged();}catch(refreshError){setError(`${errorMessage(e)} Connection reload failed: ${errorMessage(refreshError)}`);}}}
+ async function start(){setBusy(true);setError(undefined);try{const result=await api.startMCPOAuth(connection.id,plan?.mode);await saveChatOAuthReturn(connection.id,result.state);window.location.assign(result.url);}catch(e){setError(errorMessage(e));setPlan(undefined);setBusy(false);try{await onChanged();}catch(refreshError){setError(`${errorMessage(e)} Connection reload failed: ${errorMessage(refreshError)}`);}}}
  async function preview(){setBusy(true);setError(undefined);setPlan(undefined);try{setPlan(await api.previewMCPOAuth(connection.id));}catch(e){setError(errorMessage(e));}finally{setBusy(false);}}
  async function revoke(){setBusy(true);setError(undefined);try{await api.revokeMCPOAuth(connection.id);setConfirm(false);await onChanged();}catch(e){setError(errorMessage(e));}finally{setBusy(false);}}
  async function recover(){

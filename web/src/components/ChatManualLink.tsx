@@ -1,3 +1,5 @@
+import { leaveChatForConnection } from './chatConnectionReturn';
+
 const destinations = new Map<string, [string, string]>([
   ['tasks', ['Tasks', '#/tasks']],
   ['workflows', ['Workflows', '#/graphs']],
@@ -26,5 +28,8 @@ export function ChatManualLink({ destination, message, onView }: {
   if (!target) return null;
   const [label, href] = target;
   const anchor = `chat-navigation-${message}`;
-  return <a id={anchor} href={href} onClick={() => onView(anchor)}>Open {label}</a>;
+  return <a id={anchor} href={href} onClick={() => {
+    if (destination === 'connections' || destination === 'connection-setup') leaveChatForConnection(location.hash, message);
+    onView(anchor);
+  }}>Open {label}</a>;
 }

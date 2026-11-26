@@ -1,4 +1,5 @@
 import { ChatPRCard } from './ChatPRCard';
+import { takeChatReturnFocus } from './chatConnectionReturn';
 import { ChatInstructionCard } from './ChatInstructionCard';
 import { ChatGuidanceCard } from './ChatGuidanceCard';
 import { ChatConfigurationCard } from './ChatConfigurationCard';
@@ -58,12 +59,13 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   }, [id, list.reload, conversation.reload]);
 
   useEffect(() => {
-    const focus = evidence.current && document.getElementById(evidence.current);
+    const anchor = evidence.current || (session && takeChatReturnFocus(session.id));
+    const focus = anchor && document.getElementById(anchor);
     if (focus instanceof HTMLElement) {
       evidence.current = undefined;
       focus.focus();
     }
-  }, [id]);
+  }, [id, session?.id]);
   useEffect(() => { if (drawer) drawerClose.current?.focus(); }, [drawer]);
 
   const closeDrawer = () => {

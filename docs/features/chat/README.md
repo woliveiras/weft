@@ -20,6 +20,8 @@ remain available while the title is generated.
 
 Ask “Where can I inspect my model budget?” or “Where do I enter the MCP connection credentials?” Follow the link in the reply to the relevant console page. Enter credentials in its setup form. Use browser Back to return to the same conversation. Opening a page leaves decisions, saves and execution to the controls on that page.
 
+When a connection needs browser OAuth, follow the Chat link to Connections and complete the normal provider consent. After **Complete OAuth connection**, use **Return to chat** to return to the originating message. Weft checks the conversation with the signed-in identity before offering the link.
+
 ## Follow a task
 
 Ask Chat to show the current state of a task or follow it until it settles.
