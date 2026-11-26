@@ -249,6 +249,13 @@ and count observed from the runtime. `accepted` means the policy was saved
 and the runtime is still settling. A stopped node can report a saved policy
 with zero active replicas.
 
+An administrator can review a pause or resumption of issue intake. The
+`triggerControl` binds the source, trigger configuration, action, actor and
+any already admitted task. Resumption also binds the fresh native consent
+scope. Confirmation uses the native lifecycle and saves an operation receipt
+on the trigger. `applied` confirms the intake control. Separately inspect the
+trigger's current state or follow a task to see the result of admitted work.
+
 An operator can review a start, pause, resume, graceful stop or immediate
 interruption on a reusable workflow or one node. Chat seals the exact graph
 version, target, run and desired control state. Confirmation takes the native

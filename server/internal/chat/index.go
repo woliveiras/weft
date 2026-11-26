@@ -121,6 +121,9 @@ func (s *Session) summary(owner, key string) storage.ChatSummary {
 			if (review.TaskStart != nil || review.TaskCancel != nil || review.TaskRetry != nil || review.Approval != nil || review.TaskAuthorization != nil) && review.State == ReviewApplying {
 				meta.WatchCount++
 			}
+			if review.TriggerControl != nil && review.State == ReviewApplying {
+				meta.WatchCount++
+			}
 			if (review.Publication != nil || review.Adoption != nil) && review.State == ReviewApplying {
 				meta.WatchCount++
 			}

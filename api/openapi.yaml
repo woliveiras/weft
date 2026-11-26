@@ -3039,6 +3039,7 @@ components:
             - {$ref: "#/components/schemas/ChatTaskStartReview"}
             - {$ref: "#/components/schemas/ChatWorkflowControlReview"}
             - {$ref: "#/components/schemas/ChatWorkflowScaleReview"}
+            - {$ref: "#/components/schemas/ChatTriggerReview"}
             - {$ref: "#/components/schemas/ChatTaskRetryReview"}
             - {$ref: "#/components/schemas/ChatCorrectionReview"}
             - {$ref: "#/components/schemas/ChatEnvironmentReview"}
@@ -3370,6 +3371,40 @@ components:
                 version: {type: integer, minimum: 1}
                 activeReplicas: {type: integer, minimum: 0}
                 state: {type: string, enum: [converging, saved, observed, failed, superseded]}
+    ChatTriggerReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [triggerControl]
+          properties:
+            triggerControl:
+              type: object
+              required: [id, name, action, actor, configuration, workflow, workflowVersion, node, sourceKind, connection, sourceProject, label, authorization, intervalMinutes]
+              properties:
+                id: {type: string}
+                name: {type: string}
+                action: {type: string, enum: [pause, resume]}
+                actor: {type: string}
+                configuration: {type: string, pattern: '^[a-f0-9]{64}$'}
+                consentScope: {type: string, pattern: '^[a-f0-9]{64}$'}
+                workflow: {type: string}
+                workflowVersion: {type: integer, minimum: 0}
+                node: {type: string}
+                resultNode: {type: string}
+                sourceKind: {type: string}
+                connection: {type: string}
+                sourceProject: {type: string}
+                query: {type: string}
+                label: {type: string}
+                owner: {type: string}
+                project: {type: string}
+                executionMode: {type: string}
+                authorization: {type: string}
+                scm: {type: string}
+                intervalMinutes: {type: integer}
+                currentTask: {type: string}
+                claiming: {type: string}
+                operations: {type: array, items: {type: string}}
     ChatDraftText:
       type: object
       required: [title, request, outcome]

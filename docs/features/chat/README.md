@@ -199,8 +199,16 @@ ambiguous request such as “Deactivate the reviewer” needs a choice about
 trigger intake, new turns, draining or immediate interruption.
 
 If the workflow or run changed during review, open the workflow to inspect
-its current state before confirming a fresh proposal. Trigger intake has
-separate configuration controls.
+its current state before confirming a fresh proposal.
+
+## Pause or resume issue intake
+
+As an administrator, name the trigger and specify future issue intake. For
+example, ask “Pause future issue intake for Ready issues.” Review the
+connection, issue selection, workflow and any pending admission before
+choosing **Pause issue intake**. An admitted task continues through its own
+lifecycle. A request to resume shows the fresh consent scope for the
+selected trigger. **Open workflow triggers** opens its manual settings.
 
 ## Change instructions for one workflow
 

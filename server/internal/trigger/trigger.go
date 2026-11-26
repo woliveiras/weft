@@ -95,8 +95,9 @@ type Trigger struct {
 	Authorization   taskauth.Mode `json:"authorizationMode"`
 	Consent         Consent       `json:"consent"`
 
-	State        string `json:"state"`
-	PausedReason string `json:"pausedReason,omitempty"`
+	State            string `json:"state"`
+	PausedReason     string `json:"pausedReason,omitempty"`
+	ControlOperation string `json:"controlOperation,omitempty"`
 
 	PollSequence         uint64            `json:"pollSequence,omitempty"`
 	LastRunAt            *time.Time        `json:"lastRunAt,omitempty"`
@@ -427,11 +428,19 @@ func (m Manager) Edit(ctx context.Context, id string, in Input, actor string) (*
 
 // Pause stops a trigger from starting tasks.
 func (m Manager) Pause(ctx context.Context, id, reason, actor string) (*Trigger, error) {
+	return m.pause(ctx, id, reason, actor, nil, "")
+}
+
+func (m Manager) pause(ctx context.Context, id, reason, actor string, review *IntakeScope, operation string) (*Trigger, error) {
 	t, err := m.Update(ctx, id, actor, func(t *Trigger) error {
+		if review != nil && !review.matches(t, actor, "pause") {
+			return storage.ErrConflict
+		}
 		if t.State == Finished {
 			return fmt.Errorf("%w: the trigger is finished", storage.ErrConflict)
 		}
 		t.State, t.PausedReason = Paused, reason
+		t.ControlOperation = operation
 		return nil
 	})
 	if err == nil {
@@ -443,7 +452,14 @@ func (m Manager) Pause(ctx context.Context, id, reason, actor string) (*Trigger,
 // Resume records the actor's consent for the trigger as it is now and
 // makes it active. A task still running from before is kept.
 func (m Manager) Resume(ctx context.Context, id, actor string) (*Trigger, error) {
+	return m.resume(ctx, id, actor, nil, "")
+}
+
+func (m Manager) resume(ctx context.Context, id, actor string, review *IntakeScope, operation string) (*Trigger, error) {
 	t, err := m.Update(ctx, id, actor, func(t *Trigger) error {
+		if review != nil && !review.matches(t, actor, "resume") {
+			return storage.ErrConflict
+		}
 		if t.Claiming != "" {
 			if _, err := m.Store.GetSetting(ctx, t.ClaimAdmission); err == nil {
 				return fmt.Errorf("%w: verify the interrupted admission for %s before using a replacement trigger", storage.ErrConflict, t.Claiming)
@@ -466,6 +482,9 @@ func (m Manager) Resume(ctx context.Context, id, actor string) (*Trigger, error)
 		if err != nil {
 			return err
 		}
+		if review != nil && c.Scope != review.ConsentScope {
+			return storage.ErrConflict
+		}
 		for i := range t.Holds {
 			h := &t.Holds[i]
 			if h.AccessError != "" {
@@ -476,6 +495,7 @@ func (m Manager) Resume(ctx context.Context, id, actor string) (*Trigger, error)
 			t.ResultNodeID = t.NodeID
 		}
 		t.Consent, t.State, t.PausedReason, t.LastError, t.NextRunAt = c, Active, "", "", nil
+		t.ControlOperation = operation
 		return nil
 	})
 	if err == nil {

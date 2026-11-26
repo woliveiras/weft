@@ -336,6 +336,42 @@ test('scales a running fixed node and separately saves an autoscale ceiling', as
   await expect(node).toBeFocused();
 });
 
+test('pauses future issue intake and resumes the same trigger with fresh reviewed consent', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const workflow = 'git-inspect';
+  const {graph} = await (await request.get(`/api/v1/graphs/${workflow}`,{headers})).json();
+  const created = await request.post('/api/v1/triggers',{headers,data:{
+    name:'Chat issue intake fixture',workflow,nodeId:graph.spec.nodes[0].id,
+    source:{kind:'github',connectionId:'e2e-tracker',repository:'acme/app'},label:'chat-ready',
+    authorizationMode:'ask',readinessDisabled:true,
+  }});
+  expect(created.status(), await created.text()).toBe(201);
+  const original = await created.json();
+  const read = async () => (await request.get(`/api/v1/triggers/${original.id}`,{headers})).json();
+  await page.addInitScript(() => localStorage.setItem('weftToken','e2e-admin-token'));
+  await page.goto('/');
+  await send(page,'Pause future issue intake for Chat issue intake fixture.');
+  const pause = page.getByRole('region',{name:'Pause issue intake for Chat issue intake fixture'});
+  await expect(pause).toContainText('github · e2e-tracker · acme/app');
+  expect((await read()).state).toBe('active');
+  await pause.getByRole('button',{name:'Pause issue intake',exact:true}).click();
+  await expect(pause.getByRole('status')).toContainText('Future issue intake paused.');
+  expect(await read()).toMatchObject({state:'paused',consent:original.consent});
+  await send(page,'Resume future issue intake for Chat issue intake fixture.');
+  const resume = page.getByRole('region',{name:'Resume issue intake for Chat issue intake fixture'});
+  await expect(resume).toContainText('e2e-admin · ask');
+  await resume.getByRole('button',{name:'Resume issue intake',exact:true}).click();
+  await expect(resume.getByRole('status')).toContainText('Issue intake resumed with reviewed consent.');
+  const reopened = await read();
+  expect(reopened).toMatchObject({state:'active',consent:{actor:'e2e-admin',authorizationMode:'ask'}});
+  expect(reopened.consent.recordedAt).not.toBe(original.consent.recordedAt);
+  const inspect = resume.getByRole('link',{name:'Open workflow triggers'});
+  await inspect.click();
+  await expect(page.getByRole('article',{name:'Trigger Chat issue intake fixture'}).getByText('Active',{exact:true})).toBeVisible();
+  await page.goBack();
+  await expect(inspect).toBeFocused();
+});
+
 test('prepares one reviewed retry from a failed task and opens the linked draft', async ({ page, request }) => {
   await selectFixtureModel(request);
   const original = await startTaskWaitingForApproval(request,'chat-retry-source','Failed documentation task fixture');

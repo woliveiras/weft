@@ -182,6 +182,9 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		if review.WorkflowScale != nil {
 			return s.applyChatScale(settleCtx, actor, sessionID, review)
 		}
+		if review.TriggerControl != nil {
+			return s.applyChatTrigger(settleCtx, actor, sessionID, review)
+		}
 		return s.applyReviewedChatAgent(settleCtx, actor, sessionID, review)
 	}
 	return s.reconcileChatReviews(ctx, actor.chatOwner, session)
@@ -387,13 +390,15 @@ func (s *Server) reconcileChatReviews(ctx context.Context, owner string, session
 			version, found, err = s.chatAdoptionReceipt(ctx, review)
 		} else if review.TaskAuthorization != nil {
 			version, found, err = s.chatTaskAuthorizationReceipt(ctx, review)
+		} else if review.TriggerControl != nil {
+			found, err = s.chatTriggerReceipt(ctx, review)
 		}
 		if err != nil {
 			return nil, err
 		}
 		if found {
 			state := chat.ReviewCreated
-			if review.TaskAuthorization != nil {
+			if review.TaskAuthorization != nil || review.TriggerControl != nil {
 				state = chat.ReviewApplied
 			}
 			session, err = s.chatStore().FinishReview(ctx, owner, session.ID, review.ID, state, version)

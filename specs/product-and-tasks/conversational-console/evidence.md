@@ -264,3 +264,13 @@ existing source and preserved its checks. A later checks review conflicted
 after a native edit. A fresh plan recorded the exact replacement once while
 preserving the new preference and the same project and commit. Unchanged
 source paths and commands stayed out of the transcript.
+
+## 2026-11-26 — Reviewed issue intake controls
+
+S41 passed the typed consent and safe-query unit checks. Authenticated HTTP
+and SQLite verified a native pause with the stored consent and existing task
+reference, a failed resume after a workflow edit, then a successful resume
+with the new workflow version and scope. The operator role received no review.
+Repeated confirmation left one native pause and one resume audit. Chromium
+verified both states, the fresh consent under the local fixture actor and focus
+restoration from the workflow's Triggers section.

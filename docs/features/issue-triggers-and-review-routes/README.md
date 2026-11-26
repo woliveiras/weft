@@ -32,6 +32,11 @@ the connection revision/site/project rather than storing credentials themselves.
 Discover/map actual transition IDs; never infer that every provider has an
 **In Review** state.
 
+To pause or resume an existing trigger from Chat, name it and specify future
+issue intake. The pause preserves the lifecycle of work already admitted.
+Resumption reviews the current source, workflow and consent scope. [Pause or
+resume issue intake in Chat](../chat/README.md#pause-or-resume-issue-intake)
+
 ## Automatic task journey
 
 Polling selects eligible issues, assesses readiness, claims the issue through

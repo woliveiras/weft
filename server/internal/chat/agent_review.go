@@ -13,6 +13,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/storage"
+	"github.com/woliveiras/weft/server/internal/trigger"
 )
 
 const (
@@ -102,6 +103,7 @@ type AgentCreation struct {
 // OperationReview persists the reviewed action. The digest binds the payload
 // to the owner and session. Claim state and the result are recorded separately.
 type OperationReview struct {
+	TriggerControl *trigger.IntakeScope             `json:"triggerControl,omitempty"`
 	WorkflowScale  *WorkflowScale                   `json:"workflowScale,omitempty"`
 	ScaleResult    *engine.WorkflowScaleObservation `json:"scaleResult,omitempty"`
 	BudgetRaise    *BudgetRaise                     `json:"budgetRaise,omitempty"`
@@ -161,7 +163,7 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	choices := 0
-	for _, exists := range []bool{r.WorkflowScale != nil, r.BudgetRaise != nil, r.Environment != nil, r.TaskCorrection != nil, r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskCancel != nil, r.TaskAuthorization != nil, r.TaskRetry != nil, r.Approval != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
+	for _, exists := range []bool{r.TriggerControl != nil, r.WorkflowScale != nil, r.BudgetRaise != nil, r.Environment != nil, r.TaskCorrection != nil, r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskCancel != nil, r.TaskAuthorization != nil, r.TaskRetry != nil, r.Approval != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
 		if exists {
 			choices++
 		}
@@ -171,6 +173,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 	}
 	var payload any
 	switch {
+	case r.TriggerControl != nil:
+		payload = struct {
+			Owner, Session, ID, Operation string
+			ExpiresAt                     time.Time
+			Trigger                       *trigger.IntakeScope
+		}{owner, session, r.ID, ControlTrigger, r.ExpiresAt, r.TriggerControl}
 	case r.WorkflowScale != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string
@@ -379,7 +387,7 @@ func (s Sessions) finishReview(ctx context.Context, owner, sessionID, reviewID, 
 		for i := range session.Messages {
 			message := &session.Messages[i]
 			if review := message.Review; review != nil && review.ID == reviewID {
-				recovered := state == ReviewCreated || (review.Skill != nil || review.Approval != nil || review.TaskCorrection != nil || review.TaskAuthorization != nil) && state == ReviewApplied
+				recovered := state == ReviewCreated || (review.Skill != nil || review.Approval != nil || review.TaskCorrection != nil || review.TaskAuthorization != nil || review.TriggerControl != nil) && state == ReviewApplied
 				if review.State != ReviewApplying && !(review.State == ReviewUnknown && recovered) {
 					return false, nil
 				}

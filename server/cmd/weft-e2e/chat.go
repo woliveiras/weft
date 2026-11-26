@@ -70,6 +70,10 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"workflow.scale","scaleWorkflow":"chat-scale-fixed","scaleNode":"reader","scaleSize":"3","scaleMode":"fixed","title":"Review fixed replicas"}`
 	case "Set the reader autoscale maximum to two in chat-scale-auto.":
 		content = `{"kind":"workflow.scale","scaleWorkflow":"chat-scale-auto","scaleNode":"reader","scaleSize":"2","scaleMode":"autoscale","title":"Review autoscale ceiling"}`
+	case "Pause future issue intake for Chat issue intake fixture.":
+		content = `{"kind":"trigger.control","triggerTarget":"Chat issue intake fixture","triggerAction":"pause","title":"Review issue intake pause"}`
+	case "Resume future issue intake for Chat issue intake fixture.":
+		content = `{"kind":"trigger.control","triggerTarget":"Chat issue intake fixture","triggerAction":"resume"}`
 	case "Start the publication workflow.":
 		content = `{"kind":"workflow.control","controlWorkflow":"chat-publication","controlAction":"start","title":"Control publication workflow"}`
 	case "Pause new turns for the reviewer node in the publication workflow.":

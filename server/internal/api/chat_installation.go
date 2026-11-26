@@ -159,6 +159,10 @@ func writeChatSession(w http.ResponseWriter, actor Identity, session *chat.Sessi
 		session = &projection
 		for i := range session.Messages {
 			message := &session.Messages[i]
+			if message.Review != nil && message.Review.TriggerControl != nil {
+				message.Review = nil
+				message.Text = "Administrator access is required to view this issue intake review."
+			}
 			if message.Review != nil && message.Review.BudgetRaise != nil {
 				message.Review = nil
 				message.Text = "Administrator access is required to view this budget review."

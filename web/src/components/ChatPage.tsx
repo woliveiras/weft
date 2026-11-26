@@ -10,10 +10,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
 import type { ChatAgentAdoptionReview, ChatApprovalReview, ChatCatalogPublicationReview, ChatMessage, ChatOperationReview,
   ChatSession, ChatSessionSummary, ChatTask, ChatTaskCancellationReview, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview,
-  ChatBudgetRaiseReview, ChatEnvironmentReview, ChatCorrectionReview, ChatTaskAuthorizationReview, ChatTaskRetryReview, ChatWorkflowScaleReview } from '../api/chat';
+  ChatBudgetRaiseReview, ChatEnvironmentReview, ChatCorrectionReview, ChatTaskAuthorizationReview, ChatTaskRetryReview, ChatWorkflowScaleReview, ChatTriggerReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
+import { settingsPath } from './graphSettingsSections';
 import './chat.css';
 
 type OpenChat = (id?: string, archived?: boolean) => void;
@@ -336,6 +337,7 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   if ('taskAuthorization' in review) return <TaskAuthorizationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('workflowControl' in review) return <WorkflowControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('workflowScale' in review) return <WorkflowScaleCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('triggerControl' in review) return <TriggerControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('environment' in review) return <EnvironmentPreparationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskCorrection' in review) return <CorrectionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskRetry' in review) return <TaskRetryReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
@@ -539,6 +541,45 @@ function WorkflowScaleCard({review, now, canConfirm, onDecide, onView}: {
     {review.state === 'declined' && <p role="status">Proposal declined.</p>}
     <a id={anchor} href={`#/g/${encodeURIComponent(scope.workflowId)}/canvas?sel=${encodeURIComponent('node:' + scope.nodeId)}`}
       onClick={() => onView(anchor)}>View node</a>
+  </section>;
+}
+
+function TriggerControlCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatTriggerReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const trigger = review.triggerControl;
+  const resume = trigger.action === 'resume';
+  const command = resume ? 'Resume issue intake' : 'Pause issue intake';
+  const anchor = `chat-trigger-${review.id}`;
+  return <section className="chat-agent-review" aria-label={`${command} for ${trigger.name}`}>
+    <h3>{command}</h3>
+    <dl>
+      <dt>Trigger</dt><dd>{trigger.name} · {trigger.id}</dd>
+      <dt>Source</dt><dd>{trigger.sourceKind} · {trigger.connection} · {trigger.sourceProject}</dd>
+      <dt>Match label</dt><dd>{trigger.label}</dd>
+      {trigger.query && <><dt>Match query</dt><dd>{trigger.query}</dd></>}
+      {trigger.owner && <><dt>Issue owner</dt><dd>{trigger.owner}</dd></>}
+      <dt>Workflow</dt><dd>{trigger.workflow}{trigger.workflowVersion > 0 && ` · Version ${trigger.workflowVersion}`}
+        {' · '}{trigger.node}{trigger.resultNode && trigger.resultNode !== trigger.node && ` → ${trigger.resultNode}`}</dd>
+      {trigger.project && <><dt>Project</dt><dd>{trigger.project}</dd></>}
+      {trigger.scm && <><dt>SCM connection</dt><dd>{trigger.scm}</dd></>}
+      {resume && <><dt>Consent</dt><dd>{trigger.actor} · {trigger.authorization}{trigger.executionMode && ` · ${trigger.executionMode}`}</dd>
+        <dt>Poll interval</dt><dd>{trigger.intervalMinutes} minutes</dd></>}
+      {trigger.currentTask && <><dt>Admitted task</dt><dd>{trigger.currentTask}</dd></>}
+      {trigger.claiming && <><dt>Admission under review</dt><dd>{trigger.claiming}</dd></>}
+    </dl>
+    {resume && trigger.operations?.length ? <details><summary>Reviewed tracker operations</summary>
+      <ul>{trigger.operations.map(operation => <li key={operation}>{operation}</li>)}</ul></details> : null}
+    <p>{resume ? 'Confirmation records fresh consent for this trigger to admit matching issues.'
+      : 'Pause stops new intake. An admission already underway can settle, and admitted tasks follow their own lifecycle.'}</p>
+    {review.state === 'awaiting_confirmation' && <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm}
+      confirmLabel={command} onDecide={onDecide}/>}
+    {review.state === 'applying' && <p role="status">Recording the reviewed intake change…</p>}
+    {review.state === 'applied' && <p role="status">{resume ? 'Issue intake resumed with reviewed consent.' : 'Future issue intake paused.'}</p>}
+    {review.state === 'conflict' && <p role="status">The trigger or its consent scope changed. Inspect Triggers and request a fresh review.</p>}
+    {review.state === 'unknown' && <p role="status">The outcome could not be verified. Inspect Triggers before trying again.</p>}
+    {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+    <a id={anchor} href={settingsPath(trigger.workflow,'triggers')} onClick={() => onView(anchor)}>Open workflow triggers</a>
   </section>;
 }
 
