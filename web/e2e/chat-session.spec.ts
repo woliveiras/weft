@@ -881,3 +881,18 @@ test('answers a task count after inspecting the inventory in the same chat', asy
   await expect(replies.last()).not.toContainText('tasks ·');
   await expect(replies.last().getByRole('link', { name: 'Open Tasks' })).toBeVisible();
 });
+
+test('opens a verified task detail link from a saved conversation', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const task = await draftTaskWithApproval(request, 'chat-link-eval', 'Editorial checklist for the task link');
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-viewer-token'));
+  await page.goto('/');
+  await send(page, 'Me de o link para a task ' + task.id);
+  const link = page.getByRole('link', {name:'Open task', exact:true});
+  await expect(link).toHaveAttribute('href', '#/tasks/' + task.id);
+  await page.reload();
+  await link.click();
+  await expect(page).toHaveURL(url => url.hash === '#/tasks/' + task.id);
+  await expect(page.getByRole('heading', {name:'Task draft'})).toBeVisible();
+  await expect(page.getByRole('textbox', {name:'Request', exact:true})).toHaveValue('Editorial checklist for the task link');
+});

@@ -8,6 +8,7 @@ Run `make eval-chat` from the repository root. Each case starts its own Weft API
 | PullRequest | Two loopback repositories both contain PR 418. “o do mobile” prepares a review of the chosen head. No diff is read and no comments are published. |
 | AgentCreation | The definition covers the requested release-review work. The catalog changes only on confirmation. Replaying confirmation leaves exactly one published version. |
 | UnavailableRead | An unreadable SQLite task record makes the running-task query unavailable. The session retains a retryable diagnostic without reporting zero matches. |
+| TaskLink | A viewer asks for a task link by ID and then asks for it again by reference. Both replies identify the same verified task. A missing ID returns no link, even when another task has that ID as its title. |
 
 ## Run the same cases with your Codex subscription
 

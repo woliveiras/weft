@@ -67,6 +67,12 @@ When a connection needs browser OAuth, follow the Chat link to Connections and c
 
 ## Follow a task
 
+To open a specific task from Chat, ask “Me de o link para a task `tsk_…`”
+with its exact ID. **Open task** takes you to the task’s Overview. Chat
+checks that the ID exists before showing the link. It can do this without
+reading the task’s execution state. If the previous reply identified one
+task, you can refer to it by asking for its link in the same conversation.
+
 Ask Chat to show the current state of a task or follow it until it settles.
 Use a task ID or part of its title. For example, “Let me know when my
 release notes review finishes.” If several tasks match, choose one in the

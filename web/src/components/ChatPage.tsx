@@ -1040,9 +1040,12 @@ function ReviewDecisionControls({expiresAt, now, canConfirm, confirmLabel, onDec
 }
 
 function TaskLink({task, message, onView}: {task:ChatTask; message:string; onView:(anchor:string)=>void}) {
+  const anchor = `chat-task-${message}`;
+  if (task.linkOnly) return <div className="chat-evidence">
+    <a id={anchor} href={taskSectionLink(task.id,'overview')} onClick={() => onView(anchor)}>Open task</a>
+  </div>;
   const result = task.executionId && (task.settledBlock || ['succeeded','failed','cancelled','interrupted'].includes(task.state));
   const target = result ? 'changes' : 'overview';
-  const anchor = `chat-task-${message}`;
   return <div className="chat-evidence">
     {!!task.repositories?.length && <section aria-label="Repository evidence">
       <h4>Repositories</h4>

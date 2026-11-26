@@ -535,6 +535,12 @@ recoverable after reopening. Only reviewed and authorized domain actions
 may change Weft. Installation summaries without individual target IDs keep
 their existing inspection semantics.
 
+A request for a task detail link resolves the explicit task ID or a single
+verified task referred to in the immediately preceding reply. Chat checks
+for that exact record under the same viewer access as Task Details and opens
+its Overview. A missing or conflicting ID yields no link. A detail link does
+not need an execution snapshot or create a watch.
+
 ### AC-011 — Complete an operator journey from the conversation
 
 Starting with an objective and an authorized identity, the user can identify

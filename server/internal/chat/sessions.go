@@ -39,6 +39,7 @@ type Message struct {
 }
 
 type TaskSummary struct {
+	LinkOnly          bool                 `json:"linkOnly,omitempty"`
 	Repositories      []RepositoryEvidence `json:"repositories,omitempty"`
 	OtherRepositories int                  `json:"otherRepositories,omitempty"`
 	RetryOf           string               `json:"retryOf,omitempty"`

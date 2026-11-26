@@ -3167,6 +3167,7 @@ components:
           properties:
             id: {type: string}
             state: {type: string}
+            linkOnly: {type: boolean, description: A verified task reference for opening its details without a runtime snapshot. State is empty for this reference.}
             graphId: {type: string}
             executionId: {type: string}
             decisionNeeded: {type: boolean}

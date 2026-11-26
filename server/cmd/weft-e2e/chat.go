@@ -32,6 +32,15 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 	if last.Role != llm.RoleUser {
 		return nil, errors.New("expected a Chat fixture user message")
 	}
+	if taskID, ok := strings.CutPrefix(last.Content, "Me de o link para a task "); ok {
+		arguments, err := json.Marshal(map[string]string{"task": taskID, "taskView": "link"})
+		if err != nil {
+			return nil, err
+		}
+		return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{
+			ID: "task-link-fixture", Name: "inspect_task", Arguments: arguments,
+		}}}}, nil
+	}
 	var toolName, arguments string
 	switch last.Content {
 	case "Quantas tarefas foram finalizadas com sucesso?":

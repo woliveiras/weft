@@ -161,7 +161,8 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 	if !claim.IsZero() {
 		ctx, cancel := context.WithTimeout(r.Context(), 50*time.Second)
 		defer cancel()
-		history := chatSessionForRole(actor, session).Context(requestID)
+		visibleSession := chatSessionForRole(actor, session)
+		history := visibleSession.Context(requestID)
 		var answer chat.Interpretation
 		directive := ""
 		lastInput := ""
@@ -207,6 +208,9 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 			} else {
 				plan := turn.Plan
 				plan, clarification := groundChatPRPlan(plan, lastInput, requestID, session, actor)
+				if plan.Kind == chat.InspectTask && plan.TaskView == chat.TaskLinkView && !chat.MatchesTaskLinkTarget(lastInput, plan.Task, visibleSession.PriorTaskLinkTarget(requestID)) {
+					clarification = "Which task should I link? Enter the exact ID of one task."
+				}
 				if clarification != "" {
 					answer = chat.Interpretation{Plan: chat.Plan{Kind: chat.Clarify, Title: plan.Title}, Text: clarification}
 				} else {
@@ -277,6 +281,9 @@ func (s *Server) callTurnModel(ctx context.Context, actor Identity, req *llm.Cha
 }
 
 func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID string, plan chat.Plan) chat.Interpretation {
+	if plan.Kind == chat.InspectTask && plan.TaskView == chat.TaskLinkView {
+		return s.linkChatTask(ctx, actor, plan)
+	}
 	return s.discoverChatPlan(ctx, actor, sessionID, plan)
 }
 

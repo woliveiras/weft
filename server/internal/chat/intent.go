@@ -55,6 +55,7 @@ type Plan struct {
 	PRSelector            PRSelector
 	Kind                  string `json:"kind"`
 	Task                  string `json:"task,omitempty"`
+	TaskView              string `json:"taskView,omitempty"`
 	Question              string `json:"question,omitempty"`
 	Title                 string `json:"title,omitempty"`
 	Document              string
@@ -219,6 +220,8 @@ func decodePlan(body string) (Plan, error) {
 			plan.Kind = value
 		case "task":
 			plan.Task = value
+		case "taskView":
+			plan.TaskView = value
 		case "taskAuthorizationMode":
 			plan.TaskAuthorizationMode = taskauth.Mode(value)
 		case "approvalId":
@@ -320,6 +323,9 @@ func decodePlan(body string) (Plan, error) {
 		return Plan{}, ErrInvalidPlan
 	}
 	if seen["taskAuthorizationMode"] && plan.Kind != AuthorizeTask {
+		return Plan{}, ErrInvalidPlan
+	}
+	if seen["taskView"] && (plan.Kind != InspectTask || plan.TaskView != TaskLinkView || !taskconfig.ValidID(plan.Task)) {
 		return Plan{}, ErrInvalidPlan
 	}
 	if plan.Kind != PlanInstallation && (seen["document"] || seen["intakeConsent"]) {

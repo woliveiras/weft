@@ -21,6 +21,9 @@ const prefix = "tasks/drafts/"
 var validID = regexp.MustCompile(`^tsk_[a-z0-9]{1,80}$`)
 var ErrInvalid = errors.New("invalid task")
 
+// ValidID reports whether id has the canonical task identifier format.
+func ValidID(id string) bool { return validID.MatchString(id) }
+
 var scmName = regexp.MustCompile(`^[a-z0-9]([a-z0-9._-]{0,61}[a-z0-9])?$`)
 
 type Input struct {
@@ -142,7 +145,7 @@ func decode(rec *storage.Setting) (*Draft, error) {
 	return &d, nil
 }
 func (m Manager) Get(ctx context.Context, id string) (*Draft, error) {
-	if !validID.MatchString(id) {
+	if !ValidID(id) {
 		return nil, storage.ErrNotFound
 	}
 	rec, err := m.Store.GetSetting(ctx, prefix+id)
