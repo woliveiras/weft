@@ -1,3 +1,4 @@
+import { downloadYaml } from './downloadYaml';
 import { useEffect, useRef, useState } from 'react';
 import { parse, stringify } from 'yaml';
 import { api, errorMessage } from '../api/client';
@@ -148,10 +149,5 @@ export function YamlEditor({
 /** The export endpoint needs the bearer token, so download via fetch + blob rather than a plain link. */
 async function download(gid: string) {
   const text = await api.exportGraph(gid, 'yaml');
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/yaml' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${gid}.yaml`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadYaml(text, `${gid}.yaml`);
 }

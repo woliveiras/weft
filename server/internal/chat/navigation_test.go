@@ -30,3 +30,16 @@ func TestManualDestinationRequiresOneKnownPage(t *testing.T) {
 		}
 	}
 }
+
+func TestChatConfigurationExportRequiresAdministrator(t *testing.T) {
+	plan, err := decodePlan(`{"kind":"manual.open","destination":"configuration-export"}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []config.Role{config.RoleViewer, config.RoleOperator, config.RoleAdmin} {
+		got := ManualHandoff(plan, role)
+		if (got.Destination == "configuration-export") != (role == config.RoleAdmin) || got.Review != nil {
+			t.Fatalf("role %s: %+v", role, got)
+		}
+	}
+}

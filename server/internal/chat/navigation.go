@@ -7,7 +7,7 @@ func ManualDestination(name string) bool {
 	switch name {
 	case "tasks", "workflows", "agents", "projects", "activity", "approvals",
 		"models", "chat-model", "plugins", "usage", "budgets", "prices",
-		"connections", "connection-setup", "skills", "administration":
+		"connections", "connection-setup", "skills", "administration", "configuration-export":
 		return true
 	default:
 		return false
@@ -22,6 +22,13 @@ func ManualHandoff(plan Plan, role config.Role) Interpretation {
 	}
 	reply.Destination = plan.Destination
 	switch plan.Destination {
+	case "configuration-export":
+		if !role.Allows(config.RoleAdmin) {
+			reply.Destination = ""
+			reply.Text = "An administrator can download the installation configuration."
+		} else {
+			reply.Text = "Download the current installation configuration as YAML. The export uses preservation markers for stored credentials."
+		}
 	case "connection-setup":
 		if role.Allows(config.RoleAdmin) {
 			reply.Text = "Open the connection form to choose the integration and enter credentials there."

@@ -39,3 +39,23 @@ func TestChatManualHandoffPersistsRoleAppropriateDestination(t *testing.T) {
 		}
 	}
 }
+
+func TestOfflineConfigurationDownloadDoesNotCopyYAMLIntoChat(t *testing.T) {
+	srv := setup(t)
+	const route = "/api/v1/chat/sessions"
+	const body = `{"requestId":"8125e80ce56b4b50a83981d63b1a811b","text":"/export"}`
+	for _, token := range []string{adminTok, viewerTok} {
+		var session chat.Session
+		if status := call(t, srv, "POST", route, token, "application/json", body, &session); status != 200 || len(session.Messages) != 2 {
+			t.Fatalf("status %d", status)
+		}
+		m := session.Messages[1]
+		if (m.Destination == "configuration-export") != (token == adminTok) || m.Review != nil {
+			t.Fatalf("export message %+v", m)
+		}
+	}
+	if code := call(t, srv, "GET", "/api/v1/config/export", viewerTok, "", "", nil); code != 403 {
+		t.Fatalf("export accepted viewer: %d", code)
+	}
+	_ = exportConfig(t, srv)
+}

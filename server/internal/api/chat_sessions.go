@@ -170,7 +170,9 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 			lastInput = history[len(history)-1].Content
 			directive = chat.ExplicitReviewDirective(lastInput)
 		}
-		if explicit, ok := chat.ExplicitInspection(lastInput); ok {
+		if strings.TrimSpace(lastInput) == "/export" {
+			answer = chat.ManualHandoff(chat.Plan{Kind: chat.OpenManual, Destination: "configuration-export", Title: "Export configuration"}, actor.Role)
+		} else if explicit, ok := chat.ExplicitInspection(lastInput); ok {
 			answer = explicit
 			if explicit.Plan.Kind == chat.InspectConsole {
 				answer = s.inspectChatConsole(ctx, actor, explicit.Plan)

@@ -1,3 +1,7 @@
+import { useState } from 'react';
+import { api, errorMessage } from '../api/client';
+import { Btn, ErrorBox } from './common';
+import { downloadYaml } from './downloadYaml';
 import { leaveChatForConnection } from './chatConnectionReturn';
 
 const destinations = new Map<string, [string, string]>([
@@ -24,6 +28,7 @@ export function ChatManualLink({ destination, message, onView }: {
   message: string;
   onView: (anchor: string) => void;
 }) {
+  if (destination === 'configuration-export') return <InstallationDownload/>;
   const target = destinations.get(destination);
   if (!target) return null;
   const [label, href] = target;
@@ -32,4 +37,22 @@ export function ChatManualLink({ destination, message, onView }: {
     if (destination === 'connections' || destination === 'connection-setup') leaveChatForConnection(location.hash, message);
     onView(anchor);
   }}>Open {label}</a>;
+}
+
+function InstallationDownload() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  async function download() {
+    setBusy(true);
+    setError(undefined);
+    try {
+      downloadYaml(await api.exportInstallation(), 'installation.yaml');
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <><Btn disabled={busy} onClick={() => void download()}>Download installation YAML</Btn>
+    {error && <ErrorBox error={error}/>}</>;
 }

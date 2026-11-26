@@ -274,6 +274,7 @@ export const api = {
   validateGraph: (g: GraphInput) =>
     request<ValidationResult>(`${V1}/graphs/validate`, { method: 'POST', ...graphBody(g) }),
   graphVersions: (id: string) => request<GraphVersion[]>(`${V1}/graphs/${enc(id)}/versions`),
+  exportInstallation: () => request<string>(`${V1}/config/export`, {text:true}),
   exportGraph: (id: string, format: 'yaml' | 'json' = 'yaml') =>
     request<string>(`${V1}/graphs/${enc(id)}/export`, { query: { format }, text: true }),
   exportUrl: (id: string, format: 'yaml' | 'json' = 'yaml') => `${V1}/graphs/${enc(id)}/export?format=${format}`,

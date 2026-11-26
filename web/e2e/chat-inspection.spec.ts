@@ -19,3 +19,16 @@ test('reads the current workflow inventory in a conversation', async ({page, req
   await page.goBack();
   await expect(link).toBeFocused();
 });
+
+test('downloads installation YAML from the original export route without putting YAML into Chat', async ({page}) => {
+  await page.addInitScript(() => localStorage.setItem('weftToken','e2e-admin-token'));
+  await page.goto('/');
+  await page.getByRole('textbox',{name:'Message'}).fill('/export');
+  await page.getByRole('button',{name:'Send', exact:true}).click();
+  const downloaded = page.waitForEvent('download');
+  const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/v1/config/export');
+  await page.getByRole('button',{name:'Download installation YAML'}).click();
+  expect((await downloaded).suggestedFilename()).toBe('installation.yaml');
+  expect((await response).status()).toBe(200);
+  await expect(page.getByLabel('Conversation',{exact:true})).not.toContainText('apiVersion:');
+});
