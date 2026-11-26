@@ -6,8 +6,10 @@ panel from **Sessions**.
 
 ## Choose the model
 
-An administrator selects a configured provider and model in
-**Models → Chat model**. The console opens stored conversations and manual
+An administrator can select a configured provider and model directly in Chat.
+Choose **Choose Chat model here** during first use, or send `/inspect chat-model`
+and use that action in the reply. **Save Chat model** keeps the current conversation
+and unsent message. The same setting is available in **Models → Chat model**. The console opens stored conversations and manual
 pages without a usable model. If interpretation becomes unavailable, use
 **Retry saved request** after restoring the model or budget. Supply provider
 credentials only in the existing Models configuration form.

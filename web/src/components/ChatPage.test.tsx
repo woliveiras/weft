@@ -18,6 +18,29 @@ it('offers an offline setup path and distinguishes shared local history', async 
   fireEvent.change(screen.getByRole('textbox',{name:'Message'}),{target:{value:'Follow a task'}});
   expect((screen.getByRole('button',{name:'Send'}) as HTMLButtonElement).disabled).toBe(true);
   expect(backend.find('POST',paths)).toHaveLength(0);
+  expect(screen.queryByRole('button',{name:'Choose Chat model here'})).toBeNull();
+});
+
+it('configures the model in Chat without inference and keeps the unsent request', async () => {
+  const backend = fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'unconfigured',revision:0}),
+    'GET /api/v1/providers': () => [{name:'local',type:'mock',status:'configured',defaultModel:'fixture'}],
+    'PUT /api/v1/chat/settings': () => ({model:{provider:'local',name:'fixture'},status:'configured',revision:1}),
+    [`GET ${paths}`]: () => ({items:[]}),
+  });
+  render(<ChatPage archived={false} canCreateAgent onOpen={vi.fn()}/>);
+  const message = screen.getByRole('textbox',{name:'Message'});
+  fireEvent.change(message,{target:{value:'Inspect the release'}});
+  fireEvent.click(await screen.findByRole('button',{name:'Choose Chat model here'}));
+  await screen.findByRole('option',{name:'local'});
+  fireEvent.change(screen.getByLabelText('Provider'),{target:{value:'local'}});
+  fireEvent.change(screen.getByLabelText('Model ID'),{target:{value:'fixture'}});
+  fireEvent.click(screen.getByRole('button',{name:'Save Chat model'}));
+  await screen.findByText('Chat model saved.');
+  expect(message).toHaveProperty('value','Inspect the release');
+  expect(screen.getByRole('button',{name:'Send'})).toHaveProperty('disabled',false);
+  expect(backend.find('PUT','/api/v1/chat/settings')[0].headers['If-Match']).toBe('0');
+  expect(backend.find('POST',paths)).toHaveLength(0);
 });
 
 it('shows simultaneous running and unread success cues with metadata and keyboard access', async () => {

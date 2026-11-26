@@ -1,3 +1,4 @@
+import { ChatModelSection } from './ChatModelSection';
 import { ChatSkillCard } from './ChatSkillCard';
 import { runLink } from './runPresentation';
 import { ChatPRCard } from './ChatPRCard';
@@ -45,6 +46,12 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   }, [id, archived, newDraft]);
   const [error, setError] = useState<string>();
   const [drawer, setDrawer] = useState(false);
+  const [modelEditorOpen, setModelEditorOpen] = useState(false);
+  const modelPanel = useRef<HTMLDivElement>(null);
+  const openModelEditor = () => {
+    setModelEditorOpen(true);
+    window.requestAnimationFrame(() => modelPanel.current?.focus());
+  };
   const [details, setDetails] = useState<string>();
   const [now, setNow] = useState(Date.now);
   const keys = useRef(new Map<string, {id:string; text:string}>());
@@ -207,6 +214,15 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
         <a href="#/models/chat">Open Chat model settings</a>
         {' or '}<a href="#/tasks">open Tasks</a>. Use <code>/inspect</code> to see available read-only queries.
       </p>}
+      {!MOCK && canCreateAgent && !modelAvailable && !modelEditorOpen && settings.data &&
+        <Btn onClick={openModelEditor}>Choose Chat model here</Btn>}
+      {!MOCK && canCreateAgent && modelEditorOpen && <div ref={modelPanel} tabIndex={-1}>
+        <ChatModelSection canEdit onSaved={settings.setData}/>
+        <Btn onClick={() => {
+          setModelEditorOpen(false);
+          heading.current?.focus();
+        }}>Close model settings</Btn>
+      </div>}
       {id && !session && conversation.loading && <p role="status">Loading conversation…</p>}
       {id && conversation.error && <><ErrorBox error={session ? conversation.error : 'Conversation unavailable.'}/>
         <Btn onClick={() => void conversation.reload()}>Retry loading conversation</Btn></>}
@@ -218,6 +234,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       <div className="chat-transcript" aria-label="Conversation">
         {session?.messages.map(message => <Message key={message.id} value={message}
           now={now} canCreateAgent={canCreateAgent && !sending} canOperate={canOperate && !sending}
+          onModelSettings={canCreateAgent ? openModelEditor : undefined}
           onDecide={(review, decision) => void mutate(() => api.decideChatReview(session.id, review.id, review.digest, decision))}
           onView={anchor => { evidence.current = anchor; }}
           onRead={() => void markRead(message.id)}
@@ -312,7 +329,8 @@ function SessionRow({item, current, expanded, onOpen, onDetails}: {
   </li>;
 }
 
-function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetry, onDecide}: {
+function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetry, onDecide, onModelSettings}: {
+  onModelSettings?:()=>void;
   value:ChatMessage; now:number; canCreateAgent:boolean; canOperate:boolean; onView:(anchor:string)=>void; onRead:()=>void;
   onRetry?:()=>void; onDecide:(review:ChatOperationReview, decision:'confirm'|'decline')=>void;
 }) {
@@ -332,6 +350,7 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
   return <article className={`chat-message chat-message-${value.role}`} ref={panel}>
     <span className="small muted">{value.role === 'user' ? 'You' : 'Weft'}</span>
     <p>{value.text}</p>
+    {value.destination === 'chat-model' && onModelSettings && <Btn onClick={onModelSettings}>Choose Chat model here</Btn>}
     {value.destination && <ChatManualLink destination={value.destination} message={value.id} onView={onView}/>}
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
     {onRetry && <Btn onClick={onRetry}>Retry saved request</Btn>}

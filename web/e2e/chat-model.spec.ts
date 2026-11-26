@@ -32,3 +32,25 @@ test('an administrator selects the Chat model and a viewer sees the persisted ch
     await viewer.close();
   }
 });
+
+test('changes the model from a conversation and preserves the pending request', async ({page}) => {
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.goto('/#/chat');
+  const composer = page.getByRole('textbox',{name:'Message',exact:true});
+  await composer.fill('/inspect chat-model');
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page).toHaveURL(/#\/chat\/[a-z0-9]+$/);
+  const session = page.url();
+  await composer.fill('Keep this request');
+  await page.getByRole('button',{name:'Choose Chat model here'}).last().click();
+  const form = page.getByRole('form',{name:'Chat model selection'});
+  const field = form.getByLabel('Model ID');
+  const before = await field.inputValue();
+  await form.getByLabel('Provider').selectOption('e2e');
+  await field.fill(before === 'fixture' ? 'fixture-other' : 'fixture');
+  await form.getByRole('button',{name:'Save Chat model'}).click();
+  await expect(page.getByText('Chat model saved.')).toBeVisible();
+  await page.getByRole('button',{name:'Close model settings'}).click();
+  await expect(page).toHaveURL(session);
+  await expect(composer).toHaveValue('Keep this request');
+});

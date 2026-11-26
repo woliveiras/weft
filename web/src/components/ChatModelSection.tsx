@@ -4,7 +4,7 @@ import type { ChatModelSettings } from '../api/types';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox } from './common';
 
-export function ChatModelSection({ canEdit }: { canEdit: boolean }) {
+export function ChatModelSection({ canEdit, onSaved }: { canEdit: boolean; onSaved?: (settings: ChatModelSettings) => void }) {
   const settings = useAsync(api.chatModelSettings, []);
   const [saved, setSaved] = useState(false);
   return <section className="card" aria-labelledby="chat-model-heading" aria-busy={settings.loading}>
@@ -18,7 +18,7 @@ export function ChatModelSection({ canEdit }: { canEdit: boolean }) {
         : <p>No Chat model selected.</p>}
       {settings.data.status === 'unavailable' && <p role="status">The selected provider is unavailable. {canEdit ? 'Select an available provider below.' : 'Contact an administrator.'}</p>}
       {canEdit && <ChatModelForm key={settings.data.revision} settings={settings.data}
-        onSaved={next => { settings.setData(next); setSaved(true); }}
+        onSaved={next => { settings.setData(next); setSaved(true); onSaved?.(next); }}
         onReload={() => { setSaved(false); void settings.reload(); }}
         refreshing={settings.loading} />}
     </>}
