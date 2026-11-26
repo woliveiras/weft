@@ -22,3 +22,17 @@ func TestChatInstallationReviewIsHiddenAfterLossOfAdminRole(t *testing.T) {
 		}
 	}
 }
+
+func TestChatSessionFiltersHistoricalAuthorizationAndContextWithoutChangingStorage(t *testing.T) {
+	auth := &chat.OperationReview{TaskAuthorization: &chat.TaskAuthorization{}}
+	session := &chat.Session{Messages: []chat.Message{{ID: "old", Role: "assistant", Review: auth}}}
+	for _, role := range []config.Role{config.RoleViewer, config.RoleOperator} {
+		projected := chatSessionForRole(Identity{Role: role}, session)
+		if projected.Messages[0].Review != nil || projected.Messages[0].Text == "" {
+			t.Fatal("retained historical consent", role)
+		}
+	}
+	if chatSessionForRole(Identity{Role: config.RoleAdmin}, session).Messages[0].Review != auth {
+		t.Fatal("stored review lost")
+	}
+}

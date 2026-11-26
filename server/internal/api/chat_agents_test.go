@@ -3,12 +3,15 @@ package api_test
 import (
 	"context"
 	"fmt"
+	"github.com/woliveiras/weft/server/internal/api"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/woliveiras/weft/server/internal/agentcatalog"
 	"github.com/woliveiras/weft/server/internal/chat"
+	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/llm"
 )
 
@@ -140,5 +143,37 @@ func TestChatAgentReviewCreatesOneCatalogVersion(t *testing.T) {
 		`{"requestId":"2a154ae9cee7436ca37f848ef78c450e","text":"Create a change calendar reader."}`, &budgetBlocked); status != http.StatusOK ||
 		len(budgetBlocked.Messages) != 2 || budgetBlocked.Messages[0].State != "unavailable" || budgetBlocked.Messages[1].Review != nil {
 		t.Fatalf("unpriced with budget: %d %+v", status, budgetBlocked.Messages)
+	}
+}
+
+func TestHistoricalChatOperationUsesCurrentRoleOfSamePrincipal(t *testing.T) {
+	srv, app := setupApp(t, nil)
+	deps := app.API.Deps
+	auth, err := api.NewAuthenticator(config.Auth{Tokens: []config.Token{{Name: "admin", Token: operatorTok, Role: config.RoleOperator}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps.Auth = auth
+	downgraded := httptest.NewServer(api.New(deps).Handler())
+	defer downgraded.Close()
+	if err := app.Models.ReplaceProviders([]llm.Entry{{Config: llm.ProviderConfig{Name: "chat-fixture", Type: "mock"}, Provider: chatAgentFixture{}}}, "chat-fixture"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Store.PutSetting(t.Context(), "chat/model", []byte(`{"provider":"chat-fixture","name":"fixture"}`), 0, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	const id = "3e6251d203394743abbc6250fc5fc3ff"
+	const route = "/api/v1/chat/sessions"
+	var original chat.Session
+	if code := call(t, srv, "POST", route, adminTok, "application/json", `{"requestId":"`+id+`","text":"Create a release reader."}`, &original); code != 200 || len(original.Messages) != 2 || original.Messages[1].Review == nil {
+		t.Fatal(code, original)
+	}
+	var lower chat.Session
+	if code := call(t, downgraded, "GET", route+"/"+id, operatorTok, "", "", &lower); code != 200 || len(lower.Messages) != 2 || lower.Messages[1].Review != nil || lower.Messages[0].Text != original.Messages[0].Text {
+		t.Fatal(code, lower)
+	}
+	var restored chat.Session
+	if code := call(t, srv, "GET", route+"/"+id, adminTok, "", "", &restored); code != 200 || restored.Messages[1].Review == nil {
+		t.Fatal(code, restored)
 	}
 }

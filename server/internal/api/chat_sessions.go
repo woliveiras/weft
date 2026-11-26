@@ -162,7 +162,7 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 	if !claim.IsZero() {
 		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 		defer cancel()
-		history := session.Context(requestID)
+		history := chatSessionForRole(actor, session).Context(requestID)
 		var answer chat.Interpretation
 		directive := ""
 		lastInput := ""

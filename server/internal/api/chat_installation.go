@@ -153,6 +153,10 @@ func hydrateChatProjectSettings(docs []installation.Document, snapshot map[strin
 // The owner may have changed role since a proposal was prepared. All routes
 // returning a session use this projection, including read and title updates.
 func writeChatSession(w http.ResponseWriter, actor Identity, session *chat.Session) {
+	writeJSON(w, http.StatusOK, chatSessionForRole(actor, session))
+}
+
+func chatSessionForRole(actor Identity, session *chat.Session) *chat.Session {
 	if !actor.Role.Allows(config.RoleAdmin) {
 		projection := *session
 		projection.Messages = slices.Clone(session.Messages)
@@ -183,7 +187,11 @@ func writeChatSession(w http.ResponseWriter, actor Identity, session *chat.Sessi
 				message.Review = nil
 				message.Text = "Administrator access is required to view this installation review."
 			}
+			if message.Review != nil && !actor.Role.Allows(reviewDecisionRole(message.Review)) {
+				message.Review = nil
+				message.Text = "Your current role does not have access to this operation review."
+			}
 		}
 	}
-	writeJSON(w, http.StatusOK, session)
+	return session
 }
