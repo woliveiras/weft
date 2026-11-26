@@ -1,8 +1,6 @@
 # Weft web console
 
-The operator console for Weft: a visual graph editor, read-only workspace
-browser, node and channel inspectors, human-in-the-loop approvals, the event
-timeline and a message explorer that walks a workflow's causal chain.
+The console opens on Chat. The conversation occupies the main workspace, with indexed Recents and Archived sessions on the right. Chat polls owner-scoped summaries and the selected transcript. The manual console includes the graph editor, workspace browser, approval queue and execution views. Review cards link to those views and preserve the originating conversation. [Operator guide](../docs/features/chat/README.md).
 
 React 19 + TypeScript (strict) + Vite, with `@xyflow/react` for the canvas,
 `@dagrejs/dagre` for auto-layout and `yaml` for the definition editor. There

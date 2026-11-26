@@ -1,5 +1,7 @@
 # Tasks
 
+From Chat, ask to draft or correct a task, prepare its environment, review authorization, start it, or follow it while working in another conversation. Keep the task ID when comparing evidence for a retry with the original attempt. [Chat guide](../chat/README.md).
+
 A task combines a work request with a reviewed workflow version and records its
 own execution. Its normal entry is **Tasks → New task** (`#/tasks/new`). Existing
 requests open at `#/tasks/<id>`. The list searches title, task ID and issue and

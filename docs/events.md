@@ -116,6 +116,10 @@ be stored before proceeding.
 `stop` and `kill` emit `graph.stopping` immediately; `graph.stopped` follows when the last replica
 has drained.
 
+## Conversational console updates
+
+The browser polls the owner's Chat session and Recents endpoints for progress, unread results and decisions. An observer reads canonical task and operation state even when the browser is closed. The public event stream carries existing domain events. It excludes conversation text, generated titles and private unread markers. To inspect a result after reconnecting, reopen the conversation and follow its link to the native receipt. [Chat API](api.md#chat-sessions).
+
 ## Installation and task audit events
 
 | Type | Data |

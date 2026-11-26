@@ -1,5 +1,7 @@
 # Activity, runs and evidence inspection
 
+From Chat, use `/inspect activity` to find active work and `/inspect execution <id>` for an exact execution. **View execution** opens its native evidence. Use the steps below for the full activity and run views.
+
 This journey answers what is running, what needs a decision and what actually
 happened. It does not start work merely because a record is opened.
 

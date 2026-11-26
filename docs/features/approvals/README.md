@@ -1,5 +1,7 @@
 # Approvals and human decisions
 
+Chat can review a pending native request and record an authorized answer or decision. Open Approvals for the full queue and protected application evidence. [Chat guide](../chat/README.md).
+
 **Work → Approvals** (`#/approvals`) brings pending requests and previous
 outcomes into a table. Search, status, request-type and workflow filters narrow
 the loaded scope. Newest requests appear first. Filtering a bounded recent

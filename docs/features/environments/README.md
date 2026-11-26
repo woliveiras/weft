@@ -1,5 +1,7 @@
 # Environments and command execution
 
+For a saved task, Chat can review a build, request it and report its readiness. Starting the task against that build requires a separate review. This guide describes the environment and its full manual controls.
+
 An environment prepares the toolchain image and setup required by Docker-isolated
 commands. It is distinct from model-provider execution, repository storage,
 task authorization and the host where Weft itself runs.

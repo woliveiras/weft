@@ -2,6 +2,12 @@
 
 Allowed transitions are declared in `server/internal/domain/state.go` (`CanTransition`). The engine drives them in `engine/` and `hitl/`. Every replica, execution and approval transition emits an event (`replica.state_changed`, `execution.*`, `approval.*`).
 
+## Chat sessions and operations
+
+Archive and read status belong to the conversation. Archiving removes a session from Recents and preserves its watches. One unread result can coexist with another running operation in the same conversation.
+
+A review begins in `awaiting_confirmation`. The server can record a decline, refuse an expired or stale review, or claim it as `applying`. An accepted runtime command has a durable request. The worker then observes the owning service. A consumed one-time instruction, a terminal execution and an applied configuration each require their own evidence. Loss of a receipt can leave an unknown outcome. [Operator guide](features/chat/README.md).
+
 ## Graph run
 
 ```mermaid

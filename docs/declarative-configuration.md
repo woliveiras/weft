@@ -1,5 +1,7 @@
 # Declarative installation configuration
 
+Administrators can request the same plan and apply from Chat and download a fresh YAML snapshot with `/export`. The conversation records the reviewed revisions and per-object outcome, including partial application. [Chat guide](features/chat/README.md).
+
 An administrator can configure Weft from YAML, review a field diff, apply the
 reviewed changes and export the installation. The console remains editable.
 This is application configuration, not bootstrap authentication or deployment.

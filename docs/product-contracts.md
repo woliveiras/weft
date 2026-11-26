@@ -34,6 +34,8 @@ approvals; see [review API](api.md#durable-application-reviews),
 [tool yield/continuation](runtime-protocol.md#yielding-for-durable-human-review)
 and [gateway operations](sandbox-runtime.md#human-review-and-application-previews).
 
+Chat is the default console entry. Its transcripts and session lists belong to one authenticated identity. The auth-disabled profile uses a labeled, shared local history. Conversation retention includes archived sessions and has no automatic expiration. An action requested in Chat uses the current role and the resource’s native checks. The administrator selects a Chat model separately and inference is accounted for under the applicable budgets. [Chat API](api.md#chat-sessions).
+
 ## 2. Contract Conventions
 
 - JSON field names are `camelCase`; event metadata keys retain their existing

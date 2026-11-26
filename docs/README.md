@@ -9,6 +9,7 @@ should use [Contributing](../CONTRIBUTING.md) for toolchains and checks.
 | Task | Documentation |
 | --- | --- |
 | Inspect complete feature flows, prerequisites, save boundaries and recovery without opening the console | [Feature flow inventory](features/README.md) |
+| Operate Weft in a conversation, review proposed changes and track work in the background | [Chat](features/chat/README.md) |
 | Navigate the console and inspect runs | [Console navigation](interface-navigation.md) |
 | Create tasks, register projects and follow issue-triggered work | [Task workflows](task-workflows.md), [task authorization](task-authorization.md) |
 | Configure the installation | [Configuration](configuration.md) |

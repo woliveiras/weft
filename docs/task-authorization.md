@@ -1,5 +1,7 @@
 # Task authorization
 
+Chat can present and confirm the authorization scope of an exact task attempt. The server rechecks the task scope and authorization revision. Running tasks permit only the reductions allowed by the task authorization service. [Chat guide](features/chat/README.md).
+
 Task consent and execution isolation are independent. Modes do not grant tools,
 change credentials, expand child permissions or override installation policy.
 

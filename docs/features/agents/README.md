@@ -1,5 +1,7 @@
 # Agents
 
+In Chat, specify whether a change should guide a single running turn, edit a node in one workflow, or publish a reusable agent version. Publishing and adopting that version on a workflow are separate reviews. [Chat guide](../chat/README.md).
+
 The catalogue at `#/agents` lists reusable agents as cards: icon, name, short
 description and latest published version. Search includes name, ID, description
 and origin workflow. Open a card for that agent's configuration; **New agent**
