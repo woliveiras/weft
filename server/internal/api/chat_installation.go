@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
@@ -28,6 +29,7 @@ func (s *Server) reviewChatInstallation(ctx context.Context, actor Identity, id 
 		out.Text, out.Retryable = "Could not read the installation configuration. Retry the saved request.", true
 		return out
 	}
+	docs = hydrateChatProjectSettings(docs, snapshot)
 	in := installation.Request{Revisions: map[string]string{}, RecordConsent: proposal.IntakeConsent}
 	for _, doc := range docs {
 		if doc.Revision() != "" {
@@ -79,6 +81,16 @@ func (s *Server) applyReviewedChatInstallation(ctx context.Context, actor Identi
 	if err != nil {
 		return s.chatStore().FinishReview(ctx, actor.chatOwner, id, review.ID, chat.ReviewConflict, 0)
 	}
+	for _, doc := range docs {
+		if partialChatProject(doc) {
+			snapshot, err := s.configSnapshot(ctx)
+			if err != nil {
+				return s.chatStore().FinishReview(ctx, actor.chatOwner, id, review.ID, chat.ReviewUnknown, 0)
+			}
+			docs = hydrateChatProjectSettings(docs, snapshot)
+			break
+		}
+	}
 	revisions := map[string]string{}
 	for _, obj := range decision.Objects {
 		revisions[obj.Key] = obj.Revision
@@ -104,6 +116,38 @@ func (s *Server) applyReviewedChatInstallation(ctx context.Context, actor Identi
 		receipts = append(receipts, chat.ConfigReceipt{Key: obj.Key, Result: outcome, Revision: obj.Revision})
 	}
 	return s.chatStore().FinishConfigReview(ctx, actor.chatOwner, id, review.ID, receipts, plan.OK)
+}
+
+func partialChatProject(doc installation.Document) bool {
+	if doc.Kind != "Project" || len(doc.Spec) == 0 {
+		return false
+	}
+	for key := range doc.Spec {
+		if key != "executionMode" && key != "checks" {
+			return false
+		}
+	}
+	return true
+}
+
+// Existing projects can be identified by native ID without repeating source
+// details or settings the operator did not ask to change. Keep hydration out
+// of the persisted proposal. The plan and revision still gate confirmation.
+func hydrateChatProjectSettings(docs []installation.Document, snapshot map[string]configObject) []installation.Document {
+	for i, doc := range docs {
+		if !partialChatProject(doc) {
+			continue
+		}
+		old, ok := snapshot[doc.Key()]
+		if !ok {
+			continue
+		}
+		hydrated := maps.Clone(old.Doc.Spec)
+		maps.Copy(hydrated, doc.Spec)
+		doc.Spec = hydrated
+		docs[i] = doc
+	}
+	return docs
 }
 
 // The owner may have changed role since a proposal was prepared. All routes

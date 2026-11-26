@@ -216,6 +216,14 @@ The card shows when the runtime picked up the message. The runtime can return it
 
 As an administrator, ask for a concrete change such as “Set the task budget to two dollars with an eighty percent warning.” Review the object names, current revisions, field changes and any intake consent before choosing **Apply configuration**. A plan can include up to eight objects. The installation service validates the complete plan before applying its first change.
 
+Use `/inspect projects` to find a registered project ID. Ask for an explicit
+environment preference such as “Set project `prj_…` to prefer sandbox for
+new tasks.” To replace its checks, specify the intended list with each
+command, workspace-relative directory and timeout as applicable. Review the
+changes before applying. Chat uses the saved repository and resolves omitted
+settings on the server. A preference guides future task setup. Checks remain
+subject to each agent's tool permissions when a task uses them.
+
 Each result names the object and its outcome. If a plan stops midway, inspect the applied objects, correct the failure and request a fresh plan. An unknown outcome requires inspection of the installation. Use the existing setup form or installation CLI to enter or rotate credentials. Chat can preserve existing credentials.
 
 ## Archive and access

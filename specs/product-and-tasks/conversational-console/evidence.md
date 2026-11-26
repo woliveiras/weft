@@ -255,3 +255,12 @@ counts received no review. The affected Go packages, TypeScript, 14 component
 checks, OpenAPI parsing, `make lint` and `git diff --check` passed.
 Chromium confirmed both effects and restored focus on return from the selected
 node in the workflow canvas.
+
+## 2026-11-26 — Existing project settings
+
+S40 passed the project settings unit and authenticated HTTP/SQLite checks
+against a registered local Git fixture. A partial preference change used the
+existing source and preserved its checks. A later checks review conflicted
+after a native edit. A fresh plan recorded the exact replacement once while
+preserving the new preference and the same project and commit. Unchanged
+source paths and commands stayed out of the transcript.
