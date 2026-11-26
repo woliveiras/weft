@@ -55,7 +55,7 @@ func (s *Server) reviewChatAgent(ctx context.Context, actor Identity, sessionID 
 	return out
 }
 
-func (s *Server) decideChatAgent(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) decideChatReview(w http.ResponseWriter, r *http.Request) error {
 	actor, err := s.chatOwner(r)
 	if err != nil {
 		return err
@@ -74,7 +74,7 @@ func (s *Server) decideChatAgent(w http.ResponseWriter, r *http.Request) error {
 	if action != "confirm" && action != "decline" {
 		return storage.ErrNotFound
 	}
-	session, err := s.decideStoredChatAgent(ctx, actor, sessionID, r.PathValue("operationID"), input.Digest, action)
+	session, err := s.decideStoredChatReview(ctx, actor, sessionID, r.PathValue("operationID"), input.Digest, action)
 	if errors.Is(err, chat.ErrReviewMismatch) || errors.Is(err, chat.ErrExpiredReview) {
 		return fmt.Errorf("%w: %s", storage.ErrConflict, err)
 	}
@@ -85,30 +85,33 @@ func (s *Server) decideChatAgent(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (s *Server) decideStoredChatAgent(ctx context.Context, actor Identity, sessionID, reviewID, digest, action string) (*chat.Session, error) {
+func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, sessionID, reviewID, digest, action string) (*chat.Session, error) {
 	store := s.chatStore()
 	if action == "decline" {
-		return store.DeclineAgentReview(ctx, actor.chatOwner, sessionID, reviewID, digest)
+		return store.DeclineReview(ctx, actor.chatOwner, sessionID, reviewID, digest)
 	}
-	session, review, claimed, err := store.ClaimAgentReview(ctx, actor.chatOwner, sessionID, reviewID, digest)
+	session, review, claimed, err := store.ClaimReview(ctx, actor.chatOwner, sessionID, reviewID, digest)
 	if err != nil {
 		return nil, err
 	}
 	if claimed {
-		// The claim has already been saved. Limit the local catalog operation
+		// The claim has already been saved. Limit the local operation
 		// separately from the browser connection and reconcile a lost reply.
 		settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
+		if review.Workflow != nil {
+			return s.applyReviewedChatWorkflow(settleCtx, actor, sessionID, review)
+		}
 		return s.applyReviewedChatAgent(settleCtx, actor, sessionID, review)
 	}
-	return s.reconcileAgentReviews(ctx, actor.chatOwner, session)
+	return s.reconcileChatReviews(ctx, actor.chatOwner, session)
 }
 
-func (s *Server) decideChatAgentFromText(ctx context.Context, actor Identity, session *chat.Session, action string) (chat.Interpretation, error) {
+func (s *Server) decideChatReviewFromText(ctx context.Context, actor Identity, session *chat.Session, action string) (chat.Interpretation, error) {
 	if !actor.Role.Allows(config.RoleAdmin) {
-		return chat.Interpretation{Text: "An administrator must decide catalog agent creation."}, nil
+		return chat.Interpretation{Text: "An administrator must decide this proposal."}, nil
 	}
-	review := session.SinglePendingAgentReview(time.Now())
+	review := session.SinglePendingReview(time.Now())
 	if review == nil {
 		return chat.Interpretation{Text: "This request does not identify one active proposal. Use the action on the specific review or ask for a new review."}, nil
 	}
@@ -116,47 +119,47 @@ func (s *Server) decideChatAgentFromText(ctx context.Context, actor Identity, se
 	// Use the same administrative serialization as the button route.
 	s.configurationMu.Lock()
 	defer s.configurationMu.Unlock()
-	_, err := s.decideStoredChatAgent(ctx, actor, session.ID, review.ID, review.Digest, action)
+	_, err := s.decideStoredChatReview(ctx, actor, session.ID, review.ID, review.Digest, action)
 	if errors.Is(err, chat.ErrExpiredReview) {
 		return chat.Interpretation{Text: "Confirmation expired. Ask for a new review."}, nil
 	}
 	if err != nil {
 		return chat.Interpretation{}, err
 	}
-	return chat.Interpretation{Text: "The review card shows the recorded decision and catalog state."}, nil
+	return chat.Interpretation{Text: "The review card shows the recorded decision and outcome."}, nil
 }
 
-func (s *Server) applyReviewedChatAgent(ctx context.Context, actor Identity, sessionID string, review *chat.AgentReview) (*chat.Session, error) {
+func (s *Server) applyReviewedChatAgent(ctx context.Context, actor Identity, sessionID string, review *chat.OperationReview) (*chat.Session, error) {
 	store := s.chatStore()
 	settings, err := s.readChatModel(ctx)
 	if err != nil {
-		return store.FinishAgentReview(ctx, actor.chatOwner, sessionID, review.ID, chat.ReviewUnknown, 0)
+		return store.FinishReview(ctx, actor.chatOwner, sessionID, review.ID, chat.ReviewUnknown, 0)
 	}
 	if settings.Status != "configured" || settings.Revision != review.ModelRevision ||
 		settings.Model.Provider != review.Definition.Model.Provider || settings.Model.Name != review.Definition.Model.Name {
-		return store.FinishAgentReview(ctx, actor.chatOwner, sessionID, review.ID, chat.ReviewConflict, 0)
+		return store.FinishReview(ctx, actor.chatOwner, sessionID, review.ID, chat.ReviewConflict, 0)
 	}
 	definition := review.Definition
 	if err := s.validateAgentDefinition(ctx, &definition); err != nil || !reflect.DeepEqual(definition, review.Definition) {
-		return store.FinishAgentReview(ctx, actor.chatOwner, sessionID, review.ID, chat.ReviewConflict, 0)
+		return store.FinishReview(ctx, actor.chatOwner, sessionID, review.ID, chat.ReviewConflict, 0)
 	}
 	m := agentcatalog.Manager{Store: s.Store}
 	item, err := m.CreateForOperation(ctx, review.AgentID, definition, actor.Name, review.ID)
 	if err == nil {
 		s.auditAgentPublication(ctx, item, actor.Name)
-		return store.FinishAgentReview(ctx, actor.chatOwner, sessionID, review.ID, chat.ReviewCreated, item.Versions[0].Version)
+		return store.FinishReview(ctx, actor.chatOwner, sessionID, review.ID, chat.ReviewCreated, item.Versions[0].Version)
 	}
 	if v, found, readErr := s.chatAgentReceipt(ctx, review); readErr == nil && found {
-		return store.FinishAgentReview(ctx, actor.chatOwner, sessionID, review.ID, chat.ReviewCreated, v)
+		return store.FinishReview(ctx, actor.chatOwner, sessionID, review.ID, chat.ReviewCreated, v)
 	}
 	state := chat.ReviewUnknown
 	if errors.Is(err, storage.ErrConflict) || errors.Is(err, agentcatalog.ErrInvalid) {
 		state = chat.ReviewConflict
 	}
-	return store.FinishAgentReview(ctx, actor.chatOwner, sessionID, review.ID, state, 0)
+	return store.FinishReview(ctx, actor.chatOwner, sessionID, review.ID, state, 0)
 }
 
-func (s *Server) chatAgentReceipt(ctx context.Context, review *chat.AgentReview) (int, bool, error) {
+func (s *Server) chatAgentReceipt(ctx context.Context, review *chat.OperationReview) (int, bool, error) {
 	item, err := (agentcatalog.Manager{Store: s.Store}).Get(ctx, review.AgentID)
 	if errors.Is(err, storage.ErrNotFound) {
 		return 0, false, nil
@@ -168,23 +171,28 @@ func (s *Server) chatAgentReceipt(ctx context.Context, review *chat.AgentReview)
 	return version.Version, version.Operation == review.ID, nil
 }
 
-func (s *Server) reconcileAgentReviews(ctx context.Context, owner string, session *chat.Session) (*chat.Session, error) {
+func (s *Server) reconcileChatReviews(ctx context.Context, owner string, session *chat.Session) (*chat.Session, error) {
 	for _, message := range session.Messages {
 		review := message.Review
 		if review == nil || (review.State != chat.ReviewApplying && review.State != chat.ReviewUnknown) {
 			continue
 		}
-		version, found, err := s.chatAgentReceipt(ctx, review)
+		var version int
+		var found bool
+		var err error
+		if review.AgentCreation != nil {
+			version, found, err = s.chatAgentReceipt(ctx, review)
+		}
 		if err != nil {
 			return nil, err
 		}
 		if found {
-			session, err = s.chatStore().FinishAgentReview(ctx, owner, session.ID, review.ID, chat.ReviewCreated, version)
+			session, err = s.chatStore().FinishReview(ctx, owner, session.ID, review.ID, chat.ReviewCreated, version)
 			if err != nil {
 				return nil, err
 			}
 		} else if review.State == chat.ReviewApplying && time.Since(review.ClaimedAt) > 20*time.Second {
-			session, err = s.chatStore().FinishAgentReview(ctx, owner, session.ID, review.ID, chat.ReviewUnknown, 0)
+			session, err = s.chatStore().FinishReview(ctx, owner, session.ID, review.ID, chat.ReviewUnknown, 0)
 			if err != nil {
 				return nil, err
 			}

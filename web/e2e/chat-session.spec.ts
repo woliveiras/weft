@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import type { ChatList } from '../src/api/chat';
+import type { GraphSummary } from '../src/api/types';
 
 const headers = { Authorization: 'Bearer e2e-admin-token' };
 
@@ -177,4 +178,39 @@ test('a private conversation clears when another tab switches the signed-in iden
   });
   expect(viewerRead.status()).toBe(404);
   expect(await viewerRead.text()).not.toContain(privateMessage);
+});
+
+test('a reviewed workflow keeps the requested catalog version and opens in the manual editor', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const agentId = 'editorial-reader';
+  const definition = {
+    name: 'Editorial reader', prompt: 'Read the editorial notes.', runtime: { kind: 'native' },
+    model: { provider: 'e2e', name: 'fixture' }, isolation: { mode: 'process' }, readOnly: true,
+  };
+  const created = await request.post('/api/v1/agents', { headers, data: { id: agentId, definition } });
+  expect(created.status(), await created.text()).toBe(201);
+  const newer = await request.put(`/api/v1/agents/${agentId}`, {
+    headers: { ...headers, 'If-Match': '1' },
+    data: { id: agentId, definition: { ...definition, prompt: 'Review editorial changes and test results.' } },
+  });
+  expect(newer.ok()).toBe(true);
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.goto('/');
+  await send(page, 'Create a workflow named Editorial check using version one of the Editorial reader.');
+  const confirm = page.getByRole('button', { name: 'Create workflow', exact: true });
+  await expect(confirm).toBeEnabled();
+  const graphPath = '/api/v1/graphs/editorial-check';
+  expect((await request.get(graphPath, { headers })).status()).toBe(404);
+  await confirm.click();
+  await page.getByRole('link', { name: 'View workflow', exact: true }).click();
+  await expect(page).toHaveURL(/#\/g\/editorial-check(?:\/|$)/);
+  const graph = await request.get(graphPath, { headers });
+  expect(graph.ok()).toBe(true);
+  const saved: GraphSummary = await graph.json();
+  expect(saved.graph.metadata.version).toBe(1);
+  expect(saved.graph.spec.nodes).toHaveLength(1);
+  expect(saved.graph.spec.nodes[0].agent).toMatchObject({ id: agentId, version: 1 });
+  expect(saved.record.state).toBe('stopped');
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'Prepare editorial workflow', exact: true })).toBeVisible();
 });

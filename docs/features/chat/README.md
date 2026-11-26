@@ -43,10 +43,26 @@ empty tool grants. Check the definition and choose **Create agent** or
 **Decline**. If there is exactly one active proposal, type
 “Confirm this proposal” or “Decline this proposal” to decide it. Open **View
 agent** after the catalog confirms version creation. Adding the definition
-to a workflow and running it remain separate steps in Workflows.
+to a workflow and running it are separate actions.
 
 A stale or expired review requires a new proposal. If a response is lost,
 return to the conversation to check the catalog receipt before trying again.
+
+## Create a workflow using an existing agent
+
+As an administrator, name the workflow and the catalog agent it should use.
+If the agent has multiple versions, give the version number or explicitly ask
+for its latest saved version. Review the exact version, task input and
+inherited grants before choosing **Create workflow**. This saves a stopped
+workflow with one agent and leaves task creation and execution for separate
+actions. Open **View workflow** to inspect the saved graph in the editor.
+Use Workflows to design a custom topology or configure required agent
+parameters.
+
+If another person saves that workflow ID while you are reviewing it, Chat
+shows a conflict and you can ask for a fresh proposal with a different ID.
+If the creation outcome is temporarily unknown, inspect Workflows before
+asking to try again.
 
 ## Archive and access
 

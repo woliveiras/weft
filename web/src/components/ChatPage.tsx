@@ -1,7 +1,7 @@
 import { ChatManualLink } from './ChatManualLink';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
-import type { ChatAgentReview, ChatMessage, ChatSession, ChatSessionSummary, ChatTask } from '../api/chat';
+import type { ChatMessage, ChatOperationReview, ChatSession, ChatSessionSummary, ChatTask } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -188,7 +188,7 @@ export function ChatPage({id, archived, canCreateAgent = false, onOpen}: {id?: s
       <div className="chat-transcript" aria-label="Conversation">
         {session?.messages.map(message => <Message key={message.id} value={message}
           now={now} canCreateAgent={canCreateAgent && !sending}
-          onDecide={(review, decision) => void mutate(() => api.decideChatAgent(session.id, review.id, review.digest, decision))}
+          onDecide={(review, decision) => void mutate(() => api.decideChatReview(session.id, review.id, review.digest, decision))}
           onView={anchor => { evidence.current = anchor; }}
           onRead={() => void markRead(message.id)}
           onRetry={modelAvailable && !sending && canRetry(message,now) ? () => void mutate(() => api.retryChat(session.id,message.id)) : undefined}/>)}
@@ -259,7 +259,7 @@ function SessionRow({item, current, expanded, onOpen, onDetails}: {
 
 function Message({value, now, canCreateAgent, onView, onRead, onRetry, onDecide}: {
   value:ChatMessage; now:number; canCreateAgent:boolean; onView:(anchor:string)=>void; onRead:()=>void;
-  onRetry?:()=>void; onDecide:(review:ChatAgentReview, decision:'confirm'|'decline')=>void;
+  onRetry?:()=>void; onDecide:(review:ChatOperationReview, decision:'confirm'|'decline')=>void;
 }) {
   const panel = useRef<HTMLElement>(null);
   const review = value.review;
@@ -281,46 +281,63 @@ function Message({value, now, canCreateAgent, onView, onRead, onRetry, onDecide}
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
     {onRetry && <Btn onClick={onRetry}>Retry saved request</Btn>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
-    {review && <AgentReviewCard review={review} now={now} canConfirm={canCreateAgent}
+    {review && <OperationReviewCard review={review} now={now} canConfirm={canCreateAgent}
       onDecide={decision => onDecide(review,decision)} onView={onView}/>}
     {value.unread && <Btn onClick={onRead}>Mark result read</Btn>}
   </article>;
 }
 
-function AgentReviewCard({review, now, canConfirm, onDecide, onView}: {
-  review:ChatAgentReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatOperationReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
 }) {
-  const definition = review.definition;
+  const workflow = review.workflow;
+  const name = review.workflow ? review.workflow.graph.metadata.name : review.definition.name;
+  const kind = workflow ? 'workflow' : 'agent';
   const expired = now >= Date.parse(review.expiresAt);
-  const anchor = `chat-agent-${review.id}`;
-  return <section className="chat-agent-review" aria-label={`Catalog agent ${definition.name}`}>
-    <h3>{definition.name}</h3>
-    <dl>
-      <dt>Agent ID</dt><dd>{review.agentId}</dd>
-      <dt>Model</dt><dd>{definition.model.provider} · {definition.model.name}</dd>
-      <dt>Runtime</dt><dd>{definition.runtime.kind} · {definition.isolation?.mode} · Read-only workspace</dd>
-      <dt>Tool grants</dt><dd>None</dd>
-    </dl>
-    <h4>Instructions</h4>
-    <p>{definition.prompt}</p>
+  const anchor = `chat-${kind}-${review.id}`;
+  const href = review.workflow ? `#/g/${encodeURIComponent(review.workflow.graph.metadata.id)}/canvas`
+    : `#/agents/${encodeURIComponent(review.agentId)}`;
+  return <section className="chat-agent-review" aria-label={`${workflow ? 'Workflow' : 'Catalog agent'} ${name}`}>
+    <h3>{name}</h3>
+    {review.workflow ? <dl>
+      <dt>Workflow ID</dt><dd>{review.workflow.graph.metadata.id}</dd>
+      <dt>Catalog agent</dt><dd>{review.workflow.agentName} · {review.workflow.graph.spec.nodes[0].agent.id}
+        {' · Version '}{review.workflow.graph.spec.nodes[0].agent.version}</dd>
+      <dt>Runtime</dt><dd>{review.workflow.runtime} · {review.workflow.readOnly ? 'Read-only workspace' : 'Writable workspace'}</dd>
+      <dt>Inherited tool grants</dt><dd>{review.workflow.toolNames?.join(', ') || 'None'}</dd>
+      <dt>Task input</dt><dd>{review.workflow.graph.spec.task.channelId} → {review.workflow.graph.spec.task.nodeId}
+        {' · '}{review.workflow.graph.spec.task.messageType}</dd>
+    </dl> : <>
+      <dl>
+        <dt>Agent ID</dt><dd>{review.agentId}</dd>
+        <dt>Model</dt><dd>{review.definition.model.provider} · {review.definition.model.name}</dd>
+        <dt>Runtime</dt><dd>{review.definition.runtime.kind} · {review.definition.isolation?.mode} · Read-only workspace</dd>
+        <dt>Tool grants</dt><dd>None</dd>
+      </dl>
+      <h4>Instructions</h4>
+      <p>{review.definition.prompt}</p>
+    </>}
     {review.state === 'awaiting_confirmation' && <>
-      <p>This creates a reusable catalog definition. No workflow starts.</p>
+      <p>{workflow ? 'This saves a stopped workflow with one agent. Tasks are created and started separately.'
+        : 'This creates a reusable catalog definition. No workflow starts.'}</p>
       {expired
         ? <p role="status">Confirmation expired. Ask for a new review.</p>
         : <><p>Review expires at <time dateTime={review.expiresAt}>{new Date(review.expiresAt).toLocaleTimeString()}</time>.</p>
           <div className="btn-row">
-            <Btn tone="primary" disabled={!canConfirm} onClick={() => onDecide('confirm')}>Create agent</Btn>
+            <Btn tone="primary" disabled={!canConfirm} onClick={() => onDecide('confirm')}>Create {kind}</Btn>
             <Btn disabled={!canConfirm} onClick={() => onDecide('decline')}>Decline</Btn>
           </div>
           {canConfirm && <p className="small muted">When this is the only pending review, you can type “Confirm this proposal” or “Decline this proposal”.</p>}</>}
     </>}
-    {review.state === 'applying' && <p role="status">Creation accepted. Checking the catalog result…</p>}
+    {review.state === 'applying' && <p role="status">Creation accepted. Checking the result…</p>}
     {review.state === 'conflict' && <p role="status">The reviewed configuration changed. Ask for a new review.</p>}
-    {review.state === 'unknown' && <p role="status">Creation outcome is temporarily unknown. Check Agents before asking to try again.</p>}
+    {review.state === 'unknown' && <p role="status">Creation outcome is temporarily unknown.
+      {' '}Check <a id={anchor} href={workflow ? '#/graphs' : '#/agents'} onClick={() => onView(anchor)}>
+        {workflow ? 'Workflows' : 'Agents'}</a> before asking to try again.</p>}
     {review.state === 'declined' && <p role="status">Proposal declined.</p>}
     {review.state === 'created' && <>
-      <p role="status">Catalog version {review.resultVersion} created.</p>
-      <a id={anchor} href={`#/agents/${encodeURIComponent(review.agentId)}`} onClick={() => onView(anchor)}>View agent</a>
+      <p role="status">{workflow ? 'Workflow' : 'Catalog'} version {review.resultVersion} created.</p>
+      <a id={anchor} href={href} onClick={() => onView(anchor)}>View {kind}</a>
     </>}
   </section>;
 }

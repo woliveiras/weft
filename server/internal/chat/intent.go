@@ -20,12 +20,13 @@ const (
 	maxContextTurns = 8
 	maxAnswerTokens = 640
 
-	OpenManual  = "manual.open"
-	WatchTask   = "task.watch"
-	InspectTask = "task.inspect"
-	CreateAgent = "agent.create"
-	Clarify     = "clarify"
-	Unsupported = "unsupported"
+	OpenManual     = "manual.open"
+	WatchTask      = "task.watch"
+	InspectTask    = "task.inspect"
+	CreateAgent    = "agent.create"
+	CreateWorkflow = "workflow.create"
+	Clarify        = "clarify"
+	Unsupported    = "unsupported"
 )
 
 var (
@@ -40,6 +41,7 @@ Return exactly one JSON object. "kind" is one of:
 - "task.watch": follow a particular existing task and report when it settles. Add "task" containing the task's stated ID or exact name as a selector.
 - "task.inspect": show the latest state of a particular task now. Add "task" with the same selector convention.
 - "agent.create": propose a reusable agent for the catalog. Add "agentId" (lowercase letters, digits and hyphens), "agentName" and concise "instructions". The operator reviews the proposal before anything is created. Never interpret a confirmation as a new create request.
+- "workflow.create": propose a stopped task workflow with one existing catalog agent. Add "workflowId" (lowercase letters, digits and hyphens), "workflowName" and "agent" (the stated catalog ID or exact name). Add "agentVersion" as a string only if the user requested that version or explicitly requested "latest". Ask which agent when the request is ambiguous. This capability never creates an agent or starts a workflow.
 - "manual.open": open a console page for inspection or to enter credentials. Add "destination" with one of: tasks, workflows, agents, projects, activity, approvals, models, chat-model, plugins, usage, budgets, prices, connections, connection-setup, skills, administration. Never ask for a credential. Use this for navigation requests or secure setup. Never represent navigation as performing the requested operation.
 - "clarify": ask one focused question when the target or action is unclear. Add "question". Never guess between different targets or effects.
 - "unsupported": any request outside these capabilities. Do not add a task or question.
@@ -54,6 +56,7 @@ type Plan struct {
 	Title       string `json:"title,omitempty"`
 	Destination string `json:"destination,omitempty"`
 	Agent       AgentDraft
+	Workflow    WorkflowDraft
 }
 
 func safeText(text string, limit int) bool {
@@ -119,11 +122,11 @@ func decodePlan(body string) (Plan, error) {
 			return Plan{}, ErrInvalidPlan
 		}
 		seen[key] = true
-		var value string
-		if err := decoder.Decode(&value); err != nil {
+		var input *string
+		if err := decoder.Decode(&input); err != nil || input == nil {
 			return Plan{}, ErrInvalidPlan
 		}
-		value = strings.TrimSpace(value)
+		value := strings.TrimSpace(*input)
 		switch key {
 		case "destination":
 			plan.Destination = value
@@ -141,6 +144,14 @@ func decodePlan(body string) (Plan, error) {
 			plan.Agent.Name = value
 		case "instructions":
 			plan.Agent.Instructions = value
+		case "workflowId":
+			plan.Workflow.ID = value
+		case "workflowName":
+			plan.Workflow.Name = value
+		case "agent":
+			plan.Workflow.Agent = value
+		case "agentVersion":
+			plan.Workflow.AgentVersion = value
 		default:
 			return Plan{}, ErrInvalidPlan
 		}
@@ -149,6 +160,9 @@ func decodePlan(body string) (Plan, error) {
 		return Plan{}, ErrInvalidPlan
 	}
 	if plan.Kind != CreateAgent && (seen["agentId"] || seen["agentName"] || seen["instructions"]) {
+		return Plan{}, ErrInvalidPlan
+	}
+	if plan.Kind != CreateWorkflow && (seen["workflowId"] || seen["workflowName"] || seen["agent"] || seen["agentVersion"]) {
 		return Plan{}, ErrInvalidPlan
 	}
 	if seen["destination"] && plan.Kind != OpenManual {
@@ -173,6 +187,10 @@ func decodePlan(body string) (Plan, error) {
 		}
 	case CreateAgent:
 		if seen["task"] || seen["question"] || plan.Agent.validate() != nil {
+			return Plan{}, ErrInvalidPlan
+		}
+	case CreateWorkflow:
+		if seen["task"] || seen["question"] || plan.Workflow.validate() != nil {
 			return Plan{}, ErrInvalidPlan
 		}
 	default:

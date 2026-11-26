@@ -60,17 +60,17 @@ func TestAgentDraftRejectsReservedUnsafeOrUnscopedFields(t *testing.T) {
 func TestReviewTextDirectivesRequireExactExplicitConsent(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
-	first := &AgentReview{State: ReviewAwaiting, ExpiresAt: now.Add(time.Minute)}
-	second := &AgentReview{State: ReviewAwaiting, ExpiresAt: now.Add(time.Hour)}
+	first := &OperationReview{State: ReviewAwaiting, ExpiresAt: now.Add(time.Minute)}
+	second := &OperationReview{State: ReviewAwaiting, ExpiresAt: now.Add(time.Hour)}
 	session := Session{Messages: []Message{{Review: first}, {Review: second}}}
-	if got := session.SinglePendingAgentReview(now); got != nil {
+	if got := session.SinglePendingReview(now); got != nil {
 		t.Fatalf("ambiguous text selected %+v", got)
 	}
 	second.State = ReviewDeclined
-	if got := session.SinglePendingAgentReview(now); got != first {
+	if got := session.SinglePendingReview(now); got != first {
 		t.Fatalf("unique review = %+v", got)
 	}
-	if got := session.SinglePendingAgentReview(now.Add(time.Minute)); got != nil {
+	if got := session.SinglePendingReview(now.Add(time.Minute)); got != nil {
 		t.Fatalf("expired review selected: %+v", got)
 	}
 	for input, want := range map[string]string{

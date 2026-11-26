@@ -186,6 +186,13 @@ decision retrieves its recorded state without creating another version.
 The Chat message endpoint accepts the explicit confirmation or decline text
 shown on the card when the conversation contains exactly one pending review.
 
+Workflow creation uses the same decision endpoint. The workflow review contains
+the planned graph, one pinned catalog agent version and task ingress defaults.
+Confirmation checks that the workflow ID is still unused under the normal
+workflow transition lock. A successful result records the saved graph version.
+The workflow is stopped and no task is created. If an outcome cannot be
+verified, the review stays unknown and repeats do not apply it again.
+
 ## Native issue connections
 
 Native Jira Data Center connections have their own credential store, independent

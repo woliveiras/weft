@@ -141,7 +141,16 @@ func (e *Engine) SaveGraph(ctx context.Context, g *domain.Graph, expectedVersion
 	if err := e.ResolveAgentBindings(ctx, g); err != nil {
 		return nil, nil, err
 	}
-	return e.saveGraphDocument(ctx, g, expectedVersion, actor)
+	return e.saveGraphDocument(ctx, g, expectedVersion, false, actor)
+}
+
+// CreateGraph saves a new workflow, checking absence under the same
+// transition lease as edits and lifecycle changes.
+func (e *Engine) CreateGraph(ctx context.Context, g *domain.Graph, actor string) (*domain.Graph, *domain.GraphRecord, error) {
+	if err := e.ResolveAgentBindings(ctx, g); err != nil {
+		return nil, nil, err
+	}
+	return e.saveGraphDocument(ctx, g, 0, true, actor)
 }
 
 // SaveTaskGraph persists the already reviewed execution copy. Its task-owned
@@ -150,10 +159,10 @@ func (e *Engine) SaveTaskGraph(ctx context.Context, g *domain.Graph, actor strin
 	if !strings.HasPrefix(g.Metadata.ID, domain.TaskRunGraphPrefix) || g.Metadata.Labels[domain.LabelTask] == "" {
 		return nil, nil, fmt.Errorf("%w: expected a task execution copy", ErrInvalid)
 	}
-	return e.saveGraphDocument(ctx, g, 0, actor)
+	return e.saveGraphDocument(ctx, g, 0, false, actor)
 }
 
-func (e *Engine) saveGraphDocument(ctx context.Context, g *domain.Graph, expectedVersion int, actor string) (*domain.Graph, *domain.GraphRecord, error) {
+func (e *Engine) saveGraphDocument(ctx context.Context, g *domain.Graph, expectedVersion int, createOnly bool, actor string) (*domain.Graph, *domain.GraphRecord, error) {
 	authored, err := cloneGraph(g)
 	if err != nil {
 		return nil, nil, err
@@ -174,13 +183,13 @@ func (e *Engine) saveGraphDocument(ctx context.Context, g *domain.Graph, expecte
 	var record *domain.GraphRecord
 	err = e.WithGraphTransition(ctx, g.Metadata.ID, func(ctx context.Context) error {
 		var err error
-		saved, record, err = e.saveGraph(ctx, g, effective, expectedVersion, actor)
+		saved, record, err = e.saveGraph(ctx, g, effective, expectedVersion, createOnly, actor)
 		return err
 	})
 	return saved, record, err
 }
 
-func (e *Engine) saveGraph(ctx context.Context, g, effective *domain.Graph, expectedVersion int, actor string) (*domain.Graph, *domain.GraphRecord, error) {
+func (e *Engine) saveGraph(ctx context.Context, g, effective *domain.Graph, expectedVersion int, createOnly bool, actor string) (*domain.Graph, *domain.GraphRecord, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
@@ -191,6 +200,9 @@ func (e *Engine) saveGraph(ctx context.Context, g, effective *domain.Graph, expe
 	isNew := errors.Is(existsErr, storage.ErrNotFound)
 	if existsErr != nil && !isNew {
 		return nil, nil, existsErr
+	}
+	if createOnly && !isNew {
+		return nil, nil, fmt.Errorf("%w: graph %q already exists (use PUT to update)", ErrConflict, g.Metadata.ID)
 	}
 	if isNew {
 		if err := e.retryBrokerCleanup(ctx, g.Metadata.ID); err != nil {

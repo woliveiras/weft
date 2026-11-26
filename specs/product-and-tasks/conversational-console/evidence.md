@@ -91,5 +91,15 @@ left the catalog unchanged. A repeat returned the recorded title without a
 second model call. Filtered or malformed model output could not introduce an
 operation. TypeScript, five focused component tests and OpenAPI parsing passed.
 
+## 2026-11-26 — Reviewed workflow creation
+
+S27 passed the Go unit and authenticated HTTP/SQLite integration checks. The
+review preserved the explicitly selected catalog version after another version
+was published. Repeated confirmation returned the same stopped workflow and
+left the manual editor's intervening save intact in the collision scenario.
+Chromium followed the review through the real API and store, opened the saved
+canvas, and returned to the original conversation. TypeScript, nine focused
+component tests, OpenAPI parsing, `make lint` and `git diff --check` passed.
+
 Device and assistive-technology review, external provider qualification and
 production backup and restore remain open.

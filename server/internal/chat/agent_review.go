@@ -36,10 +36,10 @@ func ExplicitReviewDirective(text string) string {
 	}
 }
 
-// SinglePendingAgentReview returns a candidate only when an explicit textual
+// SinglePendingReview returns a candidate only when an explicit textual
 // action has exactly one currently actionable target in the conversation.
-func (s *Session) SinglePendingAgentReview(now time.Time) *AgentReview {
-	var pending *AgentReview
+func (s *Session) SinglePendingReview(now time.Time) *OperationReview {
+	var pending *OperationReview
 	for _, message := range s.Messages {
 		review := message.Review
 		if review == nil || review.State != ReviewAwaiting {
@@ -91,44 +91,71 @@ func (d AgentDraft) Definition(model domain.ModelRef) (domain.AgentDefinition, e
 	}, nil
 }
 
-// AgentReview persists the completely rendered action. Only state and receipt
-// may change after the review was issued. The digest is scoped to the owner
-// and session and fences the model-selection revision.
-type AgentReview struct {
-	ID            string                 `json:"id"`
+type AgentCreation struct {
 	AgentID       string                 `json:"agentId"`
 	Definition    domain.AgentDefinition `json:"definition"`
 	ModelRevision int64                  `json:"modelRevision"`
-	ExpiresAt     time.Time              `json:"expiresAt"`
-	Digest        string                 `json:"digest"`
-	State         string                 `json:"state"`
-	ClaimedAt     time.Time              `json:"claimedAt,omitempty"`
-	ResultVersion int                    `json:"resultVersion,omitempty"`
 }
 
-func NewAgentReview(owner, session, agent string, definition domain.AgentDefinition, modelRevision int64, now time.Time) (*AgentReview, error) {
-	review := &AgentReview{
-		ID: domain.NewID("chatop"), AgentID: agent, Definition: definition, ModelRevision: modelRevision,
-		ExpiresAt: now.Add(10 * time.Minute).UTC(), State: ReviewAwaiting,
-	}
+// OperationReview persists the reviewed action. The digest binds the payload
+// to the owner and session. Claim state and the result are recorded separately.
+type OperationReview struct {
+	*AgentCreation
+	Workflow      *WorkflowCreation `json:"workflow,omitempty"`
+	ID            string            `json:"id"`
+	ExpiresAt     time.Time         `json:"expiresAt"`
+	Digest        string            `json:"digest"`
+	State         string            `json:"state"`
+	ClaimedAt     time.Time         `json:"claimedAt,omitempty"`
+	ResultVersion int               `json:"resultVersion,omitempty"`
+}
+
+func NewAgentReview(owner, session, agent string, definition domain.AgentDefinition, modelRevision int64, now time.Time) (*OperationReview, error) {
+	return newReview(owner, session, now, OperationReview{
+		AgentCreation: &AgentCreation{AgentID: agent, Definition: definition, ModelRevision: modelRevision},
+	})
+}
+
+func newReview(owner, session string, now time.Time, action OperationReview) (*OperationReview, error) {
+	review := action
+	review.ID = domain.NewID("chatop")
+	review.ExpiresAt, review.State = now.Add(10*time.Minute).UTC(), ReviewAwaiting
 	digest, err := review.digest(owner, session)
 	if err != nil {
 		return nil, err
 	}
 	review.Digest = digest
-	return review, nil
+	return &review, nil
 }
 
-func (r AgentReview) digest(owner, session string) (string, error) {
-	raw, err := json.Marshal(struct {
-		Owner, Session, Operation, ID, Agent   string
-		Definition                             domain.AgentDefinition
-		ExpectedCatalogRevision, ModelRevision int64
-		ExpiresAt                              time.Time
-	}{
-		Owner: owner, Session: session, Operation: "agent.create", ID: r.ID, Agent: r.AgentID,
-		Definition: r.Definition, ExpectedCatalogRevision: 0, ModelRevision: r.ModelRevision, ExpiresAt: r.ExpiresAt,
-	})
+func (r OperationReview) digest(owner, session string) (string, error) {
+	var payload any
+	switch {
+	case r.Workflow != nil && r.AgentCreation == nil:
+		payload = struct {
+			Owner, Session, Operation, ID string
+			Workflow                      *WorkflowCreation
+			ExpectedGraphVersion          int
+			ExpiresAt                     time.Time
+		}{
+			Owner: owner, Session: session, Operation: CreateWorkflow, ID: r.ID,
+			Workflow: r.Workflow, ExpectedGraphVersion: 0, ExpiresAt: r.ExpiresAt,
+		}
+	case r.AgentCreation != nil && r.Workflow == nil:
+		// Keep the exact digest of already persisted catalog agent reviews.
+		payload = struct {
+			Owner, Session, Operation, ID, Agent   string
+			Definition                             domain.AgentDefinition
+			ExpectedCatalogRevision, ModelRevision int64
+			ExpiresAt                              time.Time
+		}{
+			Owner: owner, Session: session, Operation: CreateAgent, ID: r.ID, Agent: r.AgentID,
+			Definition: r.Definition, ExpectedCatalogRevision: 0, ModelRevision: r.ModelRevision, ExpiresAt: r.ExpiresAt,
+		}
+	default:
+		return "", ErrReviewMismatch
+	}
+	raw, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
 	}
@@ -136,7 +163,7 @@ func (r AgentReview) digest(owner, session string) (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
-func (r AgentReview) ValidateConfirmation(owner, session, digest string, now time.Time) error {
+func (r OperationReview) ValidateConfirmation(owner, session, digest string, now time.Time) error {
 	if err := r.validateDigest(owner, session, digest); err != nil {
 		return err
 	}
@@ -146,7 +173,7 @@ func (r AgentReview) ValidateConfirmation(owner, session, digest string, now tim
 	return nil
 }
 
-func (r AgentReview) validateDigest(owner, session, digest string) error {
+func (r OperationReview) validateDigest(owner, session, digest string) error {
 	expected, err := r.digest(owner, session)
 	if err != nil {
 		return err
@@ -157,8 +184,8 @@ func (r AgentReview) validateDigest(owner, session, digest string) error {
 	return nil
 }
 
-func (s Sessions) ClaimAgentReview(ctx context.Context, owner, sessionID, reviewID, digest string) (*Session, *AgentReview, bool, error) {
-	var review *AgentReview
+func (s Sessions) ClaimReview(ctx context.Context, owner, sessionID, reviewID, digest string) (*Session, *OperationReview, bool, error) {
+	var review *OperationReview
 	var claimed bool
 	session, err := s.update(ctx, owner, sessionID, func(session *Session) (bool, error) {
 		claimed = false
@@ -183,7 +210,7 @@ func (s Sessions) ClaimAgentReview(ctx context.Context, owner, sessionID, review
 	return session, review, claimed && err == nil, err
 }
 
-func (s Sessions) FinishAgentReview(ctx context.Context, owner, sessionID, reviewID, state string, version int) (*Session, error) {
+func (s Sessions) FinishReview(ctx context.Context, owner, sessionID, reviewID, state string, version int) (*Session, error) {
 	return s.update(ctx, owner, sessionID, func(session *Session) (bool, error) {
 		for i := range session.Messages {
 			message := &session.Messages[i]
@@ -201,7 +228,7 @@ func (s Sessions) FinishAgentReview(ctx context.Context, owner, sessionID, revie
 	})
 }
 
-func (s Sessions) DeclineAgentReview(ctx context.Context, owner, sessionID, reviewID, digest string) (*Session, error) {
+func (s Sessions) DeclineReview(ctx context.Context, owner, sessionID, reviewID, digest string) (*Session, error) {
 	return s.update(ctx, owner, sessionID, func(session *Session) (bool, error) {
 		for _, message := range session.Messages {
 			if review := message.Review; review != nil && review.ID == reviewID {

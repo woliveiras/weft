@@ -256,7 +256,7 @@ func (s *Server) routes() {
 		{"POST /api/v1/chat/sessions/{chatID}/messages/{requestID}/retry", R, s.retryChat},
 		{"POST /api/v1/chat/sessions/{chatID}/messages/{messageID}/read", R, s.updateChat},
 		{"POST /api/v1/chat/sessions/{chatID}/title/retry", R, s.retryChatTitle},
-		{"POST /api/v1/chat/sessions/{chatID}/operations/{operationID}/{decision}", A, s.decideChatAgent},
+		{"POST /api/v1/chat/sessions/{chatID}/operations/{operationID}/{decision}", A, s.decideChatReview},
 		{"GET /api/v1/trigger-policy", R, s.triggerPolicy},
 		{"GET /api/v1/review-routes", R, s.listReviewRoutes},
 		{"GET /api/v1/review-routes/{name}", R, s.getReviewRoute},
@@ -676,7 +676,7 @@ func (s *Server) createGraph(w http.ResponseWriter, r *http.Request) error {
 	if err := s.validateEnvironmentOrigin(r.Context(), g); err != nil {
 		return err
 	}
-	g, rec, err := s.Engine.SaveGraph(r.Context(), g, 0, identityFrom(r.Context()).Name)
+	g, rec, err := s.Engine.CreateGraph(r.Context(), g, identityFrom(r.Context()).Name)
 	if err != nil {
 		return err
 	}

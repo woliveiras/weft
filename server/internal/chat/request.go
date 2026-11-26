@@ -105,7 +105,7 @@ type Interpretation struct {
 	Plan        Plan
 	Text        string
 	Task        *TaskSummary
-	Review      *AgentReview
+	Review      *OperationReview
 	Destination string
 	Retryable   bool
 }

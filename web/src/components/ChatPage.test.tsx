@@ -67,6 +67,40 @@ it('shows the reviewed definition and sends a scoped decline without publishing'
   expect(backend.find('POST',declinePath).map(req => req.body)).toEqual([{digest:'recorded-digest'}]);
 });
 
+it.each([
+  {state:'created', version:1, link:'View workflow', href:'#/g/release/canvas'},
+  {state:'unknown', version:undefined, link:'Workflows', href:'#/graphs'},
+])('shows the pinned workflow definition and the $state outcome link', async ({state,version,link,href}) => {
+  const review = {
+    id:'workflow-review', digest:'workflow-digest', expiresAt:'2999-11-26T08:00:00Z',
+    workflow:{
+      graph:{metadata:{id:'release',name:'Release notes'},spec:{
+        nodes:[{id:'worker',agent:{id:'reader',version:1}}],
+        task:{nodeId:'worker',resultNodeId:'worker',channelId:'requests',messageType:'work.request'},
+      }},
+      agentName:'Release reader',runtime:'native',readOnly:true,
+    },
+  };
+  const session = (state:string, resultVersion?:number) => ({
+    id, archived:false, messages:[{id:'reply',role:'assistant',text:'Review the workflow.',review:{...review,state,resultVersion}}],
+  });
+  const confirmPath = `${paths}/${id}/operations/workflow-review/confirm`;
+  const backend = fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'configured',revision:1}),
+    [`GET ${paths}`]: () => ({items:[],shared:false}),
+    [`GET ${paths}/${id}`]: () => session('awaiting_confirmation'),
+    [`POST ${confirmPath}`]: () => session(state,version),
+  });
+  render(<ChatPage id={id} archived={false} canCreateAgent onOpen={vi.fn()}/>);
+  const card = await screen.findByRole('region',{name:'Workflow Release notes'});
+  expect(within(card).getByText('Release reader · reader · Version 1')).toBeTruthy();
+  expect(within(card).getByText(/saves a stopped workflow/)).toBeTruthy();
+  expect(within(card).queryByRole('link',{name:'View workflow'})).toBeNull();
+  fireEvent.click(within(card).getByRole('button',{name:'Create workflow'}));
+  expect((await within(card).findByRole('link',{name:link})).getAttribute('href')).toBe(href);
+  expect(backend.find('POST',confirmPath).map(request => request.body)).toEqual([{digest:'workflow-digest'}]);
+});
+
 it('shows archived novelty from Recents and navigates across bounded pages', async () => {
   const open = vi.fn();
   const item = {

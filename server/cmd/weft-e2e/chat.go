@@ -30,6 +30,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"task.watch","task":"Documentation check for Chat fixture","title":"Follow documentation check"}`
 	case "Create a reusable agent called Release reader to summarize release notes.":
 		content = `{"kind":"agent.create","agentId":"release-reader","agentName":"Release reader","instructions":"Summarize release notes.","title":"Create release reader"}`
+	case "Create a workflow named Editorial check using version one of the Editorial reader.":
+		content = `{"kind":"workflow.create","workflowId":"editorial-check","workflowName":"Editorial check","agent":"editorial-reader","agentVersion":"1","title":"Prepare editorial workflow"}`
 	default:
 		return nil, errors.New("unknown Chat fixture request")
 	}

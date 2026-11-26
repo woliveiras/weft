@@ -103,7 +103,7 @@ func (s *Server) getChat(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return chatError(err)
 	}
-	session, err = s.reconcileAgentReviews(r.Context(), actor.chatOwner, session)
+	session, err = s.reconcileChatReviews(r.Context(), actor.chatOwner, session)
 	if err != nil {
 		return chatError(err)
 	}
@@ -160,7 +160,7 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 			directive = chat.ExplicitReviewDirective(history[len(history)-1].Content)
 		}
 		if directive != "" {
-			answer, err = s.decideChatAgentFromText(ctx, actor, session, directive)
+			answer, err = s.decideChatReviewFromText(ctx, actor, session, directive)
 			if err != nil {
 				answer = chat.Interpretation{Text: "The review decision could not be read. Inspect the existing review before trying again."}
 			}
@@ -233,9 +233,11 @@ func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID 
 	case chat.Clarify:
 		reply.Text = plan.Question
 	case chat.Unsupported:
-		reply.Text = "Chat can inspect or follow an existing task, or propose a reusable catalog agent. Use the console navigation for other operations."
+		reply.Text = "Chat can inspect or follow a task or propose a catalog agent or workflow. Use the console navigation for other operations."
 	case chat.CreateAgent:
 		return s.reviewChatAgent(ctx, actor, sessionID, plan)
+	case chat.CreateWorkflow:
+		return s.reviewChatWorkflow(ctx, actor, sessionID, plan)
 	case chat.InspectTask, chat.WatchTask:
 		id, err := s.resolveChatTask(ctx, plan.Task)
 		if errors.Is(err, storage.ErrNotFound) {

@@ -15,12 +15,20 @@ export interface ChatMessage {
   attempt?: string;
   destination?: string;
   task?: ChatTask;
-  review?: ChatAgentReview;
+  review?: ChatOperationReview;
   unread?: boolean;
 }
 
-export interface ChatAgentReview {
+interface ChatReviewState {
   id: string;
+  digest: string;
+  expiresAt: string;
+  state: 'awaiting_confirmation' | 'applying' | 'created' | 'conflict' | 'unknown' | 'declined';
+  resultVersion?: number;
+}
+
+interface ChatAgentReview extends ChatReviewState {
+  workflow?: never;
   agentId: string;
   definition: {
     name: string;
@@ -30,11 +38,25 @@ export interface ChatAgentReview {
     isolation?: { mode: string };
     readOnly: boolean;
   };
-  digest: string;
-  expiresAt: string;
-  state: 'awaiting_confirmation' | 'applying' | 'created' | 'conflict' | 'unknown' | 'declined';
-  resultVersion?: number;
 }
+
+interface ChatWorkflowReview extends ChatReviewState {
+  workflow: {
+    graph: {
+      metadata: {id: string; name: string};
+      spec: {
+        nodes: [{agent: {id: string; version: number}; id: string}];
+        task: {nodeId: string; resultNodeId: string; channelId: string; messageType: string};
+      };
+    };
+    agentName: string;
+    runtime: string;
+    readOnly: boolean;
+    toolNames?: string[];
+  };
+}
+
+export type ChatOperationReview = ChatAgentReview | ChatWorkflowReview;
 
 export interface ChatSession {
   id: string;
