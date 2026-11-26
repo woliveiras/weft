@@ -316,7 +316,7 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
         onClick={() => onView(`chat-execution-${value.id}`)}>View execution</a>
     </section>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
-    {review && <OperationReviewCard review={review} now={now} canConfirm={('taskCorrection' in review || 'pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'workflowScale' in review || 'approval' in review) ? canOperate : canCreateAgent}
+    {review && <OperationReviewCard review={review} now={now} canConfirm={('executionCancel' in review || 'taskCorrection' in review || 'pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'workflowScale' in review || 'approval' in review) ? canOperate : canCreateAgent}
       onDecide={decision => onDecide(review,decision)} onView={onView}/>}
     {value.unread && <Btn onClick={onRead}>Mark result read</Btn>}
   </article>;
@@ -336,6 +336,26 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   if ('taskCancel' in review) return <TaskCancellationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskAuthorization' in review) return <TaskAuthorizationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('workflowControl' in review) return <WorkflowControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('executionCancel' in review) {
+    const target = review.executionCancel;
+    const anchor = `chat-cancel-${review.id}`;
+    return <section className="chat-agent-review" aria-label="Review execution cancellation">
+      <h3>{target.mode === 'tree' ? 'Cancel execution tree' : 'Cancel delegated child'}</h3>
+      <p>{target.graph} · Run {target.run}</p>
+      <p>Selected execution · {target.selected}</p><p>Tree root · {target.root}</p>
+      {target.mode === 'tree' && <p>The request covers the root and its descendants.</p>}
+      {review.state === 'awaiting_confirmation' && <ReviewDecisionControls expiresAt={review.expiresAt} now={now}
+        canConfirm={canConfirm} confirmLabel="Request cancellation" onDecide={onDecide}/>}
+      {review.state === 'applying' && <p role="status">Recording cancellation…</p>}
+      {review.state === 'accepted' && <p role="status">Cancellation requested. Waiting for the execution scope to settle.</p>}
+      {review.state === 'applied' && <p role="status">The selected scope settled with an observed cancellation.</p>}
+      {review.state === 'incomplete' && <p role="status">The scope settled before any execution reported cancellation.</p>}
+      {review.state === 'unknown' && <p role="status">Cancellation receipt unavailable.</p>}
+      {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+      {review.state === 'conflict' && <p role="status">The execution or its cancellation request changed. Inspect its current state.</p>}
+      <a id={anchor} href={runLink(target.graph,target.selected)} onClick={()=>onView(anchor)}>View execution</a>
+    </section>;
+  }
   if ('workflowScale' in review) return <WorkflowScaleCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('triggerControl' in review) return <TriggerControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('environment' in review) return <EnvironmentPreparationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;

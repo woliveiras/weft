@@ -3038,6 +3038,7 @@ components:
             - {$ref: "#/components/schemas/ChatTaskDraftReview"}
             - {$ref: "#/components/schemas/ChatTaskStartReview"}
             - {$ref: "#/components/schemas/ChatWorkflowControlReview"}
+            - {$ref: "#/components/schemas/ChatExecutionCancelReview"}
             - {$ref: "#/components/schemas/ChatWorkflowScaleReview"}
             - {$ref: "#/components/schemas/ChatTriggerReview"}
             - {$ref: "#/components/schemas/ChatTaskRetryReview"}
@@ -3335,6 +3336,21 @@ components:
                 observed: {type: string}
                 settled: {type: boolean}
                 incomplete: {type: boolean}
+    ChatExecutionCancelReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [executionCancel]
+          properties:
+            executionCancel:
+              type: object
+              required: [selected, root, graph, run, mode]
+              properties:
+                selected: {type: string}
+                root: {type: string}
+                graph: {type: string}
+                run: {type: string}
+                mode: {enum: [tree, child]}
     ChatWorkflowScaleReview:
       allOf:
         - {$ref: "#/components/schemas/ChatReviewState"}

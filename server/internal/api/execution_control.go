@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"github.com/woliveiras/weft/server/internal/delegation"
 	"github.com/woliveiras/weft/server/internal/domain"
@@ -42,17 +43,26 @@ func (s *Server) cancelExecution(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if result.Created {
-		x, err := s.Store.GetExecution(r.Context(), result.Request.ExecutionID)
-		if err != nil {
-			return err
-		}
-		s.Bus.Publish(r.Context(), domain.NewEvent("execution.cancel_requested", x.GraphID, result.Request).WithExecution(x.ID).WithNode(x.NodeID, x.Replica).WithActor(actor))
+	if err := s.publishExecutionCancellation(r.Context(), actor, result); err != nil {
+		return err
 	}
 	status := http.StatusAccepted
 	if result.AlreadyTerminal {
 		status = http.StatusOK
 	}
 	writeJSON(w, status, result)
+	return nil
+}
+
+func (s *Server) publishExecutionCancellation(ctx context.Context, actor string, result executioncontrol.Result) error {
+	if result.Created {
+		x, err := s.Store.GetExecution(ctx, result.Request.ExecutionID)
+		if err != nil {
+			return err
+		}
+		publicRequest := *result.Request
+		publicRequest.Operation = ""
+		s.Bus.Publish(ctx, domain.NewEvent("execution.cancel_requested", x.GraphID, &publicRequest).WithExecution(x.ID).WithNode(x.NodeID, x.Replica).WithActor(actor))
+	}
 	return nil
 }

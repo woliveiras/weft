@@ -212,6 +212,10 @@ export interface ChatWorkflowScaleReview extends ChatReviewState {
   scaleResult?: {version: number; activeReplicas: number; state: 'converging'|'saved'|'observed'|'failed'|'superseded'};
 }
 
+export interface ChatExecutionCancelReview extends ChatReviewState {
+  executionCancel: {selected:string; root:string; graph:string; run:string; mode:"tree"|"child"};
+}
+
 export interface ChatTriggerReview extends ChatReviewState {
   triggerControl: {
     id: string; name: string; action: 'pause'|'resume'; actor: string;
@@ -222,7 +226,7 @@ export interface ChatTriggerReview extends ChatReviewState {
   };
 }
 
-export type ChatOperationReview = ChatTriggerReview | ChatWorkflowScaleReview | ChatBudgetRaiseReview | ChatEnvironmentReview | ChatCorrectionReview | ChatSkillReview | ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
+export type ChatOperationReview = ChatExecutionCancelReview | ChatTriggerReview | ChatWorkflowScaleReview | ChatBudgetRaiseReview | ChatEnvironmentReview | ChatCorrectionReview | ChatSkillReview | ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
   ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview |
   ChatTaskRetryReview | ChatCatalogPublicationReview | ChatAgentAdoptionReview | ChatApprovalReview | ChatTaskCancellationReview |
   ChatTaskAuthorizationReview;

@@ -179,6 +179,9 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		if review.WorkflowControl != nil {
 			return s.applyReviewedChatControl(settleCtx, actor, sessionID, review)
 		}
+		if review.ExecutionCancel != nil {
+			return s.applyChatExecutionCancel(settleCtx, actor, sessionID, review)
+		}
 		if review.WorkflowScale != nil {
 			return s.applyChatScale(settleCtx, actor, sessionID, review)
 		}
@@ -209,7 +212,7 @@ func (s *Server) decideChatReviewFromText(ctx context.Context, actor Identity, s
 }
 
 func reviewDecisionRole(review *chat.OperationReview) config.Role {
-	if review.WorkflowControl != nil || review.WorkflowScale != nil {
+	if review.WorkflowControl != nil || review.WorkflowScale != nil || review.ExecutionCancel != nil {
 		return config.RoleOperator
 	}
 	if review.PR != nil || review.Guidance != nil {
@@ -266,6 +269,14 @@ func (s *Server) chatAgentReceipt(ctx context.Context, review *chat.OperationRev
 func (s *Server) reconcileChatReviews(ctx context.Context, owner string, session *chat.Session) (*chat.Session, error) {
 	for _, message := range session.Messages {
 		review := message.Review
+		if review != nil && review.ExecutionCancel != nil && (review.State == chat.ReviewApplying || review.State == chat.ReviewAccepted || review.State == chat.ReviewUnknown) {
+			var err error
+			session, err = s.observeChatExecutionCancel(ctx, owner, session, review)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if review != nil && review.WorkflowScale != nil && (review.State == chat.ReviewApplying || review.State == chat.ReviewAccepted || review.State == chat.ReviewUnknown) {
 			var err error
 			session, err = s.observeChatScale(ctx, owner, session, review)

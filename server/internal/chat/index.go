@@ -127,7 +127,7 @@ func (s *Session) summary(owner, key string) storage.ChatSummary {
 			if (review.Publication != nil || review.Adoption != nil) && review.State == ReviewApplying {
 				meta.WatchCount++
 			}
-			if (review.WorkflowControl != nil || review.WorkflowScale != nil) && (review.State == ReviewApplying || review.State == ReviewAccepted) {
+			if (review.WorkflowControl != nil || review.WorkflowScale != nil || review.ExecutionCancel != nil) && (review.State == ReviewApplying || review.State == ReviewAccepted) {
 				meta.WatchCount++
 				if review.State == ReviewAccepted {
 					meta.Running++
@@ -139,7 +139,9 @@ func (s *Session) summary(owner, key string) storage.ChatSummary {
 			case ReviewApplying, ReviewQueued:
 				meta.Running++
 			case ReviewCreated, ReviewApplied, ReviewConsumed:
-				if message.Unread {
+				if message.Unread && review.ExecutionCancel != nil {
+					meta.UnreadCancellation++
+				} else if message.Unread {
 					meta.UnreadSuccess++
 				}
 			case ReviewConflict, ReviewIncomplete, ReviewRunEnded:

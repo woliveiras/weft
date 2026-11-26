@@ -252,6 +252,8 @@ func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID 
 	switch plan.Kind {
 	case chat.AnalyzePR:
 		return s.reviewChatPR(ctx, actor, sessionID, plan)
+	case chat.CancelExecution:
+		return s.reviewChatExecutionCancel(ctx, actor, sessionID, plan)
 	case chat.InspectExecution:
 		return s.inspectChatExecution(ctx, plan)
 	case chat.InspectConsole:

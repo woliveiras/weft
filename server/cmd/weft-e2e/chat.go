@@ -4,6 +4,8 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/woliveiras/weft/server/internal/llm"
 )
@@ -85,7 +87,11 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 	case "Adopt version two for the reader node in chat-pinned-reader.":
 		content = `{"kind":"workflow.adopt_agent","adoptWorkflow":"chat-pinned-reader","adoptNode":"reader","adoptVersion":"2"}`
 	default:
-		return nil, errors.New("unknown Chat fixture request")
+		id, ok := strings.CutPrefix(last.Content, "Cancel just the delegated execution ")
+		if !ok {
+			return nil, errors.New("unknown Chat fixture request")
+		}
+		content = fmt.Sprintf(`{"kind":"execution.cancel","executionId":%q,"executionScope":"child"}`, id)
 	}
 	return &llm.ChatResponse{
 		Message: llm.ChatMessage{Role: llm.RoleAssistant, Content: content},

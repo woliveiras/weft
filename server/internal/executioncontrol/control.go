@@ -23,6 +23,7 @@ var ErrUnavailable = errors.New("execution cancellation state unavailable")
 var ErrInvalid = errors.New("invalid execution cancellation scope")
 
 type Request struct {
+	Operation   string    `json:"operation,omitempty"`
 	ExecutionID string    `json:"executionId"`
 	RootID      string    `json:"rootExecutionId"`
 	Scope       string    `json:"scope"`
@@ -129,12 +130,19 @@ func (m Manager) Tree(ctx context.Context, id string) (Tree, error) {
 
 // Cancel only acknowledges a durable request. Workers own terminal outcomes.
 func (m Manager) Cancel(ctx context.Context, id, scope, actor string) (Result, error) {
+	return m.cancel(ctx, id, scope, actor, "", nil)
+}
+
+func (m Manager) cancel(ctx context.Context, id, scope, actor, operation string, review *CancelScope) (Result, error) {
 	if scope != "child" && scope != "tree" {
 		return Result{}, ErrInvalid
 	}
 	tree, e := m.Tree(ctx, id)
 	if e != nil {
 		return Result{}, e
+	}
+	if review != nil && !review.Matches(tree) {
+		return Result{}, storage.ErrConflict
 	}
 	target := tree.RootID
 	active := false
@@ -152,18 +160,24 @@ func (m Manager) Cancel(ctx context.Context, id, scope, actor string) (Result, e
 	if old, e := m.Requested(ctx, target); e != nil {
 		return Result{}, e
 	} else if old != nil {
+		if review != nil && old.Operation != operation {
+			return Result{}, storage.ErrConflict
+		}
 		return Result{Request: old, AlreadyTerminal: !active}, nil
 	}
 	if !active {
 		return Result{AlreadyTerminal: true}, nil
 	}
-	r := &Request{target, tree.RootID, scope, actor, time.Now().UTC()}
+	r := &Request{ExecutionID: target, RootID: tree.RootID, Scope: scope, Actor: actor, At: time.Now().UTC(), Operation: operation}
 	b, e := json.Marshal(r)
 	if e != nil {
 		return Result{}, e
 	}
 	if _, e = m.Store.PutSetting(ctx, Prefix+target, b, 0, actor); errors.Is(e, storage.ErrConflict) {
 		old, readErr := m.Requested(ctx, target)
+		if review != nil && readErr == nil && (old == nil || old.Operation != operation) {
+			return Result{}, storage.ErrConflict
+		}
 		return Result{Request: old}, readErr
 	} else if e != nil {
 		return Result{}, e

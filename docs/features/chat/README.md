@@ -252,3 +252,5 @@ When inference fails, the saved reply identifies the next step. A budget rejecti
 Administrators can type `/export` or ask to download the current installation configuration. **Download installation YAML** retrieves the export with the current credentials. The file uses the same secret-preservation markers as the CLI export. The conversation stores the download action and leaves the YAML out of its transcript and model context.
 
 Use `/inspect execution <id>` or ask about an exact execution to see its observed state, tree root and number of active executions. **View execution** opens the selected execution. A cancellation request and the execution's eventual terminal status are shown separately.
+
+An operator can ask to cancel an execution tree or only a particular delegated child. The review identifies the root, selected execution, workflow and run. Confirmation records a cooperative request. Chat continues to observe the reviewed scope and reports whether an execution actually reached the cancelled state. **View execution** opens its native evidence.

@@ -2,6 +2,7 @@ package chat
 
 import (
 	"testing"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/executioncontrol"
@@ -27,5 +28,26 @@ func TestExecutionSummaryDistinguishesRequestedAndObserved(t *testing.T) {
 	}
 	if _, err := decodePlan(`{"kind":"execution.inspect","executionId":"exec-1"}`); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCancelIntentRequiresScopeAndBindsTheExactRun(t *testing.T) {
+	for _, raw := range []string{`{"kind":"execution.cancel","executionId":"child"}`, `{"kind":"task.cancel","task":"task","executionScope":"tree"}`, `{"kind":"execution.cancel","executionId":"child","executionScope":"all"}`} {
+		if _, err := decodePlan(raw); err == nil {
+			t.Fatal(raw)
+		}
+	}
+	if _, err := decodePlan(`{"kind":"execution.cancel","executionId":"child","executionScope":"child"}`); err != nil {
+		t.Fatal(err)
+	}
+	s := executioncontrol.CancelScope{Selected: "child", Root: "root", Mode: "child", Run: "first", Graph: "workflow"}
+	r, err := NewExecutionCancelReview("owner", "session", s, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.ExecutionCancel.Run = "second"
+	digest, err := r.digest("owner", "session")
+	if err != nil || digest == r.Digest {
+		t.Fatal("unsealed run", err)
 	}
 }

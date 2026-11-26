@@ -758,3 +758,27 @@ test('a delayed first response never reopens that chat over a second session', a
     release();
   }
 });
+
+test('requests cancellation of a single delegated child from its conversation', async ({page,request}) => {
+  await selectFixtureModel(request);
+  const id = 'chat-stop-child';
+  const graph = {metadata:{id},spec:{nodes:[{id:'parent',runtime:{kind:'native'},prompt:'delegation-fixture',model:{provider:'e2e',name:'fixture'},loop:{mode:'once'},tools:[{name:'delegation.request'}]}]}};
+  expect((await request.post('/api/v1/graphs',{headers,data:graph})).status()).toBe(201);
+  expect((await request.post(`/api/v1/graphs/${id}/start`,{headers})).ok()).toBe(true);
+  let child = '';
+  await expect.poll(async () => {
+    const pending = await (await request.get(`/api/v1/approvals?graph=${id}`,{headers})).json();
+    child = pending.find((a:{kind:string;status:string}) => a.kind==='delegation' && a.status==='pending')?.executionId ?? '';
+    return child;
+  }).not.toBe('');
+  await page.addInitScript(() => localStorage.setItem('weftToken','e2e-operator-token'));
+  await page.goto('/');
+  await send(page,'Cancel just the delegated execution ' + child);
+  const review = page.getByRole('region',{name:'Review execution cancellation'});
+  await expect(review.getByRole('heading',{name:'Cancel delegated child'})).toBeVisible();
+  await review.getByRole('button',{name:'Request cancellation'}).click();
+  await expect(review.getByText('The selected scope settled with an observed cancellation.')).toBeVisible();
+  const tree = await (await request.get(`/api/v1/executions/${child}/tree`,{headers})).json();
+  expect(tree.nodes.find((n:{execution:{id:string}})=>n.execution.id===child).execution.status).toBe('cancelled');
+  expect(tree.nodes.find((n:{execution:{id:string}})=>n.execution.id===tree.rootExecutionId).cancellation).toBeUndefined();
+});
