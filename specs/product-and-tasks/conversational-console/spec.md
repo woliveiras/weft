@@ -102,6 +102,8 @@ person declines to leave a dirty editor, the editor remains mounted and the
 session remains available. Preserve the respective persisted and in-memory
 draft guarantees.
 
+The composer stays at the bottom of the visible conversation. Slash suggestions complete supported commands without submitting. Ctrl+Enter and Command+Enter send through the same path as Send.
+
 Use **New chat** as the temporary title, and **Untitled chat** with a visible
 title-generation failure state after a failure or a filtered result. Preserve
 the session and allow a bounded retry. Generate one short title from the first

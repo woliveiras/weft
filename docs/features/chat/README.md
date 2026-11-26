@@ -1,4 +1,9 @@
 # Chat
+  
+The message field stays at the bottom while the conversation scrolls above it.
+Type `/` for commands. Use the arrow keys and Enter or Tab to complete a suggestion.
+Send with **Ctrl+Enter** or **Command+Enter**, or select **Send**.
+
 
 Open Chat from the left navigation or the console's home URL. Start with
 **New chat** above **Recents** on the right. On a narrow screen, open that

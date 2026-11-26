@@ -1,0 +1,28 @@
+.page.chat-page { flex: 1 1 0; min-height: 0; overflow: hidden; grid-template-rows: minmax(0, 1fr); }
+.chat-page .chat-conversation { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.chat-page .chat-header { flex: none; }
+.chat-page .chat-panel { max-height: 100%; overflow-y: auto; }
+.chat-reading-area { flex: 1 1 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px; }
+.chat-reading-area .chat-welcome { margin-block: clamp(2rem, 12vh, 8rem); text-align: center; }
+.chat-page .chat-composer {
+  flex: none; position: relative; margin: var(--space-3) 0 env(safe-area-inset-bottom);
+  gap: 0; border: 1px solid var(--border-strong); border-radius: 12px;
+  background: var(--surface-raised); padding: var(--space-3);
+}
+.chat-composer:focus-within { outline: 2px solid var(--primary); outline-offset: 1px; }
+.chat-page .chat-composer textarea {
+  width: 100%; padding: var(--space-2); min-height: 2.75rem; max-height: min(20vh, 10rem);
+  border: 0; border-radius: 6px; background: transparent; box-shadow: none; resize: vertical;
+}
+.chat-page .chat-composer textarea:focus { outline: none; }
+.chat-composer-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.chat-composer-actions span { font-size: 0.8rem; }
+.chat-command-menu {
+  position: absolute; z-index: 3; inset-inline: 0; bottom: calc(100% + 0.5rem);
+  max-height: min(16rem, 38dvh); overflow-y: auto; overscroll-behavior: contain;
+  list-style: none; padding: var(--space-2); margin: 0; border: 1px solid var(--border-strong);
+  border-radius: var(--radius); background: var(--surface-raised); box-shadow: var(--shadow-2);
+}
+.chat-command-menu li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-3); cursor: pointer; }
+.chat-command-menu li:is(:hover,[aria-selected=true]) { background: var(--primary-soft); border-radius: var(--radius-sm); }
+.chat-command-menu li span { color: var(--text-muted); font-size: .85rem; }

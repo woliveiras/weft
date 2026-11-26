@@ -316,10 +316,11 @@ it.each([true,false])('keeps a late response in its original chat (success %s)',
   fireEvent.click(screen.getByRole('button',{name:'Send'}));
   await screen.findByRole('button',{name:'Sending…'});
   fireEvent.click(screen.getByRole('button',{name:'New chat'}));
-  fireEvent.change(input,{target:{value:'A different request'}});
+  const newInput = screen.getByRole('textbox',{name:'Message'});
+  fireEvent.change(newInput,{target:{value:'A different request'}});
   expect((screen.getByRole('button',{name:'Send'}) as HTMLButtonElement).disabled).toBe(false);
   await act(async () => release(success ? {id, messages:[]} : new Response('Failure',{status:503})));
-  expect((input as HTMLTextAreaElement).value).toBe('A different request');
+  expect((newInput as HTMLTextAreaElement).value).toBe('A different request');
   expect(open.mock.calls).toEqual([[undefined,false]]);
   expect(screen.queryByRole('alert')).toBeNull();
 });

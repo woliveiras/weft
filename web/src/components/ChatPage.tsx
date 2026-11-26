@@ -1,3 +1,4 @@
+import { ChatComposer } from './ChatComposer';
 import { ChatModelSection } from './ChatModelSection';
 import { ChatSkillCard } from './ChatSkillCard';
 import { runLink } from './runPresentation';
@@ -56,6 +57,12 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   const [details, setDetails] = useState<string>();
   const [now, setNow] = useState(Date.now);
   const keys = useRef(new Map<string, {id:string; text:string}>());
+  const history = useRef<HTMLDivElement>(null);
+  const followLatest = useRef(true);
+  useLayoutEffect(() => { followLatest.current = true; }, [id]);
+  useLayoutEffect(() => {
+    if (followLatest.current && history.current) history.current.scrollTop = history.current.scrollHeight;
+  }, [session?.id, session?.messages.length]);
   const heading = useRef<HTMLHeadingElement>(null);
   const drawerButton = useRef<HTMLButtonElement>(null);
   const drawerClose = useRef<HTMLButtonElement>(null);
@@ -207,6 +214,10 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
         </Btn>}
       </header>
 
+      <div className="chat-reading-area" ref={history} onScroll={() => {
+        const el = history.current;
+        if (el) followLatest.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      }}>
       {error && <ErrorBox error={error}/>}
       {settings.error && <><ErrorBox error={settings.error}/><Btn onClick={() => void settings.reload()}>Check Chat model</Btn></>}
       {MOCK && <p className="card">Conversational requests require a running Weft server.</p>}
@@ -249,16 +260,11 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
           onRead={() => void markRead(message.id)}
           onRetry={modelAvailable && !sending && canRetry(message,now) ? () => void mutate(() => api.retryChat(session.id,message.id)) : undefined}/>)}
       </div>
-      {(!id || session) && !archived && <form className="chat-composer" onSubmit={event => { event.preventDefault(); void send(); }}>
-        <label>Message<textarea value={draft} onChange={event => {
-          const text = event.currentTarget.value;
-          setDrafts(previous => ({...previous,[draftKey]:text}));
-        }}
-          rows={3} maxLength={4096} /></label>
-        <Btn tone="primary" type="submit" disabled={!canSend || sending || waiting || !draft.trim()}>
-          {sending ? 'Sending…' : 'Send'}
-        </Btn>
-      </form>}
+      </div>
+      {(!id || session) && !archived && <ChatComposer key={draftKey} draft={draft}
+        onChange={text => setDrafts(previous => ({...previous,[draftKey]:text}))}
+        onSend={() => void send()} disabled={!canSend || sending || !!waiting}
+        sending={sending} admin={canCreateAgent} choicePending={session?.messages.at(-1)?.state === 'discovery'}/>}
     </section>
 
     <aside className="chat-panel" aria-label="Chat sessions">
