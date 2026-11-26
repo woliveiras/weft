@@ -199,3 +199,7 @@ production backup and restore remain open.
 ## 2026-11-26 — Native archive and restore fixture
 
 The native Chromium journey opened an unconfigured Chat, inspected the installed workflows, archived its session and restored it from Archived. A disposable format-1 installation from pre-Chat commit `140bb61` preserved the archived transcript and its index after upgrade, restart, offline backup and restoration. The historical upgrade target still references `faf4644`, which is absent from this checkout. The native browser suite also reproduced the same nine manual-journey failures at `140bb61` and with Chat installed.
+
+## 2026-11-26 — Task draft corrections
+
+For S16/S28 the HTTP and SQLite fixture preserved the workflow binding and the draft lifecycle after a reviewed text correction. A viewer received no review. A repeated confirmation returned the same revision and a stale proposal conflicted. Unit checks covered generated and custom channel payloads, invalid fields and sensitive source text. Chromium reviewed both texts, saved the correction, checked the resulting task via HTTP and reopened it in Tasks.

@@ -44,6 +44,8 @@ type Input struct {
 	SCMConnection string `json:"scmConnection,omitempty"`
 }
 type Draft struct {
+	CorrectionOperation   string       `json:"correctionOperation,omitempty"`
+	CorrectionRevision    int64        `json:"correctionRevision,omitempty"`
 	CreationOperation     string       `json:"creationOperation,omitempty"`
 	StartOperation        string       `json:"startOperation,omitempty"`
 	RepositoryRevision    int64        `json:"repositoryRevision,omitempty"`
@@ -270,7 +272,7 @@ func (m Manager) saveDraft(ctx context.Context, id string, in Input, revision in
 	}
 	now := time.Now().UTC()
 	d := &Draft{TriggerIssueOrigin: origin, Input: in, ID: id, TriggerGitHubIssue: githubIssueKey, Status: "draft", CreatedBy: actor, UpdatedBy: actor, CreatedAt: now, UpdatedAt: now}
-	if id == "" || operation != "" {
+	if id == "" {
 		if revision != 0 {
 			return nil, storage.ErrConflict
 		}
@@ -296,6 +298,10 @@ func (m Manager) saveDraft(ctx context.Context, id string, in Input, revision in
 		}
 		if old.Resolution != nil && old.Resolution.Repository != "" && strings.Contains(in.Request, old.Resolution.Repository) && in.ProjectID == "" && len(in.Repositories) == 0 {
 			return nil, fmt.Errorf("%w: select a registered project for the repository URL or remove the URL from the request", ErrInvalid)
+		}
+		d.CorrectionOperation, d.CorrectionRevision = old.CorrectionOperation, old.CorrectionRevision
+		if operation != "" {
+			d.CorrectionOperation, d.CorrectionRevision = operation, revision+1
 		}
 		d.Submitted = old.Submitted
 		d.CreationOperation = old.CreationOperation

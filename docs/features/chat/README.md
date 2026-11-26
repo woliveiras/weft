@@ -48,6 +48,10 @@ Ask “Revise o PR 418.” If several running workflows or connections qualify, 
 
 The preview identifies the repository, source and base commits, model and workflow version. **View workflow** opens the selected node. **Analyze PR** checks the revisions again and sends the bounded diff to the workflow model for one billed, tool-free analysis. Existing channel and turn gates still apply. The draft appears in the conversation with **View execution**. A missing receipt leaves the outcome unknown. Requesting analysis grants no publication permission.
 
+## Correct a task draft
+
+Identify the draft by its ID or unique title and specify the replacement title, request, or outcome. Compare the current and proposed text, then select **Save draft correction**. The draft keeps its workflow and repository bindings. When it uses a generated channel payload, the title and request update there as well. Open **Tasks** to review custom payloads, resolve incomplete bindings or change repositories. A newer draft or workflow revision requires a fresh review.
+
 ## Save a managed skill
 
 An administrator can ask to create a skill with a name and instruction text, or revise an existing skill by ID. Compare the text and current audience on the review card, then choose **Save skill revision**. New skills start disabled. A revision preserves the skill’s activation, scope and description. **View skill** opens its saved content. Built-in skills remain read-only.

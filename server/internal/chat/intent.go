@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/woliveiras/weft/server/internal/llm"
+	"github.com/woliveiras/weft/server/internal/taskconfig"
 )
 
 const (
@@ -45,6 +46,7 @@ Return exactly one JSON object. "kind" is one of:
 - "task.start": propose starting an explicitly identified saved task. Add "task" with the task ID or exact title established in the conversation. Ask which task when the target is unclear. Starting requires a separate review. Never infer start from a request to create, inspect or follow a task.
 - "approval.decide": propose an explicit decision for one pending request. Include either "approvalId" with its exact ID or "task" when the user identifies a single task's pending approval. Add "approvalDecision" (approve or reject), optionally "approvalAnswer" for the user's exact answer to a question and "approvalComment" for their stated comment. Never invent an answer, edit a held message, or infer an approval from opening, starting or following a task.
 - "task.retry": propose saving a linked retry draft of an explicitly identified failed task. Add "task" with its ID or exact title. This prepares the next attempt for review. It does not start the retry or apply the original attempt's authorization.
+- "task.edit": correct an existing draft. Include "task" with the exact ID or unique title and only requested replacement fields "newTitle", "newRequest" or "newOutcome". Outcome is understand, implement, investigate, review or freeform. Do not change runtime or bindings.
 - "task.create": prepare a saved task draft using a named workflow. Add "taskTitle", "workflow" (the stated workflow ID or exact name), "request" (the intended work), and "outcome" (understand, implement, investigate, review, freeform). Add "workflowVersion" as a string only if the user named the version. Ask for the workflow if the target is unclear. Work requiring a repository or delivery settings must be configured in Tasks. Never include grants or start a task.
 - "agent.create": propose a reusable agent for the catalog. Add "agentId" (lowercase letters, digits and hyphens), "agentName" and concise "instructions". The operator reviews the proposal before anything is created. Never interpret a confirmation as a new create request.
 - "agent.publish": propose replacing shared catalog instructions in a new agent version. Add "publishAgent" with the exact catalog ID or name and "sharedInstructions" with the complete proposed text. A publication never changes existing workflow pins. Ask whether the user wants shared publication, workflow-local instructions or one-time guidance if that scope is unclear.
@@ -65,6 +67,7 @@ You may include a short, neutral "title" for the conversation based on the lates
 // Plan proposes an operation or asks for clarification. A task selector is
 // always resolved against the caller's permitted resources before it is used.
 type Plan struct {
+	Correction    taskconfig.DraftText
 	Skill         SkillDraft
 	Area          string
 	PRSelector    PRSelector
@@ -214,6 +217,12 @@ func decodePlan(body string) (Plan, error) {
 			plan.Approval.Comment = value
 		case "question":
 			plan.Question = value
+		case "newTitle":
+			plan.Correction.Title = value
+		case "newRequest":
+			plan.Correction.Request = value
+		case "newOutcome":
+			plan.Correction.Outcome = value
 		case "taskTitle":
 			plan.TaskDraft.Title = value
 		case "workflow":
@@ -284,6 +293,9 @@ func decodePlan(body string) (Plan, error) {
 	if plan.Kind != GuideNode && (seen["guideWorkflow"] || seen["guideNode"] || seen["guideReplica"] || seen["guidance"]) {
 		return Plan{}, ErrInvalidPlan
 	}
+	if (seen["newTitle"] || seen["newRequest"] || seen["newOutcome"]) && plan.Kind != CorrectTask {
+		return Plan{}, ErrInvalidPlan
+	}
 	if plan.Kind != CreateTask && (seen["taskTitle"] || seen["workflow"] || seen["workflowVersion"] || seen["request"] || seen["outcome"]) {
 		return Plan{}, ErrInvalidPlan
 	}
@@ -342,6 +354,10 @@ func decodePlan(body string) (Plan, error) {
 		}
 	case OpenManual:
 		if !ManualDestination(plan.Destination) || seen["task"] || seen["question"] {
+			return Plan{}, ErrInvalidPlan
+		}
+	case CorrectTask:
+		if !shortLabel(plan.Task) || seen["question"] || !validCorrection(plan.Correction, true) || (seen["newTitle"] && plan.Correction.Title == "") || (seen["newRequest"] && plan.Correction.Request == "") || (seen["newOutcome"] && plan.Correction.Outcome == "") {
 			return Plan{}, ErrInvalidPlan
 		}
 	case WatchTask, InspectTask, StartTask, RetryTask:

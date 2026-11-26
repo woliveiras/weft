@@ -3028,6 +3028,7 @@ components:
             - {$ref: "#/components/schemas/ChatTaskStartReview"}
             - {$ref: "#/components/schemas/ChatWorkflowControlReview"}
             - {$ref: "#/components/schemas/ChatTaskRetryReview"}
+            - {$ref: "#/components/schemas/ChatCorrectionReview"}
             - {$ref: "#/components/schemas/ChatCatalogPublicationReview"}
             - {$ref: "#/components/schemas/ChatAgentAdoptionReview"}
             - {$ref: "#/components/schemas/ChatApprovalReview"}
@@ -3283,6 +3284,30 @@ components:
                 observed: {type: string}
                 settled: {type: boolean}
                 incomplete: {type: boolean}
+    ChatDraftText:
+      type: object
+      required: [title, request, outcome]
+      properties:
+        title: {type: string}
+        request: {type: string}
+        outcome: {type: string, enum: [review, understand, investigate, freeform, implement]}
+    ChatCorrectionReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [taskCorrection]
+          properties:
+            taskCorrection:
+              type: object
+              required: [task, workflow, revision, workflowVersion, workflowDigest, before, after]
+              properties:
+                task: {type: string}
+                workflow: {type: string}
+                revision: {type: integer}
+                workflowVersion: {type: integer}
+                workflowDigest: {type: string}
+                before: {$ref: "#/components/schemas/ChatDraftText"}
+                after: {$ref: "#/components/schemas/ChatDraftText"}
     ChatTaskRetryReview:
       allOf:
         - {$ref: "#/components/schemas/ChatReviewState"}

@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
 import type { ChatAgentAdoptionReview, ChatApprovalReview, ChatCatalogPublicationReview, ChatMessage, ChatOperationReview,
   ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview,
-  ChatTaskRetryReview } from '../api/chat';
+  ChatCorrectionReview, ChatTaskRetryReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -294,7 +294,7 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
     {onRetry && <Btn onClick={onRetry}>Retry saved request</Btn>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
-    {review && <OperationReviewCard review={review} now={now} canConfirm={('pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'approval' in review) ? canOperate : canCreateAgent}
+    {review && <OperationReviewCard review={review} now={now} canConfirm={('taskCorrection' in review || 'pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'approval' in review) ? canOperate : canCreateAgent}
       onDecide={decision => onDecide(review,decision)} onView={onView}/>}
     {value.unread && <Btn onClick={onRead}>Mark result read</Btn>}
   </article>;
@@ -311,6 +311,7 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   if ('taskDraft' in review) return <TaskDraftReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskStart' in review) return <TaskStartReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('workflowControl' in review) return <WorkflowControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('taskCorrection' in review) return <CorrectionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskRetry' in review) return <TaskRetryReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('publication' in review) return <CatalogPublicationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('adoption' in review) return <AgentAdoptionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
@@ -462,6 +463,26 @@ function WorkflowControlCard({review, now, canConfirm, onDecide, onView}: {
     {review.state === 'unknown' && <p role="status">The control outcome is temporarily unknown. Inspect the workflow before trying again.</p>}
     {review.state === 'declined' && <p role="status">Proposal declined.</p>}
     <a id={anchor} href={`#/g/${encodeURIComponent(scope.workflowId)}/canvas${selection}`} onClick={() => onView(anchor)}>Open workflow</a>
+  </section>;
+}
+
+function CorrectionCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatCorrectionReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const {taskCorrection: edit} = review;
+  const anchor = 'chat-correction-' + review.id;
+  return <section className="chat-agent-review" aria-label="Task draft correction">
+    <h3>Edit task draft</h3>
+    <p>{edit.task} · {edit.workflow} v{edit.workflowVersion} · draft revision {edit.revision}</p>
+    <h4>Current</h4><p>{edit.before.title}</p><p>{edit.before.request}</p><p>{edit.before.outcome}</p>
+    <h4>Proposed</h4><p>{edit.after.title}</p><p>{edit.after.request}</p><p>{edit.after.outcome}</p>
+    {review.state === 'awaiting_confirmation' && <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm} confirmLabel="Save draft correction" onDecide={onDecide}/>}
+    {review.state === 'applied' && <p role="status">Task draft revision {review.resultVersion} saved.</p>}
+    {review.state === 'applying' && <p role="status">Saving the draft correction…</p>}
+    {review.state === 'unknown' && <p role="status">Save outcome unknown. Open the task to inspect its current revision.</p>}
+    {review.state === 'declined' && <p role="status">Correction declined.</p>}
+    {review.state === 'conflict' && <p role="status">The task or workflow changed. Request a fresh review.</p>}
+    <a id={anchor} href={taskSectionLink(edit.task,'overview')} onClick={()=>onView(anchor)}>Open task draft</a>
   </section>;
 }
 

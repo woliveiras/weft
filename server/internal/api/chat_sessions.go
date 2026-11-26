@@ -261,6 +261,8 @@ func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID 
 		return s.reviewChatAdoption(ctx, actor, sessionID, plan)
 	case chat.CreateWorkflow:
 		return s.reviewChatWorkflow(ctx, actor, sessionID, plan)
+	case chat.CorrectTask:
+		return s.reviewChatTaskCorrection(ctx, actor, sessionID, plan)
 	case chat.CreateTask:
 		return s.reviewChatTaskDraft(ctx, actor, sessionID, plan)
 	case chat.StartTask:

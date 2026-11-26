@@ -125,6 +125,9 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		}
 		settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 		defer cancel()
+		if review.TaskCorrection != nil {
+			return s.applyChatTaskCorrection(settleCtx, actor, sessionID, review)
+		}
 		if review.Skill != nil {
 			return s.applyChatSkill(settleCtx, actor, sessionID, review)
 		}
@@ -194,7 +197,7 @@ func reviewDecisionRole(review *chat.OperationReview) config.Role {
 	if review.PR != nil || review.Guidance != nil {
 		return config.RoleOperator
 	}
-	if review.TaskDraft != nil || review.TaskRetry != nil || review.Approval != nil {
+	if review.TaskCorrection != nil || review.TaskDraft != nil || review.TaskRetry != nil || review.Approval != nil {
 		return config.RoleOperator
 	}
 	return config.RoleAdmin
@@ -249,6 +252,14 @@ func (s *Server) reconcileChatReviews(ctx context.Context, owner string, session
 			(review.State == chat.ReviewApplying || review.State == chat.ReviewAccepted || review.State == chat.ReviewUnknown) {
 			var err error
 			session, err = s.reconcileChatWorkflowControl(ctx, owner, session, review)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if review != nil && review.TaskCorrection != nil && (review.State == chat.ReviewApplying || review.State == chat.ReviewUnknown) {
+			var err error
+			session, err = s.observeChatTaskCorrection(ctx, owner, session, review)
 			if err != nil {
 				return nil, err
 			}
