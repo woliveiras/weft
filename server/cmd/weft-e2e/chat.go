@@ -42,7 +42,7 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"node.guide","guideWorkflow":"guidance-sample","guideNode":"reader","guideReplica":"0","guidance":"Summarize the warnings.","title":"Guide the reader"}`
 	case "Set local instructions for reader in instruction-sample to review test changes.":
 		content = `{"kind":"workflow.instructions","instructionWorkflow":"instruction-sample","instructionNode":"reader","localInstructions":"Review test changes.","title":"Review workflow instructions"}`
-	case "Revise o PR 418.":
+	case "Revise o PR 418.", "Revise o PR 418 em team/repo.":
 		content = `{"kind":"pr.analyze","prNumber":"418","title":"Review a pull request"}`
 	case "Open the connections list for OAuth setup.":
 		content = `{"kind":"manual.open","destination":"connections","title":"Set up a connection"}`

@@ -2348,6 +2348,45 @@ paths:
         "403": {description: Operator access required}
         "404": {description: Review absent or inaccessible}
         "409": {description: Pinned revision, grant or bounded diff no longer available}
+  /api/v1/chat/sessions/{chatId}/operations/{operationId}/pr-comment-review:
+    parameters:
+      - {$ref: "#/components/parameters/ChatSessionID"}
+      - {name: operationId, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [chat]
+      operationId: prepareChatPRComments
+      x-weft-role: operator
+      description: Review selected line comments from an owned completed analysis. No provider write until the separately bound confirmation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [commentIds]
+              properties:
+                commentIds: {type: array, uniqueItems: true, minItems: 1, maxItems: 6, items: {type: integer, minimum: 1}}
+      responses:
+        "200": {$ref: "#/components/responses/ChatSession"}
+        "400": {description: Invalid or unresolved selection}
+        "403": {description: Current role or explicit repository grants are insufficient}
+        "404": {description: Analysis absent or inaccessible}
+        "409": {description: Provider, immutable diff anchor or reviewed revision unavailable}
+  /api/v1/chat/sessions/{chatId}/operations/{operationId}/pr-comment-receipts:
+    parameters:
+      - {$ref: "#/components/parameters/ChatSessionID"}
+      - {name: operationId, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [chat]
+      operationId: reconcileChatPRComments
+      x-weft-role: operator
+      description: Look up uncertain publication receipts using the original scoped connection and source revision. Never attempts or resends a comment.
+      responses:
+        "200": {$ref: "#/components/responses/ChatSession"}
+        "403": {description: Current role or explicit repository grants are insufficient}
+        "404": {description: Review absent or inaccessible}
+        "409": {description: Publication has not settled}
   /api/v1/chat/sessions/{chatId}/operations/{operationId}/{decision}:
     parameters:
       - {$ref: "#/components/parameters/ChatSessionID"}
@@ -2357,7 +2396,7 @@ paths:
       tags: [chat]
       operationId: decideChatReview
       x-weft-role: operator
-      description: Decision requires session ownership and the current role for the reviewed operation. Task drafting and retry, eligible approvals, live guidance and runtime controls require operator. Task start and cancellation, catalog and workflow edits and installation configuration require admin.
+      description: Decision requires session ownership and the current role for the reviewed operation. Task drafting and retry, PR analysis and line comment publication, eligible approvals, live guidance and runtime controls require operator. Task start and cancellation, catalog and workflow edits and installation configuration require admin.
       requestBody:
         required: true
         content:
@@ -3093,6 +3132,7 @@ components:
             - {$ref: "#/components/schemas/ChatGuidanceReview"}
             - {$ref: "#/components/schemas/ChatInstructionReview"}
             - {$ref: "#/components/schemas/ChatPRReview"}
+            - {$ref: "#/components/schemas/ChatPRPublicationReview"}
             - {$ref: "#/components/schemas/ChatSkillReview"}
         task:
           type: object
@@ -3192,27 +3232,63 @@ components:
           required: [pr]
           properties:
             prSummary: {type: string, description: "Bounded draft from the correlated execution."}
-            pr:
+            pr: {$ref: "#/components/schemas/ChatPRAnalysis"}
+            prComments: {type: array, maxItems: 6, items: {$ref: "#/components/schemas/ChatPRDraftComment"}}
+    ChatPRAnalysis:
+      type: object
+      required: [number, provider, repository, connection, connectionRevision, head, base, headRef, baseRef, graph, node, channel, version, run, modelProvider, modelName]
+      properties:
+        number: {type: integer}
+        provider: {type: string}
+        repository: {type: string}
+        connection: {type: string}
+        connectionRevision: {type: string}
+        head: {type: string}
+        base: {type: string}
+        headRef: {type: string}
+        baseRef: {type: string}
+        draft: {type: boolean}
+        graph: {type: string}
+        node: {type: string}
+        channel: {type: string}
+        version: {type: integer}
+        run: {type: string}
+        modelProvider: {type: string}
+        modelName: {type: string}
+    ChatPRDraftComment:
+      type: object
+      required: [id, path, side, line, body]
+      properties:
+        id: {type: integer, minimum: 1}
+        path: {type: string}
+        side: {type: string, enum: [LEFT, RIGHT]}
+        line: {type: integer, minimum: 1}
+        body: {type: string, maxLength: 480}
+    ChatPRPublicationReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [prPublication]
+          properties:
+            prPublication:
               type: object
-              required: [number, provider, repository, connection, connectionRevision, head, base, headRef, baseRef, graph, node, channel, version, run, modelProvider, modelName]
+              required: [analysis, analysisId, executionId, comments]
               properties:
-                number: {type: integer}
-                provider: {type: string}
-                repository: {type: string}
-                connection: {type: string}
-                connectionRevision: {type: string}
-                head: {type: string}
-                base: {type: string}
-                headRef: {type: string}
-                baseRef: {type: string}
-                draft: {type: boolean}
-                graph: {type: string}
-                node: {type: string}
-                channel: {type: string}
-                version: {type: integer}
-                run: {type: string}
-                modelProvider: {type: string}
-                modelName: {type: string}
+                analysis: {$ref: "#/components/schemas/ChatPRAnalysis"}
+                analysisId: {type: string}
+                executionId: {type: string}
+                comments: {type: array, minItems: 1, maxItems: 6, items: {$ref: "#/components/schemas/ChatPRDraftComment"}}
+            prReceipts:
+              type: array
+              maxItems: 6
+              description: Receipt per selected comment in the reviewed order
+              items:
+                type: object
+                required: [state]
+                properties:
+                  state: {type: string, enum: [published, failed, unknown]}
+                  id: {type: integer, format: int64}
+                  code: {type: string}
     ChatInstructionReview:
       allOf:
         - {$ref: "#/components/schemas/ChatReviewState"}

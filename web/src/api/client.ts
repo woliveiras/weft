@@ -355,6 +355,10 @@ export const api = {
     request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/title/retry`, {method:'POST'}),
   chatPRDiff: (id: string, operation: string) =>
     request<{head: string; base: string; diff: string}>(`${V1}/chat/sessions/${enc(id)}/operations/${enc(operation)}/pr-diff`),
+  prepareChatPRComments: (id: string, operation: string, commentIds: number[]) =>
+    request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/operations/${enc(operation)}/pr-comment-review`, {method:'POST',body:{commentIds}}),
+  reconcileChatPRComments: (id: string, operation: string) =>
+    request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/operations/${enc(operation)}/pr-comment-receipts`, {method:'POST'}),
   decideChatReview: (id: string, operation: string, digest: string, decision: 'confirm' | 'decline') =>
     request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/operations/${enc(operation)}/${decision}`, {method:'POST',body:{digest}}),
   archiveChat: (id: string, archived: boolean) =>

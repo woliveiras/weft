@@ -2,6 +2,7 @@ import { ChatModelSection } from './ChatModelSection';
 import { ChatSkillCard } from './ChatSkillCard';
 import { runLink } from './runPresentation';
 import { ChatPRCard } from './ChatPRCard';
+import { ChatPRPublicationCard } from './ChatPRPublicationCard';
 import { takeChatReturnFocus } from './chatConnectionReturn';
 import { ChatInstructionCard } from './ChatInstructionCard';
 import { ChatGuidanceCard } from './ChatGuidanceCard';
@@ -241,6 +242,9 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
           now={now} canCreateAgent={canCreateAgent && !sending} canOperate={canOperate && !sending}
           onModelSettings={canCreateAgent ? openModelEditor : undefined}
           onDecide={(review, decision) => void mutate(() => api.decideChatReview(session.id, review.id, review.digest, decision))}
+          onPRAction={(operation, commentIds) => void mutate(() => commentIds
+            ? api.prepareChatPRComments(session.id, operation, commentIds)
+            : api.reconcileChatPRComments(session.id, operation))}
           onView={anchor => { evidence.current = anchor; }}
           onRead={() => void markRead(message.id)}
           onRetry={modelAvailable && !sending && canRetry(message,now) ? () => void mutate(() => api.retryChat(session.id,message.id)) : undefined}/>)}
@@ -334,8 +338,11 @@ function SessionRow({item, current, expanded, onOpen, onDetails}: {
   </li>;
 }
 
-function Message({sessionId, value, now, canCreateAgent, canOperate, onView, onRead, onRetry, onDecide, onModelSettings}: {
+type PRAction = (operation: string, commentIds?: number[]) => void;
+
+function Message({sessionId, value, now, canCreateAgent, canOperate, onView, onRead, onRetry, onDecide, onModelSettings, onPRAction}: {
   sessionId:string;
+  onPRAction:PRAction;
   onModelSettings?:()=>void;
   value:ChatMessage; now:number; canCreateAgent:boolean; canOperate:boolean; onView:(anchor:string)=>void; onRead:()=>void;
   onRetry?:()=>void; onDecide:(review:ChatOperationReview, decision:'confirm'|'decline')=>void;
@@ -368,18 +375,22 @@ function Message({sessionId, value, now, canCreateAgent, canOperate, onView, onR
         onClick={() => onView(`chat-execution-${value.id}`)}>View execution</a>
     </section>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
-    {review && <OperationReviewCard sessionId={sessionId} review={review} now={now} canConfirm={('executionCancel' in review || 'taskCorrection' in review || 'pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'workflowScale' in review || 'workflowEnvironment' in review || 'approval' in review) ? canOperate : canCreateAgent}
-      onDecide={decision => onDecide(review,decision)} onView={onView}/>}
+    {review && <OperationReviewCard sessionId={sessionId} review={review} now={now} canConfirm={('executionCancel' in review || 'taskCorrection' in review || 'pr' in review || 'prPublication' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review || 'workflowScale' in review || 'workflowEnvironment' in review || 'approval' in review) ? canOperate : canCreateAgent}
+      onDecide={decision => onDecide(review,decision)} onView={onView} onPRAction={onPRAction}/>}
     {value.unread && <Btn onClick={onRead}>Mark result read</Btn>}
   </article>;
 }
 
-function OperationReviewCard({sessionId, review, now, canConfirm, onDecide, onView}: {
+function OperationReviewCard({sessionId, review, now, canConfirm, onDecide, onView, onPRAction}: {
   sessionId:string; review:ChatOperationReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+  onPRAction:PRAction;
 }) {
   if ('budgetRaise' in review) return <BudgetRaiseCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('skill' in review) return <ChatSkillCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
-  if ('pr' in review) return <ChatPRCard sessionId={sessionId} review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('pr' in review) return <ChatPRCard sessionId={sessionId} review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}
+    onPrepare={ids => onPRAction(review.id, ids)}/>;
+  if ('prPublication' in review) return <ChatPRPublicationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}
+    onReconcile={() => onPRAction(review.id)}/>;
   if ('instructions' in review) return <ChatInstructionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('guidance' in review) return <ChatGuidanceCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;
   if ('configuration' in review) return <ChatConfigurationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide}/>;

@@ -231,6 +231,12 @@ Startup indexes retained sessions with a missing or stale projection without
 altering the transcript or incrementing its revision. Recents is paginated.
 The reconciler selects only sessions with pending watches.
 
+PR comment reviews keep the selected draft and shown receipts in the
+conversation. The SCM service holds a separate `scm/review-comments/` setting
+per connection revision, PR revision and exact comment digest. It reserves the
+receipt before a provider write. The setting stores its lookup marker and
+outcome. The raw diff stays outside the transcript and receipt.
+
 ## Instruction records
 
 Existing settings CAS stores `instructions/skills/{id}` with current revision plus immutable history and actor/time, and `instructions/executions/{executionId}` as a create-only manifest. No SQL migration. See [limits and deletion semantics](instructions.md).

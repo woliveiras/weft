@@ -44,7 +44,7 @@ func (analysisProvider) Models(context.Context) ([]llm.ModelInfo, error) {
 }
 func (analysisProvider) Chat(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
 	if r.Metadata["graph"] == "manual-review" && len(r.Tools) == 0 && len(r.Messages) == 2 && strings.Contains(r.Messages[1].Content, "fixture change") {
-		return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, Content: "Add a boundary test for the fixture change."}}, nil
+		return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, Content: `{"summary":"Add a boundary test for the fixture change.","comments":[{"path":"file","side":"RIGHT","line":1,"body":"Add a boundary test for the new value."},{"path":"file","side":"LEFT","line":1,"body":"Explain why the original value was removed."}]}`}}, nil
 	}
 	if r.JSON && strings.HasPrefix(r.System, "You interpret a Weft operator's requests") {
 		return consoleFixtureResponse(r)

@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ChatPRReview } from '../api/chat';
 import { api } from '../api/client';
@@ -33,7 +34,7 @@ it('links a completed draft to the observed execution', () => {
 it('fetches the pinned diff on demand, without confirming the analysis', async () => {
   const inspect = vi.spyOn(api, 'chatPRDiff').mockResolvedValue({head:'head', base:'base', diff:'+++ b/file.ts\n@@ -1 +1 @@\n+fixture line'});
   const decide = vi.fn();
-  render(<ChatPRCard sessionId="session" review={proposal} now={0} canConfirm onDecide={decide} onView={vi.fn()}/>);
+  render(<StrictMode><ChatPRCard sessionId="session" review={proposal} now={0} canConfirm onDecide={decide} onView={vi.fn()}/></StrictMode>);
   expect(inspect).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', {name: 'Inspect pinned diff'}));
   expect(await screen.findByText(/\+fixture line/)).toBeTruthy();

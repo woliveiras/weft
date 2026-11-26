@@ -14,6 +14,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/executioncontrol"
+	"github.com/woliveiras/weft/server/internal/scm"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/trigger"
 )
@@ -117,6 +118,9 @@ type OperationReview struct {
 	Skill               *SkillChange                     `json:"skill,omitempty"`
 	PR                  *PRAnalysis                      `json:"pr,omitempty"`
 	PRSummary           string                           `json:"prSummary,omitempty"`
+	PRComments          []PRDraftComment                 `json:"prComments,omitempty"`
+	PRPublication       *PRCommentPublication            `json:"prPublication,omitempty"`
+	PRReceipts          []scm.ReviewCommentResult        `json:"prReceipts,omitempty"`
 	Instructions        *InstructionEdit                 `json:"instructions,omitempty"`
 	Guidance            *Guidance                        `json:"guidance,omitempty"`
 	ConsumedAt          *time.Time                       `json:"consumedAt,omitempty"`
@@ -148,7 +152,7 @@ func (review *OperationReview) DecisionRole() config.Role {
 	if review.WorkflowControl != nil || review.WorkflowScale != nil || review.ExecutionCancel != nil || review.WorkflowEnvironment != nil {
 		return config.RoleOperator
 	}
-	if review.PR != nil || review.Guidance != nil {
+	if review.PR != nil || review.PRPublication != nil || review.Guidance != nil {
 		return config.RoleOperator
 	}
 	if review.TaskCorrection != nil || review.TaskDraft != nil || review.TaskRetry != nil || review.Approval != nil {
@@ -181,7 +185,7 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	choices := 0
-	for _, exists := range []bool{r.WorkflowEnvironment != nil, r.ExecutionCancel != nil, r.TriggerControl != nil, r.WorkflowScale != nil, r.BudgetRaise != nil, r.Environment != nil, r.TaskCorrection != nil, r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskCancel != nil, r.TaskAuthorization != nil, r.TaskRetry != nil, r.Approval != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
+	for _, exists := range []bool{r.WorkflowEnvironment != nil, r.ExecutionCancel != nil, r.TriggerControl != nil, r.WorkflowScale != nil, r.BudgetRaise != nil, r.Environment != nil, r.TaskCorrection != nil, r.Skill != nil, r.PR != nil, r.PRPublication != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskCancel != nil, r.TaskAuthorization != nil, r.TaskRetry != nil, r.Approval != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
 		if exists {
 			choices++
 		}
@@ -281,6 +285,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 			ExpiresAt                     time.Time
 			PR                            *PRAnalysis
 		}{owner, session, r.ID, AnalyzePR, r.ExpiresAt, r.PR}
+	case r.PRPublication != nil:
+		payload = struct {
+			Owner, Session, ID, Operation string
+			ExpiresAt                     time.Time
+			Publication                   *PRCommentPublication
+		}{owner, session, r.ID, PublishPRComments, r.ExpiresAt, r.PRPublication}
 	case r.Instructions != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string

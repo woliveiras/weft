@@ -80,6 +80,7 @@ const (
 	EvBranchPushed           EventType = "scm.branch_pushed"
 	EvPullRequestOpened      EventType = "scm.pull_request_opened"
 	EvReviewSummaryPublished EventType = "scm.review_summary_published"
+	EvReviewCommentPublished EventType = "scm.review_comment_published"
 	// Issue triggers.
 	EvTriggerHoldResolved EventType = "trigger.hold_resolved"
 	EvTriggerChanged      EventType = "trigger.changed"

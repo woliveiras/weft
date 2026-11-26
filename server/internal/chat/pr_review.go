@@ -65,9 +65,7 @@ func NewPRReview(owner, session string, p PRAnalysis, now time.Time) (*Operation
 }
 
 func (s Sessions) ObservePR(ctx context.Context, owner, session, id, prior, state, execution, summary string) (*Session, error) {
-	if !safeText(summary, 4000) {
-		summary = "Open the execution to inspect the review result."
-	}
+	summary, comments := parsePRDraft(summary)
 	return s.update(ctx, owner, session, func(v *Session) (bool, error) {
 		for i := range v.Messages {
 			m := &v.Messages[i]
@@ -79,6 +77,7 @@ func (s Sessions) ObservePR(ctx context.Context, owner, session, id, prior, stat
 				return false, nil
 			}
 			r.State, r.ResultID, r.PRSummary = state, execution, summary
+			r.PRComments = comments
 			m.Unread = m.Unread || state == ReviewApplied || state == ReviewIncomplete || state == ReviewUnknown
 			v.LastActivity = time.Now().UTC()
 			return true, nil

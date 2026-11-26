@@ -191,6 +191,20 @@ decision retrieves its recorded state without creating another version.
 The Chat message endpoint accepts the explicit confirmation or decline text
 shown on the card when the conversation contains exactly one pending review.
 
+A PR analysis review can expose its bounded diff at
+`GET /api/v1/chat/sessions/{id}/operations/{operationId}/pr-diff`. The route
+checks session ownership, operator role, the saved SCM read grant and the
+reviewed head and base. Diff reads do not start an analysis and are not cached
+or copied to the transcript.
+
+For a completed GitHub analysis, `POST .../{operationId}/pr-comment-review`
+accepts `{commentIds}` from the draft. It returns a separate `prPublication`
+review with the exact comments and target. The decision endpoint rechecks the
+saved `scm.pull_request.comment` grant, connection version and bounded diff.
+Each `prReceipts` item corresponds to the comment in the same position. An
+uncertain receipt can be checked with `POST .../{publicationId}/pr-comment-receipts`.
+Recovery only looks up an existing write. It does not resend a comment.
+
 Installation reviews use the same decision endpoint and require administrator access. The `configuration` on a review contains the proposed document, per-object changes, expected revisions and intake consent. A terminal review distinguishes `applied`, `incomplete`, `conflict` and `unknown`. Inspect `configReceipts` to identify each applied, unchanged, failed, untouched or saved-but-unverified object. A repeated confirmation returns the recorded outcome. A role change hides the administrative review on subsequent reads.
 
 Chat can propose an existing `Project` by native ID with only `executionMode`

@@ -75,9 +75,8 @@ func matchingGrants(p *Principal, t Tool, includeCapabilityOnlyNames bool) []dom
 			}
 			continue
 		}
-		// Checkpoint tools let an agent rewrite its workspace from history:
-		// only a grant naming the tool or its capability enables them, never
-		// a wildcard.
+		// Checkpoint and reviewed line comment grants must name the tool or
+		// capability explicitly. A wildcard cannot grant either effect.
 		if ExplicitGrantOnly(t) {
 			if g.Name == t.Name() || g.Name == t.Capability() {
 				out = append(out, g)
@@ -99,10 +98,9 @@ func matchingGrants(p *Principal, t Tool, includeCapabilityOnlyNames bool) []dom
 	return out
 }
 
-// ExplicitGrantOnly reports tools that wildcard grants ("*", "checkpoint.*")
-// never cover.
+// ExplicitGrantOnly reports tools that wildcard grants never cover.
 func ExplicitGrantOnly(t Tool) bool {
-	return strings.HasPrefix(t.Capability(), "checkpoint.")
+	return strings.HasPrefix(t.Capability(), "checkpoint.") || t.Capability() == "scm.pull_request.comment"
 }
 
 // Authorize decides whether p may invoke t. It returns the merged grant the

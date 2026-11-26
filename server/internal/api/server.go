@@ -257,6 +257,8 @@ func (s *Server) routes() {
 		{"POST /api/v1/chat/sessions/{chatID}/messages/{messageID}/read", R, s.updateChat},
 		{"POST /api/v1/chat/sessions/{chatID}/title/retry", R, s.retryChatTitle},
 		{"GET /api/v1/chat/sessions/{chatID}/operations/{operationID}/pr-diff", O, s.inspectChatPRDiff},
+		{"POST /api/v1/chat/sessions/{chatID}/operations/{operationID}/pr-comment-review", O, s.prepareChatPRComments},
+		{"POST /api/v1/chat/sessions/{chatID}/operations/{operationID}/pr-comment-receipts", O, s.reconcileChatPRComments},
 		{"POST /api/v1/chat/sessions/{chatID}/operations/{operationID}/{decision}", O, s.decideChatReview},
 		{"GET /api/v1/trigger-policy", R, s.triggerPolicy},
 		{"GET /api/v1/review-routes", R, s.listReviewRoutes},

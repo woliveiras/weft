@@ -123,6 +123,9 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		if review.Environment != nil || review.WorkflowEnvironment != nil || review.TaskStart != nil || review.PR != nil {
 			timeout = 30 * time.Second
 		}
+		if review.PRPublication != nil {
+			timeout = chatPRPublicationTimeout
+		}
 		settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 		defer cancel()
 		if review.Environment != nil {
@@ -139,6 +142,9 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		}
 		if review.PR != nil {
 			return s.dispatchChatPR(settleCtx, actor, sessionID, review)
+		}
+		if review.PRPublication != nil {
+			return s.applyChatPRComments(settleCtx, actor, sessionID, review)
 		}
 		if review.Instructions != nil {
 			return s.applyChatInstructions(settleCtx, actor, sessionID, review)
@@ -328,6 +334,17 @@ func (s *Server) reconcileChatReviews(ctx context.Context, owner string, session
 			if review.State == chat.ReviewQueued || review.State == chat.ReviewApplying || review.State == chat.ReviewUnknown {
 				var err error
 				session, err = s.observeChatPR(ctx, owner, session, review)
+				if err != nil {
+					return nil, err
+				}
+			}
+			continue
+		}
+		if review != nil && review.PRPublication != nil {
+			if review.State == chat.ReviewApplying && time.Since(review.ClaimedAt) > chatPRPublicationTimeout+3*time.Second {
+				var err error
+				session, err = s.chatStore().ObservePRCommentReview(ctx, owner, session.ID, review.ID, "",
+					chatPRCommentResults(len(review.PRPublication.Comments), "unknown", "receipt_unconfirmed"))
 				if err != nil {
 					return nil, err
 				}

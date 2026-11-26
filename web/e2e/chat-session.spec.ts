@@ -30,21 +30,36 @@ async function draftTaskWithApproval(request: APIRequestContext, graphId: string
   return await draft.json() as {id: string; revision: number};
 }
 
-test('discovers duplicate PR numbers before analyzing a pinned PR and returning its execution', async ({ page, request }) => {
+test('discovers duplicate PR numbers and publishes only reviewed comments on the pinned PR', async ({ page, request }) => {
   await selectFixtureModel(request);
   const base = 'b'.repeat(40), head = 'a'.repeat(40);
+  const changedHead = 'd'.repeat(40);
+  let currentHead = head;
   let writes = 0;
   let diffs = 0;
-  const remote = createServer((req, res) => {
-    if (req.method !== 'GET') { writes++; res.writeHead(405).end(); return; }
+  const published: {id: number; path: string; line: number; side: string; commit_id: string; body: string}[] = [];
+  const remote = createServer(async (req, res) => {
+    if (req.method !== 'GET') {
+      writes++;
+      if (req.method !== 'POST' || req.url !== '/repos/team/repo/pulls/418/comments') { res.writeHead(405).end(); return; }
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      const comment = {...JSON.parse(body),id:990+writes} as typeof published[number];
+      published.push(comment);
+      if (comment.side === 'LEFT') res.destroy();
+      else res.writeHead(201).end(JSON.stringify(comment));
+      return;
+    }
     if (req.url === '/repos/team/repo/pulls/418') {
       res.end(JSON.stringify({number: 418, title:'Update the mobile checksum', html_url: 'https://fixture.example/team/repo/pull/418', state: 'open',
-        head: {ref: 'feature', sha: head, repo: {full_name: 'team/repo'}},
+        head: {ref: 'feature', sha: currentHead, repo: {full_name: 'team/repo'}},
         base: {ref: 'main', sha: base, repo: {full_name: 'team/repo'}}}));
     } else if (req.url === '/repos/team/docs/pulls/418') {
       res.end(JSON.stringify({number:418,title:'Improve the documentation',html_url:'https://fixture.example/team/docs/pull/418',state:'open',
         head:{ref:'docs',sha:'c'.repeat(40),repo:{full_name:'team/docs'}},base:{ref:'main',sha:base,repo:{full_name:'team/docs'}}}));
-    } else if (req.url === `/repos/team/repo/compare/${base}...${head}`) {
+    } else if (req.url === '/repos/team/repo/pulls/418/comments?per_page=100&page=1') {
+      res.end(JSON.stringify(published));
+    } else if (req.url === `/repos/team/repo/compare/${base}...${currentHead}`) {
       diffs++;
       res.end('diff --git a/file b/file\n--- a/file\n+++ b/file\n@@ -1 +1 @@\n-original\n+fixture change\n');
     } else { res.writeHead(404).end(); }
@@ -63,7 +78,8 @@ test('discovers duplicate PR numbers before analyzing a pinned PR and returning 
     const graph = await request.post('/api/v1/graphs', {headers, data: {
       metadata: {id: 'manual-review'}, spec: {
         nodes: [{id: 'reader', prompt: 'Review the change.', runtime: {kind: 'native'}, model: {provider: 'e2e', name: 'fixture'},
-          loop: {mode: 'event'}, tools: [{name: 'scm.pull_request.read', repositories: ['pr-fixture','pr-second']}]}],
+          loop: {mode: 'event'}, tools: [{name: 'scm.pull_request.read', repositories: ['pr-fixture','pr-second']},
+            {name:'scm.pull_request.comment', repositories:['pr-fixture']}]}],
         channels: [{id: 'in', to: ['reader']}],
       },
     }});
@@ -96,6 +112,44 @@ test('discovers duplicate PR numbers before analyzing a pinned PR and returning 
     await expect(page).toHaveURL(/manual-review\/runs\?execution=/);
     expect(writes).toBe(0);
     expect(diffs).toBe(2);
+    await page.goBack();
+    await review.getByRole('checkbox', {name: /added line 1/}).check();
+    await review.getByRole('button', {name:'Review selected comments'}).click();
+    const publication = page.getByRole('region', {name:'Publish comments on PR #418'});
+    await expect(publication.getByText('Add a boundary test for the new value.')).toBeVisible();
+    await expect(publication.getByText('Explain why the original value was removed.')).toHaveCount(0);
+    await expect(publication.getByText(head)).toBeVisible();
+    expect(writes).toBe(0);
+    await publication.getByRole('button', {name:'Publish 1 comment',exact:true}).click();
+    await expect(publication.getByText('Published · Provider comment 991')).toBeVisible();
+    await page.reload();
+    await expect(publication.getByText('Published · Provider comment 991')).toBeVisible();
+    expect(writes).toBe(1);
+    expect(published).toEqual([{id:991,path:'file',line:1,side:'RIGHT',commit_id:head,body:expect.stringContaining('Add a boundary test for the new value.')}]);
+
+    await review.getByRole('checkbox', {name: /removed line 1/}).check();
+    await review.getByRole('button', {name:'Review selected comments'}).click();
+    const stale = publication.last();
+    await expect(stale.getByRole('button', {name:'Publish 1 comment',exact:true})).toBeVisible();
+    currentHead = changedHead;
+    await stale.getByRole('button', {name:'Publish 1 comment',exact:true}).click();
+    await expect(stale.getByText(/The source or grant changed/)).toBeVisible();
+    expect(writes).toBe(1);
+
+    await send(page, 'Revise o PR 418 em team/repo.');
+    const fresh = review.last();
+    await expect(fresh.getByText(changedHead)).toBeVisible();
+    await fresh.getByRole('button', {name: 'Analyze PR #418'}).click();
+    await fresh.getByRole('checkbox', {name: /removed line 1/}).check();
+    await fresh.getByRole('button', {name:'Review selected comments'}).click();
+    const uncertain = publication.last();
+    await uncertain.getByRole('button', {name:'Publish 1 comment',exact:true}).click();
+    await expect(uncertain.getByText(/Unknown · Publication receipt/)).toBeVisible();
+    await page.reload();
+    await uncertain.getByRole('button', {name:'Reconcile comment receipts'}).click();
+    await expect(uncertain.getByText('Published · Provider comment 992')).toBeVisible();
+    expect(writes).toBe(2);
+    expect(published[1]).toEqual({id:992,path:'file',line:1,side:'LEFT',commit_id:changedHead,body:expect.stringContaining('Explain why the original value was removed.')});
   } finally {
     await new Promise<void>((resolve, reject) => remote.close(err => err ? reject(err) : resolve()));
   }

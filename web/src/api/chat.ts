@@ -125,11 +125,23 @@ export interface ChatSkillReview extends ChatReviewState {
 }
 
 export interface ChatPRReview extends ChatReviewState {
-  pr: {
-    number: number; provider: string; connection: string; repository: string; head: string; base: string;
-    graph: string; node: string; version: number; modelProvider: string; modelName: string;
-  };
+  pr: ChatPRAnalysis;
   prSummary?: string;
+  prComments?: ChatPRDraftComment[];
+}
+
+interface ChatPRAnalysis {
+  number: number; provider: string; connection: string; repository: string; head: string; base: string; draft?: boolean;
+  graph: string; node: string; version: number; modelProvider: string; modelName: string;
+}
+
+export interface ChatPRDraftComment {
+  id: number; path: string; side: 'LEFT' | 'RIGHT'; line: number; body: string;
+}
+
+export interface ChatPRPublicationReview extends ChatReviewState {
+  prPublication: {analysis: ChatPRAnalysis; analysisId: string; executionId: string; comments: ChatPRDraftComment[]};
+  prReceipts?: {state: 'published' | 'failed' | 'unknown'; id?: number; code?: string}[];
 }
 
 export interface ChatInstructionReview extends ChatReviewState {
@@ -230,7 +242,7 @@ export interface ChatTriggerReview extends ChatReviewState {
   };
 }
 
-export type ChatOperationReview = ChatExecutionCancelReview | ChatTriggerReview | ChatWorkflowScaleReview | ChatBudgetRaiseReview | ChatEnvironmentReview | ChatWorkflowEnvironmentReview | ChatCorrectionReview | ChatSkillReview | ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
+export type ChatOperationReview = ChatExecutionCancelReview | ChatTriggerReview | ChatWorkflowScaleReview | ChatBudgetRaiseReview | ChatEnvironmentReview | ChatWorkflowEnvironmentReview | ChatCorrectionReview | ChatSkillReview | ChatPRReview | ChatPRPublicationReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
   ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview |
   ChatTaskRetryReview | ChatCatalogPublicationReview | ChatAgentAdoptionReview | ChatApprovalReview | ChatTaskCancellationReview |
   ChatTaskAuthorizationReview;
