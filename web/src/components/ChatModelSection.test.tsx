@@ -55,8 +55,11 @@ it('retains input and reveals a recovery action after a stale write', async () =
   });
   render(<ModelsPage info={info('admin')} modelSection="chat" />);
   const model = await screen.findByLabelText('Model ID') as HTMLInputElement;
+  await screen.findByRole('option', {name:'local'});
   fireEvent.change(model, {target:{value:'review-draft'}});
-  fireEvent.click(screen.getByRole('button', {name:'Save Chat model'}));
+  const save = screen.getByRole('button', {name:'Save Chat model'}) as HTMLButtonElement;
+  expect(save.disabled).toBe(false);
+  fireEvent.click(save);
   expect(await screen.findByRole('button', {name:'Reload saved selection'})).toBeTruthy();
   expect(model.value).toBe('review-draft');
   expect(backend.find('PUT', settingsPath)).toHaveLength(1);
