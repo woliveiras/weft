@@ -226,6 +226,15 @@ its operation receipt. Running tasks accept reductions under the native
 policy. Project defaults, workflow grants and mandatory approvals use
 their own controls.
 
+An administrator can raise an existing task-attempt or current UTC monthly
+budget through a `budgetRaise` review. Confirmation binds the absolute
+amount in ledger currency, scope, actor, ledger revision and monthly
+definition revision when applicable. The native ledger saves a receipt and
+schedules eligible resumptions. The response exposes the saved revision
+and the results observed for the affected runs in `budgetResult`. An
+`accepted` review can still be waiting to observe a resume. A recorded
+increase leaves recurring definitions and future-run defaults intact.
+
 An operator can review a start, pause, resume, graceful stop or immediate
 interruption on a reusable workflow or one node. Chat seals the exact graph
 version, target, run and desired control state. Confirmation takes the native

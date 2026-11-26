@@ -103,6 +103,12 @@ func (s *Session) summary(owner, key string) storage.ChatSummary {
 			}
 		}
 		if review := message.Review; review != nil {
+			if review.BudgetRaise != nil && (review.State == ReviewApplying || review.State == ReviewAccepted) {
+				meta.WatchCount++
+				if review.State == ReviewAccepted {
+					meta.Running++
+				}
+			}
 			if (review.Skill != nil || review.TaskCorrection != nil) && review.State == ReviewApplying {
 				meta.WatchCount++
 			}

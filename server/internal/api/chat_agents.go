@@ -167,6 +167,9 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		if review.TaskAuthorization != nil {
 			return s.applyChatTaskAuthorization(settleCtx, actor, sessionID, review)
 		}
+		if review.BudgetRaise != nil {
+			return s.applyChatBudgetRaise(settleCtx, actor, sessionID, review)
+		}
 		if review.TaskRetry != nil {
 			return s.applyReviewedChatTaskRetry(settleCtx, actor, sessionID, review)
 		}
@@ -257,6 +260,14 @@ func (s *Server) chatAgentReceipt(ctx context.Context, review *chat.OperationRev
 func (s *Server) reconcileChatReviews(ctx context.Context, owner string, session *chat.Session) (*chat.Session, error) {
 	for _, message := range session.Messages {
 		review := message.Review
+		if review != nil && review.BudgetRaise != nil && (review.State == chat.ReviewApplying || review.State == chat.ReviewAccepted || review.State == chat.ReviewUnknown) {
+			var err error
+			session, err = s.observeChatBudgetRaise(ctx, owner, session, review)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
 		if review != nil && review.WorkflowControl != nil &&
 			(review.State == chat.ReviewApplying || review.State == chat.ReviewAccepted || review.State == chat.ReviewUnknown) {
 			var err error

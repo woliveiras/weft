@@ -159,6 +159,20 @@ Open Approvals for the full request and for environment, delegation or tool
 decisions. A recorded decision can unblock work. Follow the task or execution
 to see its outcome.
 
+## Increase a current budget
+
+As an administrator, ask to raise the current allowance for a named task
+attempt or a current month ledger. Give the new total and the ledger's
+currency. Review the ledger, revisions, old and proposed limits and any
+held runs before choosing **Increase current budget**. Chat shows the saved
+limit and whether each affected run resumes, is still blocked or has an
+unverified outcome. A recurring monthly cap or a default for future runs
+requires its own installation configuration review.
+
+If the administrator's Chat inference is already blocked by an exhausted
+budget, raise the allowance in **Models → Budgets** and retry the saved
+request. Chat inference uses the installation's normal budget admission.
+
 ## Prepare a retry after failure
 
 Ask Chat to retry the failed manual task by its ID or title. Review the

@@ -243,6 +243,62 @@ test('records task authorization separately and opens the native access settings
   await expect(review).toBeVisible();
 });
 
+test('reviews an exact current task allowance and observes the native budget resume', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const policyPath = '/api/v1/cost/policy';
+  const pricesPath = '/api/v1/cost/prices';
+  const previousPolicy = await (await request.get(policyPath, {headers})).json();
+  const previousPrices = await (await request.get(pricesPath, {headers})).json();
+  const put = async (path:string, data:unknown) => {
+    const response = await request.put(path, {headers,data});
+    expect(response.ok(), await response.text()).toBe(true);
+  };
+  try {
+    await put(policyPath, {taskRunBudgetMicros: 1, warningPercent: 80});
+    await put(pricesPath, {currency:'USD', prices:[{provider:'e2e', model:'*', inputMicrosPerMTok:1_000_000, outputMicrosPerMTok:1_000_000}]});
+    const graphId = 'chat-budget-report';
+    const graph = await request.post('/api/v1/graphs', {headers,data:{metadata:{id:graphId},spec:{
+      nodes:[{id:'reader',prompt:'Summarize the report.',runtime:{kind:'native'},model:{provider:'e2e'},loop:{mode:'once'}}],
+    }}});
+    expect(graph.status()).toBe(201);
+    const draft = await request.post('/api/v1/tasks',{headers,data:{title:'Budget report task fixture',request:'Summarize the report.',
+      graphId,graphVersion:1,nodeId:'reader',resultNodeId:'reader',outcome:'understand'}});
+    expect(draft.status()).toBe(201);
+    const task = await draft.json();
+    const taskPath = `/api/v1/tasks/${task.id}`;
+    const started = await request.post(`${taskPath}/start`,{headers:{...headers,'If-Match':`"${task.revision}"`},data:{confirm:true}});
+    expect(started.status()).toBe(202);
+    const readTask = async () => (await request.get(taskPath,{headers})).json();
+    await expect.poll(async () => (await readTask()).executionGraphId).toBeTruthy();
+    const {executionGraphId} = await readTask();
+    const budgetPath = `/api/v1/cost/budgets/run/${executionGraphId}`;
+    const readBudget = async () => (await request.get(budgetPath,{headers})).json();
+    await expect.poll(readBudget).toMatchObject({limitMicros:1,paused:true,reached:true});
+    await page.addInitScript(() => localStorage.setItem('weftToken','e2e-admin-token'));
+    await page.goto('/');
+    await send(page,'Raise the current allowance for the budget report task to 2.004005 USD.');
+    const review = page.getByRole('region',{name:'Increase budget for Budget report task fixture'});
+    await expect(review.getByText('2.004005 USD',{exact:true})).toBeVisible();
+    await expect(review.getByText('0.000001 USD',{exact:true})).toBeVisible();
+    expect(await readBudget()).toMatchObject({limitMicros:1,reached:true});
+    await review.getByRole('button',{name:'Increase current budget',exact:true}).click();
+    await expect(review.getByText(/Limit raised to 2\.004005 USD/)).toBeVisible();
+    await expect(review.getByText(/Running observed|Attempt ended after the resume command/)).toBeVisible();
+    expect(await readBudget()).toMatchObject({limitMicros:2_004_005,reached:false});
+    const recurring = await (await request.get(policyPath,{headers})).json();
+    expect(recurring.taskRunBudgetMicros).toBe(1);
+    const inspect = review.getByRole('link',{name:'Open budgets',exact:true});
+    await inspect.click();
+    await expect(page).toHaveURL(/#\/models\/budgets$/);
+    await page.goBack();
+    await expect(inspect).toBeFocused();
+  } finally {
+    await put(policyPath,previousPolicy);
+    const {currency,unpriced,prices} = previousPrices;
+    await put(pricesPath,{currency,unpriced,prices});
+  }
+});
+
 test('prepares one reviewed retry from a failed task and opens the linked draft', async ({ page, request }) => {
   await selectFixtureModel(request);
   const original = await startTaskWaitingForApproval(request,'chat-retry-source','Failed documentation task fixture');

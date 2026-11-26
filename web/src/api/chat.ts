@@ -190,7 +190,16 @@ export interface ChatTaskAuthorizationReview extends ChatReviewState {
   };
 }
 
-export type ChatOperationReview = ChatEnvironmentReview | ChatCorrectionReview | ChatSkillReview | ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
+export interface ChatBudgetRaiseReview extends ChatReviewState {
+  budgetRaise: {
+    target: {scope: string; id: string; period?: string; currency: string; limitMicros: number; revision: number;
+      definitionsRevision: number; pausedGraphs?: string[]};
+    subject: string; actor: string; limitMicros: number;
+  };
+  budgetResult?: {revision: number; reached: boolean; resumes?: {graphId: string; runId: string; state: string}[]};
+}
+
+export type ChatOperationReview = ChatBudgetRaiseReview | ChatEnvironmentReview | ChatCorrectionReview | ChatSkillReview | ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
   ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview |
   ChatTaskRetryReview | ChatCatalogPublicationReview | ChatAgentAdoptionReview | ChatApprovalReview | ChatTaskCancellationReview |
   ChatTaskAuthorizationReview;

@@ -233,3 +233,13 @@ invalidated the proposal, and replay returned the same receipt. The running
 fixture accepted only a reduction. Chromium verified the new record and found
 the same current mode in the task's Settings & access while the task remained
 a draft. TypeScript, eleven focused component checks and OpenAPI parsing passed.
+
+## 2026-11-26 — Reviewed current budget increases
+
+For S38, Go tests verified exact micro-unit amounts, actor and scope binding,
+stale ledger and definition conflicts, and the UTC month boundary. With a
+real SQLite ledger and a fixture model, authenticated HTTP verified one native
+raise and audit event across repeated confirmation. Chat observed the original
+run resume in one fixture and reported a different applicable budget blocking
+it in another. Chromium confirmed 2.004005 USD, checked the stored allowance
+and the separate default for new tasks, and returned from Models to the review.

@@ -3035,6 +3035,7 @@ components:
             - {$ref: "#/components/schemas/ChatApprovalReview"}
             - {$ref: "#/components/schemas/ChatTaskCancellationReview"}
             - {$ref: "#/components/schemas/ChatTaskAuthorizationReview"}
+            - {$ref: "#/components/schemas/ChatBudgetRaiseReview"}
             - {$ref: "#/components/schemas/ChatConfigurationReview"}
             - {$ref: "#/components/schemas/ChatGuidanceReview"}
             - {$ref: "#/components/schemas/ChatInstructionReview"}
@@ -3501,6 +3502,46 @@ components:
                       scmConnection: {type: string}
                       repository: {type: string}
                       targetBranch: {type: string}
+    ChatBudgetRaiseReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [budgetRaise]
+          properties:
+            budgetRaise:
+              type: object
+              required: [target, subject, actor, limitMicros]
+              properties:
+                subject: {type: string}
+                actor: {type: string}
+                limitMicros: {type: integer, format: int64, minimum: 1}
+                target:
+                  type: object
+                  required: [scope, id, currency, limitMicros, revision, definitionsRevision]
+                  properties:
+                    scope: {type: string, enum: [run, installation, user, project, workflow]}
+                    id: {type: string}
+                    period: {type: string, pattern: '^[0-9]{4}-[0-9]{2}$'}
+                    currency: {type: string, pattern: '^[A-Z]{3}$'}
+                    limitMicros: {type: integer, format: int64, minimum: 0}
+                    revision: {type: integer, format: int64, minimum: 1}
+                    definitionsRevision: {type: integer, format: int64, minimum: 0}
+                    pausedGraphs: {type: array, maxItems: 16, items: {type: string}}
+            budgetResult:
+              type: object
+              required: [revision, reached]
+              properties:
+                revision: {type: integer, format: int64, minimum: 0}
+                reached: {type: boolean}
+                resumes:
+                  type: array
+                  items:
+                    type: object
+                    required: [graphId, runId, state]
+                    properties:
+                      graphId: {type: string}
+                      runId: {type: string}
+                      state: {type: string, enum: [resumed, pending, run_ended, budget_reached, not_applicable, stopped, run_changed, already_running, deleted, unbound, superseded, unknown]}
     ChatReviewState:
       type: object
       required: [id, expiresAt, digest, state]

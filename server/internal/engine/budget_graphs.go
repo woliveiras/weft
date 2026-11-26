@@ -65,12 +65,70 @@ func (e *Engine) checkManualBudgetResume(ctx context.Context, g *domain.Graph, r
 }
 
 func (e *Engine) RaiseBudget(ctx context.Context, scope, id string, limit int64, actor string) (cost.View, error) {
-	budgets := e.monetaryBudgets()
-	view, previous, actions, err := budgets.Raise(ctx, scope, id, limit, actor)
+	view, previous, actions, err := e.monetaryBudgets().Raise(ctx, scope, id, limit, actor)
 	if err != nil {
 		return view, err
 	}
+	return e.finishBudgetRaise(ctx, view, previous, limit, actor, actions), nil
+}
 
+func (e *Engine) RaiseReviewedBudget(ctx context.Context, target cost.RaiseTarget, limit int64, actor, operation string) error {
+	view, previous, actions, err := e.monetaryBudgets().RaiseReviewed(ctx, target, limit, actor, operation)
+	if err != nil {
+		return err
+	}
+	e.finishBudgetRaise(ctx, view, previous, limit, actor, actions)
+	return nil
+}
+
+// ObserveBudgetResume distinguishes an exact persisted command from the run's
+// observed state. It never attributes a manual or later run to this raise.
+func (e *Engine) ObserveBudgetResume(ctx context.Context, action cost.BudgetGraph) (string, error) {
+	record, err := e.store.GetGraphRecord(ctx, action.Graph)
+	outcome, err := budgetGraphOutcome(action, record, err)
+	if err != nil {
+		return "", err
+	}
+	switch outcome {
+	case "deleted", "stopped", "run_changed", "already_running":
+		return outcome, nil
+	case "resumed":
+		switch record.State {
+		case domain.GraphRunning:
+			return "resumed", nil
+		case domain.GraphStopped, domain.GraphFailed:
+			return "run_ended", nil
+		}
+		if record.DesiredState == domain.GraphRunning {
+			return "pending", nil
+		}
+		return "superseded", nil
+	}
+	if action.RunID == "" {
+		return "unbound", nil
+	}
+	budgets := e.monetaryBudgets()
+	g, err := e.store.GetGraph(ctx, record.ID, record.Version)
+	if err != nil {
+		return "", err
+	}
+	_, reason, err := budgets.ResumeBlocker(ctx, graphBudgetTarget(g), action, time.Now())
+	if err != nil {
+		return "", err
+	}
+	if reason != "" {
+		return reason, nil
+	}
+	_, pending, err := budgets.GraphActionRevision(ctx, action)
+	if pending || err != nil {
+		return "pending", err
+	}
+	return "unknown", nil
+}
+
+func (e *Engine) finishBudgetRaise(ctx context.Context, view cost.View, previous, limit int64, actor string, actions []cost.BudgetGraph) cost.View {
+	budgets := e.monetaryBudgets()
+	scope, id := view.Scope, view.ID
 	// The raise is already committed. Finish the bounded attempt and audit
 	// even if the client disconnects during the request.
 	work, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*time.Second)
@@ -118,7 +176,7 @@ func (e *Engine) RaiseBudget(ctx context.Context, scope, id string, limit int64,
 		view = *latest
 	}
 	budgets.AuditRaise(audit, scope, id, actor, previous, limit, resumed, view.NotResumed, skipped)
-	return view, nil
+	return view
 }
 
 func (e *Engine) waitBudgetGraphTransition(ctx context.Context, target cost.BudgetGraph) (string, error) {

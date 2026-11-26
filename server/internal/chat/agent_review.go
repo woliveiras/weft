@@ -102,6 +102,8 @@ type AgentCreation struct {
 // OperationReview persists the reviewed action. The digest binds the payload
 // to the owner and session. Claim state and the result are recorded separately.
 type OperationReview struct {
+	BudgetRaise    *BudgetRaise            `json:"budgetRaise,omitempty"`
+	BudgetResult   *BudgetRaiseResult      `json:"budgetResult,omitempty"`
 	Environment    *EnvironmentPreparation `json:"environment,omitempty"`
 	TaskCorrection *TaskCorrection         `json:"taskCorrection,omitempty"`
 	Skill          *SkillChange            `json:"skill,omitempty"`
@@ -157,7 +159,7 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	choices := 0
-	for _, exists := range []bool{r.Environment != nil, r.TaskCorrection != nil, r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskCancel != nil, r.TaskAuthorization != nil, r.TaskRetry != nil, r.Approval != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
+	for _, exists := range []bool{r.BudgetRaise != nil, r.Environment != nil, r.TaskCorrection != nil, r.Skill != nil, r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Adoption != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskCancel != nil, r.TaskAuthorization != nil, r.TaskRetry != nil, r.Approval != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
 		if exists {
 			choices++
 		}
@@ -167,6 +169,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 	}
 	var payload any
 	switch {
+	case r.BudgetRaise != nil:
+		payload = struct {
+			Owner, Session, ID, Operation string
+			ExpiresAt                     time.Time
+			Raise                         *BudgetRaise
+		}{owner, session, r.ID, RaiseBudget, r.ExpiresAt, r.BudgetRaise}
 	case r.TaskAuthorization != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string

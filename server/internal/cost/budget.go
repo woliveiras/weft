@@ -73,11 +73,12 @@ type Ledger struct {
 	InterruptPercent int `json:"interruptPercent,omitempty"`
 	WarningPercent   int `json:"warningPercent,omitempty"`
 	// PausedGraphs includes runs waiting for a pause or resume to apply.
-	PausedGraphs []string               `json:"pausedGraphs,omitempty"`
-	GraphActions map[string]GraphAction `json:"graphActions,omitempty"`
-	RaisedAt     *time.Time             `json:"raisedAt,omitempty"`
-	RaisedBy     string                 `json:"raisedBy,omitempty"`
-	RaisedLimit  int64                  `json:"raisedLimit,omitempty"`
+	PausedGraphs  []string               `json:"pausedGraphs,omitempty"`
+	GraphActions  map[string]GraphAction `json:"graphActions,omitempty"`
+	RaisedAt      *time.Time             `json:"raisedAt,omitempty"`
+	RaisedBy      string                 `json:"raisedBy,omitempty"`
+	RaisedLimit   int64                  `json:"raisedLimit,omitempty"`
+	ReviewedRaise *RaiseReceipt          `json:"reviewedRaise,omitempty"`
 }
 
 // View summarises a ledger.

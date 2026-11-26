@@ -62,6 +62,7 @@ Return exactly one JSON object. "kind" is one of:
 - "node.guide": send one operator message to a later matching turn of a running workflow. Add "guideWorkflow" and "guideNode" with the stated exact IDs, "guideReplica" with a replica number or "any" only if the user explicitly selected it, and "guidance" with the requested message. Ask for any missing target. For an ambiguous change of behavior, ask whether the operator wants one-time guidance, a workflow instruction revision, or a reusable catalog change.
 - "pr.analyze": analyze one existing pull request without publishing. Add "prNumber" as a positive decimal string. Include "prWorkflow" and "prConnection" only when specified. Never infer repository, workflow, or write permission.
 - "console.inspect": read live facts in the conversation. Add "inspectArea" from tasks, workflows, agents, projects, skills, approvals, activity, triggers, review-routes, mcp, scm, issue-connections, models, chat-model, plugins, tools, network, retention, usage, prices, budgets. Use this for a question about current inventory or state. Use manual.open only for a navigation request.
+- "budget.raise": raise one explicitly identified current ledger. Add "budgetScope" (run, installation, user, project or workflow), "budgetTarget" (exact task ID or title for run, exact budget ID for user/project/workflow, omit for installation), "budgetAmount" (the absolute new decimal limit, not an increment), and "budgetCurrency" (ISO code stated by the user). Ask about any unclear scope, amount, currency, or whether the operator means an existing allowance or a recurring definition. Recurring caps or default allowances for future runs use installation.plan. A raise may resume work put on hold by that ledger under existing budget policy.
 - "skill.save": create or revise a managed instruction skill. Add "skillAction" (create or revise), "skillId", "skillTitle", and "skillBody". New skills are saved disabled. Revision preserves the current audience, activation and description. Never use this intent to enable or delete a skill.
 - "manual.open": open a console page for inspection or to enter credentials. Add "destination" with one of: tasks, workflows, agents, projects, activity, approvals, models, chat-model, plugins, usage, budgets, prices, connections, connection-setup, skills, administration. Never ask for a credential. Use this for navigation requests or secure setup. Never represent navigation as performing the requested operation.
 - "clarify": ask one focused question when the target or action is unclear. Add "question". Never guess between different targets or effects.
@@ -71,6 +72,7 @@ You may include a short, neutral "title" for the conversation based on the lates
 // Plan proposes an operation or asks for clarification. A task selector is
 // always resolved against the caller's permitted resources before it is used.
 type Plan struct {
+	Budget                BudgetRaiseDraft
 	Correction            taskconfig.DraftText
 	Skill                 SkillDraft
 	Area                  string
@@ -163,6 +165,14 @@ func decodePlan(body string) (Plan, error) {
 		}
 		value := strings.TrimSpace(*input)
 		switch key {
+		case "budgetScope":
+			plan.Budget.Scope = value
+		case "budgetTarget":
+			plan.Budget.Target = value
+		case "budgetAmount":
+			plan.Budget.Amount = value
+		case "budgetCurrency":
+			plan.Budget.Currency = value
 		case "prNumber":
 			plan.PRSelector.Number = value
 		case "prWorkflow":
@@ -321,7 +331,14 @@ func decodePlan(body string) (Plan, error) {
 	if plan.Kind != ControlWorkflow && (seen["controlWorkflow"] || seen["controlNode"] || seen["controlAction"]) {
 		return Plan{}, ErrInvalidPlan
 	}
+	if plan.Kind != RaiseBudget && (seen["budgetScope"] || seen["budgetTarget"] || seen["budgetAmount"] || seen["budgetCurrency"]) {
+		return Plan{}, ErrInvalidPlan
+	}
 	switch plan.Kind {
+	case RaiseBudget:
+		if !plan.Budget.Valid() || seen["task"] || seen["question"] {
+			return Plan{}, ErrInvalidPlan
+		}
 	case AuthorizeTask:
 		if !shortLabel(plan.Task) || !taskauth.Valid(plan.TaskAuthorizationMode) || seen["question"] {
 			return Plan{}, ErrInvalidPlan

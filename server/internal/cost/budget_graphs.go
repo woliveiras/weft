@@ -66,13 +66,25 @@ func (l *Ledger) setGraphAction(graph string, action GraphAction) {
 // Raise persists the new limit and schedules resumptions in the same ledger
 // write. The caller audits the outcome after attempting the graph actions.
 func (b Budgets) Raise(ctx context.Context, scope, id string, limit int64, actor string) (View, int64, []BudgetGraph, error) {
+	return b.raise(ctx, scope, id, limit, actor, nil, "")
+}
+
+func (b Budgets) RaiseReviewed(ctx context.Context, target RaiseTarget, limit int64, actor, operation string) (View, int64, []BudgetGraph, error) {
+	if target.Revision < 1 || operation == "" {
+		return View{}, 0, nil, storage.ErrConflict
+	}
+	return b.raise(ctx, target.Scope, target.ID, limit, actor, &target, operation)
+}
+
+func (b Budgets) raise(ctx context.Context, scope, id string, limit int64, actor string, reviewed *RaiseTarget, operation string) (View, int64, []BudgetGraph, error) {
 	if limit < 1 || limit > MaxBudgetMicros {
 		return View{}, 0, nil, &ValidationError{Errors: []Issue{{"limitMicros", fmt.Sprintf("must be between 1 and %d", MaxBudgetMicros)}}}
 	}
 	if strings.HasPrefix(actor, "system") || actor == "" {
 		return View{}, 0, nil, errors.New("cost: only a person can raise a budget")
 	}
-	if ExpiredLedger(scope, id, Period(time.Now())) {
+	period := Period(time.Now())
+	if ExpiredLedger(scope, id, period) || reviewed != nil && scope != TaskRun && reviewed.Period != period {
 		return View{}, 0, nil, &ValidationError{Errors: []Issue{{"id", "the monthly budget period has ended"}}}
 	}
 	var view View
@@ -83,8 +95,14 @@ func (b Budgets) Raise(ctx context.Context, scope, id string, limit int64, actor
 		if l == nil {
 			return nil, fmt.Errorf("%w: budget %s/%s", storage.ErrNotFound, scope, id)
 		}
+		if reviewed != nil && scope != TaskRun && Period(time.Now()) != reviewed.Period {
+			return nil, storage.ErrConflict
+		}
 		if definition != nil {
 			definition.applyLimit(l)
+		}
+		if reviewed != nil && (reviewed.Currency != l.Currency || reviewed.Limit != l.Limit) {
+			return nil, storage.ErrConflict
 		}
 		if limit <= l.Limit {
 			return nil, &ValidationError{Errors: []Issue{{"limitMicros", fmt.Sprintf("must be higher than the current limit (%d)", l.Limit)}}}
@@ -106,11 +124,19 @@ func (b Budgets) Raise(ctx context.Context, scope, id string, limit int64, actor
 			l.setGraphAction(graph, action)
 			actions = append(actions, BudgetGraph{scope, id, graph, action})
 		}
+		l.ReviewedRaise = nil
+		if reviewed != nil {
+			l.ReviewedRaise = &RaiseReceipt{Operation: operation, Revision: reviewed.Revision + 1, Reached: l.Reached, Actions: actions}
+		}
 		view = l.View()
 		return l, nil
 	}
+	var guards []storage.SettingRevision
+	if reviewed != nil {
+		guards = append(guards, storage.SettingRevision{Key: ledgerKey(scope, id), Revision: reviewed.Revision})
+	}
 	if scope == TaskRun {
-		err := b.update(ctx, scope, id, "raise", applyRaise)
+		err := b.update(ctx, scope, id, "raise", applyRaise, guards...)
 		return view, previous, actions, err
 	}
 	for range 100 {
@@ -118,15 +144,18 @@ func (b Budgets) Raise(ctx context.Context, scope, id string, limit int64, actor
 		if err != nil {
 			return View{}, 0, nil, err
 		}
+		if reviewed != nil && reviewed.DefinitionsRevision != revision {
+			return View{}, 0, nil, storage.ErrConflict
+		}
 		definition = nil
 		for _, d := range defs {
-			if d.Scope == scope && MonthlyID(d.ID, Period(time.Now())) == id {
+			if d.Scope == scope && MonthlyID(d.ID, period) == id {
 				definition = &applicable{scope: scope, limit: d.LimitMicros}
 				break
 			}
 		}
-		err = b.update(ctx, scope, id, "raise", applyRaise, storage.SettingRevision{Key: DefinitionsKey, Revision: revision})
-		if !errors.Is(err, storage.ErrConflict) {
+		err = b.update(ctx, scope, id, "raise", applyRaise, append(guards, storage.SettingRevision{Key: DefinitionsKey, Revision: revision})...)
+		if reviewed != nil || !errors.Is(err, storage.ErrConflict) {
 			return view, previous, actions, err
 		}
 	}

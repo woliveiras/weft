@@ -64,6 +64,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"task.cancel","task":"Cancellation fixture task"}`
 	case "Set the editorial authorization task to workspace access.":
 		content = `{"kind":"task.authorize","task":"Editorial authorization task fixture","taskAuthorizationMode":"workspace","title":"Review editorial task authorization"}`
+	case "Raise the current allowance for the budget report task to 2.004005 USD.":
+		content = `{"kind":"budget.raise","budgetScope":"run","budgetTarget":"Budget report task fixture","budgetAmount":"2.004005","budgetCurrency":"USD","title":"Review budget report allowance"}`
 	case "Start the publication workflow.":
 		content = `{"kind":"workflow.control","controlWorkflow":"chat-publication","controlAction":"start","title":"Control publication workflow"}`
 	case "Pause new turns for the reviewer node in the publication workflow.":

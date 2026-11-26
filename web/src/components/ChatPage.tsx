@@ -9,7 +9,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
 import type { ChatAgentAdoptionReview, ChatApprovalReview, ChatCatalogPublicationReview, ChatMessage, ChatOperationReview,
   ChatSession, ChatSessionSummary, ChatTask, ChatTaskCancellationReview, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview,
-  ChatEnvironmentReview, ChatCorrectionReview, ChatTaskAuthorizationReview, ChatTaskRetryReview } from '../api/chat';
+  ChatBudgetRaiseReview, ChatEnvironmentReview, ChatCorrectionReview, ChatTaskAuthorizationReview, ChatTaskRetryReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -315,6 +315,7 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
 function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   review:ChatOperationReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
 }) {
+  if ('budgetRaise' in review) return <BudgetRaiseCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('skill' in review) return <ChatSkillCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('pr' in review) return <ChatPRCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('instructions' in review) return <ChatInstructionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
@@ -373,6 +374,54 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
       <p role="status">{workflow ? 'Workflow' : 'Catalog'} version {review.resultVersion} created.</p>
       <a id={anchor} href={href} onClick={() => onView(anchor)}>View {kind}</a>
     </>}
+  </section>;
+}
+
+const budgetResumeLabels: Record<string, string> = {
+  resumed: 'Running observed', pending: 'Waiting to observe resumption', budget_reached: 'Still blocked by an applicable budget',
+  run_ended: 'Attempt ended after the resume command', stopped: 'Run stopped', run_changed: 'Run changed',
+  not_applicable: 'This allowance no longer applies', deleted: 'Run no longer exists', already_running: 'Already running',
+  unbound: 'Original run could not be verified', superseded: 'Resume command was superseded', unknown: 'Resumption could not be verified',
+};
+
+function budgetAmount(micros:number, currency:string) {
+  const amount = (micros / 1_000_000).toFixed(6).replace(/\.?0+$/, '');
+  return `${amount} ${currency}`;
+}
+
+function BudgetRaiseCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatBudgetRaiseReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const {target, subject, actor, limitMicros} = review.budgetRaise;
+  const result = review.budgetResult;
+  const anchor = `chat-budget-${review.id}`;
+  return <section className="chat-agent-review" aria-label={`Increase budget for ${subject}`}>
+    <h3>Increase current budget for {subject}</h3>
+    <dl>
+      <dt>Scope</dt><dd>{target.period ? `${target.scope} · ${target.period} UTC` : 'This task attempt'}</dd>
+      <dt>Ledger</dt><dd>{target.id} · Revision {target.revision}</dd>
+      {target.period && <><dt>Recurring definition revision</dt><dd>{target.definitionsRevision}</dd></>}
+      <dt>Requested by</dt><dd>{actor}</dd>
+      <dt>Current limit</dt><dd>{budgetAmount(target.limitMicros,target.currency)}</dd>
+      <dt>Proposed limit</dt><dd>{budgetAmount(limitMicros,target.currency)}</dd>
+    </dl>
+    <p>{target.period ? 'This change applies to the current month. The recurring definition stays in effect for future months.'
+      : 'This change applies to this task attempt. The default limit for future attempts stays in effect.'}</p>
+    {target.pausedGraphs?.length ? <><p>Runs held by this ledger may resume under the current budget policy.</p>
+      <ul>{target.pausedGraphs.map(graph => <li key={graph}>{graph}</li>)}</ul></> : null}
+    {review.state === 'awaiting_confirmation' && <ReviewDecisionControls expiresAt={review.expiresAt} now={now}
+      canConfirm={canConfirm} confirmLabel="Increase current budget" onDecide={onDecide}/>}
+    {review.state === 'applying' && <p role="status">Applying the reviewed increase…</p>}
+    {review.state === 'conflict' && <p role="status">The ledger or its definition changed. Request a fresh review.</p>}
+    {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+    {review.state === 'unknown' && <p role="status">The latest outcome could not be verified. Inspect the budget before requesting another increase.</p>}
+    {!!result?.revision && <p role="status">Limit raised to {budgetAmount(limitMicros,target.currency)}. Ledger revision {result.revision}.</p>}
+    {result?.reached && <p>The new allowance is still exhausted.</p>}
+    {review.state === 'accepted' && <p role="status">Watching the affected runs.</p>}
+    {result?.resumes?.length ? <ul>{result.resumes.map(resume => <li key={resume.graphId}>
+      {resume.graphId}{resume.runId && ` · ${resume.runId}`} · {budgetResumeLabels[resume.state] ?? 'Resumption could not be verified'}
+    </li>)}</ul> : null}
+    <a id={anchor} href="#/models/budgets" onClick={() => onView(anchor)}>Open budgets</a>
   </section>;
 }
 
