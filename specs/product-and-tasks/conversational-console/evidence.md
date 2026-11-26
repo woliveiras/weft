@@ -284,3 +284,40 @@ builds, zero builds from a stale or viewer request, one operator audit after
 confirmation and reuse of the ready matching definition. The workflow stayed
 stopped. Chromium passed the task and workflow environment journeys and
 returned from the workflow's Environment settings to the same review.
+
+## 2026-11-26 — Session continuity and scope
+
+Authenticated HTTP and SQLite tests exercised a task draft with multiple
+registered Git repositories and rejected confirmation after a project changed.
+A separate execution test cancelled a selected delegated child, recorded the
+request once and observed settlement while its parent remained active.
+
+The inventory follow-up test selected the first workflow from the order shown
+in the same conversation. The role-change integration reopened a stored
+review as the same principal with fewer permissions. The unit test checked
+that the filtered conversation also omits restricted data from the next
+model request.
+
+Chromium exercised full generated titles in the desktop rail and in a
+375-pixel touch drawer. It verified single-line overflow, pointer access to
+the preview, keyboard dismissal and focus retention. The reduced-motion
+journey checked the same session without horizontal page overflow.
+
+## 2026-11-26 — Console regression comparison
+
+The full Chromium fixture run at `16fa3c0` recorded 190 passes, 18 failures
+and seven skips. The pre-Chat checkout `140bb61` recorded 159 passes, 18
+failures and seven skips. The eighteen failing test names matched exactly.
+
+The final `make test` at `6801e13` passed the Go suites, 40 Python tests,
+web type-check and all 856 Vitest cases across 140 files. The stale-model
+settings test waited for the provider option and verified that Save was
+enabled before exercising the conflict.
+
+After formatting the session-title fixture, `make lint`, `make build`,
+Playwright type-check and all 33 Chromium Chat journeys passed at `796138a`
+in a clean checkout. The browser and fixture services shared an isolated
+loopback network. The documentation check resolved 37 added local links,
+and the OpenAPI document resolved all 432 references. External SCM accounts,
+production OIDC and physical assistive technologies still require separate
+qualification.
