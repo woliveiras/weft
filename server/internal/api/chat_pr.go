@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/chat"
-	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/scm"
@@ -28,62 +26,14 @@ var errPRScope = errors.New("no unique eligible review destination")
 var errPRRead = errors.New("review evidence unavailable")
 
 func (s *Server) selectPRTarget(ctx context.Context, selector chat.PRSelector) (manualPRTarget, error) {
-	var target manualPRTarget
-	records, err := s.Store.ListGraphRecords(ctx)
+	repos, err := s.prLookupTargets(ctx, selector)
 	if err != nil {
-		return target, err
+		return manualPRTarget{}, err
 	}
-	connections, err := s.SCM.List(ctx)
-	if err != nil {
-		return target, err
+	if len(repos) != 1 || len(repos[0].reviewers) != 1 {
+		return manualPRTarget{}, errPRScope
 	}
-	number, err := strconv.Atoi(selector.Number)
-	if err != nil || !selector.Valid() {
-		return target, errPRScope
-	}
-	for _, rec := range records {
-		if rec.DesiredState != domain.GraphRunning || rec.State != domain.GraphRunning || rec.RunID == "" || strings.HasPrefix(rec.ID, domain.TaskRunGraphPrefix) || (selector.Workflow != "" && selector.Workflow != rec.ID) {
-			continue
-		}
-		g, _, err := s.Engine.GetGraph(ctx, rec.ID, rec.Version)
-		if err != nil {
-			return target, err
-		}
-		if g.Metadata.Labels[domain.LabelTask] != "" {
-			continue
-		}
-		for i := range g.Spec.Nodes {
-			n := &g.Spec.Nodes[i]
-			if n.Disabled || n.Runtime.Kind != domain.RuntimeNative || n.Loop.Mode != domain.LoopEvent || n.Loop.BatchSize > 1 || len(g.Outgoing(n.ID)) != 0 || n.Model.Provider == "" || n.Model.Name == "" {
-				continue
-			}
-			ingress := g.Incoming(n.ID)
-			if len(ingress) != 1 || ingress[0].From != "" || !slices.Equal(g.Consumers(ingress[0]), []string{n.ID}) {
-				continue
-			}
-			for _, c := range connections {
-				if selector.Connection != "" && c.Name != selector.Connection {
-					continue
-				}
-				if c.Kind != "github" && c.Kind != "bitbucket-cloud" && c.Kind != "bitbucket-dc" {
-					continue
-				}
-				for _, grant := range n.Tools {
-					if grant.Name != scm.CapPullRequestRead || tools.CheckRepository(grant, c.Name) != nil {
-						continue
-					}
-					if target.proposal.Graph != "" {
-						return manualPRTarget{}, errPRScope
-					}
-					target = manualPRTarget{chat.PRAnalysis{Number: number, Connection: c.Name, ConnectionRevision: c.UpdatedAt.UTC().Format(time.RFC3339Nano), Provider: c.Kind, Repository: c.Repository, Graph: rec.ID, Version: rec.Version, Run: rec.RunID, Node: n.ID, Channel: ingress[0].ID, ModelProvider: n.Model.Provider, ModelName: n.Model.Name}, grant}
-				}
-			}
-		}
-	}
-	if target.proposal.Graph == "" {
-		return target, errPRScope
-	}
-	return target, nil
+	return repos[0].reviewers[0], nil
 }
 
 func (s *Server) readChatPR(ctx context.Context, actor Identity, t manualPRTarget, diff bool) (scm.ReviewSnapshot, string, error) {
@@ -104,43 +54,13 @@ func (s *Server) readChatPR(ctx context.Context, actor Identity, t manualPRTarge
 	return result.PullRequest, result.Diff, nil
 }
 
-func (s *Server) reviewChatPR(ctx context.Context, actor Identity, id string, plan chat.Plan) chat.Interpretation {
-	out := chat.Interpretation{Plan: plan}
-	if !actor.Role.Allows(config.RoleOperator) {
-		out.Text = "An operator is required to request a pull request analysis."
-		return out
-	}
-	target, err := s.selectPRTarget(ctx, plan.PRSelector)
-	if errors.Is(err, errPRScope) {
-		out.Plan.Kind, out.Destination, out.Text = chat.Clarify, "workflows", "Which running review workflow and SCM connection should read this PR? Choose a native event reviewer with a single ingress and a repository read grant."
-		return out
-	}
-	if err != nil {
-		out.Text, out.Retryable = "The review destination could not be inspected.", true
-		return out
-	}
-	snapshot, _, err := s.readChatPR(ctx, actor, target, false)
-	if err != nil {
-		out.Text, out.Destination = "The selected gateway could not read this open PR with the current grant. Inspect the connection and any required tool approval.", "connections"
-		return out
-	}
-	p := target.proposal
-	p.Head, p.Base, p.HeadRef, p.BaseRef, p.Draft = snapshot.HeadSHA, snapshot.BaseSHA, snapshot.Head, snapshot.Base, snapshot.Draft
-	out.Review, err = chat.NewPRReview(actor.chatOwner, id, p, time.Now())
-	if err != nil {
-		out.Text = "The selected PR lacks a complete, displayable revision identity."
-		return out
-	}
-	out.Text = fmt.Sprintf("Review the source and destination for analysis of PR #%d.", p.Number)
-	return out
-}
-
 func (s *Server) dispatchChatPR(ctx context.Context, actor Identity, session string, r *chat.OperationReview) (*chat.Session, error) {
 	p := *r.PR
 	finish := func(state string) (*chat.Session, error) {
 		return s.chatStore().ObservePR(ctx, actor.chatOwner, session, r.ID, r.State, state, "", "")
 	}
-	t, err := s.selectPRTarget(ctx, chat.PRSelector{Workflow: p.Graph, Connection: p.Connection, Number: strconv.Itoa(p.Number)})
+	t, err := s.selectPRTarget(ctx, chat.PRSelector{Workflow: p.Graph, Connection: p.Connection, Number: strconv.Itoa(p.Number),
+		Node: p.Node, WorkflowVersion: p.Version, Run: p.Run, ConnectionRevision: p.ConnectionRevision})
 	if errors.Is(err, errPRScope) {
 		return finish(chat.ReviewConflict)
 	}

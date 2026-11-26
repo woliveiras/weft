@@ -66,7 +66,7 @@ Return exactly one JSON object. "kind" is one of:
 - "installation.plan": propose installation configuration using one or more weft.io/v1 YAML documents in "document". Use only supported installation kinds: InferencePlugin, ModelProvider, PriceCatalog, CostPolicy, Budget, NetworkPolicy, MCPConnection, SCMConnection, IssueConnection, IssueWorkflowMapping, JiraCloudProfile, JiraCloudWorkflowMapping, Project, Graph, PullRequestReviewRoute, IssueTrigger. Ask about missing consequential settings. To change an existing project's defaults or checks, use its exact project ID in metadata.name and include only explicitly requested spec.executionMode and/or spec.checks. The server preserves omitted settings and repository source. A supplied checks list replaces the project's list, so confirm the complete intended list and exact commands. For requested issue or PR intake activation, include "intakeConsent":"review" to show its separate scope to the administrator. Credential input goes to manual setup. Never set force, claim consent, or report a change as applied.
 - "workflow.instructions": replace the local instructions of one node in a saved workflow. Add "instructionWorkflow" and "instructionNode" (exact IDs) and "localInstructions" with the complete proposed replacement (empty only for an explicit request to clear local instructions). Ask which scope is intended if the request could mean a one-time message or reusable catalog publication.
 - "node.guide": send one operator message to a later matching turn of a running workflow. Add "guideWorkflow" and "guideNode" with the stated exact IDs, "guideReplica" with a replica number or "any" only if the user explicitly selected it, and "guidance" with the requested message. Ask for any missing target. For an ambiguous change of behavior, ask whether the operator wants one-time guidance, a workflow instruction revision, or a reusable catalog change.
-- "pr.analyze": analyze one existing pull request without publishing. Add "prNumber" as a positive decimal string. Include "prWorkflow" and "prConnection" only when specified. Never infer repository, workflow, or write permission.
+- "pr.analyze": analyze one existing pull request without publishing. Include "prNumber" as a positive decimal string or "prUrl" with the supplied pull request URL. Include "prRepository" (owner/repository), "prWorkflow", "prNode" or "prConnection" only when the user named them. For a referential phrase such as "in that repository", use a previously selected SCM connection from trusted Weft context. For a bare number, omit all scope selectors and let Weft discover matching repositories and reviewers. Never infer one from an earlier inquiry or infer write permission.
 - "console.inspect": read live facts in the conversation. Add "inspectArea" from tasks, workflows, agents, projects, skills, approvals, activity, triggers, review-routes, mcp, scm, issue-connections, models, chat-model, plugins, tools, network, retention, delegation, usage, prices, budgets. Use this for a question about current inventory or state. Use manual.open only for a navigation request.
 - "budget.raise": raise one explicitly identified current ledger. Add "budgetScope" (run, installation, user, project or workflow), "budgetTarget" (exact task ID or title for run, exact budget ID for user/project/workflow, omit for installation), "budgetAmount" (the absolute new decimal limit, not an increment), and "budgetCurrency" (ISO code stated by the user). Ask about any unclear scope, amount, currency, or whether the operator means an existing allowance or a recurring definition. Recurring caps or default allowances for future runs use installation.plan. A raise may resume work put on hold by that ledger under existing budget policy.
 - "skill.save": create or revise a managed instruction skill. Add "skillAction" (create or revise), "skillId", "skillTitle", and "skillBody". New skills are saved disabled. Revision preserves the current audience, activation and description. Never use this intent to enable or delete a skill.
@@ -212,6 +212,12 @@ func decodePlan(body string) (Plan, error) {
 			plan.Budget.Currency = value
 		case "prNumber":
 			plan.PRSelector.Number = value
+		case "prRepository":
+			plan.PRSelector.Repository = value
+		case "prUrl":
+			plan.PRSelector.URL = value
+		case "prNode":
+			plan.PRSelector.Node = value
 		case "prWorkflow":
 			plan.PRSelector.Workflow = value
 		case "prConnection":
@@ -337,7 +343,7 @@ func decodePlan(body string) (Plan, error) {
 	if plan.Kind != CreateWorkflow && (seen["workflowId"] || seen["workflowName"] || seen["agent"] || seen["agentVersion"]) {
 		return Plan{}, ErrInvalidPlan
 	}
-	if plan.Kind != AnalyzePR && (seen["prNumber"] || seen["prWorkflow"] || seen["prConnection"]) {
+	if plan.Kind != AnalyzePR && (seen["prNumber"] || seen["prWorkflow"] || seen["prConnection"] || seen["prRepository"] || seen["prUrl"] || seen["prNode"]) {
 		return Plan{}, ErrInvalidPlan
 	}
 	if (seen["inspectArea"] && plan.Kind != InspectConsole && plan.Kind != FindResource) || (seen["resourceQuery"] && plan.Kind != FindResource) {

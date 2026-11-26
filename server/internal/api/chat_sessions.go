@@ -198,7 +198,12 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 			if modelErr != nil {
 				answer = chatRecovery(modelErr, callErr)
 			} else {
-				answer = s.resolveChatPlan(ctx, actor, id, plan)
+				plan, clarification := groundChatPRPlan(plan, lastInput, requestID, session, actor)
+				if clarification != "" {
+					answer = chat.Interpretation{Plan: chat.Plan{Kind: chat.Clarify, Title: plan.Title}, Text: clarification}
+				} else {
+					answer = s.resolveChatPlan(ctx, actor, id, plan)
+				}
 			}
 		}
 		saveCtx, finish := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)

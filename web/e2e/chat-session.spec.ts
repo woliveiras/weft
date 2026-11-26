@@ -30,17 +30,22 @@ async function draftTaskWithApproval(request: APIRequestContext, graphId: string
   return await draft.json() as {id: string; revision: number};
 }
 
-test('analyzes a pinned PR and returns a draft with its execution', async ({ page, request }) => {
+test('discovers duplicate PR numbers before analyzing a pinned PR and returning its execution', async ({ page, request }) => {
   await selectFixtureModel(request);
   const base = 'b'.repeat(40), head = 'a'.repeat(40);
   let writes = 0;
+  let diffs = 0;
   const remote = createServer((req, res) => {
     if (req.method !== 'GET') { writes++; res.writeHead(405).end(); return; }
     if (req.url === '/repos/team/repo/pulls/418') {
-      res.end(JSON.stringify({number: 418, html_url: 'https://fixture.example/repo/pull/418', state: 'open',
+      res.end(JSON.stringify({number: 418, title:'Update the mobile checksum', html_url: 'https://fixture.example/team/repo/pull/418', state: 'open',
         head: {ref: 'feature', sha: head, repo: {full_name: 'team/repo'}},
         base: {ref: 'main', sha: base, repo: {full_name: 'team/repo'}}}));
+    } else if (req.url === '/repos/team/docs/pulls/418') {
+      res.end(JSON.stringify({number:418,title:'Improve the documentation',html_url:'https://fixture.example/team/docs/pull/418',state:'open',
+        head:{ref:'docs',sha:'c'.repeat(40),repo:{full_name:'team/docs'}},base:{ref:'main',sha:base,repo:{full_name:'team/docs'}}}));
     } else if (req.url === `/repos/team/repo/compare/${base}...${head}`) {
+      diffs++;
       res.end('diff --git a/file b/file\n+fixture change\n');
     } else { res.writeHead(404).end(); }
   });
@@ -52,10 +57,13 @@ test('analyzes a pinned PR and returns a draft with its execution', async ({ pag
       apiUrl: `http://127.0.0.1:${port}`,
     }});
     expect(connection.ok()).toBe(true);
+    expect((await request.post('/api/v1/scm/connections',{headers,data:{
+      name:'pr-second',kind:'github',repository:'team/docs',token:'synthetic-browser-docs-fixture',apiUrl:`http://127.0.0.1:${port}`,
+    }})).ok()).toBe(true);
     const graph = await request.post('/api/v1/graphs', {headers, data: {
       metadata: {id: 'manual-review'}, spec: {
         nodes: [{id: 'reader', prompt: 'Review the change.', runtime: {kind: 'native'}, model: {provider: 'e2e', name: 'fixture'},
-          loop: {mode: 'event'}, tools: [{name: 'scm.pull_request.read', repositories: ['pr-fixture']}]}],
+          loop: {mode: 'event'}, tools: [{name: 'scm.pull_request.read', repositories: ['pr-fixture','pr-second']}]}],
         channels: [{id: 'in', to: ['reader']}],
       },
     }});
@@ -68,16 +76,22 @@ test('analyzes a pinned PR and returns a draft with its execution', async ({ pag
     await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-operator-token'));
     await page.goto('/');
     await send(page, 'Revise o PR 418.');
+    await expect(page.getByText(/Improve the documentation/)).toBeVisible();
+    await expect(page.getByText(/Update the mobile checksum/)).toBeVisible();
+    expect(diffs).toBe(0);
+    await send(page,'o do mobile checksum');
     const review = page.getByRole('region', {name: 'Review PR #418'});
     await expect(review.getByText(head)).toBeVisible();
     await review.getByRole('link', {name: 'View workflow'}).click();
     await expect(page).toHaveURL(/manual-review\/canvas/);
     await page.goBack();
+    expect(diffs).toBe(0);
     await review.getByRole('button', {name: 'Analyze PR #418'}).click();
     await expect(review.getByText('Add a boundary test for the fixture change.')).toBeVisible();
     await review.getByRole('link', {name: 'View execution'}).click();
     await expect(page).toHaveURL(/manual-review\/runs\?execution=/);
     expect(writes).toBe(0);
+    expect(diffs).toBe(1);
   } finally {
     await new Promise<void>((resolve, reject) => remote.close(err => err ? reject(err) : resolve()));
   }

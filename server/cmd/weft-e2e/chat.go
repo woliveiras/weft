@@ -43,7 +43,7 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 	case "Set local instructions for reader in instruction-sample to review test changes.":
 		content = `{"kind":"workflow.instructions","instructionWorkflow":"instruction-sample","instructionNode":"reader","localInstructions":"Review test changes.","title":"Review workflow instructions"}`
 	case "Revise o PR 418.":
-		content = `{"kind":"pr.analyze","prNumber":"418","prWorkflow":"manual-review","prConnection":"pr-fixture","title":"Review a pull request"}`
+		content = `{"kind":"pr.analyze","prNumber":"418","title":"Review a pull request"}`
 	case "Open the connections list for OAuth setup.":
 		content = `{"kind":"manual.open","destination":"connections","title":"Set up a connection"}`
 	case "Create an editorial skill for checking release notes.":

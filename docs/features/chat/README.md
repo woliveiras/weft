@@ -69,7 +69,22 @@ Completed watches and task inspections show the pinned base commit, checkout sta
 
 ## Review a pull request
 
-Ask “Revise o PR 418.” If several running workflows or connections qualify, name the workflow and connection. The reviewer needs a native event node, one exclusive ingress, a single input per turn, an explicit model and a named repository read grant. Connections with interactive read approval require the existing manual path.
+Ask “Revise o PR 418.” Chat checks the PR on configured repository connections
+that an existing saved workflow can read. The lookup uses PR metadata. Give a
+PR link, `owner/repository` or the connection name to narrow the search. When
+the same number appears in multiple repositories, choose the displayed number,
+repository or a distinguishing title fragment. “In that repository” refers to
+an explicit selection in the conversation. A new request by number searches
+again. If some repositories could not be checked, Chat marks the search
+incomplete and asks for a choice or narrower scope.
+
+Chat resolves the reviewer after the repository. Choose a reviewer if several
+qualify. The reviewer needs a running native event node, one exclusive ingress,
+a single input per turn, an explicit model and a named repository read grant.
+When a saved reviewer is stopped, Chat can prepare a separate **Start** review.
+For a missing reviewer, ask for a reviewed Graph in Chat or inspect Workflows.
+Connections whose grants require interactive read approval use the existing
+manual path.
 
 The preview identifies the repository, source and base commits, model and workflow version. **View workflow** opens the selected node. **Analyze PR** checks the revisions again and sends the bounded diff to the workflow model for one billed, tool-free analysis. Existing channel and turn gates still apply. The draft appears in the conversation with **View execution**. A missing receipt leaves the outcome unknown. Requesting analysis grants no publication permission.
 

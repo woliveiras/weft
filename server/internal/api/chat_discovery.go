@@ -228,6 +228,9 @@ func foundResource(plan chat.Plan, area string, c chat.Choice) chat.Interpretati
 }
 
 func (s *Server) resumeDiscoveryChoice(ctx context.Context, actor Identity, sessionID string, d *chat.Discovery, choice chat.Choice) chat.Interpretation {
+	if strings.HasPrefix(d.Area, "pr-") {
+		return s.resolveChatPRChoice(ctx, actor, sessionID, d.Plan, d.Area, choice.ID)
+	}
 	plan := d.Plan
 	slots := discoverySlots(&plan)
 	if d.Field < 0 || d.Field >= len(slots) || slots[d.Field].area != d.Area {

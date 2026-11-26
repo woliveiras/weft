@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 	"regexp"
-	"strconv"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/storage"
@@ -12,15 +11,21 @@ import (
 const AnalyzePR = "pr.analyze"
 
 type PRSelector struct {
-	Number     string
-	Workflow   string
-	Connection string
+	Number             string
+	Workflow           string
+	Connection         string
+	Repository         string
+	URL                string
+	Node               string
+	ConnectionRevision string
+	WorkflowVersion    int
+	Run                string
 }
 
 func (p PRSelector) Valid() bool {
-	number, err := strconv.Atoi(p.Number)
-	return err == nil && number > 0 && strconv.Itoa(number) == p.Number &&
-		(p.Workflow == "" || shortLabel(p.Workflow)) && (p.Connection == "" || shortLabel(p.Connection))
+	_, ok := p.NumberAndRepository()
+	return ok && (p.Workflow == "" || shortLabel(p.Workflow)) &&
+		(p.Connection == "" || shortLabel(p.Connection)) && (p.Node == "" || shortLabel(p.Node))
 }
 
 // PRAnalysis contains only the immutable source identity and the execution
