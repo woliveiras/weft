@@ -86,8 +86,10 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
     navigate();
   };
 
+  const canSend = modelAvailable || (!MOCK && /^\s*\/inspect(?:\s|$)/.test(draft));
+
   async function send() {
-    if (!modelAvailable || !draft.trim() || sending || waiting) return;
+    if (!canSend || !draft.trim() || sending || waiting) return;
     const previous = keys.current.get(draftKey);
     const requestId = previous?.text === draft ? previous.id
       : Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2,'0')).join('');
@@ -183,7 +185,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       {!MOCK && !modelAvailable && settings.data && <p className="card">
         {settings.data.status === 'unconfigured' ? 'No Chat model selected.' : 'The selected Chat model provider is unavailable.'}{' '}
         <a href="#/models/chat">Open Chat model settings</a>
-        {' or '}<a href="#/tasks">open Tasks</a>.
+        {' or '}<a href="#/tasks">open Tasks</a>. Use <code>/inspect</code> to see available read-only queries.
       </p>}
       {id && !session && conversation.loading && <p role="status">Loading conversation…</p>}
       {id && conversation.error && <><ErrorBox error={session ? conversation.error : 'Conversation unavailable.'}/>
@@ -207,7 +209,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
           setDrafts(previous => ({...previous,[draftKey]:text}));
         }}
           rows={3} maxLength={4096} /></label>
-        <Btn tone="primary" type="submit" disabled={!modelAvailable || sending || waiting || !draft.trim()}>
+        <Btn tone="primary" type="submit" disabled={!canSend || sending || waiting || !draft.trim()}>
           {sending ? 'Sending…' : 'Send'}
         </Btn>
       </form>}

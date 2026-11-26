@@ -156,10 +156,17 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 		history := session.Context(requestID)
 		var answer chat.Interpretation
 		directive := ""
+		lastInput := ""
 		if len(history) > 0 {
-			directive = chat.ExplicitReviewDirective(history[len(history)-1].Content)
+			lastInput = history[len(history)-1].Content
+			directive = chat.ExplicitReviewDirective(lastInput)
 		}
-		if directive != "" {
+		if explicit, ok := chat.ExplicitInspection(lastInput); ok {
+			answer = explicit
+			if explicit.Plan.Kind == chat.InspectConsole {
+				answer = s.inspectChatConsole(ctx, actor, explicit.Plan)
+			}
+		} else if directive != "" {
 			answer, err = s.decideChatReviewFromText(ctx, actor, session, directive)
 			if err != nil {
 				answer = chat.Interpretation{Text: "The review decision could not be read. Inspect the existing review before trying again."}
@@ -230,6 +237,8 @@ func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID 
 	switch plan.Kind {
 	case chat.AnalyzePR:
 		return s.reviewChatPR(ctx, actor, sessionID, plan)
+	case chat.InspectConsole:
+		return s.inspectChatConsole(ctx, actor, plan)
 	case chat.EditInstructions:
 		return s.reviewChatInstructions(ctx, actor, sessionID, plan)
 	case chat.GuideNode:

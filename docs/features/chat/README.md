@@ -16,6 +16,12 @@ When a saved conversation stays **Untitled chat**, use **Retry title** to
 generate a title from the first request. The transcript and any open reviews
 remain available while the title is generated.
 
+## Inspect installation state
+
+Ask which workflows are active, which providers are configured, how much the installation spent this month or which approvals are pending. The reply shows a dated snapshot from the corresponding Weft service and a link to inspect it. Lists show up to eight entries. A dependency failure leaves the result unavailable.
+
+Use `/inspect` to see the supported resources, or enter a shortcut such as `/inspect budgets`. These explicit reads work without a Chat model and incur no inference cost. Connection inspection uses stored status. Testing reachability remains a separate action.
+
 ## Open a console page from a conversation
 
 Ask “Where can I inspect my model budget?” or “Where do I enter the MCP connection credentials?” Follow the link in the reply to the relevant console page. Enter credentials in its setup form. Use browser Back to return to the same conversation. Opening a page leaves decisions, saves and execution to the controls on that page.

@@ -151,6 +151,9 @@ default. These routes do not contact the provider or take credentials.
 
 ### Chat sessions
 
+Explicit `/inspect <resource>` requests read installation state through the same authenticated Chat session endpoint. Enter `/inspect` to list the supported resources. The server projects bounded, timestamped fields and links to the owning console page. This shortcut works without a configured inference provider.
+
+
 `GET /api/v1/chat/sessions` lists up to 30 sessions per page for the current
 principal, ordered by last relevant activity with the session ID breaking
 ties. Pass the preceding page's `next` cursor as `after` to view older
