@@ -216,6 +216,12 @@ workflow transition lease and reuses its budget and execution checks. A saved
 operation receipt proves the control was recorded. The response reports the
 requested and observed state separately while the runtime settles.
 
+An operator can confirm a retry draft for the exact saved revision of an
+eligible failed manual task. The same source revision has one deterministic
+retry draft. The result links the authoritative child ID. The original
+task and its evidence remain available, and the retry has its own start
+review and authorization.
+
 ## Native issue connections
 
 Native Jira Data Center connections have their own credential store, independent

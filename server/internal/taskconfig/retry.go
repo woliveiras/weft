@@ -22,29 +22,11 @@ func (m Manager) RetryFailed(ctx context.Context, id string, revision int64, act
 	if err != nil {
 		return nil, false, err
 	}
-	if revision < 1 || source.Revision != revision || source.Status != "failed" || source.TriggerIssueOrigin != nil || source.TriggerGitHubIssue != "" {
+	if revision < 1 || source.Revision != revision || !source.CanRetryFailure() {
 		return nil, false, fmt.Errorf("%w: retry requires the unchanged failed manual task; recover issue-trigger tasks through their trigger", storage.ErrConflict)
 	}
-	hash := sha256.Sum256([]byte("task-retry\n" + id + "\n" + strconv.FormatInt(revision, 10)))
-	childID := "tsk_" + hex.EncodeToString(hash[:])
-	readChild := func() (*Draft, error) {
-		row, err := m.Store.GetSetting(ctx, prefix+childID)
-		if err != nil {
-			return nil, err
-		}
-		child, err := decode(row)
-		if err != nil {
-			return nil, err
-		}
-		if child.Status == "deleted" {
-			return nil, fmt.Errorf("%w: the retry draft was deleted; create a new task manually", storage.ErrConflict)
-		}
-		if child.ID != childID || child.RetryOfTaskID != id || child.RetryOfRevision != revision {
-			return nil, fmt.Errorf("%w: inconsistent retry task identity", storage.ErrConflict)
-		}
-		return child, nil
-	}
-	if child, err := readChild(); err == nil {
+	childID := retryDraftID(id, revision)
+	if child, err := m.RetryDraft(ctx, id, revision); err == nil {
 		return child, false, nil
 	} else if !errors.Is(err, storage.ErrNotFound) {
 		return nil, false, err
@@ -74,11 +56,41 @@ func (m Manager) RetryFailed(ctx context.Context, id string, revision int64, act
 	}
 	child.Revision, err = m.Store.PutSetting(ctx, prefix+childID, payload, 0, actor)
 	if errors.Is(err, storage.ErrConflict) {
-		existing, readErr := readChild()
+		existing, readErr := m.RetryDraft(ctx, id, revision)
 		return existing, false, readErr
 	}
 	if err != nil {
 		return nil, false, err
 	}
 	return child, true, nil
+}
+
+func (d *Draft) CanRetryFailure() bool {
+	return d.Status == "failed" && d.TriggerIssueOrigin == nil && d.TriggerGitHubIssue == ""
+}
+
+func retryDraftID(id string, revision int64) string {
+	hash := sha256.Sum256([]byte("task-retry\n" + id + "\n" + strconv.FormatInt(revision, 10)))
+	return "tsk_" + hex.EncodeToString(hash[:])
+}
+
+// RetryDraft looks up the deterministic child of a failed task revision. It
+// never creates a draft or prepares execution to resolve an uncertain reply.
+func (m Manager) RetryDraft(ctx context.Context, id string, revision int64) (*Draft, error) {
+	childID := retryDraftID(id, revision)
+	row, err := m.Store.GetSetting(ctx, prefix+childID)
+	if err != nil {
+		return nil, err
+	}
+	child, err := decode(row)
+	if err != nil {
+		return nil, err
+	}
+	if child.Status == "deleted" {
+		return nil, fmt.Errorf("%w: the retry draft was deleted; create a new task manually", storage.ErrConflict)
+	}
+	if child.ID != childID || child.RetryOfTaskID != id || child.RetryOfRevision != revision {
+		return nil, fmt.Errorf("%w: inconsistent retry task identity", storage.ErrConflict)
+	}
+	return child, nil
 }

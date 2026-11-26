@@ -91,6 +91,14 @@ preparation or delivery settings. If the task or its authorization changes
 while you are reviewing, inspect the updated setup and request a fresh start
 proposal.
 
+## Prepare a retry after failure
+
+Ask Chat to retry the failed manual task by its ID or title. Review the
+original attempt and choose **Prepare retry draft**. Open **View retry**
+to review the linked task with its copied request and workflow version.
+Starting the retry requires its own authorization and review. For
+trigger-owned tasks, use the trigger's recovery controls.
+
 ## Control a workflow or agent
 
 Name the workflow and, for a single-agent change, the node. Choose **Pause

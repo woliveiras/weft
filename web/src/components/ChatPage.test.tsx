@@ -184,6 +184,31 @@ it('displays the reviewed node and a recorded control while runtime is still dra
   expect(backend.find('POST',path).map(request => request.body)).toEqual([{digest:'bound-control'}]);
 });
 
+it('links the original failed task and the separate retry draft', async () => {
+  const review = {
+    id:'retry-action', digest:'retry-revision', expiresAt:'2999-11-26T08:00:00Z',
+    taskRetry:{id:'tsk_original',title:'Rebuild index',revision:6,workflowId:'search',workflowVersion:2,repositoryCount:0},
+  };
+  const session = (state:string, resultId?:string) => ({
+    id, archived:false, messages:[{id:'reply',role:'assistant',text:'Review the failed attempt.',review:{...review,state,resultId}}],
+  });
+  const path = `${paths}/${id}/operations/retry-action/confirm`;
+  const backend = fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'configured',revision:1}),
+    [`GET ${paths}`]: () => ({items:[],shared:false}),
+    [`GET ${paths}/${id}`]: () => session('awaiting_confirmation'),
+    [`POST ${path}`]: () => session('created','tsk_linked'),
+  });
+  render(<ChatPage id={id} archived={false} canOperate onOpen={vi.fn()}/>);
+  const card = await screen.findByRole('region',{name:'Retry task Rebuild index'});
+  expect(within(card).getByRole('link',{name:'View failed task'}).getAttribute('href')).toContain('#/tasks/tsk_original');
+  expect(within(card).getByText(/requires its own review and authorization/)).toBeTruthy();
+  expect(within(card).queryByRole('link',{name:'View retry'})).toBeNull();
+  fireEvent.click(within(card).getByRole('button',{name:'Prepare retry draft'}));
+  expect((await within(card).findByRole('link',{name:'View retry'})).getAttribute('href')).toContain('#/tasks/tsk_linked');
+  expect(backend.find('POST',path).map(request => request.body)).toEqual([{digest:'retry-revision'}]);
+});
+
 it('shows archived novelty from Recents and navigates across bounded pages', async () => {
   const open = vi.fn();
   const item = {

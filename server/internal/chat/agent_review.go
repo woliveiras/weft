@@ -113,6 +113,7 @@ type OperationReview struct {
 	Workflow        *WorkflowCreation                  `json:"workflow,omitempty"`
 	TaskDraft       *TaskCreation                      `json:"taskDraft,omitempty"`
 	TaskStart       *TaskAdmission                     `json:"taskStart,omitempty"`
+	TaskRetry       *TaskRetry                         `json:"taskRetry,omitempty"`
 	WorkflowControl *WorkflowControl                   `json:"workflowControl,omitempty"`
 	ControlResult   *engine.WorkflowControlObservation `json:"controlResult,omitempty"`
 	ID              string                             `json:"id"`
@@ -144,7 +145,7 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	choices := 0
-	for _, exists := range []bool{r.PR != nil, r.AgentCreation != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
+	for _, exists := range []bool{r.PR != nil, r.AgentCreation != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskRetry != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
 		if exists {
 			choices++
 		}
@@ -217,6 +218,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 			TaskStart                     *TaskAdmission
 			ExpiresAt                     time.Time
 		}{owner, session, StartTask, r.ID, r.TaskStart, r.ExpiresAt}
+	case r.TaskRetry != nil:
+		payload = struct {
+			Owner, Session, Operation, ID string
+			TaskRetry                     *TaskRetry
+			ExpiresAt                     time.Time
+		}{owner, session, RetryTask, r.ID, r.TaskRetry, r.ExpiresAt}
 	default:
 		return "", ErrReviewMismatch
 	}

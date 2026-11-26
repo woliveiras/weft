@@ -168,6 +168,40 @@ test('starts a reviewed task, preserves its approval and follows the observed re
   await expect(page.getByText(`Task ${task.id}: succeeded.`)).toBeVisible();
 });
 
+test('prepares one reviewed retry from a failed task and opens the linked draft', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const original = await startTaskWaitingForApproval(request,'chat-retry-source','Failed documentation task fixture');
+  const sourcePath = `/api/v1/tasks/${original}`;
+  const progress = await (await request.get(`${sourcePath}/progress`,{headers})).json();
+  expect(progress.pendingApprovals).toHaveLength(1);
+  const rejected = await request.post(`/api/v1/approvals/${progress.pendingApprovals[0].id}/reject`,{headers});
+  expect(rejected.ok()).toBe(true);
+  await expect.poll(async () => (await (await request.get(sourcePath,{headers})).json()).status).toBe('failed');
+  const failed = await (await request.get(sourcePath,{headers})).json();
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-operator-token'));
+  await page.goto('/');
+  await send(page,'Prepare a retry of my failed documentation task.');
+  const card = page.getByRole('region',{name:'Retry task Failed documentation task fixture'});
+  await expect(card.getByText(`${original} · Revision ${failed.revision}`)).toBeVisible();
+  await card.getByRole('button',{name:'Prepare retry draft',exact:true}).click();
+  const result = card.getByRole('link',{name:'View retry'});
+  const href = await result.getAttribute('href');
+  expect(href).toMatch(/^#\/tasks\/tsk_[a-z0-9]+/);
+  const childPath = `/api/v1${href?.slice(1).split('?')[0]}`;
+  const retry = await (await request.get(childPath,{headers})).json();
+  expect(retry).toMatchObject({
+    status:'draft', retryOfTaskId:original, retryOfRevision:failed.revision,
+    request:failed.request, graphId:failed.graphId, graphVersion:failed.graphVersion,
+  });
+  expect(retry.executionGraphId).toBeUndefined();
+  const consent = await (await request.get(`${childPath}/authorization`,{headers})).json();
+  expect(consent.record).toBeUndefined();
+  await result.click();
+  await expect(page.getByRole('link',{name:'Original failed task'})).toHaveAttribute('href',`#/tasks/${original}`);
+  await page.goBack();
+  await expect(result).toBeVisible();
+});
+
 test('an administrator reviews the installation budget in chat before applying it', async ({ page, request }) => {
   await selectFixtureModel(request);
   const policyPath = '/api/v1/cost/policy';

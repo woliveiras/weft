@@ -5,7 +5,7 @@ import { ChatConfigurationCard } from './ChatConfigurationCard';
 import { ChatManualLink } from './ChatManualLink';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
-import type { ChatMessage, ChatOperationReview, ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview } from '../api/chat';
+import type { ChatMessage, ChatOperationReview, ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview, ChatTaskRetryReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -287,7 +287,7 @@ function Message({value, now, canCreateAgent, canOperate, onView, onRead, onRetr
     {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
     {onRetry && <Btn onClick={onRetry}>Retry saved request</Btn>}
     {value.task && <TaskLink task={value.task} message={value.id} onView={onView}/>}
-    {review && <OperationReviewCard review={review} now={now} canConfirm={('pr' in review || 'taskDraft' in review || 'guidance' in review || 'workflowControl' in review) ? canOperate : canCreateAgent}
+    {review && <OperationReviewCard review={review} now={now} canConfirm={('pr' in review || 'taskDraft' in review || 'taskRetry' in review || 'guidance' in review || 'workflowControl' in review) ? canOperate : canCreateAgent}
       onDecide={decision => onDecide(review,decision)} onView={onView}/>}
     {value.unread && <Btn onClick={onRead}>Mark result read</Btn>}
   </article>;
@@ -303,6 +303,7 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   if ('taskDraft' in review) return <TaskDraftReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskStart' in review) return <TaskStartReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('workflowControl' in review) return <WorkflowControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('taskRetry' in review) return <TaskRetryReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   const workflow = review.workflow;
   const name = review.workflow ? review.workflow.graph.metadata.name : review.definition.name;
   const kind = workflow ? 'workflow' : 'agent';
@@ -450,6 +451,34 @@ function WorkflowControlCard({review, now, canConfirm, onDecide, onView}: {
     {review.state === 'unknown' && <p role="status">The control outcome is temporarily unknown. Inspect the workflow before trying again.</p>}
     {review.state === 'declined' && <p role="status">Proposal declined.</p>}
     <a id={anchor} href={`#/g/${encodeURIComponent(scope.workflowId)}/canvas${selection}`} onClick={() => onView(anchor)}>Open workflow</a>
+  </section>;
+}
+
+function TaskRetryReviewCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatTaskRetryReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const {taskRetry:source} = review;
+  const anchor = `chat-retry-${review.id}`;
+  return <section className="chat-agent-review" aria-label={`Retry task ${source.title}`}>
+    <h3>{source.title}</h3>
+    <dl>
+      <dt>Failed task</dt><dd>{source.id} · Revision {source.revision}</dd>
+      <dt>Workflow</dt><dd>{source.workflowId} · Version {source.workflowVersion}</dd>
+      <dt>Repositories copied</dt><dd>{source.repositoryCount}</dd>
+    </dl>
+    {review.state === 'awaiting_confirmation' && <>
+      <p>Prepare one linked draft with the same saved input. A new start requires its own review and authorization.</p>
+      <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm} confirmLabel="Prepare retry draft" onDecide={onDecide}/>
+    </>}
+    {review.state === 'applying' && <p role="status">Retry requested. Checking the linked draft…</p>}
+    {review.state === 'conflict' && <p role="status">The failed attempt changed or its linked draft is unavailable. Inspect the original task before requesting a new review.</p>}
+    {review.state === 'unknown' && <p role="status">The retry outcome is temporarily unknown. Check the original task before trying again.</p>}
+    {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+    {review.state === 'created' && review.resultId && <>
+      <p role="status">The linked retry is available.</p>
+      <a id={`${anchor}-result`} href={taskSectionLink(review.resultId,'overview')} onClick={() => onView(`${anchor}-result`)}>View retry</a>
+    </>}
+    <a id={anchor} href={taskSectionLink(source.id,'overview')} onClick={() => onView(anchor)}>View failed task</a>
   </section>;
 }
 

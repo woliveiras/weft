@@ -149,5 +149,14 @@ Chromium opened the reviewed runtime controls as an operator, verified the
 observed state, inspected the exact node and returned to the conversation.
 TypeScript, ten focused component checks and OpenAPI parsing passed.
 
+## 2026-11-26 — Reviewed task retry
+
+S32 passed targeted Go tests for the review, API and native retry. HTTP and
+SQLite preserved one linked draft on repeat, fenced a changed source
+revision, and left the original consent separate. Chromium rejected a
+fixture task's held input, prepared a retry only after confirmation and
+opened the linked draft in Tasks. TypeScript, eleven component checks,
+OpenAPI parsing and `git diff --check` passed.
+
 Device and assistive-technology review, external provider qualification and
 production backup and restore remain open.

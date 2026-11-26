@@ -48,6 +48,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"workflow.control","controlWorkflow":"chat-publication","controlAction":"start","title":"Control publication workflow"}`
 	case "Pause new turns for the reviewer node in the publication workflow.":
 		content = `{"kind":"workflow.control","controlWorkflow":"chat-publication","controlNode":"reviewer","controlAction":"pause"}`
+	case "Prepare a retry of my failed documentation task.":
+		content = `{"kind":"task.retry","task":"Failed documentation task fixture","title":"Retry documentation task"}`
 	default:
 		return nil, errors.New("unknown Chat fixture request")
 	}

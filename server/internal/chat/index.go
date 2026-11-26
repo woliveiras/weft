@@ -94,7 +94,7 @@ func (s *Session) summary(owner, key string) storage.ChatSummary {
 			if review.Guidance != nil && (review.State == ReviewQueued || review.State == ReviewApplying) {
 				meta.WatchCount++
 			}
-			if review.TaskStart != nil && review.State == ReviewApplying {
+			if (review.TaskStart != nil || review.TaskRetry != nil) && review.State == ReviewApplying {
 				meta.WatchCount++
 			}
 			if review.WorkflowControl != nil && (review.State == ReviewApplying || review.State == ReviewAccepted) {

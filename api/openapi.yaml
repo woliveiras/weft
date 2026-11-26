@@ -3027,6 +3027,7 @@ components:
             - {$ref: "#/components/schemas/ChatTaskDraftReview"}
             - {$ref: "#/components/schemas/ChatTaskStartReview"}
             - {$ref: "#/components/schemas/ChatWorkflowControlReview"}
+            - {$ref: "#/components/schemas/ChatTaskRetryReview"}
             - {$ref: "#/components/schemas/ChatConfigurationReview"}
             - {$ref: "#/components/schemas/ChatGuidanceReview"}
             - {$ref: "#/components/schemas/ChatInstructionReview"}
@@ -3255,6 +3256,22 @@ components:
                 observed: {type: string}
                 settled: {type: boolean}
                 incomplete: {type: boolean}
+    ChatTaskRetryReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [taskRetry]
+          properties:
+            taskRetry:
+              type: object
+              required: [id, title, revision, workflowId, workflowVersion, repositoryCount]
+              properties:
+                id: {type: string}
+                title: {type: string}
+                revision: {type: integer, minimum: 1}
+                workflowId: {type: string}
+                workflowVersion: {type: integer, minimum: 1}
+                repositoryCount: {type: integer, minimum: 0}
     ChatReviewState:
       type: object
       required: [id, expiresAt, digest, state]
@@ -3265,7 +3282,7 @@ components:
         state: {type: string, enum: [awaiting_confirmation, applying, created, accepted, queued, consumed, run_ended, applied, incomplete, conflict, unknown, declined]}
         claimedAt: {type: string, format: date-time}
         resultVersion: {type: integer}
-        resultId: {type: string, description: Exact ID of the saved draft or admitted task}
+        resultId: {type: string, description: Exact ID of the saved draft, linked retry or admitted task}
     ChatModelSelection:
       type: object
       additionalProperties: false

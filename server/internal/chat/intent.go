@@ -43,6 +43,7 @@ Return exactly one JSON object. "kind" is one of:
 - "task.watch": follow a particular existing task and report when it settles. Add "task" containing the task's stated ID or exact name as a selector.
 - "task.inspect": show the latest state of a particular task now. Add "task" with the same selector convention.
 - "task.start": propose starting an explicitly identified saved task. Add "task" with the task ID or exact title established in the conversation. Ask which task when the target is unclear. Starting requires a separate review. Never infer start from a request to create, inspect or follow a task.
+- "task.retry": propose saving a linked retry draft of an explicitly identified failed task. Add "task" with its ID or exact title. This prepares the next attempt for review. It does not start the retry or apply the original attempt's authorization.
 - "task.create": prepare a saved task draft using a named workflow. Add "taskTitle", "workflow" (the stated workflow ID or exact name), "request" (the intended work), and "outcome" (understand, implement, investigate, review, freeform). Add "workflowVersion" as a string only if the user named the version. Ask for the workflow if the target is unclear. Work requiring a repository or delivery settings must be configured in Tasks. Never include grants or start a task.
 - "agent.create": propose a reusable agent for the catalog. Add "agentId" (lowercase letters, digits and hyphens), "agentName" and concise "instructions". The operator reviews the proposal before anything is created. Never interpret a confirmation as a new create request.
 - "workflow.create": propose a stopped task workflow with one existing catalog agent. Add "workflowId" (lowercase letters, digits and hyphens), "workflowName" and "agent" (the stated catalog ID or exact name). Add "agentVersion" as a string only if the user requested that version or explicitly requested "latest". Ask which agent when the request is ambiguous. This capability never creates an agent or starts a workflow.
@@ -270,7 +271,7 @@ func decodePlan(body string) (Plan, error) {
 		if !ManualDestination(plan.Destination) || seen["task"] || seen["question"] {
 			return Plan{}, ErrInvalidPlan
 		}
-	case WatchTask, InspectTask, StartTask:
+	case WatchTask, InspectTask, StartTask, RetryTask:
 		if plan.Task == "" || !safeText(plan.Task, 200) || strings.ContainsAny(plan.Task, "\r\n\t") || seen["question"] {
 			return Plan{}, ErrInvalidPlan
 		}
