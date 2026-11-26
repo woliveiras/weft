@@ -32,3 +32,16 @@ test('downloads installation YAML from the original export route without putting
   expect((await response).status()).toBe(200);
   await expect(page.getByLabel('Conversation',{exact:true})).not.toContainText('apiVersion:');
 });
+
+test('opens the exact delegation section from its stored policy snapshot', async ({page})=>{
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
+  await page.goto('/');
+  await page.getByRole('textbox',{name:'Message'}).fill('/inspect delegation');
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.getByText(/Maximum depth.+children per execution/)).toBeVisible();
+  const policy=page.getByRole('link',{name:'Open Delegation',exact:true});
+  await policy.click();
+  await expect(page).toHaveURL(/#\/administration\/delegation$/);
+  await page.goBack();
+  await expect(policy).toBeFocused();
+});

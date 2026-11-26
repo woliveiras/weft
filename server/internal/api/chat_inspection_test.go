@@ -29,7 +29,7 @@ func TestConsoleInspectionReadsCanonicalStateAndNeverCallsAModelForShortcuts(t *
 		}
 		return session.Messages[1]
 	}
-	for i, area := range strings.Fields("tasks workflows agents projects skills approvals activity triggers review-routes mcp scm issue-connections models chat-model plugins tools network retention usage prices budgets") {
+	for i, area := range strings.Fields("tasks workflows agents projects skills approvals activity triggers review-routes mcp scm issue-connections models chat-model plugins tools network retention delegation usage prices budgets") {
 		m := ask(i+1, "/inspect "+area)
 		if m.Review != nil || m.Destination != chat.InspectionDestination(area) || !strings.HasPrefix(m.Text, area+" · ") {
 			t.Fatalf("%s: %+v", area, m)

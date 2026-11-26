@@ -43,3 +43,20 @@ func TestChatConfigurationExportRequiresAdministrator(t *testing.T) {
 		}
 	}
 }
+
+func TestSecureSetupHandoffsUseAppropriateManualDestination(t *testing.T) {
+	for _, tc := range []struct {
+		dest string
+		role config.Role
+		want string
+	}{
+		{"task-editor", config.RoleViewer, "tasks"}, {"task-editor", config.RoleOperator, "task-editor"},
+		{"project-import", config.RoleViewer, "projects"}, {"project-import", config.RoleAdmin, "project-import"},
+		{"source-control-setup", config.RoleOperator, "connections"}, {"source-control-setup", config.RoleAdmin, "source-control-setup"},
+	} {
+		got := ManualHandoff(Plan{Kind: OpenManual, Destination: tc.dest}, tc.role)
+		if got.Destination != tc.want || got.Review != nil {
+			t.Fatal(tc, got)
+		}
+	}
+}

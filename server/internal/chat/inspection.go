@@ -21,8 +21,8 @@ func InspectionDestination(area string) string {
 		return "connections"
 	case "triggers", "review-routes":
 		return "workflows"
-	case "tools", "network", "retention":
-		return "administration"
+	case "tools", "network", "retention", "delegation":
+		return area
 	}
 	return ""
 }
@@ -107,5 +107,5 @@ func ExplicitInspection(text string) (Interpretation, bool) {
 	if len(fields) == 2 && InspectionDestination(fields[1]) != "" {
 		return Interpretation{Plan: Plan{Kind: InspectConsole, Area: fields[1]}}, true
 	}
-	return Interpretation{Text: "Use /inspect followed by tasks, workflows, agents, projects, skills, approvals, activity, triggers, review-routes, mcp, scm, issue-connections, models, chat-model, plugins, tools, network, retention, usage, prices, or budgets."}, true
+	return Interpretation{Text: "Use /inspect followed by tasks, workflows, agents, projects, skills, approvals, activity, triggers, review-routes, mcp, scm, issue-connections, models, chat-model, plugins, tools, network, retention, delegation, usage, prices, or budgets. Use /inspect execution <id> for a specific execution."}, true
 }

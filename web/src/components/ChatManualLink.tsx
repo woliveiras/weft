@@ -20,6 +20,14 @@ const destinations = new Map<string, [string, string]>([
   ['connections', ['Connections', '#/connections']],
   ['connection-setup', ['Connection setup', '#/connections/new']],
   ['skills', ['Skills and instructions', '#/skills']],
+  ['delegation', ['Delegation', '#/administration/delegation']],
+  ['network', ['Network policy', '#/administration/network']],
+  ['retention', ['Retention', '#/administration/retention']],
+  ['resources', ['Resources', '#/administration/resources']],
+  ['tools', ['Tools', '#/administration/tools']],
+  ['task-editor', ['Task editor', '#/tasks/new']],
+  ['project-import', ['Project import', '#/projects/import']],
+  ['source-control-setup', ['Source control setup', '#/connections/source-control/new']],
   ['administration', ['Administration', '#/administration/health']],
 ]);
 

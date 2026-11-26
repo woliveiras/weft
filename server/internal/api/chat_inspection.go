@@ -12,6 +12,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/chat"
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/cost"
+	"github.com/woliveiras/weft/server/internal/delegation"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/instructions"
 	"github.com/woliveiras/weft/server/internal/projectconfig"
@@ -216,6 +217,15 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 		for _, t := range s.Tools.List() {
 			v.Add(t.Name() + " · " + t.Capability())
 		}
+	case "delegation":
+		current, err := (delegation.Manager{Store: s.Store}).Policy(ctx)
+		if err != nil {
+			return err
+		}
+		p := current.Policy
+		v.Add(fmt.Sprintf("Revision %d · enabled %t · approval %s", current.Revision, p.Enabled, p.ApprovalMode))
+		v.Add(fmt.Sprintf("Maximum depth %d · %d children per execution · %d concurrent children", p.MaxDepth, p.MaxChildrenPerExecution, p.MaxConcurrentChildren))
+		v.Add(fmt.Sprintf("Tree budget · %d tokens", p.MaxTreeTokens))
 	case "network":
 		current, err := s.networkSettings().Get(ctx)
 		if err != nil {

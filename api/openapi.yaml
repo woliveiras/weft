@@ -3044,7 +3044,7 @@ components:
             nodes: {type: integer}
             active: {type: integer}
             cancellationRequested: {type: boolean}
-        destination: {type: string, enum: [tasks, workflows, agents, projects, activity, approvals, models, chat-model, plugins, usage, budgets, prices, connections, connection-setup, skills, administration, configuration-export], description: "Read-only console destination or authenticated download."}
+        destination: {type: string, enum: [tasks, workflows, agents, projects, activity, approvals, models, chat-model, plugins, usage, budgets, prices, connections, connection-setup, skills, administration, configuration-export, delegation, network, retention, resources, tools, task-editor, project-import, source-control-setup], description: "Read-only console destination or authenticated download."}
         review:
           oneOf:
             - {$ref: "#/components/schemas/ChatAgentReview"}
