@@ -135,8 +135,12 @@ export interface ChatTaskRetryReview extends ChatReviewState {
   taskRetry: {id: string; title: string; revision: number; workflowId: string; workflowVersion: number; repositoryCount: number};
 }
 
+export interface ChatCatalogPublicationReview extends ChatReviewState {
+  publication: {id: string; name: string; previousVersion: number; revision: number; before: string; after: string};
+}
+
 export type ChatOperationReview = ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
-  ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview | ChatTaskRetryReview;
+  ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview | ChatTaskRetryReview | ChatCatalogPublicationReview;
 
 export interface ChatSession {
   id: string;

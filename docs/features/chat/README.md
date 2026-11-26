@@ -55,6 +55,14 @@ to a workflow and running it are separate actions.
 A stale or expired review requires a new proposal. If a response is lost,
 return to the conversation to check the catalog receipt before trying again.
 
+## Publish shared agent instructions
+
+As an administrator, name the catalog agent and describe the shared
+instruction change. Compare the complete current and proposed instructions
+and choose **Publish agent version**. The new version appears in Agents.
+Each workflow continues to use its own pinned version until it adopts a
+different one.
+
 ## Create a workflow using an existing agent
 
 As an administrator, name the workflow and the catalog agent it should use.

@@ -3028,6 +3028,7 @@ components:
             - {$ref: "#/components/schemas/ChatTaskStartReview"}
             - {$ref: "#/components/schemas/ChatWorkflowControlReview"}
             - {$ref: "#/components/schemas/ChatTaskRetryReview"}
+            - {$ref: "#/components/schemas/ChatCatalogPublicationReview"}
             - {$ref: "#/components/schemas/ChatConfigurationReview"}
             - {$ref: "#/components/schemas/ChatGuidanceReview"}
             - {$ref: "#/components/schemas/ChatInstructionReview"}
@@ -3272,6 +3273,23 @@ components:
                 workflowId: {type: string}
                 workflowVersion: {type: integer, minimum: 1}
                 repositoryCount: {type: integer, minimum: 0}
+    ChatCatalogPublicationReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [publication]
+          properties:
+            publication:
+              type: object
+              required: [id, name, previousVersion, revision, definitionDigest, before, after]
+              properties:
+                id: {type: string}
+                name: {type: string}
+                previousVersion: {type: integer, minimum: 1}
+                revision: {type: integer, minimum: 1}
+                definitionDigest: {type: string, pattern: '^[0-9a-f]{64}$'}
+                before: {type: string}
+                after: {type: string}
     ChatReviewState:
       type: object
       required: [id, expiresAt, digest, state]

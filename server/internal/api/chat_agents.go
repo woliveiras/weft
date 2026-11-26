@@ -140,6 +140,9 @@ func (s *Server) decideStoredChatReview(ctx context.Context, actor Identity, ses
 		if review.Workflow != nil {
 			return s.applyReviewedChatWorkflow(settleCtx, actor, sessionID, review)
 		}
+		if review.Publication != nil {
+			return s.applyChatCatalogPublication(settleCtx, actor, sessionID, review)
+		}
 		if review.TaskDraft != nil {
 			return s.applyReviewedChatTaskDraft(settleCtx, actor, sessionID, review)
 		}
@@ -295,6 +298,8 @@ func (s *Server) reconcileChatReviews(ctx context.Context, owner string, session
 		var err error
 		if review.AgentCreation != nil {
 			version, found, err = s.chatAgentReceipt(ctx, review)
+		} else if review.Publication != nil {
+			version, found, err = s.chatPublicationReceipt(ctx, review)
 		}
 		if err != nil {
 			return nil, err

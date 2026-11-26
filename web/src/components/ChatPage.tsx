@@ -6,7 +6,7 @@ import { ChatConfigurationCard } from './ChatConfigurationCard';
 import { ChatManualLink } from './ChatManualLink';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
-import type { ChatMessage, ChatOperationReview, ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview, ChatTaskRetryReview } from '../api/chat';
+import type { ChatCatalogPublicationReview, ChatMessage, ChatOperationReview, ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview, ChatTaskRetryReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -306,6 +306,7 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   if ('taskStart' in review) return <TaskStartReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('workflowControl' in review) return <WorkflowControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskRetry' in review) return <TaskRetryReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('publication' in review) return <CatalogPublicationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   const workflow = review.workflow;
   const name = review.workflow ? review.workflow.graph.metadata.name : review.definition.name;
   const kind = workflow ? 'workflow' : 'agent';
@@ -481,6 +482,32 @@ function TaskRetryReviewCard({review, now, canConfirm, onDecide, onView}: {
       <a id={`${anchor}-result`} href={taskSectionLink(review.resultId,'overview')} onClick={() => onView(`${anchor}-result`)}>View retry</a>
     </>}
     <a id={anchor} href={taskSectionLink(source.id,'overview')} onClick={() => onView(anchor)}>View failed task</a>
+  </section>;
+}
+
+function CatalogPublicationCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatCatalogPublicationReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const {publication} = review;
+  const anchor = `chat-publication-${review.id}`;
+  return <section className="chat-agent-review" aria-label={`Publish shared instructions for ${publication.name}`}>
+    <h3>{publication.name}</h3>
+    <dl>
+      <dt>Catalog agent</dt><dd>{publication.id}</dd>
+      <dt>Current version</dt><dd>{publication.previousVersion}</dd>
+    </dl>
+    <h4>Current shared instructions</h4><p>{publication.before || 'None'}</p>
+    <h4>Proposed shared instructions</h4><p>{publication.after}</p>
+    {review.state === 'awaiting_confirmation' && <>
+      <p>This publishes a new version in Agents. Each workflow adopts the version separately.</p>
+      <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm} confirmLabel="Publish agent version" onDecide={onDecide}/>
+    </>}
+    {review.state === 'applying' && <p role="status">Publication requested. Checking the catalog…</p>}
+    {review.state === 'conflict' && <p role="status">The reviewed catalog changed. Inspect the current version before requesting a new review.</p>}
+    {review.state === 'unknown' && <p role="status">The publication outcome is temporarily unknown. Inspect the catalog before trying again.</p>}
+    {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+    {review.state === 'created' && <p role="status">Catalog version {review.resultVersion} published.</p>}
+    <a id={anchor} href={`#/agents/${encodeURIComponent(publication.id)}`} onClick={() => onView(anchor)}>View agent</a>
   </section>;
 }
 

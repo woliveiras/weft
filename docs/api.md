@@ -222,6 +222,12 @@ retry draft. The result links the authoritative child ID. The original
 task and its evidence remain available, and the retry has its own start
 review and authorization.
 
+An administrator can publish revised shared agent instructions through the
+same review route. The review binds the current catalog version, storage
+revision and prior definition. The publication appends one immutable version
+with the operation receipt and preserves the other catalog fields. Workflow
+pins and node-local instructions are governed by separate workflow changes.
+
 ## Native issue connections
 
 Native Jira Data Center connections have their own credential store, independent

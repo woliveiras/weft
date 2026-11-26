@@ -463,3 +463,39 @@ test('a reviewed workflow keeps the requested catalog version and opens in the m
   await page.goBack();
   await expect(viewDraft).toBeVisible();
 });
+
+test('publishes shared instructions and keeps the existing workflow pinned', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const agentId = 'publishing-reader';
+  const agentPath = `/api/v1/agents/${agentId}`;
+  const created = await request.post('/api/v1/agents', {headers,data:{id:agentId,definition:{
+    name:'Publishing reader',prompt:'Read the notes.',runtime:{kind:'native'},
+    model:{provider:'e2e',name:'fixture'},isolation:{mode:'process'},readOnly:true,
+  }}});
+  expect(created.status()).toBe(201);
+  const graphPath = '/api/v1/graphs/chat-pinned-reader';
+  const graph = await request.post('/api/v1/graphs',{headers,data:{
+    metadata:{id:'chat-pinned-reader'},
+    spec:{nodes:[{id:'reader',agent:{id:agentId,version:1},localInstructions:'Observe the local constraint.'}]},
+  }});
+  expect(graph.status()).toBe(201);
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.goto('/');
+  await send(page,'Publish new shared instructions for Publishing reader to check revised notes.');
+  const card = page.getByRole('region',{name:'Publish shared instructions for Publishing reader'});
+  await expect(card.getByText('Read the notes.')).toBeVisible();
+  await expect(card.getByText('Check the revised notes.')).toBeVisible();
+  expect((await(await request.get(agentPath,{headers})).json()).versions).toHaveLength(1);
+  await card.getByRole('button',{name:'Publish agent version'}).click();
+  await expect(card.getByText('Catalog version 2 published.')).toBeVisible();
+  const catalog = await (await request.get(agentPath,{headers})).json();
+  expect(catalog.versions).toHaveLength(2);
+  expect(catalog.versions[1]).toMatchObject({version:2,definition:{prompt:'Check the revised notes.',readOnly:true}});
+  const workflow:GraphSummary = await (await request.get(graphPath,{headers})).json();
+  expect(workflow.graph.metadata.version).toBe(1);
+  expect(workflow.graph.spec.nodes[0]).toMatchObject({agent:{id:agentId,version:1},localInstructions:'Observe the local constraint.'});
+  await card.getByRole('link',{name:'View agent',exact:true}).click();
+  await expect(page).toHaveURL(/#\/agents\/publishing-reader$/);
+  await page.goBack();
+  await expect(card).toBeVisible();
+});

@@ -158,5 +158,15 @@ fixture task's held input, prepared a retry only after confirmation and
 opened the linked draft in Tasks. TypeScript, eleven component checks,
 OpenAPI parsing and `git diff --check` passed.
 
+## 2026-11-26 — Shared catalog publication
+
+S33 passed targeted Go unit and HTTP/SQLite tests. Repeating the review
+returned the same immutable catalog version. The original version, saved
+workflow pin and local override remained intact. A publication through the
+manual API invalidated a pending review. Chromium verified the before and
+after text, published version 2, inspected the preserved workflow pin through
+the API and returned from Agents. TypeScript, twelve focused component
+checks, OpenAPI parsing and `git diff --check` passed.
+
 Device and assistive-technology review, external provider qualification and
 production backup and restore remain open.

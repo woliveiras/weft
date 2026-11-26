@@ -244,6 +244,8 @@ func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID 
 		reply.Text = "Chat can inspect or follow a task or propose a catalog agent or workflow. Use the console navigation for other operations."
 	case chat.CreateAgent:
 		return s.reviewChatAgent(ctx, actor, sessionID, plan)
+	case chat.PublishAgent:
+		return s.reviewChatCatalogPublication(ctx, actor, sessionID, plan)
 	case chat.CreateWorkflow:
 		return s.reviewChatWorkflow(ctx, actor, sessionID, plan)
 	case chat.CreateTask:

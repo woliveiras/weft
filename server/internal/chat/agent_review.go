@@ -108,6 +108,7 @@ type OperationReview struct {
 	Guidance     *Guidance        `json:"guidance,omitempty"`
 	ConsumedAt   *time.Time       `json:"consumedAt,omitempty"`
 	*AgentCreation
+	Publication     *CatalogPublication                `json:"publication,omitempty"`
 	Configuration   *ConfigReview                      `json:"configuration,omitempty"`
 	ConfigReceipts  []ConfigReceipt                    `json:"configReceipts,omitempty"`
 	Workflow        *WorkflowCreation                  `json:"workflow,omitempty"`
@@ -145,7 +146,7 @@ func newReview(owner, session string, now time.Time, action OperationReview) (*O
 
 func (r OperationReview) digest(owner, session string) (string, error) {
 	choices := 0
-	for _, exists := range []bool{r.PR != nil, r.AgentCreation != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskRetry != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
+	for _, exists := range []bool{r.PR != nil, r.AgentCreation != nil, r.Publication != nil, r.Workflow != nil, r.Configuration != nil, r.TaskDraft != nil, r.TaskStart != nil, r.TaskRetry != nil, r.Guidance != nil, r.Instructions != nil, r.WorkflowControl != nil} {
 		if exists {
 			choices++
 		}
@@ -155,6 +156,12 @@ func (r OperationReview) digest(owner, session string) (string, error) {
 	}
 	var payload any
 	switch {
+	case r.Publication != nil:
+		payload = struct {
+			Owner, Session, ID, Operation string
+			ExpiresAt                     time.Time
+			Publication                   *CatalogPublication
+		}{owner, session, r.ID, PublishAgent, r.ExpiresAt, r.Publication}
 	case r.WorkflowControl != nil:
 		payload = struct {
 			Owner, Session, ID, Operation string

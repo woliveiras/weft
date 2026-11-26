@@ -39,6 +39,7 @@ type Agent struct {
 	ID       string    `json:"id"`
 	Versions []Version `json:"versions"`
 	Origin   *Origin   `json:"origin,omitempty"`
+	Revision int64     `json:"-"`
 }
 
 type Summary struct {
@@ -59,6 +60,7 @@ func decode(s *storage.Setting) (Agent, error) {
 	if len(a.Versions) == 0 || a.ID != strings.TrimPrefix(s.Key, prefix) {
 		return a, errors.New("invalid stored agent catalog entry")
 	}
+	a.Revision = s.Revision
 	return a, nil
 }
 
@@ -103,6 +105,15 @@ func (m Manager) CreateForOperation(ctx context.Context, id string, d domain.Age
 	return m.publish(ctx, id, 0, d, actor, operation)
 }
 
+// PublishForOperation binds the new version to its reviewed operation in the
+// same compare-and-set write that appends it to the catalog.
+func (m Manager) PublishForOperation(ctx context.Context, id string, expected int64, d domain.AgentDefinition, actor, operation string) (Agent, error) {
+	if operation == "" || expected < 1 {
+		return Agent{}, fmt.Errorf("%w: publication requires an existing catalog revision and operation", ErrInvalid)
+	}
+	return m.publish(ctx, id, expected, d, actor, operation)
+}
+
 func (m Manager) publish(ctx context.Context, id string, expected int64, d domain.AgentDefinition, actor, operation string) (Agent, error) {
 	switch {
 	case id == "new" || id == "source" || (expected == 0 && strings.HasPrefix(id, workflowAgentPrefix)):
@@ -133,7 +144,7 @@ func (m Manager) publish(ctx context.Context, id string, expected int64, d domai
 	if err != nil {
 		return a, err
 	}
-	_, err = m.Store.PutSetting(ctx, prefix+id, raw, expected, actor)
+	a.Revision, err = m.Store.PutSetting(ctx, prefix+id, raw, expected, actor)
 	return a, err
 }
 
