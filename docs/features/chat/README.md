@@ -254,3 +254,5 @@ Administrators can type `/export` or ask to download the current installation co
 Use `/inspect execution <id>` or ask about an exact execution to see its observed state, tree root and number of active executions. **View execution** opens the selected execution. A cancellation request and the execution's eventual terminal status are shown separately.
 
 An operator can ask to cancel an execution tree or only a particular delegated child. The review identifies the root, selected execution, workflow and run. Confirmation records a cooperative request. Chat continues to observe the reviewed scope and reports whether an execution actually reached the cancelled state. **View execution** opens its native evidence.
+
+When you switch chats before a reply arrives, Recents keeps that reply unread until you view it. A hollow dot indicates an unread reply and the green dot indicates a successful operational result. Both can appear alongside the running indicator.

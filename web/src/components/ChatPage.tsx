@@ -251,7 +251,9 @@ function canRetry(message: ChatMessage, now: number) {
 function SessionRow({item, current, expanded, onOpen, onDetails}: {
   item: ChatSessionSummary; current: boolean; expanded: boolean; onOpen: () => void; onDetails: () => void;
 }) {
+  const otherUnread = Math.max(0,item.unread - item.unreadSuccess - item.unreadFailure - item.unreadCancellation);
   const status = [
+    otherUnread ? `${otherUnread} unread ${otherUnread === 1 ? "reply" : "replies"}` : '',
     item.running ? `${item.running} running` : '',
     item.unreadSuccess ? `${item.unreadSuccess} successful result unread` : '',
     item.unreadFailure ? `${item.unreadFailure} failed or blocked result unread` : '',
@@ -270,6 +272,7 @@ function SessionRow({item, current, expanded, onOpen, onDetails}: {
         aria-current={current?'page':undefined}>{title}</button>
       <span className="chat-session-indicators" role={status ? 'img' : undefined} aria-label={status || undefined}>
         {!!item.running && <span className="chat-running" aria-hidden="true"/>}
+        {!!otherUnread && <span className="chat-reply-dot" aria-hidden="true"/>}
         {!!item.unreadSuccess && <span className="chat-success" aria-hidden="true"/>}
         {!!(item.unreadFailure || item.unreadCancellation || item.decisions || item.unknown) && <span className="chat-attention" aria-hidden="true">!</span>}
       </span>

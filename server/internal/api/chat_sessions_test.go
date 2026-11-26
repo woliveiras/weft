@@ -99,3 +99,30 @@ func TestRecentSessionStopsShowingRunningWhenItsRequestSettles(t *testing.T) {
 	}
 	check(0)
 }
+
+func TestUnreadDetachedReplyClearsOnlyAfterReadingItsMessage(t *testing.T) {
+	srv := setup(t)
+	const route = "/api/v1/chat/sessions"
+	const id = "d302e80ce56b4b50a83981d63b1a811b"
+	var session chat.Session
+	if status := call(t, srv, "POST", route, viewerTok, "application/json", `{"requestId":"`+id+`","text":"/inspect workflows"}`, &session); status != 200 || len(session.Messages) != 2 || !session.Messages[1].Unread {
+		t.Fatal(status, session)
+	}
+	check := func(want int) {
+		t.Helper()
+		var list struct {
+			Items []struct {
+				Unread        int
+				UnreadSuccess int
+			}
+		}
+		if status := call(t, srv, "GET", route, viewerTok, "", "", &list); status != 200 || len(list.Items) != 1 || list.Items[0].Unread != want || list.Items[0].UnreadSuccess != 0 {
+			t.Fatal(status, list)
+		}
+	}
+	check(1)
+	if status := call(t, srv, "POST", route+"/"+id+"/messages/"+session.Messages[1].ID+"/read", viewerTok, "", "", nil); status != 200 {
+		t.Fatal(status)
+	}
+	check(0)
+}

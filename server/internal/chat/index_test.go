@@ -104,3 +104,11 @@ func TestSummaryTracksPendingRequestSeparatelyFromDurableWatches(t *testing.T) {
 		t.Fatal("title retry absent from session list")
 	}
 }
+
+func TestUnreadInspectionReplyStaysDistinctFromTerminalSuccess(t *testing.T) {
+	s := Session{Messages: []Message{{Role: "assistant", Unread: true, Text: "Select a task"}}}
+	meta := s.summary("owner", "key")
+	if meta.Unread != 1 || meta.UnreadSuccess != 0 || meta.UnreadFailure != 0 || meta.Running != 0 {
+		t.Fatal(meta)
+	}
+}

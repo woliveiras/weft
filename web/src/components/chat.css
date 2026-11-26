@@ -18,6 +18,7 @@
 .chat-session-row { position: relative; padding-block: 0.15rem; }
 .chat-session-title { text-align: start; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-session-indicators { display: inline-flex; align-items: center; gap: 0.3rem; }
+.chat-reply-dot { display: inline-block; width: .5rem; height: .5rem; border: 1px solid currentColor; border-radius: 50%; }
 .chat-running, .chat-success { display: inline-block; width: 0.65rem; height: 0.65rem; border-radius: 50%; }
 .chat-running {
   border: 2px solid currentColor;

@@ -301,3 +301,12 @@ it('opens the selected child execution and distinguishes a request from terminal
   expect(within(summary).getByText('Cancellation requested')).toBeTruthy();
   expect(within(summary).getByRole('link',{name:'View execution'}).getAttribute('href')).toContain('#/g/review/runs?execution=child');
 });
+
+it('announces an unread reply while preserving the running indicator', async () => {
+  fakeApi({
+    'GET /api/v1/chat/settings':()=>({status:'configured',revision:1}),
+    [`GET ${paths}`]:()=>({items:[{id,title:'A conversation',running:1,unread:1,unreadSuccess:0,unreadFailure:0,unreadCancellation:0,decisions:0,unknown:0}]}),
+  });
+  render(<ChatPage archived={false} onOpen={vi.fn()}/>);
+  expect(await screen.findByRole('img',{name:/1 unread repl.*1 running/})).toBeTruthy();
+});
