@@ -344,3 +344,21 @@ All 33 Chat Chromium journeys passed with local fixtures. The final
 `make test`, `make lint` and `make build` passed, including 858 web tests.
 The first full Go run recorded failures in the budget-resume and trigger-retry
 tests. Both passed on a focused rerun and in the subsequent full suite.
+
+## 2026-11-26 — Conversational resource discovery
+
+- **S44–S45.** The Go unit tests exercise exact IDs, name matches, Portuguese and English choices, ambiguous labels, result limits and unsafe labels. Authenticated HTTP and SQLite tests reopen a conversation containing two identically named workflows and select the original start operation. Another session cannot select those candidates. Additional cases cover an incomplete inventory, a removed target, and a workflow replaced by another with the old ID as its display name. The latter cannot receive the original node guidance.
+- **Nested choices.** With two pending approvals on a running task, a title fragment selects the intended approval and preserves the task ID and proposed decision. A second conversation selects the same approval after it expires and receives no review for its still-pending sibling. The transcript displays the approval title and ID during discovery. The question text appears when reviewing the selected request.
+- **S46–S47.** The SCM and HTTP fixtures exercise discovery across configured repository connections, ambiguous and missing PR numbers, partial coverage, stale connection/reviewer selections, multiple eligible reviewers and a saved reviewer that requires a separately reviewed start. An additional HTTP regression supplies a repository name that the fixture model omits. Only that repository is queried. An unrecognized link causes a clarification before any SCM call. A provider 404 establishes absence only after the same connection demonstrates PR-list access. The tests distinguish metadata lookup from analysis and remote publication.
+- **Chromium.** One journey reloads a numbered workflow search and chooses by name without a configured model. Another finds PR #418 in two fixture repositories and selects one with “o do mobile checksum”. Both repositories receive metadata reads. The chosen repository receives one diff read after confirmation, and the fixture records zero remote writes.
+
+At implementation commit `072c5e9`, `make lint`, `make build` and `make test`
+passed in a clean checkout, including 858 web tests across 140 files. All
+34 Chat Playwright journeys passed in Chromium with a disposable backend
+and local fixtures. OpenAPI parsed as 3.1.0 and includes the discovery message
+state. The documentation link check found 38 added local links and zero
+unresolved paths. Two earlier full runs encountered intermittent web test
+failures in SharedEnvironmentsSection (selection timeout) and TaskEntryFlow
+(workflow preselection during delayed project discovery). Both passed
+on focused reruns and in the final full suite. Live SCM accounts remain
+outside this qualification.

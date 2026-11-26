@@ -45,6 +45,13 @@ inspect the review and confirm it separately. If the search is incomplete,
 narrow the name or choose an entry that was actually found. The explicit
 `/find` and `/choose` commands work without a configured Chat model.
 
+| To find | Resource names for `/find` |
+| --- | --- |
+| Work and execution | `tasks`, `workflows`, `nodes`, `agents`, `projects`, `executions`, `approvals` |
+| Automation and extensions | `skills`, `triggers`, `review-routes`, `tools`, `plugins` |
+| Configured connections | `scm`, `mcp`, `issue-connections` |
+| Configured model providers and budget definitions | `models`, `budgets` |
+
 ## Open a console page from a conversation
 
 Ask “Where can I inspect my model budget?” or “Where do I enter the MCP connection credentials?” Follow the link in the reply to the relevant console page. Enter credentials in its setup form. Use browser Back to return to the same conversation. Opening a page leaves decisions, saves and execution to the controls on that page.

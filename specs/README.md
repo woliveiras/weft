@@ -44,7 +44,7 @@ The [historical source map](./historical-source-map.md) records the migration of
 
 ### In progress
 
-- [TASK-012 — Conversational Console](./product-and-tasks/conversational-console/spec.md) — `in-progress`. Chat home, indexed history, detached monitoring, reviewed operations and fixture-based PR analysis are available. See the [delivery evidence and remaining qualification](./product-and-tasks/conversational-console/evidence.md).
+- [TASK-012 — Conversational Console](./product-and-tasks/conversational-console/spec.md) — `in-progress`. Chat home, indexed history, detached monitoring, resource discovery by name, and reviewed operations are available. PR discovery across connected repositories has local fixture coverage. See the [delivery evidence and remaining qualification](./product-and-tasks/conversational-console/evidence.md).
 - [TASK-009 — Guided Operator Journeys](./product-and-tasks/guided-operator-journeys/spec.md) — `implemented`. Contextual task entry, reusable workflow defaults, guided creation and explicit agent adoption.
 
 ### Implemented

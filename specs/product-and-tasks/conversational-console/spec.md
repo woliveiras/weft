@@ -184,17 +184,19 @@ can still refuse a particular action due to missing privilege or price coverage.
 The recovery screen belongs to Chat and does not mount the withdrawn global
 onboarding panel or read its browser-local progress.
 
-**Review a pull request.** “revise o PR 418” resolves an authorized provider,
-installation, repository and PR. If ambiguous, ask which one. Show
-`Executar revisão do PR 418` and `Ver workflow` with the resolved target. The
-first invokes the reviewed typed action for the exact PR head and workflow
-version, proceeding through the confirmation gate if still required. The second
-only opens inspection and supplies a return path. A text equivalent invokes
-the same operation and waits for the same required confirmation. Existing
-event-driven review routes react to new internal deliveries. An arbitrary
-existing PR requires a separately verified manual path with explicit target and
-scope. Until that handler is delivered and its provider is qualified, offer
-manual inspection and explain the capability limit. Reading a PR, running an
+**Review a pull request.** For “revise o PR 418”, use a supplied repository
+or PR URL to narrow discovery. For a number alone, search configured connections
+with an authorized metadata reader. A user may choose among matching PRs by
+repository or title. A partial search requires a choice even for one result.
+After identifying the PR, resolve the eligible reviewer. If necessary, ask
+which workflow and node to use, or show how to prepare a suitable reviewer.
+A stopped reviewer can be started through a separate reviewed operation.
+
+Show `Executar revisão do PR 418` and `Ver workflow` with the resolved target.
+The first action requests analysis of the pinned PR head through the selected
+workflow version and run. The second opens the workflow with a return path.
+A text equivalent uses the same confirmation. Event-driven review routes
+continue to handle new internal deliveries. Reading a PR, running an
 analysis, posting comments, pushing, opening a PR and changing an issue are
 distinct effects. Draft review results and remote publication must read their
 corresponding receipts. A changed head or workflow invalidates the old action.
@@ -570,4 +572,5 @@ owned by PROD-04.
 - [Behavior and oracle matrix, operation inventory and impact review](./matrix.md).
 - The console opens on Chat. Session indexing, model selection, archive/restore and background observation are in use. Scoped actions cover workflows and agent versions, task drafts and execution, approvals, declarative configuration and manual PR analysis. See the [current coverage and native handoffs](./matrix.md#locally-verified-coverage), [feature-by-feature verification record](./evidence.md) and [operator guide](../../../docs/features/chat/README.md).
 - [TASK-002](../console-navigation-and-configuration/spec.md#reconciliation) retains manual deep links, editor drafts and contextual first use. PROD-04 owns release walkthrough qualification.
+- AC-010 is implemented for named resources and fixture-backed PRs. Choices survive reloading the conversation, bind the original operation and are revalidated before review. The operator can distinguish a missing PR from an incomplete repository search and select a reviewer after choosing the repository.
 - The maintainer selected local fixtures for PR 418. GitHub, Bitbucket Cloud and Bitbucket Data Center adapters have fixture evidence. Live integrations, production restore and assistive-device testing require independent qualification.

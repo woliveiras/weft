@@ -2,6 +2,8 @@
 
 Chat is the home screen. The conversation occupies the center. The right panel has **New chat**, a flat **Recents** list and access to **Archived**. Hover, focus or open a row’s details to read a truncated title. On narrow screens, use **Sessions** to open the list. Running activity, unread results and requests for a decision have independent indicators.
 
+When a request matches several resources, Chat shows a numbered list in the conversation. Reply with a number or a distinguishing name to continue the request in the same chat. You can reopen it from Recents before answering. See [Find a resource by name](features/chat/README.md#find-a-resource-by-name).
+
 The left navigation opens Chat and the manual destinations below. A link in a message can open the exact task, workflow or execution. Use browser Back to return to that conversation. Write actions appear as separate, labeled buttons on review cards and use the same authorization as their manual equivalents.
 
 | Group | Destination | Scope |
