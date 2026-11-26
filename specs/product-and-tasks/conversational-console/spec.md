@@ -8,7 +8,7 @@ risk: high
 risk_domains: [authorization, secrecy, model cost, persistence, concurrency, external effects]
 reversibility: "Additive storage and routes. Older manual interfaces remain available. Owning services govern committed effects."
 change_surfaces: [web/src, server/internal/api, server/internal/app, server/internal/storage, api/openapi.yaml, schemas, docs]
-contracts: [chat session ownership, operation review and settlement, read state, authorized event delivery]
+contracts: [authorized resource discovery, chat session ownership, operation review and settlement, read state, authorized event delivery]
 review_policy: "Review proposed defaults, phase acceptance, and evidence before claiming support."
 navigation: [specs/README.md, specs/product-and-tasks/conversational-console/matrix.md, specs/product-and-tasks/conversational-console/evidence.md]
 documentation: [docs/interface-navigation.md, docs/getting-started.md, docs/features/README.md]
@@ -493,6 +493,26 @@ cannot widen grants or leak via context, history, unsafe links, telemetry or
 another identity. Persist and restore with the supported storage profiles and
 report bounded provider/budget/availability and concurrency failures. Existing
 data remains usable during upgrade and recovery.
+
+### AC-010 — Discover and choose resources in the conversation
+
+Resolve an operation against the authorized inventory using explicit IDs, names,
+or the user's choice in this conversation. An explicit PR URL or repository
+narrows the search. For a number alone, inspect bounded, authorized repository
+metadata before choosing a reviewer. Discover the target and the capability to
+act on it separately. Distinguish an absent match, an unavailable source, an
+incomplete search and multiple matches. A sole result in an incomplete search
+requires explicit selection or a narrower scope.
+
+Present numbered candidates with recognizable names and distinguishing scope.
+A reply selecting a displayed number, ID or unambiguous label resumes the
+original request, including its parameters. A mention in an unrelated turn
+confers no selection. Re-read the resource and current permissions before
+preparing any operation. Choosing a candidate never confirms a mutation.
+Candidate and continuation state is owner/session scoped, bounded and
+recoverable after reopening. Only reviewed and authorized domain actions
+may change Weft. Installation summaries without individual target IDs keep
+their existing inspection semantics.
 
 ## Delivery plan
 
