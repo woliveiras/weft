@@ -3,11 +3,15 @@ package api
 import (
 	"context"
 	"errors"
+
+	"encoding/json"
+
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/chat"
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/cost"
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskauth"
@@ -35,13 +39,13 @@ func (s *Server) reviewChatTaskStart(ctx context.Context, actor Identity, sessio
 		return out
 	}
 	draft := review.Task
-	if !review.CanStart || draft.Status != "draft" || review.EnvironmentDefinition != nil ||
-		draft.Source != nil || draft.ProjectID != "" || len(draft.Repositories) != 0 || draft.SCMConnection != "" {
+	build := review.PreparedBuild()
+	if !review.CanStart || (draft.Status != "draft" && build == nil) || (review.EnvironmentDefinition != nil && build == nil) || draft.Source != nil || draft.ProjectID != "" || len(draft.Repositories) > 0 || draft.SCMConnection != "" {
 		out.Text, out.Destination = "Inspect this task in Tasks to review its authorization, environment, repositories or existing run.", "tasks"
 		return out
 	}
 	source, err := s.Store.GetGraph(ctx, draft.GraphID, draft.GraphVersion)
-	if err != nil || source.Spec.Workspace.Repo != "" {
+	if err != nil || (source.Spec.Workspace.Repo != "" && draft.ProjectID == "" && len(draft.Repositories) == 0) {
 		out.Text, out.Destination = "Inspect the workflow version and its workspace in Tasks before starting.", "tasks"
 		return out
 	}
@@ -50,7 +54,7 @@ func (s *Server) reviewChatTaskStart(ctx context.Context, actor Identity, sessio
 		out.Text, out.Destination = "Inspect the task's authorization in Tasks before starting.", "tasks"
 		return out
 	}
-	if err := (cost.Budgets{Store: s.Store}).CheckAdmission(ctx, cost.Target{User: draft.CreatedBy, Workflow: draft.GraphID}); err != nil {
+	if err := (cost.Budgets{Store: s.Store}).CheckAdmission(ctx, cost.Target{Projects: domain.RepositoryProjectIDs(draft.Repositories), User: draft.CreatedBy, Project: draft.ProjectID, Workflow: draft.GraphID}); err != nil {
 		if errors.Is(err, cost.ErrBudgetReached) {
 			out.Text, out.Destination = "The current budget blocks admission. Inspect Budgets before retrying.", "budgets"
 		} else {
@@ -64,11 +68,19 @@ func (s *Server) reviewChatTaskStart(ctx context.Context, actor Identity, sessio
 	}
 	start := chat.TaskAdmission{
 		ID: draft.ID, Title: title, WorkflowID: draft.GraphID, Version: draft.GraphVersion,
-		Revision: draft.Revision, Consent: authorization.StartConsent(),
+		Revision: draft.Revision, Consent: authorization.StartConsent(), Build: build,
 	}
-	for _, scope := range authorization.Capabilities {
+	for _, scope := range review.Agents {
 		agent := chat.AgentStartGrant{ID: scope.ID, Isolation: string(scope.Isolation)}
 		for _, grant := range scope.Grants {
+			if len(grant.Paths)+len(grant.Commands)+len(grant.Hosts)+len(grant.Repositories) > 0 || grant.RequiresApproval || grant.RateLimit > 0 {
+				raw, err := json.Marshal(grant)
+				if err != nil || chat.ValidateMessage(string(raw)) != nil {
+					out.Text, out.Destination = "Inspect the complete tool grant in Tasks before starting.", "tasks"
+					return out
+				}
+				agent.Constraints = append(agent.Constraints, string(raw))
+			}
 			if chat.ValidateMessage(grant.Name) == nil {
 				agent.Tools = append(agent.Tools, grant.Name)
 			} else {
@@ -89,6 +101,10 @@ func (s *Server) reviewChatTaskStart(ctx context.Context, actor Identity, sessio
 func (s *Server) applyReviewedChatTaskStart(ctx context.Context, actor Identity, sessionID string, review *chat.OperationReview) (*chat.Session, error) {
 	target := review.TaskStart
 	err := s.Engine.WithGraphTransition(ctx, target.WorkflowID, func(ctx context.Context) error {
+		if target.Build != nil {
+			_, err := s.taskRunner().StartPreparedForOperation(ctx, target.ID, target.Revision, actor.Name, review.ID, target.Consent, *target.Build)
+			return err
+		}
 		_, err := s.taskRunner().StartForOperation(ctx, target.ID, target.Revision, actor.Name, review.ID, target.Consent)
 		return err
 	})

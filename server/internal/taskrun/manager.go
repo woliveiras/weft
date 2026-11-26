@@ -294,7 +294,7 @@ func (m Manager) start(ctx context.Context, id string, revision int64, actor, op
 		if operation != "" {
 			return nil, storage.ErrConflict
 		}
-		return m.startPreparedEnvironment(ctx, d, revision, actor)
+		return m.startPreparedEnvironment(ctx, d, revision, actor, "", taskauth.StartConsent{}, nil)
 	}
 	if d.Status != "draft" {
 		if operation != "" && d.StartOperation != operation {

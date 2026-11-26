@@ -20,6 +20,12 @@ test('reviews a task environment, observes readiness and keeps agents stopped',a
   const progress=await (await request.get('/api/v1/tasks/'+task.id+'/progress',{headers})).json();
   expect(progress.task.status).toBe('environment_pending');
   expect(progress.executions).toHaveLength(0);
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Start the prepared release sandbox task.');
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  const start = page.getByRole('region',{name:'Start task Release sandbox fixture'});
+  await expect(start).toContainText(progress.environment.hash);
+  await start.getByRole('button',{name:'Start task',exact:true}).click();
+  await expect(start).toContainText('Task admission recorded');
   await review.getByRole('link',{name:'Inspect task'}).click();
   await expect(page).toHaveURL(new RegExp(task.id));
 });

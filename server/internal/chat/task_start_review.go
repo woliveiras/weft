@@ -6,16 +6,18 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskauth"
+	"github.com/woliveiras/weft/server/internal/taskrun"
 )
 
 type TaskAdmission struct {
-	ID          string                `json:"id"`
-	Title       string                `json:"title"`
-	WorkflowID  string                `json:"workflowId"`
-	Version     int                   `json:"workflowVersion"`
-	Revision    int64                 `json:"taskRevision"`
-	Consent     taskauth.StartConsent `json:"consent"`
-	AgentGrants []AgentStartGrant     `json:"agentGrants"`
+	Build       *taskrun.PreparedBuild `json:"build,omitempty"`
+	ID          string                 `json:"id"`
+	Title       string                 `json:"title"`
+	WorkflowID  string                 `json:"workflowId"`
+	Version     int                    `json:"workflowVersion"`
+	Revision    int64                  `json:"taskRevision"`
+	Consent     taskauth.StartConsent  `json:"consent"`
+	AgentGrants []AgentStartGrant      `json:"agentGrants"`
 }
 
 // FinishTaskStart records admission separately from the observed task outcome.
@@ -56,9 +58,10 @@ func (s Sessions) finishTrackedTaskAction(ctx context.Context, owner, sessionID,
 }
 
 type AgentStartGrant struct {
-	ID        string   `json:"id"`
-	Isolation string   `json:"isolation"`
-	Tools     []string `json:"tools,omitempty"`
+	Constraints []string `json:"constraints,omitempty"`
+	ID          string   `json:"id"`
+	Isolation   string   `json:"isolation"`
+	Tools       []string `json:"tools,omitempty"`
 }
 
 func NewTaskStartReview(owner, session string, start TaskAdmission, now time.Time) (*OperationReview, error) {

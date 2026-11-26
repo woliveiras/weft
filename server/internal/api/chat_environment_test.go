@@ -22,11 +22,15 @@ import (
 type chatBuildFixture struct{ chatAgentFixture }
 
 func (chatBuildFixture) Chat(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	var selector string
-	if _, err := fmt.Sscanf(req.Messages[len(req.Messages)-1].Content, "Prepare %s", &selector); err != nil {
+	var command, selector string
+	if _, err := fmt.Sscanf(req.Messages[len(req.Messages)-1].Content, "%s %s", &command, &selector); err != nil {
 		return nil, err
 	}
-	return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, Content: fmt.Sprintf(`{"kind":"task.prepare_environment","task":%q}`, selector)}}, nil
+	kind := "task.prepare_environment"
+	if command == "Start" {
+		kind = "task.start"
+	}
+	return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, Content: fmt.Sprintf(`{"kind":%q,"task":%q}`, kind, selector)}}, nil
 }
 
 func TestChatEnvironmentBuildRequiresAdministratorAndSeparateTaskStart(t *testing.T) {
@@ -108,5 +112,21 @@ func TestChatEnvironmentBuildRequiresAdministratorAndSeparateTaskStart(t *testin
 	var progress taskrun.View
 	if code := call(t, srv, "GET", "/api/v1/tasks/"+source.ID+"/progress", viewerTok, "", "", &progress); code != 200 || len(progress.Executions) != 0 || progress.Task.Status != "environment_pending" || progress.Environment == nil || !progress.Environment.UpToDate {
 		t.Fatal(code, progress)
+	}
+	var start chat.Session
+	if code := call(t, srv, "POST", "/api/v1/chat/sessions", adminTok, "application/json", fmt.Sprintf(`{"requestId":"%032x","text":"Start %s"}`, 4, source.ID), &start); code != 200 {
+		t.Fatal(code)
+	}
+	if r := start.Messages[1].Review; r == nil || r.TaskStart == nil || r.TaskStart.Build == nil || r.TaskStart.Build.Hash != progress.Environment.Hash {
+		t.Fatal(start.Messages)
+	}
+	for range 2 {
+		if r := confirm(start).Messages[1].Review; r.State != chat.ReviewAccepted {
+			t.Fatal(r)
+		}
+	}
+	var admitted taskconfig.Draft
+	if code := call(t, srv, "GET", "/api/v1/tasks/"+source.ID, adminTok, "", "", &admitted); code != 200 || admitted.StartOperation != start.Messages[1].Review.ID || admitted.ExecutionGraphID != progress.Task.ExecutionGraphID {
+		t.Fatal(code, admitted)
 	}
 }

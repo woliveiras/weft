@@ -125,7 +125,7 @@ func (m Manager) prepareEnvironment(ctx context.Context, id string, revision int
 	return m.buildPreparedEnvironment(ctx, d, g, actor)
 }
 
-func (m Manager) startPreparedEnvironment(ctx context.Context, d *taskconfig.Draft, revision int64, actor string) (*taskconfig.Draft, error) {
+func (m Manager) startPreparedEnvironment(ctx context.Context, d *taskconfig.Draft, revision int64, actor, operation string, consent taskauth.StartConsent, build *PreparedBuild) (*taskconfig.Draft, error) {
 	if d.Revision != revision {
 		return nil, storage.ErrConflict
 	}
@@ -143,11 +143,24 @@ func (m Manager) startPreparedEnvironment(ctx context.Context, d *taskconfig.Dra
 	if err != nil {
 		return nil, err
 	}
-	if err := (taskauth.Manager{Store: m.Store}).Ensure(ctx, d.ID, actor); err != nil {
+	var guards []storage.SettingRevision
+	authorization := taskauth.Manager{Store: m.Store}
+	if build != nil {
+		current := review.PreparedBuild()
+		if current == nil || *current != *build {
+			return nil, storage.ErrConflict
+		}
+		guard, err := authorization.GuardStart(ctx, d.ID, actor, d.Revision, consent)
+		if err != nil {
+			return nil, err
+		}
+		guards = append(guards, guard)
+		d.StartOperation = operation
+	} else if err = authorization.Ensure(ctx, d.ID, actor); err != nil {
 		return nil, err
 	}
 	tm := taskconfig.Manager{Store: m.Store}
-	d, err = tm.Transition(ctx, d, "starting", actor)
+	d, err = tm.Transition(ctx, d, "starting", actor, guards...)
 	if err != nil {
 		return nil, err
 	}

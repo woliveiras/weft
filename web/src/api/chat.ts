@@ -99,7 +99,8 @@ export interface ChatTaskStartReview extends ChatReviewState {
     workflowVersion: number;
     taskRevision: number;
     consent: {scope: string; mode: string; revision: number};
-    agentGrants: {id: string; isolation: string; tools?: string[]}[];
+    build?:{graph:string;hash:string;completed:string};
+    agentGrants: {id: string; isolation: string; tools?: string[]; constraints?:string[]}[];
   };
 }
 

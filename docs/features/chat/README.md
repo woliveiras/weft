@@ -50,7 +50,7 @@ The preview identifies the repository, source and base commits, model and workfl
 
 ## Prepare a task environment
 
-Ask to prepare the environment of a saved task by ID or unique name. An administrator can review the pinned workflow, task revision, repository commits and saved build definition before confirming. The session reports readiness when the native environment matches the reviewed definition. Use **Inspect task** for build diagnostics, existing preparations or approval holds. Task admission is a separate action.
+Ask to prepare the environment of a saved task by ID or unique name. An administrator can review the pinned workflow, task revision, repository commits and saved build definition before confirming. The session reports readiness when the native environment matches the reviewed definition. Use **Inspect task** for build diagnostics, existing preparations or approval holds. After readiness, ask to start the saved task. The start card identifies the prepared build, its completion time and task authorization. Confirmation rechecks readiness and admits the task once.
 
 ## Correct a task draft
 

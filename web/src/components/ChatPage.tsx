@@ -407,8 +407,9 @@ function TaskStartReviewCard({review, now, canConfirm, onDecide, onView}: {
       <dt>Workflow</dt><dd>{task.workflowId} · Version {task.workflowVersion}</dd>
       <dt>Authorization</dt><dd>{task.consent.mode === 'ask' ? 'Ask for approval as required' : task.consent.mode}
         {task.consent.revision === 0 ? ' · Default' : ` · Revision ${task.consent.revision}`}</dd>
+      {task.build && <><dt>Prepared environment</dt><dd>{task.build.graph} · {task.build.hash} · {task.build.completed}</dd></>}
       {task.agentGrants.map(agent => <div key={agent.id}>
-        <dt>{agent.id}</dt><dd>{agent.isolation} · {agent.tools?.join(', ') || 'No tool grants'}</dd>
+        <dt>{agent.id}</dt><dd>{agent.isolation} · {agent.tools?.join(', ') || 'No tool grants'}{agent.constraints?.map(rule=><pre key={rule}>{rule}</pre>)}</dd>
       </div>)}
     </dl>
     {review.state === 'awaiting_confirmation' && <>

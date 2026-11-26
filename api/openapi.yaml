@@ -3242,6 +3242,13 @@ components:
                     scope: {type: string}
                     mode: {type: string, enum: [ask, workspace, full]}
                     revision: {type: integer, minimum: 0}
+                build:
+                  type: object
+                  required: [graph, hash, completed]
+                  properties:
+                    graph: {type: string}
+                    hash: {type: string}
+                    completed: {type: string, format: date-time}
                 agentGrants:
                   type: array
                   items:
@@ -3251,6 +3258,7 @@ components:
                       id: {type: string}
                       isolation: {type: string}
                       tools: {type: array, items: {type: string}}
+                      constraints: {type: array, items: {type: string}}
     ChatWorkflowControlReview:
       allOf:
         - {$ref: "#/components/schemas/ChatReviewState"}
