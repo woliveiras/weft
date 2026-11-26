@@ -11,7 +11,8 @@ import (
 )
 
 var explicitPRNumber = regexp.MustCompile(`(?i)\b(?:pr|pull[ \t]+request)[ \t]*#?[ \t]*([0-9]+)\b`)
-var possiblePRURL = regexp.MustCompile(`https://[^\s<>\x22\x27\x60]+`)
+var possiblePRURL = regexp.MustCompile(`(?i)\b(?:[a-z][a-z0-9+.-]*://[^\s<>\x22\x27\x60]*|(?:[a-z0-9-]+\.)+[a-z0-9-]+(?::[0-9]+)?/[^/\s<>\x22\x27\x60]+/[^\s<>\x22\x27\x60]+)`)
+var possiblePRRepository = regexp.MustCompile(`[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+`)
 
 // The model interprets the request. Its scope hints are accepted only when
 // the operator supplied them, or explicitly referred to a saved choice.
@@ -21,19 +22,12 @@ func groundChatPRPlan(plan chat.Plan, input, request string, session *chat.Sessi
 	}
 	selector := &plan.PRSelector
 	selector.ConnectionRevision, selector.WorkflowVersion, selector.Run = "", 0, ""
-	var supplied string
-	for _, word := range possiblePRURL.FindAllString(input, -1) {
-		url := strings.TrimRight(word, "()[],.!?;")
-		if _, ok := chat.ReadPRURL(url); !ok {
-			continue
-		}
-		if supplied != "" && supplied != url {
-			return plan, "Which of the supplied pull requests should I review?"
-		}
-		supplied = url
+	supplied, repository, clarification := readExplicitPRScope(input)
+	if clarification != "" {
+		return plan, clarification
 	}
-	selector.URL = supplied
-	for _, value := range []*string{&selector.Connection, &selector.Repository, &selector.Workflow, &selector.Node} {
+	selector.URL, selector.Repository = supplied, repository
+	for _, value := range []*string{&selector.Connection, &selector.Workflow, &selector.Node} {
 		if *value != "" && !hasPRScopeMention(input, *value) {
 			*value = ""
 		}
@@ -66,6 +60,33 @@ func groundChatPRPlan(plan chat.Plan, input, request string, session *chat.Sessi
 	return plan, ""
 }
 
+// Explicit scope survives an incomplete model proposal. Remove URL spans
+// before finding repository names so path segments cannot double as scopes.
+func readExplicitPRScope(input string) (link, repository, clarification string) {
+	for _, word := range possiblePRURL.FindAllString(input, -1) {
+		candidate := strings.TrimRight(word, "()[],.!?;")
+		if _, ok := chat.ReadPRURL(candidate); !ok {
+			return "", "", "I could not recognize the supplied link as a supported pull request URL. Enter the full PR link or specify the repository as owner/name."
+		}
+		if link != "" && link != candidate {
+			return "", "", "Which of the supplied pull requests should I review?"
+		}
+		link = candidate
+	}
+	withoutLinks := possiblePRURL.ReplaceAllString(input, " ")
+	for _, span := range possiblePRRepository.FindAllStringIndex(withoutLinks, -1) {
+		if !prScopeBounds(withoutLinks, span[0], span[1]) {
+			continue
+		}
+		candidate := strings.TrimRight(withoutLinks[span[0]:span[1]], ".")
+		if !chat.ValidPRRepository(candidate) || repository != "" && !strings.EqualFold(candidate, repository) {
+			return "", "", "Which repository should I use? Enter one owner/name or the full PR link."
+		}
+		repository = candidate
+	}
+	return link, repository, ""
+}
+
 func hasPRScopeMention(text, value string) bool {
 	text, value = strings.ToLower(text), strings.ToLower(value)
 	for offset := 0; offset < len(text); {
@@ -75,20 +96,24 @@ func hasPRScopeMention(text, value string) bool {
 		}
 		i += offset
 		end := i + len(value)
-		before, _ := utf8.DecodeLastRuneInString(text[:i])
-		after, width := utf8.DecodeRuneInString(text[end:])
-		if after == '.' {
-			next, _ := utf8.DecodeRuneInString(text[end+width:])
-			if !prScopeRune(next) {
-				after = ' '
-			}
-		}
-		if !prScopeRune(before) && !prScopeRune(after) {
+		if prScopeBounds(text, i, end) {
 			return true
 		}
 		offset = end
 	}
 	return false
+}
+
+func prScopeBounds(text string, start, end int) bool {
+	before, _ := utf8.DecodeLastRuneInString(text[:start])
+	after, width := utf8.DecodeRuneInString(text[end:])
+	if after == '.' {
+		next, _ := utf8.DecodeRuneInString(text[end+width:])
+		if !prScopeRune(next) {
+			after = ' '
+		}
+	}
+	return !prScopeRune(before) && !prScopeRune(after)
 }
 
 func prScopeRune(r rune) bool {

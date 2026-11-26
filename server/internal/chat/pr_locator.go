@@ -9,6 +9,9 @@ import (
 
 var prRepository = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 
+// ValidPRRepository reports whether value is a supported owner/repository pair.
+func ValidPRRepository(value string) bool { return prRepository.MatchString(value) }
+
 type PRLocator struct {
 	Kind       string
 	Repository string
@@ -58,7 +61,7 @@ func ReadPRURL(raw string) (PRLocator, bool) {
 	}
 	location.Host, location.Number = strings.ToLower(u.Host), parts[n-1]
 	number, err := strconv.Atoi(location.Number)
-	return location, err == nil && number > 0 && strconv.Itoa(number) == location.Number && prRepository.MatchString(location.Repository)
+	return location, err == nil && number > 0 && strconv.Itoa(number) == location.Number && ValidPRRepository(location.Repository)
 }
 
 func (p PRSelector) NumberAndRepository() (PRLocator, bool) {
@@ -69,7 +72,7 @@ func (p PRSelector) NumberAndRepository() (PRLocator, bool) {
 	}
 	locator := PRLocator{Repository: p.Repository, Number: p.Number}
 	number, err := strconv.Atoi(p.Number)
-	return locator, err == nil && number > 0 && strconv.Itoa(number) == p.Number && (p.Repository == "" || prRepository.MatchString(p.Repository))
+	return locator, err == nil && number > 0 && strconv.Itoa(number) == p.Number && (p.Repository == "" || ValidPRRepository(p.Repository))
 }
 
 func SafePRTitle(value string) string {

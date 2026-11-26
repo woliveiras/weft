@@ -186,6 +186,26 @@ func TestChatPRDiscoverySeparatesRepositoryMatchesAndReviewers(t *testing.T) {
 		t.Fatal("the positive result skipped other repositories")
 	}
 
+	// These prompts are intentionally handled by the model fixture's default
+	// response, which extracts the number and omits the repository and URL.
+	mu.Lock()
+	appBefore, docsBefore := reads["/repos/team/app/pulls/418"], reads["/repos/team/docs/pulls/418"]
+	maskedBefore := reads["/repos/team/masked/pulls/418"]
+	mu.Unlock()
+	if reply := last(request(19, base, operatorTok, "Revise o PR 418 em team/docs.")); reply.Review != nil || !strings.Contains(reply.Text, "not found in the checked repositories") {
+		t.Fatalf("the model's omitted scope fell back to the matching PR in another repository: %+v", reply)
+	}
+	if reply := last(request(20, base, operatorTok, "Revise o PR 418 neste link: https://scm.example/team/docs/releases/418.")); reply.Review != nil || !strings.Contains(reply.Text, "recognize the supplied link") {
+		t.Fatalf("the unsupported URL started an unscoped search: %+v", reply)
+	}
+	mu.Lock()
+	readsScoped := reads["/repos/team/app/pulls/418"] == appBefore && reads["/repos/team/docs/pulls/418"] == docsBefore+1 &&
+		reads["/repos/team/masked/pulls/418"] == maskedBefore
+	mu.Unlock()
+	if !readsScoped {
+		t.Fatal("explicit repository or unrecognized URL caused reads outside the requested scope")
+	}
+
 	accessUnknown.Store(true)
 	partial := request(3, base, operatorTok, question)
 	if reply := last(partial); reply.Review != nil || !strings.Contains(reply.Text, "Search incomplete") || !strings.Contains(reply.Text, "1. team/app") {
