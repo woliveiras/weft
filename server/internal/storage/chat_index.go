@@ -15,6 +15,7 @@ type ChatSummary struct {
 	LastActivity       time.Time   `json:"lastActivity"`
 	Archived           bool        `json:"archived"`
 	Running            int         `json:"running"`
+	RequestActiveUntil time.Time   `json:"requestActiveUntil,omitzero"`
 	WatchCount         int         `json:"watchCount"`
 	Unread             int         `json:"unread"`
 	UnreadSuccess      int         `json:"unreadSuccess"`

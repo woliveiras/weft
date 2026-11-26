@@ -76,6 +76,14 @@ func (s *Server) listChats(w http.ResponseWriter, r *http.Request) error {
 	items := make([]chatSessionSummary, 0, len(page.Items))
 	now := time.Now()
 	for _, summary := range page.Items {
+		running, unknown := summary.Running, summary.Unknown
+		if !summary.RequestActiveUntil.IsZero() {
+			if now.Before(summary.RequestActiveUntil) {
+				running++
+			} else {
+				unknown++
+			}
+		}
 		decisions := summary.Decisions
 		for _, expiry := range summary.ReviewExpiries {
 			if now.Before(expiry) {
@@ -83,9 +91,9 @@ func (s *Server) listChats(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 		items = append(items, chatSessionSummary{
-			ID: summary.ID, Title: summary.Title, LastActivity: summary.LastActivity, Running: summary.Running,
+			ID: summary.ID, Title: summary.Title, LastActivity: summary.LastActivity, Running: running,
 			Unread: summary.Unread, Success: summary.UnreadSuccess, Fail: summary.UnreadFailure, Cancel: summary.UnreadCancellation,
-			Decisions: decisions, Unknown: summary.Unknown,
+			Decisions: decisions, Unknown: unknown,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

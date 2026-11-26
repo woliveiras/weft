@@ -86,3 +86,21 @@ func TestSessionCursorRequiresTimestampAndAnOpaqueID(t *testing.T) {
 		}
 	}
 }
+
+func TestSummaryTracksPendingRequestSeparatelyFromDurableWatches(t *testing.T) {
+	now := time.Now().UTC()
+	session := &Session{Messages: []Message{{Role: "user", State: "pending", Created: now}}}
+	for _, state := range []string{"pending", "interpreting", "interpreted"} {
+		session.Messages[0].State = state
+		session.Messages[0].Attempt = now.Add(time.Second)
+		got := session.summary("owner", "key")
+		want := map[string]time.Time{"pending": now.Add(time.Minute), "interpreting": now.Add(time.Second + time.Minute)}[state]
+		if !got.RequestActiveUntil.Equal(want) || got.WatchCount != 0 {
+			t.Fatalf("state %s summary %+v", state, got)
+		}
+	}
+	session.TitleRetryState, session.TitleRetryStarted = "pending", now
+	if !session.summary("owner", "key").RequestActiveUntil.Equal(now.Add(time.Minute)) {
+		t.Fatal("title retry absent from session list")
+	}
+}

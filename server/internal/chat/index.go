@@ -61,6 +61,9 @@ func (s Sessions) List(ctx context.Context, owner string, archived bool, after s
 
 func (s *Session) summary(owner, key string) storage.ChatSummary {
 	meta := storage.ChatSummary{Key: key, Owner: owner, ID: s.ID, Title: s.Title, Archived: s.Archived, LastActivity: s.LastActivity}
+	if s.TitleRetryState == "pending" {
+		meta.RequestActiveUntil = s.TitleRetryStarted.Add(time.Minute)
+	}
 	for _, watch := range s.Watches {
 		if watch.Complete {
 			continue
@@ -74,6 +77,18 @@ func (s *Session) summary(owner, key string) storage.ChatSummary {
 		}
 	}
 	for _, message := range s.Messages {
+		if message.Role == "user" {
+			var activeUntil time.Time
+			switch message.State {
+			case "pending":
+				activeUntil = message.Created.Add(time.Minute)
+			case "interpreting":
+				activeUntil = message.Attempt.Add(time.Minute)
+			}
+			if activeUntil.After(meta.RequestActiveUntil) {
+				meta.RequestActiveUntil = activeUntil
+			}
+		}
 		if message.Unread {
 			meta.Unread++
 			if message.Task != nil {

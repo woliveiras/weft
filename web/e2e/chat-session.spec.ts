@@ -588,3 +588,41 @@ test('publishes and separately adopts a reviewed catalog version on one workflow
   await page.goBack();
   await expect(adoption).toBeVisible();
 });
+
+test('a delayed first response never reopens that chat over a second session', async ({page,request}) => {
+  await selectFixtureModel(request);
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-operator-token'));
+  await page.goto('/');
+  let release!: () => void;
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  let firstId!: string;
+  let accepted!: () => void;
+  const firstAccepted = new Promise<void>(resolve => { accepted = resolve; });
+  await page.route('**/api/v1/chat/sessions', async route => {
+    if (route.request().method() !== 'POST' || firstId) return route.continue();
+    firstId = (route.request().postDataJSON() as {requestId:string}).requestId;
+    const response = await route.fetch();
+    accepted();
+    await hold;
+    await route.fulfill({response});
+  });
+  try {
+    await send(page, '/inspect tasks');
+    await firstAccepted;
+    await page.getByRole('button',{name:'New chat', exact:true}).click();
+    await send(page, '/inspect workflows');
+    await expect(page).toHaveURL(/#\/chat\/[a-f0-9]{32}/);
+    const second = page.url();
+    expect(second).not.toContain(firstId);
+    const received = page.waitForResponse(r => r.request().method() === 'POST' && r.request().postDataJSON()?.requestId === firstId);
+    release();
+    await received;
+    await expect(page.getByText('/inspect workflows',{exact:true})).toBeVisible();
+    await expect(page).toHaveURL(second);
+    const original = await request.get(`/api/v1/chat/sessions/${firstId}`, {headers:{Authorization:'Bearer e2e-operator-token'}});
+    expect(original.ok()).toBe(true);
+    expect((await original.json()).messages[0].text).toBe('/inspect tasks');
+  } finally {
+    release();
+  }
+});

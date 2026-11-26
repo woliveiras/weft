@@ -68,3 +68,34 @@ func TestChatSessionAPILabelsSharedLocalHistory(t *testing.T) {
 		t.Fatalf("local conversation list: %d %+v", code, list)
 	}
 }
+
+func TestRecentSessionStopsShowingRunningWhenItsRequestSettles(t *testing.T) {
+	srv, app := setupApp(t, func(c *config.Config) { c.Auth.Disabled = true })
+	store := chat.Sessions{Store: app.Store}
+	const id = "ab61e80ce56b4b50a83981d63b1a811b"
+	if _, _, err := store.Create(t.Context(), "local", id, "Inspect activity"); err != nil {
+		t.Fatal(err)
+	}
+	_, claim, err := store.ClaimInterpretation(t.Context(), "local", id, id, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := func(want int) {
+		t.Helper()
+		var list struct {
+			Items []struct {
+				ID      string
+				Running int
+				Unknown int
+			}
+		}
+		if status := call(t, srv, "GET", "/api/v1/chat/sessions", "", "", "", &list); status != http.StatusOK || len(list.Items) != 1 || list.Items[0].ID != id || list.Items[0].Running != want || list.Items[0].Unknown != 0 {
+			t.Fatalf("recent sessions %d %+v, want running %d", status, list, want)
+		}
+	}
+	check(1)
+	if _, err := store.FinishInterpretation(t.Context(), "local", id, id, claim, chat.Interpretation{Text: "Ready"}); err != nil {
+		t.Fatal(err)
+	}
+	check(0)
+}

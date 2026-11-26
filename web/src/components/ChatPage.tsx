@@ -5,7 +5,7 @@ import { ChatInstructionCard } from './ChatInstructionCard';
 import { ChatGuidanceCard } from './ChatGuidanceCard';
 import { ChatConfigurationCard } from './ChatConfigurationCard';
 import { ChatManualLink } from './ChatManualLink';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
 import type { ChatAgentAdoptionReview, ChatApprovalReview, ChatCatalogPublicationReview, ChatMessage, ChatOperationReview,
   ChatSession, ChatSessionSummary, ChatTask, ChatTaskCancellationReview, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview,
@@ -31,7 +31,14 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   const conversation = useAsync(() => id ? api.chatSession(id) : Promise.resolve(undefined), [id], accessLost);
   const session = conversation.data?.id === id ? conversation.data : undefined;
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [sending, setSending] = useState(false);
+  const [newDraft, setNewDraft] = useState(0);
+  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
+  const pending = useRef(new Set<string>());
+  const view = useRef(0);
+  useLayoutEffect(() => {
+    view.current++;
+    return () => { view.current++; };
+  }, [id, archived, newDraft]);
   const [error, setError] = useState<string>();
   const [drawer, setDrawer] = useState(false);
   const [details, setDetails] = useState<string>();
@@ -42,7 +49,8 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   const drawerClose = useRef<HTMLButtonElement>(null);
   const evidence = useRef<string | undefined>(undefined);
   const requestedRead = useRef(new Set<string>());
-  const draftKey = id ?? 'new';
+  const draftKey = id ?? `new-${newDraft}`;
+  const sending = busy.has(draftKey);
   const draft = drafts[draftKey] ?? '';
   const modelAvailable = !MOCK && settings.data?.status === 'configured';
   const waiting = session?.messages.some(message => message.state === 'pending' || message.state === 'interpreting');
@@ -76,6 +84,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
     drawerButton.current?.focus();
   };
   const navigate = (next?: string, archive = false) => {
+    view.current++;
     setDrawer(false);
     setDetails(undefined);
     setError(undefined);
@@ -84,8 +93,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
     window.requestAnimationFrame(() => heading.current?.focus());
   };
   const newChat = () => {
-    setDrafts(previous => ({...previous, new:''}));
-    keys.current.delete('new');
+    setNewDraft(previous => previous + 1);
     navigate();
   };
 
@@ -100,40 +108,48 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
     await mutate(async () => {
       const next = await api.sendConversationMessage(id, requestId, draft);
       keys.current.delete(draftKey);
-      setDrafts(previous => ({...previous, [draftKey]:''}));
-      if (!id) onOpen(next.id);
+      setDrafts(previous => previous[draftKey] === draft ? {...previous, [draftKey]:''} : previous);
       return next;
-    });
+    }, next => { if (!id) onOpen(next.id); });
   }
 
-  async function mutate(action: () => Promise<ChatSession>) {
+  async function mutate(action: () => Promise<ChatSession>, whenVisible?: (next: ChatSession) => void) {
+    if (pending.current.has(draftKey)) return;
+    const origin = view.current;
+    pending.current.add(draftKey);
+    setBusy(new Set(pending.current));
     setError(undefined);
-    setSending(true);
     try {
-      const session = await action();
-      conversation.setData(session);
-      void list.reload();
-    } catch (error) {
-      if (accessLost(error)) {
-        conversation.setData(undefined);
-        void list.reload();
+      const result = await action();
+      if (view.current === origin) {
+        conversation.setData(result);
+        whenVisible?.(result);
       }
-      setError(errorMessage(error));
+    } catch (error) {
+      if (view.current === origin) {
+        if (accessLost(error)) conversation.setData(undefined);
+        setError(errorMessage(error));
+      }
     } finally {
-      setSending(false);
+      pending.current.delete(draftKey);
+      setBusy(new Set(pending.current));
+      void list.reload();
     }
   }
 
   async function markRead(message: string) {
-    if (!id || requestedRead.current.has(message)) return;
-    requestedRead.current.add(message);
+    const readKey = `${id}/${message}`;
+    if (!id || requestedRead.current.has(readKey)) return;
+    const origin = view.current;
+    requestedRead.current.add(readKey);
     try {
-      conversation.setData(await api.readChatResult(id, message));
+      const result = await api.readChatResult(id, message);
+      if (view.current === origin) conversation.setData(result);
       void list.reload();
     } catch {
-      setError('Unable to mark this result as read. Try again when connected.');
+      if (view.current === origin) setError('Unable to mark this result as read. Try again when connected.');
     } finally {
-      requestedRead.current.delete(message);
+      requestedRead.current.delete(readKey);
     }
   }
 
@@ -173,11 +189,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
         <button ref={drawerButton} className="btn chat-sessions-toggle" type="button"
           aria-expanded={drawer} onClick={() => setDrawer(!drawer)}>Sessions</button>
         {session && <Btn disabled={sending}
-          onClick={() => void mutate(async () => {
-            const next = await api.archiveChat(session.id,!session.archived);
-            onOpen(next.id,next.archived);
-            return next;
-          })}>
+          onClick={() => void mutate(() => api.archiveChat(session.id,!session.archived), next => onOpen(next.id,next.archived))}>
           {session.archived ? 'Restore conversation' : 'Archive conversation'}
         </Btn>}
       </header>

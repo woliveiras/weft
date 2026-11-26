@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ChatPage } from './ChatPage';
 import { fakeApi } from '../test/fakeApi';
@@ -247,4 +247,28 @@ it('offers title-only retry after an untitled conversation', async () => {
   expect(await screen.findByRole('heading',{name:'Release work'})).toBeTruthy();
   expect(screen.getByText('Follow release work')).toBeTruthy();
   expect(backend.calls.filter(request => request.method === 'POST').map(request => request.path)).toEqual([path]);
+});
+
+it.each([true,false])('keeps a late response in its original chat (success %s)', async success => {
+  const open = vi.fn();
+  let release!: (value: unknown) => void;
+  const first = new Promise(resolve => { release = resolve; });
+  fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'configured',revision:1}),
+    [`GET ${paths}`]: () => ({items:[],shared:true}),
+    [`POST ${paths}`]: () => first,
+  });
+  render(<ChatPage archived={false} onOpen={open}/>);
+  await screen.findByText('Shared local history');
+  const input = screen.getByRole('textbox',{name:'Message'});
+  fireEvent.change(input,{target:{value:'Follow the earlier request'}});
+  fireEvent.click(screen.getByRole('button',{name:'Send'}));
+  await screen.findByRole('button',{name:'Sending…'});
+  fireEvent.click(screen.getByRole('button',{name:'New chat'}));
+  fireEvent.change(input,{target:{value:'A different request'}});
+  expect((screen.getByRole('button',{name:'Send'}) as HTMLButtonElement).disabled).toBe(false);
+  await act(async () => release(success ? {id, messages:[]} : new Response('Failure',{status:503})));
+  expect((input as HTMLTextAreaElement).value).toBe('A different request');
+  expect(open.mock.calls).toEqual([[undefined,false]]);
+  expect(screen.queryByRole('alert')).toBeNull();
 });
