@@ -223,6 +223,14 @@ archived sessions and result state across restart. Chat does not automatically
 expire these records. The background reconciler visits bounded pages to
 recover pending observations.
 
+SQLite and PostgreSQL store the compact projection in
+`chat_session_index`, ordered by owner, archive state and activity time.
+The transcript and index share the same compare-and-set transaction.
+The filesystem store writes those fields in the same atomic JSON document.
+Startup indexes retained sessions with a missing or stale projection without
+altering the transcript or incrementing its revision. Recents is paginated.
+The reconciler selects only sessions with pending watches.
+
 ## Instruction records
 
 Existing settings CAS stores `instructions/skills/{id}` with current revision plus immutable history and actor/time, and `instructions/executions/{executionId}` as a create-only manifest. No SQL migration. See [limits and deletion semantics](instructions.md).

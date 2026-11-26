@@ -145,11 +145,12 @@ type SettingRevision struct {
 
 // Setting is one stored installation setting.
 type Setting struct {
-	Key       string    `json:"key"`
-	Value     []byte    `json:"value"`
-	Revision  int64     `json:"revision"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	UpdatedBy string    `json:"updatedBy,omitempty"`
+	Key       string       `json:"key"`
+	Value     []byte       `json:"value"`
+	Revision  int64        `json:"revision"`
+	UpdatedAt time.Time    `json:"updatedAt"`
+	UpdatedBy string       `json:"updatedBy,omitempty"`
+	Chat      *ChatSummary `json:"chat,omitempty"`
 }
 
 type GraphVersion struct {

@@ -55,6 +55,19 @@ This slice verifies the task-monitoring portion of S11.
   `make build`, the OpenAPI parse and `git diff --check`. Live-provider
   environment overrides were excluded from the fixture run.
 
-P1 still needs indexed recents and due watches for larger histories, independent
-title retry, and the remaining qualification checks for devices, assistive
-technology, providers and production recovery.
+## 2026-11-26 — Indexed session lists and watches
+
+- Targeted Go tests crossed SQLite and the filesystem store. Retained records
+  had identical content and revisions after backfill, and the cursor kept its
+  boundary after that session was archived. Reopened archived watches reported
+  one unread result in Recents and cleared the count after a read marker.
+- The same index test and storage conformance passed against an isolated
+  PostgreSQL 17 instance. PostgreSQL qualification used a disposable fixture.
+- Browser fixture replay passed, including an archived watch that kept running
+  and produced one unread result. Restoring opened the same conversation in
+  Recents. TypeScript and 21 focused web tests passed, including the Archived
+  selector count and paging.
+- `make lint`, `make build`, the OpenAPI parse and `git diff --check` passed.
+
+Independent title retry, device and assistive-technology review, external
+provider qualification and production backup and restore remain open.

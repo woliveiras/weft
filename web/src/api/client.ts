@@ -343,7 +343,8 @@ export const api = {
   models: (provider: string) => request<ModelInfo[]>(`${V1}/providers/${enc(provider)}/models`),
   providerSettings: () => request<ProviderSettings>(`${V1}/provider-settings`),
   chatModelSettings: () => request<ChatModelSettings>(`${V1}/chat/settings`),
-  chatSessions: (archived: boolean) => request<ChatList>(`${V1}/chat/sessions`, {query:{archived:String(archived)}}),
+  chatSessions: (archived: boolean, after?: string) =>
+    request<ChatList>(`${V1}/chat/sessions`, {query:{archived:String(archived),after}}),
   chatSession: (id: string) => request<ChatSession>(`${V1}/chat/sessions/${enc(id)}`),
   sendConversationMessage: (id: string | undefined, requestId: string, text: string) =>
     request<ChatSession>(id ? `${V1}/chat/sessions/${enc(id)}/messages` : `${V1}/chat/sessions`, {method:'POST', body:{requestId,text}}),

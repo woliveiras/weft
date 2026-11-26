@@ -548,10 +548,10 @@ owned by PROD-04.
 ## Reconciliation
 
 - [Behavior and oracle matrix, operation inventory and impact review](./matrix.md).
-- Model selection, conversational task inspection and monitoring, and
-  reviewed catalog agent creation are delivered. Indexed history and due
-  watches, independent title retry and the other P1 qualifications remain
-  open. Preserve baseline and historical oracles.
+- Model selection, conversational task inspection and monitoring, indexed
+  session summaries, and reviewed catalog agent creation are delivered.
+  Independent title retry and further P1 qualification remain open.
+  Preserve baseline and historical oracles.
   When P1 is delivered, cross-link TASK-002 AC-001 and AC-003 to the new default
   in TASK-012 AC-001 while keeping deep links, retained drafts and contextual
   first use under TASK-002. Update the PROD-04 walkthrough criteria of its own

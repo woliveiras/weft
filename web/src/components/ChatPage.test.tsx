@@ -31,7 +31,7 @@ it('shows simultaneous running and unread success cues with metadata and keyboar
   });
   render(<ChatPage archived={false} onOpen={open}/>);
   const row = await screen.findByRole('listitem');
-  expect(within(row).getByRole('img',{name:/running.*completed task unread.*failed or blocked task unread.*decision required/})).toBeTruthy();
+  expect(within(row).getByRole('img',{name:/running.*successful result unread.*failed or blocked result unread.*decision required/})).toBeTruthy();
   const disclosure = within(row).getByRole('button',{name:'Details for Follow important release work'});
   fireEvent.click(disclosure);
   expect(disclosure.getAttribute('aria-expanded')).toBe('true');
@@ -65,4 +65,27 @@ it('shows the reviewed definition and sends a scoped decline without publishing'
   fireEvent.click(within(card).getByRole('button',{name:'Decline'}));
   expect(await screen.findByText('Proposal declined.')).toBeTruthy();
   expect(backend.find('POST',declinePath).map(req => req.body)).toEqual([{digest:'recorded-digest'}]);
+});
+
+it('shows archived novelty from Recents and navigates across bounded pages', async () => {
+  const open = vi.fn();
+  const item = {
+    id, title:'Most recent', lastActivity:'2026-11-26T08:00:00Z',
+    running:0, unread:0, unreadSuccess:0, unreadFailure:0, unreadCancellation:0, decisions:0, unknown:0,
+  };
+  let requests = 0;
+  const backend = fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'unconfigured',revision:0}),
+    [`GET ${paths}`]: () => ++requests === 1
+      ? ({shared:false,items:[item],archivedUnread:3,next:'123~'+id})
+      : ({shared:false,items:[{...item,title:'Older conversation'}],archivedUnread:3}),
+  });
+  render(<ChatPage archived={false} onOpen={open}/>);
+  expect(await screen.findByRole('button',{name:'Most recent'})).toBeTruthy();
+  fireEvent.click(screen.getByRole('button',{name:'Archived · 3 unread'}));
+  expect(open).toHaveBeenCalledWith(undefined,true);
+  fireEvent.click(screen.getByRole('button',{name:'Older conversations'}));
+  expect(await screen.findByRole('button',{name:'Older conversation'})).toBeTruthy();
+  expect(screen.queryByRole('button',{name:'Most recent'})).toBeNull();
+  expect(backend.fetch.mock.calls.some(([url]) => new URL(String(url),'http://localhost').searchParams.get('after') === '123~'+id)).toBe(true);
 });

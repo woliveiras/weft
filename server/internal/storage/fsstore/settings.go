@@ -21,6 +21,10 @@ func (s *Store) settingPath(key string) string {
 func cloneSetting(st *storage.Setting) *storage.Setting {
 	c := *st
 	c.Value = append([]byte{}, st.Value...)
+	if st.Chat != nil {
+		meta := cloneChatSummary(*st.Chat)
+		c.Chat = &meta
+	}
 	return &c
 }
 
@@ -53,6 +57,10 @@ func (s *Store) PutSettingIf(ctx context.Context, key string, value []byte, expe
 	if err := s.checkSettingRevisions(guards); err != nil {
 		return 0, err
 	}
+	return s.putSettingLocked(key, value, expectedRevision, by, nil)
+}
+
+func (s *Store) putSettingLocked(key string, value []byte, expectedRevision int64, by string, chat *storage.ChatSummary) (int64, error) {
 	cur := s.settingRevision(key)
 	if cur != expectedRevision {
 		if expectedRevision == 0 {
@@ -61,6 +69,11 @@ func (s *Store) PutSettingIf(ctx context.Context, key string, value []byte, expe
 		return 0, fmt.Errorf("%w: setting %q is not at revision %d", storage.ErrConflict, key, expectedRevision)
 	}
 	st := &storage.Setting{Key: key, Value: append([]byte{}, value...), Revision: cur + 1, UpdatedAt: time.Now().UTC(), UpdatedBy: by}
+	if chat != nil {
+		meta := cloneChatSummary(*chat)
+		meta.Revision = st.Revision
+		st.Chat = &meta
+	}
 	if err := writeJSON(s.settingPath(key), st); err != nil {
 		return 0, err
 	}

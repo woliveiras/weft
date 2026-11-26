@@ -52,13 +52,13 @@ func TestSessionStorageSeparatesOwnersAndSurvivesReopen(t *testing.T) {
 	defer backend.Close()
 	sessions.Store = backend
 	for _, owner := range []string{"owner-a", "owner-b"} {
-		active, err := sessions.List(ctx, owner, false)
-		if err != nil || len(active) != 0 {
+		active, err := sessions.List(ctx, owner, false, "")
+		if err != nil || len(active.Items) != 0 {
 			t.Fatalf("active list for %s: %+v %v", owner, active, err)
 		}
 	}
-	archived, err := sessions.List(ctx, "owner-a", true)
-	if err != nil || len(archived) != 1 || archived[0].ID != id || !archived[0].Archived {
+	archived, err := sessions.List(ctx, "owner-a", true, "")
+	if err != nil || len(archived.Items) != 1 || archived.Items[0].ID != id || !archived.Items[0].Archived {
 		t.Fatalf("archived list: %+v %v", archived, err)
 	}
 	if _, err = sessions.Archive(ctx, "owner-a", id, false); err != nil {
@@ -98,8 +98,8 @@ func TestConcurrentFirstMessageProducesOneSession(t *testing.T) {
 			count++
 		}
 	}
-	list, err := sessions.List(ctx, "owner-a", false)
-	if err != nil || count != 1 || len(list) != 1 {
+	list, err := sessions.List(ctx, "owner-a", false, "")
+	if err != nil || count != 1 || len(list.Items) != 1 {
 		t.Fatalf("unique creations=%d list=%+v err=%v", count, list, err)
 	}
 }
@@ -177,8 +177,16 @@ func TestArchivedWatchSettlesOnceFromCanonicalTaskAfterRestart(t *testing.T) {
 	if !result.Unread || result.Task.ID != task.ID || result.Task.State != "failed" {
 		t.Fatalf("recorded outcome: %+v", result)
 	}
+	page, err := sessions.List(ctx, owner, false, "")
+	if err != nil || page.ArchivedUnread != 1 || len(page.Items) != 0 {
+		t.Fatalf("archived outcome visible from Recents: %+v %v", page, err)
+	}
 	read, err := sessions.MarkRead(ctx, owner, id, result.ID)
 	if err != nil || read.Messages[2].Unread || !read.LastActivity.Equal(finished.LastActivity) {
 		t.Fatalf("mark read: %+v %v", read, err)
+	}
+	page, err = sessions.List(ctx, owner, false, "")
+	if err != nil || page.ArchivedUnread != 0 {
+		t.Fatalf("archived notification was not cleared: %+v %v", page, err)
 	}
 }

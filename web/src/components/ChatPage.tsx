@@ -12,7 +12,11 @@ const accessLost = (error: unknown) => error instanceof ApiError && [401,403,404
 
 export function ChatPage({id, archived, canCreateAgent = false, onOpen}: {id?: string; archived:boolean; canCreateAgent?:boolean; onOpen:OpenChat}) {
   const settings = useAsync(api.chatModelSettings, []);
-  const list = useAsync(() => api.chatSessions(archived), [archived], accessLost);
+  const [cursor, setCursor] = useState<{archived:boolean; after?:string}>({archived});
+  const after = cursor.archived === archived ? cursor.after : undefined;
+  const pageKey = `${archived}/${after ?? ''}`;
+  const list = useAsync(async () => ({...await api.chatSessions(archived,after),pageKey}), [archived,after], accessLost);
+  const visiblePage = list.data?.pageKey === pageKey ? list.data : undefined;
   const conversation = useAsync(() => id ? api.chatSession(id) : Promise.resolve(undefined), [id], accessLost);
   const session = conversation.data?.id === id ? conversation.data : undefined;
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -31,6 +35,8 @@ export function ChatPage({id, archived, canCreateAgent = false, onOpen}: {id?: s
   const draft = drafts[draftKey] ?? '';
   const modelAvailable = !MOCK && settings.data?.status === 'configured';
   const waiting = session?.messages.some(message => message.state === 'pending' || message.state === 'interpreting');
+  const archivedUnread = list.data?.archivedUnread ?? 0;
+  const archivedLabel = archivedUnread ? `Archived · ${archivedUnread} unread` : 'Archived';
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -58,6 +64,7 @@ export function ChatPage({id, archived, canCreateAgent = false, onOpen}: {id?: s
     setDrawer(false);
     setDetails(undefined);
     setError(undefined);
+    if (!next) setCursor({archived:archive});
     onOpen(next, archive);
     window.requestAnimationFrame(() => heading.current?.focus());
   };
@@ -107,8 +114,9 @@ export function ChatPage({id, archived, canCreateAgent = false, onOpen}: {id?: s
       conversation.setData(await api.readChatResult(id, message));
       void list.reload();
     } catch {
-      requestedRead.current.delete(message);
       setError('Unable to mark this result as read. Try again when connected.');
+    } finally {
+      requestedRead.current.delete(message);
     }
   }
 
@@ -116,15 +124,21 @@ export function ChatPage({id, archived, canCreateAgent = false, onOpen}: {id?: s
     <Btn onClick={newChat}>New chat</Btn>
     <nav className="chat-list-tabs" aria-label="Session views">
       <button type="button" aria-current={!archived ? 'page' : undefined} onClick={() => navigate()}>Recents</button>
-      <button type="button" aria-current={archived ? 'page' : undefined} onClick={() => navigate(undefined,true)}>Archived</button>
+      <button type="button" aria-current={archived ? 'page' : undefined} onClick={() => navigate(undefined,true)}>
+        {archivedLabel}
+      </button>
     </nav>
-    {list.loading && !list.data && <p role="status">Loading sessions…</p>}
+    {list.loading && !visiblePage && <p role="status">Loading sessions…</p>}
     {list.error && <ErrorBox error={list.error}/>}
-    {list.data?.items.length === 0 && <p className="muted">{archived ? 'No archived conversations.' : 'No conversations yet.'}</p>}
+    {visiblePage?.items.length === 0 && <p className="muted">{archived ? 'No archived conversations on this page.' : 'No conversations on this page.'}</p>}
     <ul className="chat-sessions">
-      {list.data?.items.map(item => <SessionRow key={item.id} item={item} current={item.id === id}
-        expanded={details === item.id} onOpen={() => navigate(item.id)} onDetails={() => setDetails(details === item.id ? undefined : item.id)}/>)}
+      {visiblePage?.items.map(item => <SessionRow key={item.id} item={item} current={item.id === id}
+        expanded={details === item.id} onOpen={() => navigate(item.id,archived)} onDetails={() => setDetails(details === item.id ? undefined : item.id)}/>)}
     </ul>
+    <div className="btn-row">
+      {after && <Btn onClick={() => setCursor({archived})}>Newest conversations</Btn>}
+      {visiblePage?.next && <Btn onClick={() => setCursor({archived,after:visiblePage.next})}>Older conversations</Btn>}
+    </div>
   </>;
 
   return <div className="page chat-page">
@@ -138,7 +152,11 @@ export function ChatPage({id, archived, canCreateAgent = false, onOpen}: {id?: s
         <button ref={drawerButton} className="btn chat-sessions-toggle" type="button"
           aria-expanded={drawer} onClick={() => setDrawer(!drawer)}>Sessions</button>
         {session && <Btn disabled={sending}
-          onClick={() => void mutate(() => api.archiveChat(session.id,!session.archived))}>
+          onClick={() => void mutate(async () => {
+            const next = await api.archiveChat(session.id,!session.archived);
+            onOpen(next.id,next.archived);
+            return next;
+          })}>
           {session.archived ? 'Restore conversation' : 'Archive conversation'}
         </Btn>}
       </header>
@@ -199,8 +217,8 @@ function SessionRow({item, current, expanded, onOpen, onDetails}: {
 }) {
   const status = [
     item.running ? `${item.running} running` : '',
-    item.unreadSuccess ? `${item.unreadSuccess} completed task unread` : '',
-    item.unreadFailure ? `${item.unreadFailure} failed or blocked task unread` : '',
+    item.unreadSuccess ? `${item.unreadSuccess} successful result unread` : '',
+    item.unreadFailure ? `${item.unreadFailure} failed or blocked result unread` : '',
     item.unreadCancellation ? `${item.unreadCancellation} cancelled task unread` : '',
     item.decisions ? `${item.decisions} decision required` : '',
     item.unknown ? `${item.unknown} status temporarily unknown` : '',

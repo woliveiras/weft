@@ -56,7 +56,7 @@ func (s *Server) reviewChatAgent(ctx context.Context, actor Identity, sessionID 
 }
 
 func (s *Server) decideChatAgent(w http.ResponseWriter, r *http.Request) error {
-	actor, err := chatOwner(r)
+	actor, err := s.chatOwner(r)
 	if err != nil {
 		return err
 	}

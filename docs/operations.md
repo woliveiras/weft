@@ -78,7 +78,7 @@ a complete Weft backup.
 
 | Resource | Why it matters | Recovery rule |
 |---|---|---|
-| PostgreSQL (`pg-data`) or the configured store | Graph versions, grants, MCP configuration, encrypted tokens, approvals, history, leases and tree budgets | Use a database-native consistent backup. Never copy live PostgreSQL data files as an ordinary file archive. |
+| PostgreSQL (`pg-data`) or the configured store | Graph versions, grants, MCP configuration, encrypted tokens, approvals, history, leases, tree budgets and Chat sessions | Use a database-native consistent backup. Never copy live PostgreSQL data files as an ordinary file archive. |
 | `weftd-data` | Generated installation encryption key; local state when configured | Protect separately from the database backup. An external key must be retained in the secret store instead. |
 | `nats-data` | JetStream messages and consumer acknowledgement state | Use a broker-supported backup or a consistent stopped-volume snapshot. Do not infer exactly-once delivery from a restore. |
 | `workspaces` | Repositories, uncommitted edits and isolated worktrees | Preserve ownership, permissions and hidden Git metadata. A Git remote does not preserve uncommitted work. |
@@ -91,6 +91,14 @@ a complete Weft backup.
 Prometheus, Loki and Tempo data have their own retention and backup policy.
 Grafana dashboards/provisioning are repository-mounted; the shipped Compose file
 does not persist arbitrary UI-created Grafana state in a named volume.
+
+Chat transcripts, approvals recorded in Chat, linked task watches and archive
+state are part of the installation store. Archived conversations have the same
+retention as active ones. Protect backup access accordingly. On an isolated
+restore, verify with the appropriate identity that a known conversation opens
+and that its active or archived entry resolves to the same task or catalog
+version. Verify external effects against their owning service before retrying
+them. [Chat records](database-schema.md#chat-records)
 
 ## Restore drill
 

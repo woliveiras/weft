@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/api"
+	"github.com/woliveiras/weft/server/internal/chat"
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
@@ -111,6 +112,10 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	a.Store, err = stores.Open(ctx, stores.Config{Type: cfg.Storage.Type, DSN: cfg.Storage.DSN, Dir: cfg.Storage.Dir})
 	if err != nil {
 		return nil, fmt.Errorf("storage: %w", err)
+	}
+	chatIndexErr := (chat.Sessions{Store: a.Store}).EnsureIndex(ctx)
+	if chatIndexErr != nil {
+		log.Error("chat session index unavailable", "error", chatIndexErr)
 	}
 	a.Broker, err = openBroker(ctx, cfg)
 	if err != nil {
@@ -319,6 +324,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	}
 	a.ReviewRoutes = a.newReviewRoutes()
 	a.API = api.New(api.Deps{
+		ChatIndexErr:      chatIndexErr,
 		ReviewRoutes:      a.ReviewRoutes,
 		RepositoryImports: a.RepositoryImports, TriggerManager: &a.Triggers.Triggers,
 		Reviews: a.Reviews, PreviewGateway: a.PreviewGateway, MCP: a.MCP, SCM: a.SCM, IssueConnections: a.IssueConnections, CloudProfiles: &a.CloudProfiles, Gateway: a.Gateway,

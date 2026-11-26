@@ -185,12 +185,14 @@ func (s Sessions) ClaimAgentReview(ctx context.Context, owner, sessionID, review
 
 func (s Sessions) FinishAgentReview(ctx context.Context, owner, sessionID, reviewID, state string, version int) (*Session, error) {
 	return s.update(ctx, owner, sessionID, func(session *Session) (bool, error) {
-		for _, message := range session.Messages {
+		for i := range session.Messages {
+			message := &session.Messages[i]
 			if review := message.Review; review != nil && review.ID == reviewID {
 				if review.State != ReviewApplying && !(review.State == ReviewUnknown && state == ReviewCreated) {
 					return false, nil
 				}
 				review.State, review.ResultVersion = state, version
+				message.Unread = true
 				session.LastActivity = time.Now().UTC()
 				return true, nil
 			}

@@ -2220,6 +2220,10 @@ paths:
         - name: archived
           in: query
           schema: {type: boolean, default: false}
+        - name: after
+          in: query
+          description: Cursor returned by the preceding page
+          schema: {type: string}
       responses:
         "200":
           description: Recent or archived summaries within the authenticated owner scope.
@@ -2227,9 +2231,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [shared, items]
+                required: [shared, items, next, archivedUnread]
                 properties:
                   shared: {type: boolean, description: Shared local session history in auth-disabled mode}
+                  next: {type: string, description: Empty when no older page exists}
+                  archivedUnread: {type: integer, description: Unread archived results for the current owner}
                   items:
                     type: array
                     items:

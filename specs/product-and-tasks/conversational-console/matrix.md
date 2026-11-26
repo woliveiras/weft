@@ -10,7 +10,9 @@ required. The new oracles must be reviewed before tests are implemented.
 Delivery evidence covers [model selection](./evidence.md#2026-11-26--explicit-chat-model-selection),
 [task tracking](./evidence.md#2026-11-26--conversational-task-tracking) and
 [reviewed agent creation](./evidence.md#2026-11-26--reviewed-catalog-agent-creation).
-S11 has full fixture coverage. Other rows and the P1 gate remain pending.
+[Indexed session lists and watches](./evidence.md#2026-11-26--indexed-session-lists-and-watches)
+have SQLite, FS, PostgreSQL and browser evidence. S11 has full fixture coverage.
+Remaining P1 qualifications are open.
 Existing tests cited in the impact review describe the baseline.
 
 ## Behavior and oracle matrix
@@ -50,6 +52,7 @@ a write. Live transport/data tests support only the editions actually exercised.
 | S22 | AC-009. Untrusted or sensitive user input and restricted evidence | Submit secret-shaped payload, generate a title, revoke source access and ask for recap | Known secrets rejected safely; sensitive title falls back; revoked context/derived projections cannot leak through transcripts, model, events or logs | P | U redaction and provenance; I request/model fixture/log/traces/store and permission recheck | P1, P3 credential handoff |
 | S23 | AC-003. A configured provider and authenticated viewer and administrator | Inspect the empty selection, save an explicit model, try a stale or forbidden write, then remove the registered provider in a fixture | Only the administrator can change the selection with its revision. The saved model remains visible when unavailable. Setup never calls inference or falls back to another provider. | M | U model validation and form states, I role and CAS across SQLite and HTTP, E Models → Chat model with reload | P1 |
 | S24 | AC-004. An administrator has one or more saved agent proposals | Select the action on a specific review or type the explicit text displayed on the card. Repeat with an expired or stale review and with a viewer. | The same bound review controls both entry points. Ambiguous text, decline, expiry and lack of authority leave the catalog unchanged. Replayed confirmation returns one recorded version. | M/P | U digest/expiry/explicit directive, I API, catalog and SQLite with fixture model, E task tracking with reviewed creation | P1 |
+| S25 | AC-005. The owner has retained sessions and an archived pending watch | Upgrade the index, page past a session that moves to Archives, settle the task and read the result | Retained transcripts and revisions survive. Old cursor keeps a stable boundary. Indexed watch settles and the Archived selector shows the unread result until it is read. Other owners have separate counts. | P | U cursor validation, I legacy and resumed records across SQLite/FS/PostgreSQL, E archive during execution | P1 |
 
 ## Operation inventory
 

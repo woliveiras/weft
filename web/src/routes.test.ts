@@ -6,7 +6,7 @@ it('opens the chat on a bare URL and distinguishes unavailable links', () => {
   expect(parseRoute('#/graphs')).toEqual({view:'graphs'});
   expect(parseRoute('#/missing')).toEqual({view:'unavailable'});
   expect(parseRoute('#/tasks/%broken')).toEqual({view:'unavailable'});
-  for (const hash of ['#/chat','#/chat/archived','#/chat/8921e80ce56b4b50a83981d63b1a911b']) {
+  for (const hash of ['#/chat','#/chat/archived','#/chat/8921e80ce56b4b50a83981d63b1a911b','#/chat/8921e80ce56b4b50a83981d63b1a911b?archived=1']) {
     expect(routeHash(parseRoute(hash))).toBe(hash);
   }
 });

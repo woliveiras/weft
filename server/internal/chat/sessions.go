@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -99,33 +98,6 @@ func (s Sessions) Get(ctx context.Context, owner, id string) (*Session, error) {
 	return decodeSession(record)
 }
 
-func (s Sessions) List(ctx context.Context, owner string, archived bool) ([]*Session, error) {
-	if !ownerPattern.MatchString(owner) {
-		return nil, ErrInvalidID
-	}
-	records, err := s.Store.ListSettings(ctx, sessionPrefix+owner+"/")
-	if err != nil {
-		return nil, err
-	}
-	sessions := make([]*Session, 0, len(records))
-	for _, record := range records {
-		item, err := decodeSession(record)
-		if err != nil {
-			return nil, err
-		}
-		if item.Archived == archived {
-			sessions = append(sessions, item)
-		}
-	}
-	slices.SortFunc(sessions, func(a, b *Session) int {
-		if a.LastActivity.Equal(b.LastActivity) {
-			return strings.Compare(a.ID, b.ID)
-		}
-		return b.LastActivity.Compare(a.LastActivity)
-	})
-	return sessions, nil
-}
-
 func (s Sessions) Create(ctx context.Context, owner, id, text string) (*Session, bool, error) {
 	if err := ValidateMessage(text); err != nil {
 		return nil, false, err
@@ -157,7 +129,11 @@ func (s Sessions) save(ctx context.Context, owner string, session *Session) erro
 	if err != nil {
 		return err
 	}
-	revision, err := s.Store.PutSetting(ctx, key, doc, session.Revision, "chat")
+	index, err := s.index()
+	if err != nil {
+		return err
+	}
+	revision, err := index.PutChatSetting(ctx, session.summary(owner, key), doc, session.Revision)
 	if err != nil {
 		return err
 	}

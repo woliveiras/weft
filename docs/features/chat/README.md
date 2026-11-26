@@ -45,7 +45,8 @@ return to the conversation to check the catalog receipt before trying again.
 Use **Archive conversation** to move a conversation out of Recents. In
 **Archived**, open it to view new results or restore it. Archiving keeps the
 watch and read state. Active and archived conversations are retained without
-automatic expiration.
+automatic expiration. The Archived tab shows an unread count even while you
+are browsing Recents. Use **Older conversations** to load the next page.
 
 In an authenticated installation the owner can access their conversations.
 Auth-disabled local installations show **Shared local history**. People using

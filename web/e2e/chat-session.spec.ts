@@ -3,8 +3,7 @@ import type { ChatList } from '../src/api/chat';
 
 const headers = { Authorization: 'Bearer e2e-admin-token' };
 
-async function startTaskWaitingForApproval(request: APIRequestContext) {
-  const graphId = 'chat-release-notes';
+async function startTaskWaitingForApproval(request: APIRequestContext, graphId: string, title: string) {
   const graph = await request.post('/api/v1/graphs', {
     headers,
     data: {
@@ -19,7 +18,7 @@ async function startTaskWaitingForApproval(request: APIRequestContext) {
   const draft = await request.post('/api/v1/tasks', {
     headers,
     data: {
-      title: 'Release notes for Chat fixture', request: 'Review the release notes',
+      title, request: title,
       graphId, graphVersion: 1, nodeId: 'reviewer', resultNodeId: 'reviewer',
       outcome: 'freeform', channelId: 'requests', messageType: 'feature.request', payloadJson: '{}',
     },
@@ -40,7 +39,7 @@ async function send(page: Page, message: string) {
   await page.getByRole('button', { name: 'Send', exact: true }).click();
 }
 
-test('a task watch reports the result after creating a reviewed agent in another chat and closing the console', async ({ page, context, request }) => {
+async function selectFixtureModel(request: APIRequestContext) {
   const model = await request.get('/api/v1/chat/settings', { headers });
   expect(model.ok()).toBe(true);
   const settings = await model.json();
@@ -49,7 +48,20 @@ test('a task watch reports the result after creating a reviewed agent in another
     data: { provider: 'e2e', name: 'fixture' },
   });
   expect(selected.ok()).toBe(true);
-  const taskId = await startTaskWaitingForApproval(request);
+}
+
+async function approvePendingTaskInput(request: APIRequestContext, taskId: string) {
+  const progress = await request.get(`/api/v1/tasks/${taskId}/progress`, { headers });
+  expect(progress.ok()).toBe(true);
+  const { pendingApprovals } = await progress.json();
+  expect(pendingApprovals).toHaveLength(1);
+  const decision = await request.post(`/api/v1/approvals/${pendingApprovals[0].id}/approve`, { headers });
+  expect(decision.ok()).toBe(true);
+}
+
+test('a task watch reports the result after creating a reviewed agent in another chat and closing the console', async ({ page, context, request }) => {
+  await selectFixtureModel(request);
+  const taskId = await startTaskWaitingForApproval(request, 'chat-release-notes', 'Release notes for Chat fixture');
   await context.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
   await page.goto('/');
   await send(page, 'Let me know when the release notes review is complete.');
@@ -86,12 +98,7 @@ test('a task watch reports the result after creating a reviewed agent in another
   await page.close();
 
   // An independent caller completes the actual task while no console is mounted.
-  const progress = await request.get(`/api/v1/tasks/${taskId}/progress`, { headers });
-  expect(progress.ok()).toBe(true);
-  const { pendingApprovals } = await progress.json();
-  expect(pendingApprovals).toHaveLength(1);
-  const decision = await request.post(`/api/v1/approvals/${pendingApprovals[0].id}/approve`, { headers });
-  expect(decision.ok()).toBe(true);
+  await approvePendingTaskInput(request, taskId);
   await expect.poll(async () => (await (await request.get(`/api/v1/tasks/${taskId}`, { headers })).json()).status)
     .toBe('succeeded');
   await expect.poll(async () => {
@@ -112,6 +119,27 @@ test('a task watch reports the result after creating a reviewed agent in another
   await expect(evidence).toHaveCount(1);
   await evidence.click();
   await expect(reopened).toHaveURL(new RegExp(`#/tasks/${taskId}(?:[?]|$)`));
+});
+
+test('an archived watch signals a new result and can be restored from the session list', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const taskId = await startTaskWaitingForApproval(request, 'chat-archive-check', 'Documentation check for Chat fixture');
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.goto('/');
+  await send(page, 'Follow the documentation check until it finishes.');
+  await expect(page.getByRole('heading', { name: 'Follow documentation check' })).toBeVisible();
+  await page.getByRole('button', { name: 'Archive conversation', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Restore conversation', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'New chat', exact: true }).click();
+  const recents = page.getByRole('region', { name: 'Recents' });
+  const title = 'Follow documentation check';
+  await expect(recents.getByRole('button', { name: title, exact: true })).toHaveCount(0);
+  await approvePendingTaskInput(request, taskId);
+  await recents.getByRole('button', { name: /Archived.*1 unread/ }).click();
+  await page.getByRole('region', { name: 'Archived', exact: true }).getByRole('button', { name: title, exact: true }).click();
+  await expect(page.getByRole('link', { name: 'View task result' })).toBeVisible();
+  await page.getByRole('button', { name: 'Restore conversation', exact: true }).click();
+  await expect(recents.getByRole('button', { name: title, exact: true })).toBeVisible();
 });
 
 test('a private conversation clears when another tab switches the signed-in identity', async ({ page, context, request }) => {

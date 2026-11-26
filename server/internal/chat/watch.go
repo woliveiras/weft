@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/storage"
@@ -79,21 +78,21 @@ func (s Sessions) recordObservation(ctx context.Context, owner, id string, prior
 // from the beginning. Reads by an authorized owner may reconcile immediately.
 func (s Sessions) ReconcilePage(ctx context.Context, cursor string, allowed func(string) bool, observe ObserveTask) (string, error) {
 	const pageSize = 32
-	page, err := s.Store.ListSettingsPage(ctx, sessionPrefix, cursor, pageSize)
+	index, err := s.index()
+	if err != nil {
+		return cursor, err
+	}
+	page, err := index.ListWatchedChats(ctx, cursor, pageSize)
 	if err != nil {
 		return cursor, err
 	}
 	var passErr error
-	for _, record := range page {
-		cursor = record.Key
-		owner, id, ok := strings.Cut(strings.TrimPrefix(record.Key, sessionPrefix), "/")
-		if !ok || !allowed(owner) {
+	for _, summary := range page {
+		cursor = summary.Key
+		if !allowed(summary.Owner) {
 			continue
 		}
-		session, err := decodeSession(record)
-		if err == nil && len(session.Watches) > 0 {
-			_, err = s.Reconcile(ctx, owner, id, observe)
-		}
+		_, err := s.Reconcile(ctx, summary.Owner, summary.ID, observe)
 		if err != nil && !errors.Is(err, storage.ErrNotFound) {
 			passErr = errors.Join(passErr, err)
 		}

@@ -59,4 +59,6 @@ export interface ChatSessionSummary {
 export interface ChatList {
   items: ChatSessionSummary[];
   shared: boolean;
+  archivedUnread: number;
+  next?: string;
 }

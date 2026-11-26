@@ -37,10 +37,15 @@ type chatSessionSummary struct {
 	Unknown      int       `json:"unknown"`
 }
 
-func chatOwner(r *http.Request) (Identity, error) {
+var errChatIndexUnavailable = errors.New("Chat history is temporarily unavailable")
+
+func (s *Server) chatOwner(r *http.Request) (Identity, error) {
 	identity := identityFrom(r.Context())
 	if identity.chatOwner == "" {
 		return Identity{}, fmt.Errorf("%w: Chat needs an unambiguous installation identity", tools.ErrDenied)
+	}
+	if s.ChatIndexErr != nil {
+		return Identity{}, errChatIndexUnavailable
 	}
 	return identity, nil
 }
@@ -59,54 +64,38 @@ func (s *Server) chatStore() chat.Sessions {
 }
 
 func (s *Server) listChats(w http.ResponseWriter, r *http.Request) error {
-	actor, err := chatOwner(r)
+	actor, err := s.chatOwner(r)
 	if err != nil {
 		return err
 	}
 	archived := r.URL.Query().Get("archived") == "true"
-	sessions, err := s.chatStore().List(r.Context(), actor.chatOwner, archived)
+	page, err := s.chatStore().List(r.Context(), actor.chatOwner, archived, r.URL.Query().Get("after"))
 	if err != nil {
 		return chatError(err)
 	}
-	items := make([]chatSessionSummary, 0, len(sessions))
-	for _, session := range sessions {
-		item := chatSessionSummary{ID: session.ID, Title: session.Title, LastActivity: session.LastActivity}
-		for _, watch := range session.Watches {
-			if !watch.Complete {
-				item.Running++
-				if watch.Unknown {
-					item.Unknown++
-				} else if watch.Task.DecisionNeeded {
-					item.Decisions++
-				}
+	items := make([]chatSessionSummary, 0, len(page.Items))
+	now := time.Now()
+	for _, summary := range page.Items {
+		decisions := summary.Decisions
+		for _, expiry := range summary.ReviewExpiries {
+			if now.Before(expiry) {
+				decisions++
 			}
 		}
-		for _, message := range session.Messages {
-			if message.Review != nil && message.Review.State == chat.ReviewAwaiting && time.Now().Before(message.Review.ExpiresAt) {
-				item.Decisions++
-			}
-			if message.Unread {
-				item.Unread++
-				if message.Task != nil {
-					switch message.Task.State {
-					case "succeeded":
-						item.Success++
-					case "cancelled":
-						item.Cancel++
-					case "failed", "interrupted", "blocked":
-						item.Fail++
-					}
-				}
-			}
-		}
-		items = append(items, item)
+		items = append(items, chatSessionSummary{
+			ID: summary.ID, Title: summary.Title, LastActivity: summary.LastActivity, Running: summary.Running,
+			Unread: summary.Unread, Success: summary.UnreadSuccess, Fail: summary.UnreadFailure, Cancel: summary.UnreadCancellation,
+			Decisions: decisions, Unknown: summary.Unknown,
+		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "shared": actor.chatOwner == sharedChatOwner})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": items, "shared": actor.chatOwner == sharedChatOwner, "next": page.Next, "archivedUnread": page.ArchivedUnread,
+	})
 	return nil
 }
 
 func (s *Server) getChat(w http.ResponseWriter, r *http.Request) error {
-	actor, err := chatOwner(r)
+	actor, err := s.chatOwner(r)
 	if err != nil {
 		return err
 	}
@@ -123,7 +112,7 @@ func (s *Server) getChat(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) submitChat(w http.ResponseWriter, r *http.Request) error {
-	actor, err := chatOwner(r)
+	actor, err := s.chatOwner(r)
 	if err != nil {
 		return err
 	}
@@ -148,7 +137,7 @@ func (s *Server) submitChat(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) retryChat(w http.ResponseWriter, r *http.Request) error {
-	actor, err := chatOwner(r)
+	actor, err := s.chatOwner(r)
 	if err != nil {
 		return err
 	}
@@ -314,7 +303,7 @@ func (s *Server) observeChatTask(ctx context.Context, id string) (chat.TaskSumma
 }
 
 func (s *Server) updateChat(w http.ResponseWriter, r *http.Request) error {
-	actor, err := chatOwner(r)
+	actor, err := s.chatOwner(r)
 	if err != nil {
 		return err
 	}
@@ -340,6 +329,9 @@ func (s *Server) updateChat(w http.ResponseWriter, r *http.Request) error {
 
 // RunChatWatches resumes persisted task observation without calling a model.
 func (s *Server) RunChatWatches(ctx context.Context) {
+	if s.ChatIndexErr != nil {
+		return
+	}
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	cursor := ""

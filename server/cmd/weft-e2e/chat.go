@@ -24,6 +24,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"task.watch","task":"Release notes for Chat fixture","title":"Follow release notes"}`
 	case "Show me the current state of the release notes review.":
 		content = `{"kind":"task.inspect","task":"Release notes for Chat fixture","title":"Inspect release notes"}`
+	case "Follow the documentation check until it finishes.":
+		content = `{"kind":"task.watch","task":"Documentation check for Chat fixture","title":"Follow documentation check"}`
 	case "Create a reusable agent called Release reader to summarize release notes.":
 		content = `{"kind":"agent.create","agentId":"release-reader","agentName":"Release reader","instructions":"Summarize release notes.","title":"Create release reader"}`
 	default:

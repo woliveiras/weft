@@ -151,8 +151,12 @@ default. These routes do not contact the provider or take credentials.
 
 ### Chat sessions
 
-`GET /api/v1/chat/sessions` lists the current principal's recent sessions.
-Use `archived=true` for the archived view. `GET /api/v1/chat/sessions/{id}`
+`GET /api/v1/chat/sessions` lists up to 30 sessions per page for the current
+principal, ordered by last relevant activity with the session ID breaking
+ties. Pass the preceding page's `next` cursor as `after` to view older
+conversations. Use `archived=true` for the archived view. Both lists report
+`archivedUnread` for the current principal.
+`GET /api/v1/chat/sessions/{id}`
 returns the transcript and observed task states. An unavailable or
 inaccessible session is reported as not found. An auth-disabled local
 installation identifies its shared session list with `shared: true`.

@@ -69,7 +69,10 @@ function recognizeRoute(hash: string): Route {
   if (parts[0] === 'chat') {
     if (parts.length === 1) return { view:'chat' };
     if (parts.length === 2 && parts[1] === 'archived') return { view:'chat', archived:true };
-    if (parts.length === 2 && /^[a-f0-9]{32}$/.test(parts[1])) return { view:'chat', chatId:parts[1] };
+    if (parts.length === 2 && /^[a-f0-9]{32}$/.test(parts[1])) {
+      const archived = new URLSearchParams(qs).get('archived') === '1';
+      return { view:'chat', chatId:parts[1], ...(archived ? {archived:true} : {}) };
+    }
     return { view:'unavailable' };
   }
   if (parts[0] === 'activity') return { view: 'activity', activity: parseActivityState(qs) };
@@ -126,7 +129,9 @@ function recognizeRoute(hash: string): Route {
 }
 
 export function routeHash(r: Route): string {
-  if (r.view === 'chat') return r.chatId ? `#/chat/${r.chatId}` : r.archived ? '#/chat/archived' : '#/chat';
+  if (r.view === 'chat') return r.chatId
+    ? `#/chat/${r.chatId}${r.archived ? '?archived=1' : ''}`
+    : r.archived ? '#/chat/archived' : '#/chat';
   if (r.view === 'unavailable') return '#/unavailable';
   if (r.view === 'activity') return activityHash(r.activity);
   if (r.view === 'agents') {

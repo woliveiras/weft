@@ -57,6 +57,7 @@ import (
 var Version = "dev"
 
 type Deps struct {
+	ChatIndexErr      error
 	ReviewRoutes      *reviewroute.Manager
 	TriggerManager    *trigger.Manager
 	RepositoryImports *repositoryimport.Manager
@@ -384,6 +385,8 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var sve *scm.ValidationError
 	var tfe *trigger.FieldError
 	switch {
+	case errors.Is(err, errChatIndexUnavailable):
+		writeErr(w, http.StatusServiceUnavailable, "unavailable", err.Error(), nil)
 	case errors.As(err, &tfe):
 		writeErr(w, http.StatusUnprocessableEntity, "invalid", err.Error(), map[string]any{"valid": false, "errors": tfe.Errors})
 	case errors.As(err, &sve):
