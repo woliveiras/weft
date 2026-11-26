@@ -248,6 +248,23 @@ revision and feature gates as the existing caller. The model has no runtime
 callback token or unrestricted tool gateway. Existing runtime, broker,
 environment, SCM and approval services continue to own their respective effects.
 
+For a natural-language task inventory question, the selected model receives
+the authorized read tool schemas and bounded conversation context. It selects
+the task query mode, lifecycle filter and optional list size. The server validates
+the arguments and returns structured observations from the task service to the
+model. The model may request another observation for a comparison or answer in
+the operator's language. Compute totals over all matching non-deleted tasks
+before limiting list rows. An unreadable record makes the query unavailable.
+The explicit `/inspect tasks` shortcut remains available without a model.
+
+Extend this agent through named capabilities backed by the owning service. Each
+read tool declares the arguments the model can choose, the role required and the
+bounded observation it returns. A write capability can prepare a typed review.
+Execution of that review uses the existing confirmation and receipt path. Task
+inventory is the first native read tool. Other natural-language operations
+currently reach their service through the structured proposal interpreter. A native `prepare_operation` handoff gives that interpreter the original conversation and its full operation contract.
+Qualify each migrated capability with an end-to-end journey in the matrix.
+
 For a consequential write, persist a server-rendered review with operation ID,
 actor/installation/session, canonical parameter digest and target, exact
 resource revisions, authority scope, stated effects, cost/data transfer bounds
@@ -411,7 +428,7 @@ sequenceDiagram
 ```
 
 Reuse the LLM registry/gateway, provider adapter rules and cost accounting,
-extending the accounting boundary for console interpretation and title calls
+extending the accounting boundary for console interpretation, tool-result synthesis and title calls
 that have no task/run. Budget admission includes bounded concurrency, reserved
 maximum input/output tokens and spend, timeout and retry limits per request and
 principal. Ask before consequential cost changes and show degraded mode when

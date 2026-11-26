@@ -20,7 +20,7 @@ func (chatWorkflowFixture) Name() string { return "chat-fixture" }
 func (chatWorkflowFixture) Models(context.Context) ([]llm.ModelInfo, error) { return nil, nil }
 
 func (chatWorkflowFixture) Chat(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	if !req.JSON || req.Model != "fixture" || len(req.Messages) == 0 {
+	if len(req.Tools) == 0 || req.Metadata["operation"] != "chat_interpretation" || req.Model != "fixture" || len(req.Messages) == 0 {
 		return nil, fmt.Errorf("unexpected model request")
 	}
 	target, version := "release-notes", "1"

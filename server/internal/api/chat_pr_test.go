@@ -22,7 +22,7 @@ type manualPRFixture struct {
 
 func (f *manualPRFixture) Chat(_ context.Context, q *llm.ChatRequest) (*llm.ChatResponse, error) {
 	result := `{"kind":"pr.analyze","prNumber":"418","title":"Review change"}`
-	if !q.JSON {
+	if q.Metadata["operation"] != "chat_interpretation" {
 		if len(q.Tools) != 0 || !strings.Contains(q.Messages[len(q.Messages)-1].Content, "fixture change") {
 			return nil, fmt.Errorf("unscoped review")
 		}

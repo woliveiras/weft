@@ -204,24 +204,13 @@ func (m Manager) ListRecentlyUpdated(ctx context.Context, after string, limit in
 		}
 		boundary = Draft{ID: id, UpdatedAt: at}
 	}
-	records, err := m.Store.ListSettings(ctx, prefix)
+	eligible, err := m.RecentTasks(ctx)
 	if err != nil {
-		return page, err
+		return Page{}, err
 	}
-	var eligible []*Draft
-	for _, record := range records {
-		draft, err := decode(record)
-		if err != nil {
-			return Page{}, err
-		}
-		if draft.Status == "deleted" {
-			continue
-		}
-		if after == "" || compareUpdatedTasks(draft, &boundary) > 0 {
-			eligible = append(eligible, draft)
-		}
+	if after != "" {
+		eligible = slices.DeleteFunc(eligible, func(d *Draft) bool { return compareUpdatedTasks(d, &boundary) <= 0 })
 	}
-	slices.SortFunc(eligible, compareUpdatedTasks)
 	if len(eligible) > limit {
 		last := eligible[limit-1]
 		page.Next = last.UpdatedAt.Format(time.RFC3339Nano) + "~" + last.ID
@@ -229,6 +218,27 @@ func (m Manager) ListRecentlyUpdated(ctx context.Context, after string, limit in
 	}
 	page.Items = append(page.Items, eligible...)
 	return page, nil
+}
+
+// RecentTasks reads one ordered snapshot, excluding deleted drafts.
+func (m Manager) RecentTasks(ctx context.Context) ([]*Draft, error) {
+	records, err := m.Store.ListSettings(ctx, prefix)
+	if err != nil {
+		return nil, err
+	}
+	var eligible []*Draft
+	for _, record := range records {
+		draft, err := decode(record)
+		if err != nil {
+			return nil, err
+		}
+		if draft.Status == "deleted" {
+			continue
+		}
+		eligible = append(eligible, draft)
+	}
+	slices.SortFunc(eligible, compareUpdatedTasks)
+	return eligible, nil
 }
 
 func compareUpdatedTasks(a, b *Draft) int {

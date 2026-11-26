@@ -3,10 +3,12 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/woliveiras/weft/server/internal/chat"
 	"github.com/woliveiras/weft/server/internal/llm"
 )
 
@@ -17,11 +19,30 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		return nil, errors.New("missing Chat fixture input")
 	}
 	last := request.Messages[len(request.Messages)-1]
+	if last.Role == llm.RoleTool && last.Name == "query_tasks" {
+		var observation chat.TaskQueryResult
+		if err := json.Unmarshal([]byte(last.Content), &observation); err != nil {
+			return nil, err
+		}
+		if observation.Mode != "count" || observation.Status != "succeeded" {
+			return nil, errors.New("unexpected task query in browser fixture")
+		}
+		return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, Content: fmt.Sprintf("Tarefas concluídas com sucesso: %d.", observation.Total)}}, nil
+	}
 	if last.Role != llm.RoleUser {
 		return nil, errors.New("expected a Chat fixture user message")
 	}
+	if !request.JSON && last.Content != "Quantas tarefas foram finalizadas com sucesso?" {
+		return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{
+			ID: "plan-fixture", Name: "prepare_operation", Arguments: json.RawMessage(`{}`),
+		}}}}, nil
+	}
 	var content string
 	switch last.Content {
+	case "Quantas tarefas foram finalizadas com sucesso?":
+		return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{
+			ID: "query-fixture", Name: "query_tasks", Arguments: json.RawMessage(`{"mode":"count","status":"succeeded","title":"Tarefas concluídas"}`),
+		}}}}, nil
 	case "Open the session detail fixture.":
 		content = `{"kind":"manual.open","destination":"agents","title":"Review the registered workflows and retained evidence for the quarterly editorial release across multiple repositories"}`
 	case "Draft a comparison of the registered chat project.":

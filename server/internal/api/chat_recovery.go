@@ -23,6 +23,10 @@ func chatRecovery(modelErr, callErr error) chat.Interpretation {
 		result.Text = "Chat is handling its maximum number of model calls. Retry this saved request when a slot is available."
 	case errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled):
 		result.Text = "The model call ended before Chat received an answer. Retry this saved request."
+	case errors.Is(modelErr, chat.ErrTruncated):
+		result.Text = "The model reached its output limit before completing this request."
+	case errors.Is(modelErr, chat.ErrReadUnavailable):
+		result.Text = "Chat could not verify the task records. Retry the query."
 	case errors.Is(modelErr, chat.ErrInvalidPlan):
 		result.Text = "The Chat model returned an unsupported operation. Rephrase the request or inspect the available console pages."
 	default:

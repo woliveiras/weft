@@ -864,3 +864,17 @@ test('requests cancellation of a single delegated child from its conversation', 
   expect(tree.nodes.find((n:{execution:{id:string}})=>n.execution.id===child).execution.status).toBe('cancelled');
   expect(tree.nodes.find((n:{execution:{id:string}})=>n.execution.id===tree.rootExecutionId).cancellation).toBeUndefined();
 });
+
+test('answers a task count after inspecting the inventory in the same chat', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-viewer-token'));
+  await page.goto('/');
+  await send(page, '/inspect tasks');
+  const replies = page.locator('.chat-message-assistant');
+  await expect(replies.first()).toContainText('tasks ·');
+  await send(page, 'Quantas tarefas foram finalizadas com sucesso?');
+  await expect(replies).toHaveCount(2);
+  await expect(replies.last()).toContainText(/Tarefas concluídas com sucesso: \d+\./);
+  await expect(replies.last()).not.toContainText('tasks ·');
+  await expect(replies.last().getByRole('link', { name: 'Open Tasks' })).toBeVisible();
+});

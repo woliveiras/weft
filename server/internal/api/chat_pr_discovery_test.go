@@ -21,7 +21,7 @@ import (
 type prDiscoveryModel struct{ manualPRFixture }
 
 func (m *prDiscoveryModel) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-	if !req.JSON {
+	if req.Metadata["operation"] != "chat_interpretation" {
 		return m.manualPRFixture.Chat(ctx, req)
 	}
 	text := req.Messages[len(req.Messages)-1].Content

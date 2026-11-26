@@ -3111,6 +3111,9 @@ components:
           required: [area, items]
           properties:
             area: {enum: [tasks, workflows, agents, projects]}
+            taskMode: {type: string, enum: [list, count, exists], description: Mode selected by the model for a task query.}
+            taskStatus: {type: string, description: Task lifecycle filter used by the query.}
+            total: {type: integer, minimum: 0, description: Total matching tasks before the display limit.}
             items:
               type: array
               maxItems: 8

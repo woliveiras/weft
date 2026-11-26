@@ -386,3 +386,10 @@ a lost response. The HTTP tests cover authorization, a revoked grant, invalid
 selections and per-comment receipts. GitHub publication was exercised against
 a local fixture. Bitbucket Cloud and Data Center fixtures cover diff inspection
 and analysis. Their inline publication remains open.
+
+## 2026-11-26 — Model-driven task queries (S06a)
+
+- Chat unit tests exercise the provider tool envelope, linked observations, sequential comparisons, invalid arguments, unknown or repeated invocations, the read limit, truncated output and unsafe answers.
+- `TestChatQueriesTasksThroughModelAndSQLite` crossed authenticated HTTP, SQLite, the task runner and a fixture function-calling provider. With 56 tasks, all matching rows were beyond the first 50. The test covered a contextual list, a count, positive and negative existence checks, a task that had finished before its draft status caught up, and an unreadable record. Only projected task data reached the provider.
+- All 39 Chat Chromium journeys passed on the disposable installation. One sends `/inspect tasks` and then asks “Quantas tarefas foram finalizadas com sucesso?” within the same conversation. The second answer uses the tool's total. Provider decisions and synthesis were scripted locally for repeatability.
+- An additional local experiment sent the three Portuguese questions through the turn runner and Ollama's `llama3.2:latest` with synthetic task observations. In the final run the answers reported two successes, no running tasks, and the two successful task titles. For the yes/no question the model chose a filtered list instead of `exists`. Earlier runs also produced invalid arguments. The mode mismatch failed the local probe's exact-mode assertion despite a correct user-facing answer. In a separate navigation probe the same model invoked the planner but confused the budgets and prices destinations. These observations distinguish the tool contract from a particular model's selection accuracy. The configured hosted Gemini model was not exercised by this experiment.

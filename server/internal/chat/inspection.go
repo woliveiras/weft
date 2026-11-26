@@ -2,6 +2,7 @@ package chat
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -32,8 +33,11 @@ type InventoryReference struct {
 	ID       string `json:"id"`
 }
 type Inventory struct {
-	Area  string               `json:"area"`
-	Items []InventoryReference `json:"items"`
+	TaskMode   string               `json:"taskMode,omitempty"`
+	TaskStatus string               `json:"taskStatus,omitempty"`
+	Total      *int                 `json:"total,omitempty"`
+	Area       string               `json:"area"`
+	Items      []InventoryReference `json:"items"`
 }
 type Inspection struct {
 	Search     *ResourceSearch
@@ -75,7 +79,14 @@ func (v Inventory) Context() string {
 	if !SearchableArea(v.Area) {
 		return ""
 	}
-	if len(v.Items) == 0 || len(v.Items) > InspectionLimit {
+	summary := ""
+	if v.Area == "tasks" && v.Total != nil && *v.Total >= 0 && (v.TaskStatus == "" || slices.Contains(taskStates, v.TaskStatus)) && slices.Contains(taskQueryModes, v.TaskMode) {
+		summary = fmt.Sprintf("Previous task query: mode=%s, status=%q, total=%d. Re-query for the current state.", v.TaskMode, v.TaskStatus, *v.Total)
+	}
+	if len(v.Items) == 0 {
+		return summary
+	}
+	if len(v.Items) > InspectionLimit {
 		return ""
 	}
 	parts := []string{}
@@ -87,7 +98,7 @@ func (v Inventory) Context() string {
 		parts = append(parts, fmt.Sprintf("%d=%s", item.Position, item.ID))
 		last = item.Position
 	}
-	return "Weft listed " + v.Area + " in this order: " + strings.Join(parts, ", ") + "."
+	return strings.TrimSpace(summary + " Weft listed " + v.Area + " in this order: " + strings.Join(parts, ", ") + ".")
 }
 func (v Inspection) Text(now time.Time) string {
 	lines := []string{fmt.Sprintf("%s · %s", v.Area, now.UTC().Format(time.RFC3339))}

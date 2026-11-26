@@ -303,6 +303,24 @@ sequenceDiagram
   C-->>U: Open the catalog entry
 ```
 
+Task collection queries use the provider's native tool protocol.
+
+```mermaid
+sequenceDiagram
+  actor U as Operator
+  participant C as Chat API
+  participant M as Selected model
+  participant T as Task service
+  U->>C: How many tasks succeeded?
+  C->>M: Conversation and authorized tool schemas
+  M-->>C: query_tasks(mode=count, status=succeeded)
+  C->>T: Read tasks and observe active runs
+  T-->>C: Matching total
+  C->>M: Tool result linked to the original call
+  M-->>C: Answer in the operator's language
+  C-->>U: Save and display reply
+```
+
 A task watch takes a different path after the initial interpretation. The
 server stores the task reference and compares the canonical task state with
 the last observation. A terminal transition writes an unread result to the

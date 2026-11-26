@@ -18,6 +18,8 @@ func TestChatRecoveryShowsSafeNextAction(t *testing.T) {
 		{chat.ErrModelUnavailable, errors.Join(cost.ErrBudgetReached, errors.New("private-detail")), "budgets", "budget"},
 		{chat.ErrModelUnavailable, tools.ErrRateLimited, "", "maximum number"},
 		{chat.ErrInvalidPlan, nil, "", "unsupported"},
+		{chat.ErrTruncated, nil, "", "output limit"},
+		{errors.Join(chat.ErrReadUnavailable, errors.New("private-detail")), nil, "", "verify the task records"},
 		{chat.ErrModelUnavailable, errors.New("private-detail"), "chat-model", "selected model"},
 	} {
 		got := chatRecovery(tc.model, tc.call)

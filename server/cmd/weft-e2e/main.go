@@ -46,7 +46,7 @@ func (analysisProvider) Chat(_ context.Context, r *llm.ChatRequest) (*llm.ChatRe
 	if r.Metadata["graph"] == "manual-review" && len(r.Tools) == 0 && len(r.Messages) == 2 && strings.Contains(r.Messages[1].Content, "fixture change") {
 		return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, Content: `{"summary":"Add a boundary test for the fixture change.","comments":[{"path":"file","side":"RIGHT","line":1,"body":"Add a boundary test for the new value."},{"path":"file","side":"LEFT","line":1,"body":"Explain why the original value was removed."}]}`}}, nil
 	}
-	if r.JSON && strings.HasPrefix(r.System, "You interpret a Weft operator's requests") {
+	if r.Metadata["operation"] == "chat_interpretation" || r.Metadata["operation"] == "chat_answer" {
 		return consoleFixtureResponse(r)
 	}
 	if len(r.Messages) > 0 && strings.Contains(r.Messages[0].Content, "task-blocked-fixture") {

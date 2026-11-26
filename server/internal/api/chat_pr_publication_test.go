@@ -23,7 +23,7 @@ type publishPRFixture struct{ manualPRFixture }
 
 func (f *publishPRFixture) Chat(ctx context.Context, q *llm.ChatRequest) (*llm.ChatResponse, error) {
 	base, err := f.manualPRFixture.Chat(ctx, q)
-	if err != nil || q.JSON {
+	if err != nil || q.Metadata["operation"] == "chat_interpretation" {
 		return base, err
 	}
 	base.Message.Content = `{"summary":"Bounded line changes.","comments":[{"path":"file","side":"RIGHT","line":1,"body":"First approved."},{"path":"file","side":"RIGHT","line":2,"body":"Reply will be lost."},{"path":"file","side":"RIGHT","line":3,"body":"Provider rejects this."},{"path":"file","side":"LEFT","line":1,"body":"Leave this unselected."}]}`

@@ -159,7 +159,7 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 		return chatError(err)
 	}
 	if !claim.IsZero() {
-		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(r.Context(), 50*time.Second)
 		defer cancel()
 		history := chatSessionForRole(actor, session).Context(requestID)
 		var answer chat.Interpretation
@@ -190,14 +190,22 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 			}
 		} else {
 			var callErr error
-			plan, modelErr := chat.Interpret(ctx, history, func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
-				response, err := s.callChatModel(ctx, actor, req, "chat_interpretation")
+			var modelRevision int64
+			turn, modelErr := chat.RunTurn(ctx, history, s.chatReadTools(actor), func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+				operation := "chat_interpretation"
+				if req.Messages[len(req.Messages)-1].Role == llm.RoleTool {
+					operation = "chat_answer"
+				}
+				response, err := s.callTurnModel(ctx, actor, req, operation, &modelRevision)
 				callErr = err
 				return response, err
 			})
 			if modelErr != nil {
 				answer = chatRecovery(modelErr, callErr)
+			} else if turn.Text != "" {
+				answer = turn
 			} else {
+				plan := turn.Plan
 				plan, clarification := groundChatPRPlan(plan, lastInput, requestID, session, actor)
 				if clarification != "" {
 					answer = chat.Interpretation{Plan: chat.Plan{Kind: chat.Clarify, Title: plan.Title}, Text: clarification}
@@ -217,12 +225,22 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 	return nil
 }
 
-func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.ChatRequest, operation string) (_ *llm.ChatResponse, retErr error) {
+func (s *Server) callChatModel(ctx context.Context, actor Identity, req *llm.ChatRequest, operation string) (*llm.ChatResponse, error) {
+	return s.callTurnModel(ctx, actor, req, operation, nil)
+}
+
+func (s *Server) callTurnModel(ctx context.Context, actor Identity, req *llm.ChatRequest, operation string, revision *int64) (_ *llm.ChatResponse, retErr error) {
 	ctx, finish := observeChatOperation(ctx, operation)
 	defer func() { finish(retErr) }()
 	settings, err := s.readChatModel(ctx)
 	if err != nil || settings.Status != "configured" {
 		return nil, chat.ErrModelUnavailable
+	}
+	if revision != nil {
+		if *revision != 0 && settings.Revision != *revision {
+			return nil, chat.ErrModelUnavailable
+		}
+		*revision = settings.Revision
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err

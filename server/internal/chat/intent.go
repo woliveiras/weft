@@ -2,7 +2,6 @@
 package chat
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -20,7 +19,7 @@ const (
 	MaxRequestBytes = 4096
 	maxContextBytes = 12 << 10
 	maxContextTurns = 8
-	maxAnswerTokens = 640
+	maxAnswerTokens = 2048
 
 	OpenManual     = "manual.open"
 	WatchTask      = "task.watch"
@@ -70,7 +69,7 @@ Return exactly one JSON object. "kind" is one of:
 - "console.inspect": read live facts in the conversation. Add "inspectArea" from tasks, workflows, agents, projects, skills, approvals, activity, triggers, review-routes, mcp, scm, issue-connections, models, chat-model, plugins, tools, network, retention, delegation, usage, prices, budgets. Use this for a question about current inventory or state. Use manual.open only for a navigation request.
 - "budget.raise": raise one explicitly identified current ledger. Add "budgetScope" (run, installation, user, project or workflow), "budgetTarget" (exact task ID or title for run, exact budget ID for user/project/workflow, omit for installation), "budgetAmount" (the absolute new decimal limit, not an increment), and "budgetCurrency" (ISO code stated by the user). Ask about any unclear scope, amount, currency, or whether the operator means an existing allowance or a recurring definition. Recurring caps or default allowances for future runs use installation.plan. A raise may resume work put on hold by that ledger under existing budget policy.
 - "skill.save": manage a named instruction skill. Include "skillId" and "skillAction". For create or revise, also include "skillTitle" and "skillBody". New skills are disabled. To enable, disable, make an installation default, remove it from installation defaults, or delete, use enable, disable, make-default, remove-default or delete and omit title/body. Activation and default scope are independent actions. Never infer deletion from disabling.
-- "manual.open": open a console page for inspection or to enter credentials. Add "destination" with one of: tasks, workflows, agents, projects, activity, approvals, models, chat-model, plugins, usage, budgets, prices, connections, connection-setup, skills, administration, configuration-export (download the current declarative installation YAML), task-editor, project-import, source-control-setup, delegation, network, retention, resources, tools. Never ask for a credential. Use this for navigation, secure setup or an operation which requires manual controls, including protected application preview (approvals), remote delivery (tasks), repository import (project-import), destructive cleanup (resources), policy changes without a supported typed action, or prompt submission through the full editor (task-editor). Never represent navigation as performing the requested operation.
+- "manual.open": open a console page for inspection or to enter credentials. Add "destination" with one of: tasks, workflows, agents, projects, activity, approvals, models, chat-model, plugins, usage, budgets, prices, connections, connection-setup, skills, administration, configuration-export (download the current declarative installation YAML), task-editor, project-import, source-control-setup, delegation, network, retention, resources, tools. The budgets page shows spending limits and allowances, usage shows actual consumption and costs, and prices shows per-model token rates. Never ask for a credential. Use this for navigation, secure setup or an operation which requires manual controls, including protected application preview (approvals), remote delivery (tasks), repository import (project-import), destructive cleanup (resources), policy changes without a supported typed action, or prompt submission through the full editor (task-editor). Never represent navigation as performing the requested operation.
 - "clarify": ask one focused question when the target or action is unclear. Add "question". Never guess between different targets or effects.
 - "unsupported": any request outside these capabilities. Do not add a task or question.
 You may include a short, neutral "title" for the conversation based on the latest user request. Omit credentials, repository URLs, account names, and sensitive identifiers. Do not add any other keys.`
@@ -122,11 +121,9 @@ func ValidateMessage(text string) error {
 	return nil
 }
 
-// Interpret uses bounded conversation context and a provider completion. The
-// only model output accepted is a validated, side-effect-free proposal.
-func Interpret(ctx context.Context, turns []llm.ChatMessage, call func(context.Context, *llm.ChatRequest) (*llm.ChatResponse, error)) (Plan, error) {
+func boundedHistory(turns []llm.ChatMessage) ([]llm.ChatMessage, error) {
 	if len(turns) == 0 || turns[len(turns)-1].Role != llm.RoleUser {
-		return Plan{}, ErrInvalidMessage
+		return nil, ErrInvalidMessage
 	}
 	start := len(turns)
 	bytes := 0
@@ -135,7 +132,7 @@ func Interpret(ctx context.Context, turns []llm.ChatMessage, call func(context.C
 		if (message.Role != llm.RoleUser && message.Role != llm.RoleAssistant) ||
 			message.Name != "" || message.ToolCallID != "" || len(message.ToolCalls) != 0 ||
 			ValidateMessage(message.Content) != nil {
-			return Plan{}, ErrInvalidMessage
+			return nil, ErrInvalidMessage
 		}
 		if bytes+len(message.Content) > maxContextBytes {
 			break
@@ -143,17 +140,7 @@ func Interpret(ctx context.Context, turns []llm.ChatMessage, call func(context.C
 		bytes += len(message.Content)
 		start--
 	}
-	response, err := call(ctx, &llm.ChatRequest{
-		System: intentPrompt, Messages: turns[start:], JSON: true, MaxTokens: maxAnswerTokens,
-	})
-	if err != nil || response == nil {
-		return Plan{}, ErrModelUnavailable
-	}
-	if response.StopReason == "length" || response.Usage.OutputTokens > maxAnswerTokens ||
-		len(response.Message.ToolCalls) != 0 || len(response.Message.Content) > MaxRequestBytes {
-		return Plan{}, ErrInvalidPlan
-	}
-	return decodePlan(response.Message.Content)
+	return turns[start:], nil
 }
 
 func decodePlan(body string) (Plan, error) {
