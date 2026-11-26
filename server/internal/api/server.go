@@ -244,6 +244,8 @@ func (s *Server) routes() {
 		{"GET /api/v1/provider-plugins", R, s.providerPlugins},
 		{"PUT /api/v1/provider-plugins/{id}", A, s.updateProviderPlugin},
 		{"GET /api/v1/provider-settings", R, s.providerSettings},
+		{"GET /api/v1/chat/settings", R, s.getChatSettings},
+		{"PUT /api/v1/chat/settings", A, s.saveChatSettings},
 		{"GET /api/v1/trigger-policy", R, s.triggerPolicy},
 		{"GET /api/v1/review-routes", R, s.listReviewRoutes},
 		{"GET /api/v1/review-routes/{name}", R, s.getReviewRoute},

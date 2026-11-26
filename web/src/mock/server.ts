@@ -3,6 +3,7 @@
 // behaviour to exercise every screen, not a reimplementation of the engine.
 import type {
   Approval,
+  ChatModelSettings,
   Execution,
   Graph,
   GraphNode,
@@ -23,6 +24,7 @@ import { mockBus } from './events';
 import { parse as parseYaml } from 'yaml';
 
 const now = () => new Date().toISOString();
+let chatModel: ChatModelSettings = {status:'unconfigured', revision:0};
 let seq = 0;
 let idn = 0;
 const nid = (p: string) => `${p}_${Date.now().toString(36)}${(idn++).toString(36)}`;
@@ -765,6 +767,21 @@ export async function mockFetch(url: string, init: RequestInit): Promise<Respons
     return json(a);
   }
   if (p === '/provider-settings' && m === 'GET') return json(providerSettings());
+  if (p === '/chat/settings' && m === 'GET') return json({
+    ...chatModel, status: chatModel.model && !providerList().some(item => item.name === chatModel.model?.provider && item.status !== 'unavailable')
+      ? 'unavailable' : chatModel.status,
+  });
+  if (p === '/chat/settings' && m === 'PUT') {
+    const model = JSON.parse(String(init.body ?? '{}')) as ChatModelSettings['model'];
+    if (!model?.name || !providerList().some(item => item.name === model.provider && item.status !== 'unavailable')) {
+      return err(400, 'Select an available model provider and enter its model identifier.', 'invalid');
+    }
+    if (new Headers(init.headers).get('If-Match') !== String(chatModel.revision)) {
+      return err(409, 'Settings revision changed.', 'conflict');
+    }
+    chatModel = {model, status:'configured', revision:chatModel.revision+1};
+    return json(chatModel);
+  }
   if (p === '/provider-plugins' && m === 'GET') return json(providerPlugins());
   if (p.startsWith('/cost/')) return mockCost(p, m, init);
   if ((mm = p.match(/^\/provider-plugins\/([^/]+)$/)) && m === 'PUT') {

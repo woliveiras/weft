@@ -37,6 +37,7 @@ import type {
   ProviderInput,
   ProviderPlugin,
   ProviderSettings,
+  ChatModelSettings,
   PriceCatalogue,
   SCMConnection,
   SCMKind,
@@ -330,6 +331,11 @@ export const api = {
   providers: () => request<ProviderInfo[]>(`${V1}/providers`),
   models: (provider: string) => request<ModelInfo[]>(`${V1}/providers/${enc(provider)}/models`),
   providerSettings: () => request<ProviderSettings>(`${V1}/provider-settings`),
+  chatModelSettings: () => request<ChatModelSettings>(`${V1}/chat/settings`),
+  saveChatModel: (model: NonNullable<ChatModelSettings['model']>, revision: number) =>
+    request<ChatModelSettings>(`${V1}/chat/settings`, {
+      method: 'PUT', body: model, headers: { 'If-Match': String(revision) },
+    }),
   providerPlugins: () => request<ProviderPlugin[]>(`${V1}/provider-plugins`),
   triggers: (workflow: string) => request<Trigger[]>(`${V1}/triggers`, { query: { workflow } }),
   updateTrigger: (id: string, input: TriggerInput) => request<Trigger>(`${V1}/triggers/${enc(id)}`, { method: 'PUT', body: input }),

@@ -135,6 +135,20 @@ advisory — a model that writes the call as text fails it). Errors are returned
 `[redacted]`. Tests are audited as `provider.tested` events; changes as
 `provider.changed`.
 
+### Chat model selection
+
+`GET /api/v1/chat/settings` returns the current Chat model, its revision and
+one of `unconfigured`, `configured` or `unavailable`. A new installation has
+revision zero and no selection. `configured` means the selected provider is
+registered and available in Weft's registry. It does not establish whether an
+inference call would succeed.
+
+Administrators save an explicit provider and model ID using
+`PUT /api/v1/chat/settings`, body `{"provider":"local","name":"qwen:7b"}` and
+`If-Match` set to the revision just reviewed. A stale revision returns 409.
+The selection applies to Chat independently of the installation's workflow
+default. These routes do not contact the provider or take credentials.
+
 ## Native issue connections
 
 Native Jira Data Center connections have their own credential store, independent

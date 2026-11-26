@@ -751,6 +751,12 @@ export interface ProviderSettings {
   types: ProviderTypeInfo[];
 }
 
+export interface ChatModelSettings {
+  model?: { provider: string; name: string };
+  revision: number;
+  status: 'unconfigured' | 'configured' | 'unavailable';
+}
+
 /** Credential change: omit to keep, {value} to replace, {clear: true} to remove. */
 export type CredentialUpdate = { value: string } | { clear: true };
 

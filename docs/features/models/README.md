@@ -31,6 +31,19 @@ Save/test failure leaves a correction path. Check plugin enablement, required
 fields, credentials, endpoint reachability and provider errors; do not silently
 switch models after a failed call. Configuring a model grants no external tools.
 
+## Select the Chat model
+
+As an administrator, open **Models → Chat model**. Choose an existing
+provider, enter its model ID and select **Save Chat model**. Chat selection
+does not change the default for workflow agents. Saving checks the local
+provider configuration without testing the model or charging inference.
+Use the provider's explicit test action to check connectivity.
+
+If a provider is unavailable, the saved selection stays visible. Restore the
+provider or select another one. Weft does not automatically pick a replacement.
+If another administrator saves first, reload the saved selection before
+reviewing a change again. Viewers can inspect the selection.
+
 ## Configure prices and inspect usage
 
 1. In Model prices, review the current configuration revision and currency.

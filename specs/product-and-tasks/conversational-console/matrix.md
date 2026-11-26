@@ -7,8 +7,9 @@ implementation and pending maintainer review. **C** is implementation-aware
 baseline compatibility, identified by its existing criterion or contract.
 **X** is an external adapter contract, with independent live qualification
 required. The new oracles must be reviewed before tests are implemented.
-Evidence is pending for all rows. Existing tests cited in the impact review
-describe the baseline. They do not qualify Chat.
+[S23 has delivery evidence](./evidence.md#2026-11-26--explicit-chat-model-selection).
+Other rows remain pending. Existing tests cited in the impact review describe
+the baseline.
 
 ## Behavior and oracle matrix
 
@@ -45,6 +46,7 @@ a write. Live transport/data tests support only the editions actually exercised.
 | S20 | AC-009. Two principals, role reduction/revocation, anonymous local profile | Switch identity, access another owner by ID, revoke access after rendering and repeat fetch/watch/confirm | No cross-owner cache, stream, history or title leakage; current subject/resource access governs projections; undispatched work cannot inherit stale or anonymous authority | P/C baseline auth limitations | U owner projection and principal mapping; I authenticated HTTP plus durable store with role changes/stream revalidation; E switch user | P1, PROD-01 for production claims |
 | S21 | AC-009. Existing installation/profile, interrupted persistence or dependency | Upgrade, restart/reopen store, replay concurrent claims, exercise limits and restore approved backup | Old domain records remain intact; new data recoverable on qualified stores; audit persists once; safe diagnostics and bounded labels/context exclude contents; errors/unknown never become success | P/C storage and INT-004 | U bounds/telemetry/cache; I conformance SQLite and FS, supported PostgreSQL, add/restore migrations, failure injection; native and E2E restart | P1, PROD-02/08/09 before claims |
 | S22 | AC-009. Untrusted or sensitive user input and restricted evidence | Submit secret-shaped payload, generate a title, revoke source access and ask for recap | Known secrets rejected safely; sensitive title falls back; revoked context/derived projections cannot leak through transcripts, model, events or logs | P | U redaction and provenance; I request/model fixture/log/traces/store and permission recheck | P1, P3 credential handoff |
+| S23 | AC-003. A configured provider and authenticated viewer and administrator | Inspect the empty selection, save an explicit model, try a stale or forbidden write, then remove the registered provider in a fixture | Only the administrator can change the selection with its revision. The saved model remains visible when unavailable. Setup never calls inference or falls back to another provider. | M | U model validation and form states, I role and CAS across SQLite and HTTP, E Models → Chat model with reload | P1 |
 
 ## Operation inventory
 

@@ -2,7 +2,7 @@
 id: TASK-012
 title: "Conversational Console"
 summary: "Operate Weft through a durable conversation with reviewed actions and observable results."
-status: planned
+status: in-progress
 scope: [console navigation, typed control-plane operations, session history, durable monitoring]
 risk: high
 risk_domains: [authorization, secrecy, model cost, persistence, concurrency, external effects]
@@ -10,12 +10,12 @@ reversibility: "Additive storage and routes. Older manual interfaces remain avai
 change_surfaces: [web/src, server/internal/api, server/internal/app, server/internal/storage, api/openapi.yaml, schemas, docs]
 contracts: [chat session ownership, operation review and settlement, read state, authorized event delivery]
 review_policy: "Review proposed defaults, phase acceptance, and evidence before claiming support."
-navigation: [specs/README.md, specs/product-and-tasks/conversational-console/matrix.md]
+navigation: [specs/README.md, specs/product-and-tasks/conversational-console/matrix.md, specs/product-and-tasks/conversational-console/evidence.md]
 documentation: [docs/interface-navigation.md, docs/getting-started.md, docs/features/README.md]
 dependencies: [TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, OPS-003, RELEASE-2, INT-004, RUN-005, RUN-006, INT-009]
 authority:
-  granted: [specification, read-only checkout inspection]
-  withheld: [implementation, live mutation, deployment, external qualification]
+  granted: [specification, local implementation, fixture verification, local commits]
+  withheld: [live mutation, deployment, external qualification]
 ---
 
 # Conversational Console
@@ -53,6 +53,14 @@ identifier in this document.
 - Execution and monitoring have an animated status. A green dot signals an
   unread successful result. Failure, cancellation and decision-required states
   have accessible labels. Opening a session grants no approval.
+- In authenticated installations, history belongs to the owning principal.
+  In auth-disabled local installations, the history is shared and Chat visibly
+  labels it **Shared local history**. Existing manual paths remain available.
+- An administrator selects a provider already configured in Weft and names
+  the model for Chat explicitly. Inference for interpretation and titles is
+  accounted for. The selection does not inherit the workflow default.
+- Active and archived conversations are retained without automatic expiration.
+  Backup qualification and restore operations retain their separate controls.
 
 ## Behavior and invariants
 
@@ -114,7 +122,7 @@ Check text scaling, zoom, contrast, screen-reader announcements and touch
 targets in representative installed browser journeys. Replace animated status with an equivalent static treatment
 under reduced motion, retaining text/icon distinctions for all states.
 
-Proposed list defaults for review. Sort oldest-first transcripts using message
+Sort oldest-first transcripts using message
 sequence. Order Recents by last relevant activity (descending, with a stable
 ID tie-breaker). New user messages, substantive results and decisions update
 activity. Presence, heartbeats, title churn and read-marker writes leave the
@@ -159,9 +167,14 @@ whether the control plane, provider selection and configured model are available
 It offers **Configure models** for admins, **Open Models** or contact guidance
 for other roles, plus direct links to manual operations. Use existing Mock/echo
 or local model paths only when configured and applicable. No automatic cloud
-fallback or provider test with cost. The admin activates a plugin, sets up and
-explicitly tests/selects a model using Models, or uses the existing local CLI
-and reviewed YAML with secret references. Credentials go only to the applicable
+fallback or provider test with cost. The admin activates a plugin and sets up
+an available provider using Models or the local CLI and reviewed YAML with
+secret references. The separate **Models → Chat model** action selects a
+configured provider and explicit model ID with an expected settings revision.
+Inspect the saved selection independently of the workflow model default and
+report unavailable without substituting providers. This check only describes
+the local registry. Model inference availability can be observed once an
+authorized request actually runs. Credentials go only to the applicable
 provider, connection, OAuth or server secret-reference surface. Return to the
 same URL and preserved unsent input, or explicitly retry a saved pending request.
 A later provider outage, failed title or budget exhaustion leaves sessions, typed
@@ -279,18 +292,17 @@ text, raw parameters, evidence payloads and credentials.
 
 ### Ownership, storage and observability
 
-Separate conversation ownership from role checks on each linked resource. The
-proposed default is owner-only history in an authenticated installation, with
-no implicit admin browsing or sharing. Bind ownership to installation and a
+Separate conversation ownership from role checks on each linked resource.
+Authenticated installations use owner-only history without implicit
+administrator browsing or sharing. Bind ownership to installation and a
 stable principal, for example an installation-scoped static principal ID and
 OIDC issuer/subject. Current `api.Identity` contains Name and Role, OIDC name
 uses a mutable display claim where available, and unauthenticated local mode
 returns `anonymous/admin`. The new principal contract needs explicit migration
 and no name/role collision. A shared configured token is one shared principal.
-Retain the existing local manual paths in auth-disabled mode. Proposed default
-withholds durable Chat in that mode with a clear explanation. Installation-local
-shared history is an alternative only if explicitly chosen and visibly labeled
-with its lack of per-user isolation.
+Auth-disabled mode uses explicitly labeled shared local history. It has no
+per-person isolation. Keep the shared scope separate from authenticated owners
+if authentication is enabled later.
 
 Viewers can write their own conversation records and read markers if Chat is
 enabled for their profile. Their underlying Weft resources stay read-only.
@@ -517,40 +529,27 @@ owned by PROD-04.
 
 ## Open decisions
 
-- **Identity in local profiles and production.** Approve stable installation
-  principal IDs, an issuer/subject mapping and owner-only visibility. Confirm
-  whether auth-disabled mode should withhold durable Chat (proposed) or expose
-  explicitly shared, installation-local history. Shared history has no
-  per-person revocation or isolation. Real OIDC readiness remains PROD-01.
-- **Retention and restore.** Decide content retention vs. audit/evidence
-  retention by profile, backup/encryption access, expiry and restore semantics.
-  Options are keep transcripts until installation lifecycle maintenance, or
-  time-bound transcript minimization while preserving necessary minimal audit
-  and references. Time-bound removal makes old sessions and restored backups
-  differ unless reconciliation reapplies the policy. Archived status controls visibility in the session list. The retention policy
-  governs transcript lifecycle independently. Commission PROD-08/09 qualification before
-  advertising backup guarantees.
-- **Model and external transfer.** Approve default local/hosted model selection,
-  assistant budget attribution and provider data/price policy before enabling
-  hosted context, and choose eligible P4 editions and scopes for live validation.
-  Reusing a configured provider simplifies setup. A dedicated provider lets the
-  installation restrict context and spend independently. No promotion of
-  fixture coverage to live qualification.
-- **Session activity defaults.** Approve the proposed activity order,
-  foreground result-read rule and continuation/unread indication while archived.
-  Opening alone is a simpler read rule but can clear unseen results. Stopping
-  observation on archive removes the previously requested tracking until restore.
+- **Production recovery.** Qualify backup content, access controls, encryption
+  and restore for the selected topology through PROD-08/09. Sessions, including
+  archived sessions, have no application expiry.
+- **External qualification.** Select P4 editions and scopes for approved live
+  validation. Qualify OIDC in the selected deployment through PROD-01.
 
 ## History
 
-- 2026-11-26. Maintainer requested Chat as the main console experience, approved
-  the layout and archive behavior above, and commissioned planning only.
-  TASK-002 historical navigation/onboarding decisions remain recorded there.
+- 2026-11-26. The maintainer requested Chat as the main console experience and
+  approved the layout and archive behavior. TASK-002 records the historical
+  navigation and onboarding decisions.
+- 2026-11-26. The maintainer authorized local implementation and one local
+  commit per completed feature. They decided shared local history for the
+  auth-disabled profile, private authenticated history, explicit existing-provider
+  model selection with cost accounting, and retention without automatic expiry.
 
 ## Reconciliation
 
 - [Behavior and oracle matrix, operation inventory and impact review](./matrix.md).
-- The plan is ahead of implementation. Preserve baseline and historical oracles.
+- The explicit model selection is the first P1 delivery. Other P1 behavior and
+  subsequent phases remain pending. Preserve baseline and historical oracles.
   When P1 is delivered, cross-link TASK-002 AC-001 and AC-003 to the new default
   in TASK-012 AC-001 while keeping deep links, retained drafts and contextual
   first use under TASK-002. Update the PROD-04 walkthrough criteria of its own

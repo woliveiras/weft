@@ -1,9 +1,9 @@
-export const modelSections = ['providers', 'plugins', 'usage', 'budgets', 'prices'] as const;
+export const modelSections = ['providers', 'plugins', 'chat', 'usage', 'budgets', 'prices'] as const;
 export type ModelSection = typeof modelSections[number];
 export type ProviderEditorRoute = {mode:'create'} | {mode:'edit';name:string};
 export type ModelsRoute = {modelSection?:ModelSection;providerEditor?:ProviderEditorRoute};
 export const modelSectionTitles:Record<ModelSection,string> = {
-  providers:'Providers', plugins:'Inference plugins', usage:'Usage & costs', budgets:'Budgets', prices:'Model prices',
+  providers:'Providers', plugins:'Inference plugins', chat:'Chat model', usage:'Usage & costs', budgets:'Budgets', prices:'Model prices',
 };
 export function parseModelsRoute(parts:string[]):ModelsRoute {
   if(parts[1]==='providers' && parts[2]==='new') return {providerEditor:{mode:'create'}};

@@ -1,5 +1,6 @@
 import type {Info} from '../api/types';
 import {CostsSection} from './CostsSection';
+import {ChatModelSection} from './ChatModelSection';
 import {ProvidersSection} from './ProvidersSection';
 import {modelSections,modelSectionTitles,modelsHash,type ModelsRoute} from './modelsNavigation';
 
@@ -15,6 +16,8 @@ export function ModelsPage({info,modelSection='providers',providerEditor}: {info
     {providerEditor || modelSection==='providers' || modelSection==='plugins'
       ? <ProvidersSection canEdit={role==='admin'} canTest={canTest} presentation={modelSection==='plugins'?'plugins':'providers'}
           editor={providerEditor} onEditor={editor=>{location.hash=modelsHash({providerEditor:editor});}}/>
-      : <CostsSection key={modelSection} canEdit={role==='admin'} section={modelSection}/>}
+      : modelSection === 'chat'
+        ? <ChatModelSection canEdit={role === 'admin'}/>
+        : <CostsSection key={modelSection} canEdit={role==='admin'} section={modelSection}/>}
   </div>;
 }
