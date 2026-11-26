@@ -214,6 +214,15 @@ Names are encoded to be case-safe and valid on Windows.
 Known limitations: lease expiry uses each instance's clock (keep NTP in sync well within
 `engine.leaseTTL`); on Windows a crashed fs-store process leaves a stale `LOCK` to delete by hand.
 
+## Chat records
+
+Chat uses revisioned settings under `chat/model` and
+`chat/sessions/<owner>/<session>`. Session writes compare the current revision
+before committing the transcript or result marker. The settings store retains
+archived sessions and result state across restart. Chat does not automatically
+expire these records. The background reconciler visits bounded pages to
+recover pending observations.
+
 ## Instruction records
 
 Existing settings CAS stores `instructions/skills/{id}` with current revision plus immutable history and actor/time, and `instructions/executions/{executionId}` as a create-only manifest. No SQL migration. See [limits and deletion semantics](instructions.md).

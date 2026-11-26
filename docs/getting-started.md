@@ -14,6 +14,12 @@ for setup, export, conflicts and the complete example.
 
 ## Console navigation
 
+Open the console to start at Chat. To inspect or follow an existing task by
+typing a request, an administrator first selects a configured provider and
+model in **Models → Chat model**. Chat links to that setup when the model is
+missing. Use the [Chat guide](features/chat/README.md) for session controls
+and task results.
+
 Use the [console navigation guide](interface-navigation.md) to find Tasks,
 Projects, Workflows, Models, Connections and Administration. Configure agents
 and their explicit grants, save the workflow, then start it and inspect Runs.

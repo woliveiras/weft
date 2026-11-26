@@ -7,9 +7,10 @@ implementation and pending maintainer review. **C** is implementation-aware
 baseline compatibility, identified by its existing criterion or contract.
 **X** is an external adapter contract, with independent live qualification
 required. The new oracles must be reviewed before tests are implemented.
-[S23 has delivery evidence](./evidence.md#2026-11-26--explicit-chat-model-selection).
-Other rows remain pending. Existing tests cited in the impact review describe
-the baseline.
+Delivery evidence covers [model selection](./evidence.md#2026-11-26--explicit-chat-model-selection)
+and [task tracking](./evidence.md#2026-11-26--conversational-task-tracking).
+The full workflow in S11 and the P1 gate remain pending. Existing tests cited
+in the impact review describe the baseline.
 
 ## Behavior and oracle matrix
 

@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { parseRoute, routeHash } from './App';
 
+it('opens the chat on a bare URL and distinguishes unavailable links', () => {
+  for (const hash of ['', '#', '#/']) expect(parseRoute(hash)).toEqual({view:'chat'});
+  expect(parseRoute('#/graphs')).toEqual({view:'graphs'});
+  expect(parseRoute('#/missing')).toEqual({view:'unavailable'});
+  expect(parseRoute('#/tasks/%broken')).toEqual({view:'unavailable'});
+  for (const hash of ['#/chat','#/chat/archived','#/chat/8921e80ce56b4b50a83981d63b1a911b']) {
+    expect(routeHash(parseRoute(hash))).toBe(hash);
+  }
+});
+
 describe('installation destination routes', () => {
   it('round-trips dedicated delegation profile destinations', () => {
     expect(parseRoute('#/administration/delegation/profiles/%invalid/edit')).toEqual({view:'administration',section:'delegation'});

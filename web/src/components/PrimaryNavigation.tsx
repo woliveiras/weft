@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon, type IconName } from './common';
 
-export type NavigationDestination = 'activity' | 'tasks' | 'projects' | 'graphs' | 'agents' | 'approvals' | 'connections' | 'models' | 'skills' | 'administration';
+export type NavigationDestination = 'chat' | 'activity' | 'tasks' | 'projects' | 'graphs' | 'agents' | 'approvals' | 'connections' | 'models' | 'skills' | 'administration';
 
 const configuration: { destination: NavigationDestination; label: string; icon: IconName }[] = [
   { destination: 'projects', label: 'Projects', icon: 'projects' },
@@ -22,7 +22,7 @@ function readPreference() {
 }
 
 export function PrimaryNavigation({ active, pending, onNavigate }: {
-  active: NavigationDestination;
+  active?: NavigationDestination;
   pending: number;
   onNavigate: (destination: NavigationDestination) => void;
 }) {
@@ -67,6 +67,7 @@ export function PrimaryNavigation({ active, pending, onNavigate }: {
     <div className="navigation-destinations" id="primary-navigation-destinations">
       <section className="navigation-group" aria-labelledby="work-navigation-label">
         <h2 id="work-navigation-label" className="navigation-label">Work</h2>
+        {entry('chat','Chat','chat')}
         {entry('activity','Activity','activity')}
         {entry('tasks','Tasks','tasks')}
         {entry('approvals','Approvals','approvals',pending)}

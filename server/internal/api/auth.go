@@ -23,8 +23,15 @@ import (
 
 // Identity is the authenticated caller.
 type Identity struct {
-	Name string      `json:"name"`
-	Role config.Role `json:"role"`
+	Name      string      `json:"name"`
+	Role      config.Role `json:"role"`
+	chatOwner string
+}
+
+const sharedChatOwner = "local"
+
+func chatOwnerKey(kind, name string) string {
+	return fmt.Sprintf("%s-%x", kind, sha256.Sum256([]byte(name)))
 }
 
 type ctxKey struct{}
@@ -45,6 +52,10 @@ type Authenticator struct {
 
 func NewAuthenticator(c config.Auth) (*Authenticator, error) {
 	a := &Authenticator{disabled: c.Disabled, tokens: map[[32]byte]Identity{}}
+	named := make(map[string]int)
+	for _, token := range c.Tokens {
+		named[token.Name]++
+	}
 	for _, t := range c.Tokens {
 		v, err := t.Resolve()
 		if err != nil {
@@ -53,7 +64,14 @@ func NewAuthenticator(c config.Auth) (*Authenticator, error) {
 		if len(v) < 12 {
 			return nil, fmt.Errorf("token %q is too short (min 12 chars)", t.Name)
 		}
-		a.tokens[sha256.Sum256([]byte(v))] = Identity{Name: t.Name, Role: t.Role}
+		id := Identity{Name: t.Name, Role: t.Role}
+		// Uniquely named token principals survive credential rotation. A
+		// duplicated or absent name can still use the manual console but
+		// does not establish ownership of a private transcript.
+		if t.Name != "" && named[t.Name] == 1 {
+			id.chatOwner = chatOwnerKey("static", t.Name)
+		}
+		a.tokens[sha256.Sum256([]byte(v))] = id
 	}
 	if c.OIDC != nil {
 		a.oidc = &oidcVerifier{cfg: *c.OIDC, keys: map[string]crypto.PublicKey{}}
@@ -63,7 +81,7 @@ func NewAuthenticator(c config.Auth) (*Authenticator, error) {
 
 func (a *Authenticator) Authenticate(r *http.Request) (Identity, error) {
 	if a.disabled {
-		return Identity{Name: "anonymous", Role: config.RoleAdmin}, nil
+		return Identity{Name: "anonymous", Role: config.RoleAdmin, chatOwner: sharedChatOwner}, nil
 	}
 	tok := ""
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
@@ -165,7 +183,29 @@ func (o *oidcVerifier) verify(ctx context.Context, tok string) (Identity, error)
 	if name == "" {
 		name, _ = claims["sub"].(string)
 	}
-	return Identity{Name: name, Role: role}, nil
+	id := Identity{Name: name, Role: role}
+	if sub, _ := claims["sub"].(string); sub != "" {
+		id.chatOwner = chatOwnerKey("oidc", o.cfg.Issuer+"\x00"+sub)
+	}
+	return id, nil
+}
+
+// mayObserveChatOwner enables a detached watch for configured static
+// principals and local shared history. OIDC authority is established on the
+// next authenticated request and can catch up from the canonical task state.
+func (a *Authenticator) mayObserveChatOwner(owner string) bool {
+	if a.disabled {
+		return owner == sharedChatOwner
+	}
+	if owner == "" || owner == sharedChatOwner {
+		return false
+	}
+	for _, id := range a.tokens {
+		if id.chatOwner == owner && id.Role.Allows(config.RoleViewer) {
+			return true
+		}
+	}
+	return false
 }
 
 func audienceMatches(aud any, want string) bool {

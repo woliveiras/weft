@@ -89,13 +89,14 @@ type Deps struct {
 
 type Server struct {
 	configurationMu sync.Mutex
+	chatInference   chan struct{}
 	Deps
 	mux      *http.ServeMux
 	internal *http.ServeMux // callback API; == mux unless server.internalAddr is set
 }
 
 func New(d Deps) *Server {
-	s := &Server{Deps: d, mux: http.NewServeMux()}
+	s := &Server{Deps: d, mux: http.NewServeMux(), chatInference: make(chan struct{}, 4)}
 	s.internal = s.mux
 	if d.Config.Server.InternalAddr != "" {
 		s.internal = http.NewServeMux()
@@ -246,6 +247,13 @@ func (s *Server) routes() {
 		{"GET /api/v1/provider-settings", R, s.providerSettings},
 		{"GET /api/v1/chat/settings", R, s.getChatSettings},
 		{"PUT /api/v1/chat/settings", A, s.saveChatSettings},
+		{"GET /api/v1/chat/sessions", R, s.listChats},
+		{"POST /api/v1/chat/sessions", R, s.submitChat},
+		{"GET /api/v1/chat/sessions/{chatID}", R, s.getChat},
+		{"POST /api/v1/chat/sessions/{chatID}/{action}", R, s.updateChat},
+		{"POST /api/v1/chat/sessions/{chatID}/messages", R, s.submitChat},
+		{"POST /api/v1/chat/sessions/{chatID}/messages/{requestID}/retry", R, s.retryChat},
+		{"POST /api/v1/chat/sessions/{chatID}/messages/{messageID}/read", R, s.updateChat},
 		{"GET /api/v1/trigger-policy", R, s.triggerPolicy},
 		{"GET /api/v1/review-routes", R, s.listReviewRoutes},
 		{"GET /api/v1/review-routes/{name}", R, s.getReviewRoute},

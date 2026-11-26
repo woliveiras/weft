@@ -2210,6 +2210,102 @@ paths:
               schema: {$ref: "#/components/schemas/ChatModelSettings"}
         "400": {description: Invalid selection, unavailable provider, or missing revision}
         "409": {$ref: "#/components/responses/Conflict"}
+  /api/v1/chat/sessions:
+    get:
+      tags: [chat]
+      operationId: listChatSessions
+      x-weft-role: viewer
+      parameters:
+        - name: archived
+          in: query
+          schema: {type: boolean, default: false}
+      responses:
+        "200":
+          description: Recent or archived summaries within the authenticated owner scope.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [shared, items]
+                properties:
+                  shared: {type: boolean, description: Shared local session history in auth-disabled mode}
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, title, lastActivity, running, unread, unreadSuccess, unreadFailure, unreadCancellation, decisions, unknown]
+                      properties:
+                        id: {type: string}
+                        title: {type: string}
+                        lastActivity: {type: string, format: date-time}
+                        running: {type: integer}
+                        unread: {type: integer}
+                        unreadSuccess: {type: integer}
+                        unreadFailure: {type: integer}
+                        unreadCancellation: {type: integer}
+                        decisions: {type: integer}
+                        unknown: {type: integer}
+    post:
+      tags: [chat]
+      operationId: createChatWithMessage
+      x-weft-role: viewer
+      requestBody: {$ref: "#/components/requestBodies/ChatMessageSubmission"}
+      responses:
+        "200": {$ref: "#/components/responses/ChatSession"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/v1/chat/sessions/{chatId}:
+    parameters:
+      - {$ref: "#/components/parameters/ChatSessionID"}
+    get:
+      tags: [chat]
+      operationId: getChatSession
+      x-weft-role: viewer
+      responses:
+        "200": {$ref: "#/components/responses/ChatSession"}
+        "404": {description: Session absent or inaccessible}
+  /api/v1/chat/sessions/{chatId}/{action}:
+    parameters:
+      - {$ref: "#/components/parameters/ChatSessionID"}
+      - {name: action, in: path, required: true, schema: {type: string, enum: [archive, restore]}}
+    post:
+      tags: [chat]
+      operationId: changeChatArchiveState
+      x-weft-role: viewer
+      responses:
+        "200": {$ref: "#/components/responses/ChatSession"}
+        "404": {description: Session absent or inaccessible}
+  /api/v1/chat/sessions/{chatId}/messages:
+    parameters:
+      - {$ref: "#/components/parameters/ChatSessionID"}
+    post:
+      tags: [chat]
+      operationId: appendChatMessage
+      x-weft-role: viewer
+      requestBody: {$ref: "#/components/requestBodies/ChatMessageSubmission"}
+      responses:
+        "200": {$ref: "#/components/responses/ChatSession"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/v1/chat/sessions/{chatId}/messages/{requestId}/retry:
+    parameters:
+      - {$ref: "#/components/parameters/ChatSessionID"}
+      - {name: requestId, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [chat]
+      operationId: retryChatRequest
+      x-weft-role: viewer
+      responses:
+        "200": {$ref: "#/components/responses/ChatSession"}
+        "404": {description: Request absent or inaccessible}
+  /api/v1/chat/sessions/{chatId}/messages/{messageId}/read:
+    parameters:
+      - {$ref: "#/components/parameters/ChatSessionID"}
+      - {name: messageId, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [chat]
+      operationId: markChatResultRead
+      x-weft-role: viewer
+      responses:
+        "200": {$ref: "#/components/responses/ChatSession"}
   /api/v1/providers/{name}/models:
     get:
       tags: [catalog]
@@ -2750,6 +2846,11 @@ components:
       scheme: bearer
       description: Per-execution token from TurnInput.callback.token; valid only while that turn runs.
   parameters:
+    ChatSessionID:
+      name: chatId
+      in: path
+      required: true
+      schema: {type: string, pattern: '^[0-9a-f]{32}$'}
     GraphId:
       name: id
       in: path
@@ -2791,7 +2892,36 @@ components:
               defaults: {runtime: {kind: echo}}
               nodes: [{id: a}, {id: b}]
               channels: [{id: in, to: [a]}, {id: ab, from: a, to: [b]}]
+    ChatMessageSubmission:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [requestId, text]
+            properties:
+              requestId: {type: string, pattern: '^[0-9a-f]{32}$'}
+              text: {type: string, minLength: 1, description: Up to 4096 UTF-8 bytes. Credentials are rejected.}
   responses:
+    ChatSession:
+      description: Owned conversation with messages, request states and task watches.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [id, archived, lastActivity, messages]
+            properties:
+              id: {type: string}
+              title: {type: string}
+              archived: {type: boolean}
+              lastActivity: {type: string, format: date-time}
+              messages:
+                type: array
+                items: {$ref: "#/components/schemas/ChatTranscriptMessage"}
+              watches:
+                type: array
+                items: {type: object}
     AgentEntry:
       description: Reusable agent and its immutable versions
       content:
@@ -2833,6 +2963,27 @@ components:
         application/json:
           schema: {$ref: "#/components/schemas/Error"}
   schemas:
+    ChatTranscriptMessage:
+      type: object
+      required: [id, role, text, createdAt]
+      properties:
+        id: {type: string}
+        role: {type: string, enum: [user, assistant]}
+        text: {type: string}
+        state: {type: string, enum: [pending, interpreting, interpreted, unavailable, clarification]}
+        createdAt: {type: string, format: date-time}
+        attempt: {type: string, format: date-time}
+        unread: {type: boolean}
+        task:
+          type: object
+          required: [id, state]
+          properties:
+            id: {type: string}
+            state: {type: string}
+            graphId: {type: string}
+            executionId: {type: string}
+            decisionNeeded: {type: boolean}
+            settledBlock: {type: boolean}
     ChatModelSelection:
       type: object
       additionalProperties: false

@@ -767,6 +767,7 @@ export async function mockFetch(url: string, init: RequestInit): Promise<Respons
     return json(a);
   }
   if (p === '/provider-settings' && m === 'GET') return json(providerSettings());
+  if (p === '/chat/sessions' && m === 'GET') return json({items:[],shared:false});
   if (p === '/chat/settings' && m === 'GET') return json({
     ...chatModel, status: chatModel.model && !providerList().some(item => item.name === chatModel.model?.provider && item.status !== 'unavailable')
       ? 'unavailable' : chatModel.status,

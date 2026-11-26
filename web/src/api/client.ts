@@ -1,5 +1,6 @@
 import type { Agent, AgentDefinition, AgentSummary } from './agents';
 import type {TaskInput, TaskDraft, TaskPage, TaskReview, TaskProgress, Project} from './tasks';
+import type { ChatList, ChatSession } from './chat';
 import type { ExecutionTree, CancelScope, Cancellation } from './executionTree';
 import type { ActivityQuery, ActivityView, HealthQuery, HealthView } from './activity';
 import type { DelegationPolicy, DelegationPolicyView, DelegationProfile, DelegationProfileView } from './delegation';
@@ -80,6 +81,16 @@ export function setToken(t: string): void {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+export function onStoredTokenChanged(listener: (token: string) => void) {
+  function changed(event: StorageEvent) {
+    if (event.storageArea === localStorage && (event.key === TOKEN_KEY || event.key === null)) {
+      listener(getToken());
+    }
+  }
+  window.addEventListener('storage', changed);
+  return () => window.removeEventListener('storage', changed);
+}
+
 /** Error returned by the API: {"error", "code", "details"}. */
 export class ApiError extends Error {
   constructor(
@@ -143,7 +154,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   } catch (e) {
     throw new ApiError(0, `network error: ${(e as Error).message}`, 'network');
   }
-  if (res.status === 401) {
+  if (res.status === 401 && token === getToken()) {
     unauthorizedListeners.forEach((fn) => fn());
   }
   if (!res.ok && !opts.allowStatuses?.includes(res.status)) {
@@ -332,6 +343,16 @@ export const api = {
   models: (provider: string) => request<ModelInfo[]>(`${V1}/providers/${enc(provider)}/models`),
   providerSettings: () => request<ProviderSettings>(`${V1}/provider-settings`),
   chatModelSettings: () => request<ChatModelSettings>(`${V1}/chat/settings`),
+  chatSessions: (archived: boolean) => request<ChatList>(`${V1}/chat/sessions`, {query:{archived:String(archived)}}),
+  chatSession: (id: string) => request<ChatSession>(`${V1}/chat/sessions/${enc(id)}`),
+  sendConversationMessage: (id: string | undefined, requestId: string, text: string) =>
+    request<ChatSession>(id ? `${V1}/chat/sessions/${enc(id)}/messages` : `${V1}/chat/sessions`, {method:'POST', body:{requestId,text}}),
+  retryChat: (id: string, message: string) =>
+    request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/messages/${enc(message)}/retry`, {method:'POST'}),
+  archiveChat: (id: string, archived: boolean) =>
+    request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/${archived?'archive':'restore'}`, {method:'POST'}),
+  readChatResult: (id: string, message: string) =>
+    request<ChatSession>(`${V1}/chat/sessions/${enc(id)}/messages/${enc(message)}/read`, {method:'POST'}),
   saveChatModel: (model: NonNullable<ChatModelSettings['model']>, revision: number) =>
     request<ChatModelSettings>(`${V1}/chat/settings`, {
       method: 'PUT', body: model, headers: { 'If-Match': String(revision) },

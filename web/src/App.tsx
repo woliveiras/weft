@@ -12,7 +12,7 @@ import { PrimaryNavigation } from './components/PrimaryNavigation';
 import { runSection, type RunSection } from './components/runPresentation';
 import { agentSection, type AgentSection } from './components/agentSettingsModel';
 import { Activity, useCallback, useEffect, useRef, useState } from 'react';
-import { api, errorMessage, getToken, MOCK, onUnauthorized, setToken } from './api/client';
+import { api, errorMessage, getToken, MOCK, onStoredTokenChanged, onUnauthorized, setToken } from './api/client';
 import type { GraphSummary } from './api/types';
 import { ApprovalsView } from './components/ApprovalsView';
 import { Badge, Btn, ErrorBox, Icon, Modal } from './components/common';
@@ -28,6 +28,7 @@ import { useAsync, useThrottled } from './hooks/useData';
 import { EventStreamProvider, useEventStream } from './hooks/useEventStream';
 import { BrandMark } from './components/BrandMark';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
+import { ChatPage } from './components/ChatPage';
 
 /**
  * Routes live in the hash so a reload (or a shared link) returns to the same
@@ -38,6 +39,8 @@ import { ThemeSwitcher } from './components/ThemeSwitcher';
  *   #/g/<id>/<tab>[?c=<correlation id>]  #/g/<id>/settings/<section>
  */
 type Route =
+  | { view: 'chat'; chatId?: string; archived?: boolean }
+  | { view: 'unavailable' }
   | { view: 'graphs'; create?:boolean }
   | { view: 'agents'; agentId?: string; create?: boolean }
   | { view: 'activity'; activity: ActivityRouteState }
@@ -51,8 +54,24 @@ type Route =
   | { view: 'graph'; id: string; tab: GraphTab; settingsSection?: SettingsSection; selectionKey?: string; agentId?: string; agentSection?: AgentSection; executionId?: string; runSection?: RunSection; correlationId?: string; connectionOrigin?: string };
 
 export function parseRoute(hash: string): Route {
+  try {
+    return recognizeRoute(hash);
+  } catch (error) {
+    if (error instanceof URIError) return { view:'unavailable' };
+    throw error;
+  }
+}
+
+function recognizeRoute(hash: string): Route {
   const [path, qs] = hash.replace(/^#/, '').split('?');
   const parts = path.split('/').filter(Boolean);
+  if (!parts.length) return { view:'chat' };
+  if (parts[0] === 'chat') {
+    if (parts.length === 1) return { view:'chat' };
+    if (parts.length === 2 && parts[1] === 'archived') return { view:'chat', archived:true };
+    if (parts.length === 2 && /^[a-f0-9]{32}$/.test(parts[1])) return { view:'chat', chatId:parts[1] };
+    return { view:'unavailable' };
+  }
   if (parts[0] === 'activity') return { view: 'activity', activity: parseActivityState(qs) };
   if (parts[0] === 'agents') {
     return {view:'agents', ...(parts[1] === 'new' ? {create:true} : parts[1] ? {agentId:decodeURIComponent(parts[1])} : {})};
@@ -62,6 +81,7 @@ export function parseRoute(hash: string): Route {
     ...(parts[1] === 'new' ? { projectView: 'register' as const } : parts[1] === 'import' ? { projectView: 'import' as const } : {}),
   };
   if (parts[0] === 'graphs' && parts[1] === 'new') return {view:'graphs',create:true};
+  if (parts[0] === 'graphs') return {view:'graphs'};
   if (parts[0] === 'tasks') {
     const query=new URLSearchParams(qs);
     if(parts[1]==='new') {
@@ -102,10 +122,12 @@ export function parseRoute(hash: string): Route {
       ...(tab === 'agent' ? { agentId: query.get('agent') ?? '', agentSection: agentSection(query.get('section')) } : {}),
     };
   }
-  return { view: 'graphs' };
+  return { view:'unavailable' };
 }
 
 export function routeHash(r: Route): string {
+  if (r.view === 'chat') return r.chatId ? `#/chat/${r.chatId}` : r.archived ? '#/chat/archived' : '#/chat';
+  if (r.view === 'unavailable') return '#/unavailable';
   if (r.view === 'activity') return activityHash(r.activity);
   if (r.view === 'agents') {
     return r.create ? '#/agents/new' : r.agentId ? `#/agents/${encodeURIComponent(r.agentId)}` : '#/agents';
@@ -137,29 +159,36 @@ export function routeHash(r: Route): string {
 }
 
 export function App() {
-  const [token, setTok] = useState(getToken());
+  const [access, setAccess] = useState(() => ({token:getToken(), version:0}));
   const [needLogin, setNeedLogin] = useState(false);
   useEffect(() => onUnauthorized(() => setNeedLogin(true)), []);
+  useEffect(() => onStoredTokenChanged(token => {
+    setAccess(previous => previous.token === token ? previous : {token, version:previous.version+1});
+    setNeedLogin(false);
+  }), []);
 
   return (
-    <EventStreamProvider token={token}>
-      <Shell />
-      {needLogin && (
+    needLogin ? (
         <LoginDialog
           onDone={(t) => {
             setToken(t);
-            setTok(t);
             setNeedLogin(false);
             location.reload();
           }}
         />
-      )}
-    </EventStreamProvider>
+    ) : (
+      <EventStreamProvider key={access.version} token={access.token}>
+        <Shell />
+      </EventStreamProvider>
+    )
   );
 }
 
 function Shell() {
   const [route, setRoute] = useState<Route>(() => parseRoute(location.hash));
+  const [lastChatRoute, setLastChatRoute] = useState(() => route.view === 'chat' ? route : undefined);
+  useEffect(() => { if (route.view === 'chat') setLastChatRoute(route); }, [route]);
+  const chatRoute = route.view === 'chat' ? route : lastChatRoute;
   const configurationDraft=useRef({dirty:false,busy:false});
   const onConfigurationDraft=useCallback((value:{dirty:boolean;busy:boolean})=>{configurationDraft.current=value;},[]);
   const [returnTask,setReturnTask]=useState(()=>taskReturnLink(location.hash));
@@ -258,10 +287,17 @@ function Shell() {
         )}
       </header>
       <div className="workspace-shell">
-        <PrimaryNavigation active={ownedTask ? 'tasks' : route.view === 'graph' ? 'graphs' : route.view} pending={pending}
+        <PrimaryNavigation active={ownedTask ? 'tasks' : route.view === 'graph' ? 'graphs' : route.view === 'unavailable' ? undefined : route.view} pending={pending}
           onNavigate={view => go(view === 'administration' ? {view, section: 'health'} : view === 'activity' ? {view, activity: parseActivityState('')} : {view})} />
         <main>
           <ErrorBox error={info.error && !graphs.error ? `info: ${info.error}` : undefined} />
+          {route.view === 'unavailable' && <section className="page"><h1>Page unavailable</h1>
+            <p>Open <a href="#/chat">Chat</a> or use the main navigation to find a destination.</p>
+          </section>}
+          {chatRoute && <Activity mode={route.view === 'chat' ? 'visible' : 'hidden'}>
+            <ChatPage id={chatRoute.chatId} archived={!!chatRoute.archived}
+              onOpen={(chatId, archived) => go({view:'chat', chatId, archived})}/>
+          </Activity>}
           {returnTask&&<aside className="card task-return-context" aria-label="Task configuration context"><a href={returnTask}>Return to saved task</a><p>Configuration changes do not start the task. Return to review its requirements and authorization.</p></aside>}
           {ownedTask && route.view === 'graph' && <TaskExecutionPage key={route.id} graphId={route.id} tab={route.tab} executionId={route.executionId} section={route.runSection}/>}
           {route.view === 'activity' && <ActivityPage state={route.activity} onChange={activity => go({ view: 'activity', activity })} />}

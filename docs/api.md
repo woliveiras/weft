@@ -149,6 +149,26 @@ Administrators save an explicit provider and model ID using
 The selection applies to Chat independently of the installation's workflow
 default. These routes do not contact the provider or take credentials.
 
+### Chat sessions
+
+`GET /api/v1/chat/sessions` lists the current principal's recent sessions.
+Use `archived=true` for the archived view. `GET /api/v1/chat/sessions/{id}`
+returns the transcript and observed task states. An unavailable or
+inaccessible session is reported as not found. An auth-disabled local
+installation identifies its shared session list with `shared: true`.
+
+Submit `{requestId, text}` to `POST /api/v1/chat/sessions` for a new session
+or to `POST /api/v1/chat/sessions/{id}/messages` for a follow-up. The request ID
+is 32 lowercase hexadecimal digits, stable across transport retries. Reuse
+with different text returns a conflict. An unprocessed request can be retried
+at `POST /api/v1/chat/sessions/{id}/messages/{requestId}/retry`.
+
+Use `POST /api/v1/chat/sessions/{id}/archive` or `/restore` to move a session
+between lists. These operations do not cancel its watches. Use
+`POST /api/v1/chat/sessions/{id}/messages/{messageId}/read` to mark an individual
+result read. Session writes use the same authenticated ownership rule as reads.
+The user API has no conversation deletion operation.
+
 ## Native issue connections
 
 Native Jira Data Center connections have their own credential store, independent

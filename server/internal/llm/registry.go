@@ -300,7 +300,12 @@ func (r *Registry) Names() []string {
 // concurrency limiting, Prometheus metrics and a gen_ai OpenTelemetry span.
 // An empty req.Model is filled with the provider's default model.
 func (r *Registry) Chat(ctx context.Context, providerName string, req *ChatRequest) (*ChatResponse, error) {
-	return r.chat(ctx, providerName, req, nil)
+	return r.chat(ctx, providerName, req, nil, false)
+}
+
+// ChatExplicit calls one named instance without falling back to a default.
+func (r *Registry) ChatExplicit(ctx context.Context, providerName string, req *ChatRequest) (*ChatResponse, error) {
+	return r.chat(ctx, providerName, req, nil, true)
 }
 
 // ChatStream is Chat with the answer's text passed to onText as it arrives,
@@ -313,11 +318,19 @@ func (r *Registry) ChatStream(ctx context.Context, providerName string, req *Cha
 	if onText == nil {
 		onText = func(string) {}
 	}
-	return r.chat(ctx, providerName, req, onText)
+	return r.chat(ctx, providerName, req, onText, false)
 }
 
-func (r *Registry) chat(ctx context.Context, providerName string, req *ChatRequest, onText func(string)) (*ChatResponse, error) {
-	e, providerName, ok := r.lookup(providerName)
+func (r *Registry) chat(ctx context.Context, providerName string, req *ChatRequest, onText func(string), explicit bool) (*ChatResponse, error) {
+	var e *entry
+	var ok bool
+	if explicit {
+		r.mu.RLock()
+		e, ok = r.providers[providerName]
+		r.mu.RUnlock()
+	} else {
+		e, providerName, ok = r.lookup(providerName)
+	}
 	if !ok {
 		return nil, fmt.Errorf("llm: unknown provider %q", providerName)
 	}

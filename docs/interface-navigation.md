@@ -5,6 +5,7 @@ introduce roles or change API permissions.
 
 | Group | Destination | Scope |
 | --- | --- | --- |
+| Work | Chat (`#/chat`) | Start a conversation, inspect or follow an existing task, and return to its result. See the [Chat guide](features/chat/README.md). |
 | Work | Activity (`#/activity`) | What is running, what needs a person and recent executions across all workflows, and per agent/workflow health; see below |
 | Work | Tasks (`#/tasks`) | Find saved requests in the task history table. Search by title, ID or issue and filter the current page by status or workflow. Open a row's task link for requirements, execution and progress. See [task workflows](task-workflows.md). |
 | Work | Approvals | Existing approval and application-review flows, including pending count |
@@ -338,9 +339,11 @@ every tool succeeded.
 
 ## First-use navigation
 
-The global Getting started panel has been removed following layout feedback.
-Use the main navigation directly: Graphs, Connections, Models, Administration,
-Approvals, and Skills & steering. Contextual help remains available in each screen.
+An empty URL opens Chat. If the Chat model is missing, follow the Models link
+or use a manual destination. Workflows, Connections, Models, Administration,
+Approvals and Skills & instructions remain directly accessible.
+Contextual help remains available in each screen.
+The global Getting started panel was removed following layout feedback.
 Existing browser-local guide progress is ignored; no stored application data,
 graphs, drafts, connections, permissions, or execution history is deleted.
 

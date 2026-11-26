@@ -4,12 +4,14 @@ import type { GraphStatus } from '../api/types';
 import { useEventStream } from './useEventStream';
 
 /** Load data with an async function; reload() re-runs it. */
-export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
+export function useAsync<T>(fn: () => Promise<T>, deps: unknown[], clearOnError?: (error:unknown)=>boolean) {
   const [data, setData] = useState<T | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const fnRef = useRef(fn);
   fnRef.current = fn;
+  const clearRef = useRef(clearOnError);
+  clearRef.current = clearOnError;
   const gen = useRef(0);
 
   const reload = useCallback(async () => {
@@ -22,7 +24,10 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
         setError(undefined);
       }
     } catch (e) {
-      if (my === gen.current) setError(errorMessage(e));
+      if (my === gen.current) {
+        if (clearRef.current?.(e)) setData(undefined);
+        setError(errorMessage(e));
+      }
     } finally {
       if (my === gen.current) setLoading(false);
     }
