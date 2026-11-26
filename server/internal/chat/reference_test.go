@@ -44,3 +44,24 @@ func TestObservedInventoryPreservesVisiblePositionsAndDropsUntrustedFields(t *te
 		t.Fatal(got)
 	}
 }
+
+func TestConversationReplyCarriesVisibleFormatAcrossCombinedReads(t *testing.T) {
+	message := Message{Role: "assistant", State: "grounded", Destination: "tasks", Text: "2 sucessos.\n1. Título (ID)."}
+	if got := conversationReply(message); got != message.Text {
+		t.Fatal(got)
+	}
+	message.State = ""
+	if got := conversationReply(message); got == "" || got == message.Text {
+		t.Fatalf("legacy context: %q", got)
+	}
+	message.State = "grounded"
+	message.Review = &OperationReview{State: ReviewAwaiting}
+	if got := conversationReply(message); got != "" {
+		t.Fatalf("review in history: %q", got)
+	}
+	message.Review = nil
+	message.Text = "Authorization: Bearer secret-fixture-must-stay-local"
+	if got := conversationReply(message); got != "" {
+		t.Fatalf("unsafe history: %q", got)
+	}
+}

@@ -280,7 +280,7 @@ func TestChatQueriesTasksThroughModelAndSQLite(t *testing.T) {
 		}
 	}
 	if !slices.ContainsFunc(requests[2].Messages, func(m llm.ChatMessage) bool {
-		return m.Role == llm.RoleAssistant && strings.Contains(m.Content, `mode=count, status="running", total=3`)
+		return m.Role == llm.RoleAssistant && strings.Contains(m.Content, `mode=count, status="running", total=3`) && strings.Contains(m.Content, "Há 3 tarefas em execução.")
 	}) {
 		t.Fatal("contextual list query did not receive the previous verified snapshot")
 	}

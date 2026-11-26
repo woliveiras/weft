@@ -100,7 +100,7 @@ func (s *Session) Context(requestID string) []llm.ChatMessage {
 			if message.ID == requestID {
 				break
 			}
-		} else if ref := observedReference(message); ref != "" {
+		} else if ref := conversationReply(message); ref != "" {
 			history = append(history, llm.ChatMessage{Role: llm.RoleAssistant, Content: ref})
 		} else if message.Role == "assistant" && message.Text != "" && message.State == "clarification" && message.Discovery == nil {
 			history = append(history, llm.ChatMessage{Role: llm.RoleAssistant, Content: message.Text})
@@ -109,7 +109,33 @@ func (s *Session) Context(requestID string) []llm.ChatMessage {
 	return history
 }
 
+// Give the model the visible answer when the operator refers to its format.
+// Domain reviews and tool payloads continue to contribute safe references only.
+func conversationReply(message Message) string {
+	ref := observedReference(message)
+	if message.Role != "assistant" || message.Destination != "tasks" || message.Review != nil ||
+		message.Task != nil || message.Execution != nil || message.Selection != nil || message.Discovery != nil {
+		return ref
+	}
+	// Earlier single-read answers have a query snapshot but no explicit state.
+	singleQuery := message.Inventory != nil && message.Inventory.Area == "tasks" && message.Inventory.Total != nil && ref != ""
+	if message.State == "grounded" || singleQuery {
+		if ValidateMessage(message.Text) == nil {
+			if ref != "" && len(ref)+1+len(message.Text) <= MaxRequestBytes {
+				return ref + "\n" + message.Text
+			}
+			return message.Text
+		}
+	} else if message.State == "" && message.Inventory == nil {
+		// Older combined reads have no provenance marker. Preserve the dialogue
+		// boundary and topic without replaying unclassified message contents.
+		return "The previous response concerned Tasks. Refer to the operator's preceding request for scope and presentation. Query current task records for follow-ups."
+	}
+	return ref
+}
+
 type Interpretation struct {
+	Grounded    bool
 	Discovery   *Discovery
 	Selection   *Selection
 	Inventory   *Inventory
@@ -137,6 +163,8 @@ func (s Sessions) FinishInterpretation(ctx context.Context, owner, id, requestID
 			state := ""
 			if outcome.Retryable {
 				message.State = "unavailable"
+			} else if outcome.Grounded {
+				state = "grounded"
 			} else if outcome.Plan.Kind == Clarify {
 				state = "clarification"
 			}

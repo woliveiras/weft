@@ -254,7 +254,7 @@ the task query mode, lifecycle filter and optional list size. The server validat
 the arguments and returns structured observations from the task service to the
 model. The model may request another observation for a comparison or answer in
 the operator's language. Compute totals over all matching non-deleted tasks
-before limiting list rows. An unreadable record makes the query unavailable.
+before limiting list rows. A follow-up can change the filter while retaining the preceding answer’s presentation and requested list size. Current facts come from a fresh tool read. An unreadable record makes the query unavailable.
 The explicit `/inspect tasks` shortcut remains available without a model.
 
 Extend this agent through named capabilities backed by the owning service. Each

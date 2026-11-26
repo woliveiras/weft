@@ -25,7 +25,7 @@ When inference fails, the saved reply identifies the next step. A budget rejecti
 
 Ask which workflows are active, which providers are configured, how much the installation spent this month or which approvals are pending. The reply shows a dated snapshot from the corresponding Weft service and a link to inspect it. Lists show up to eight entries. A dependency failure leaves the result unavailable.
 
-Ask “How many tasks succeeded?”, “Is anything running now?” or “List the three most recently updated failed tasks.” The Chat model chooses the task query and writes its answer using the returned evidence. Counts include every matching task. Lists show up to eight matches, ordered by last update. A follow-up can ask about another status in the same conversation.
+Ask “How many tasks succeeded?”, “Is anything running now?” or “List the three most recently updated failed tasks.” The Chat model chooses the task query and writes its answer using the returned evidence. Counts include every matching task. Lists show up to eight matches, ordered by last update. A follow-up such as “Which ones failed? Use the same format” can reuse the previous list size and presentation while querying the new status.
 
 Use `/inspect` to see the supported resources, or enter a shortcut such as `/inspect budgets`. These explicit reads work without a Chat model and incur no inference cost. Connection inspection uses stored status. Testing reachability remains a separate action.
 
