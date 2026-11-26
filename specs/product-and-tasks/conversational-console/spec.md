@@ -133,7 +133,7 @@ Sort oldest-first transcripts using message
 sequence. Order Recents by last relevant activity (descending, with a stable
 ID tie-breaker). New user messages, substantive results and decisions update
 activity. Presence, heartbeats, title churn and read-marker writes leave the
-order alone. Archive moves the session to **Archived** without changing work,
+order alone. Filtering Recents or Archived preserves the open chat and draft. Opening an archived chat shows its transcript in read-only mode until restored. Archive moves the session to **Archived** without changing work,
 pending confirmations or read markers. Unread counts remain visible in Archived.
 Restore returns the session to Recents using its last relevant activity. A result
 becomes read only when its message is rendered and viewed in the foreground,

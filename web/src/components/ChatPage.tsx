@@ -45,7 +45,9 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   useLayoutEffect(() => {
     view.current++;
     return () => { view.current++; };
-  }, [id, archived, newDraft]);
+  }, [id, newDraft]);
+  const listFilter = useRef(archived);
+  useLayoutEffect(() => { listFilter.current = archived; }, [archived]);
   const [error, setError] = useState<string>();
   const [drawer, setDrawer] = useState(false);
   const [modelEditorOpen, setModelEditorOpen] = useState(false);
@@ -111,6 +113,11 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
     onOpen(next, archive);
     window.requestAnimationFrame(() => heading.current?.focus());
   };
+  const filterList = (next: boolean) => {
+    setDetails(undefined);
+    setCursor({archived:next});
+    onOpen(id,next);
+  };
   const newChat = () => {
     setNewDraft(previous => previous + 1);
     navigate();
@@ -120,7 +127,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   const canSend = modelAvailable || (!MOCK && (draft.trim() === '/export' || /^\s*\/(?:inspect|find|choose)(?:\s|$)/.test(draft) || (!!session && (textDecision || session.messages.at(-1)?.state === 'discovery'))));
 
   async function send() {
-    if (!canSend || !draft.trim() || sending || waiting) return;
+    if (session?.archived || !canSend || !draft.trim() || sending || waiting) return;
     const previous = keys.current.get(draftKey);
     const requestId = previous?.text === draft ? previous.id
       : Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2,'0')).join('');
@@ -130,7 +137,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       keys.current.delete(draftKey);
       setDrafts(previous => previous[draftKey] === draft ? {...previous, [draftKey]:''} : previous);
       return next;
-    }, next => { if (!id) onOpen(next.id); });
+    }, next => { if (!id) { if (listFilter.current) onOpen(next.id,true); else onOpen(next.id); } });
   }
 
   async function mutate(action: () => Promise<ChatSession>, whenVisible?: (next: ChatSession) => void) {
@@ -176,8 +183,8 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   const sessionList = <>
     <Btn onClick={newChat}>New chat</Btn>
     <nav className="chat-list-tabs" aria-label="Session views">
-      <button type="button" aria-current={!archived ? 'page' : undefined} onClick={() => navigate()}>Recents</button>
-      <button type="button" aria-current={archived ? 'page' : undefined} onClick={() => navigate(undefined,true)}>
+      <button type="button" aria-current={!archived ? 'page' : undefined} onClick={() => filterList(false)}>Recents</button>
+      <button type="button" aria-current={archived ? 'page' : undefined} onClick={() => filterList(true)}>
         {archivedLabel}
       </button>
     </nav>
@@ -240,7 +247,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       {id && !session && conversation.loading && <p role="status">Loading conversation…</p>}
       {id && conversation.error && <><ErrorBox error={session ? conversation.error : 'Conversation unavailable.'}/>
         <Btn onClick={() => void conversation.reload()}>Retry loading conversation</Btn></>}
-      {!id && !archived && modelAvailable && <div className="chat-welcome">
+      {!id && modelAvailable && <div className="chat-welcome">
         <h2>What would you like to do?</h2>
         <p className="muted">Follow a task, create an agent, or review a pull request.</p>
       </div>}
@@ -250,7 +257,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       </p>)}
       <div className="chat-transcript" aria-label="Conversation">
         {session?.messages.map(message => <Message key={message.id} sessionId={session.id} value={message}
-          now={now} canCreateAgent={canCreateAgent && !sending} canOperate={canOperate && !sending}
+          now={now} canCreateAgent={canCreateAgent && !sending && !session.archived} canOperate={canOperate && !sending && !session.archived}
           onModelSettings={canCreateAgent ? openModelEditor : undefined}
           onDecide={(review, decision) => void mutate(() => api.decideChatReview(session.id, review.id, review.digest, decision))}
           onPRAction={(operation, commentIds) => void mutate(() => commentIds
@@ -258,10 +265,11 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
             : api.reconcileChatPRComments(session.id, operation))}
           onView={anchor => { evidence.current = anchor; }}
           onRead={() => void markRead(message.id)}
-          onRetry={modelAvailable && !sending && canRetry(message,now) ? () => void mutate(() => api.retryChat(session.id,message.id)) : undefined}/>)}
+          onRetry={!session.archived && modelAvailable && !sending && canRetry(message,now) ? () => void mutate(() => api.retryChat(session.id,message.id)) : undefined}/>)}
       </div>
       </div>
-      {(!id || session) && !archived && <ChatComposer key={draftKey} draft={draft}
+      {session?.archived && <p className="muted">This conversation is archived. Restore it to send a message.</p>}
+      {(!id || session) && !session?.archived && <ChatComposer key={draftKey} draft={draft}
         onChange={text => setDrafts(previous => ({...previous,[draftKey]:text}))}
         onSend={() => void send()} disabled={!canSend || sending || !!waiting}
         sending={sending} admin={canCreateAgent} choicePending={session?.messages.at(-1)?.state === 'discovery'}/>}

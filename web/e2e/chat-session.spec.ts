@@ -659,10 +659,15 @@ test('an archived watch signals a new result and can be restored from the sessio
   const title = 'Follow documentation check';
   await expect(recents.getByRole('button', { name: title, exact: true })).toHaveCount(0);
   await approvePendingTaskInput(request, taskId);
+  const composer = page.getByRole('textbox',{name:'Message'});
+  await composer.fill('Keep this unsent draft');
   await recents.getByRole('button', { name: /Archived.*1 unread/ }).click();
+  await expect(composer).toHaveValue('Keep this unsent draft');
   await page.getByRole('region', { name: 'Archived', exact: true }).getByRole('button', { name: title, exact: true }).click();
+  await expect(composer).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'View task result' })).toBeVisible();
   await page.getByRole('button', { name: 'Restore conversation', exact: true }).click();
+  await expect(composer).toBeEditable();
   await expect(recents.getByRole('button', { name: title, exact: true })).toBeVisible();
 });
 

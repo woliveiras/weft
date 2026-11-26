@@ -377,3 +377,19 @@ it('dismisses a full title with Escape without opening the conversation', async 
   expect(container.querySelector('.chat-session-preview')).toBeNull();
   expect(open).not.toHaveBeenCalled();
 });
+
+it('filters archived sessions without losing the selected chat or its draft',async () => {
+  const open = vi.fn();
+  fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'configured',revision:1}),
+    [`GET ${paths}`]: () => ({items:[]}),
+    [`GET ${paths}/${id}`]: () => ({id,title:'Open chat',archived:false,messages:[]}),
+  });
+  const view = render(<ChatPage id={id} archived={false} onOpen={open}/>);
+  const field = await screen.findByRole('textbox',{name:'Message'});
+  fireEvent.change(field,{target:{value:'A draft'}});
+  fireEvent.click(screen.getByRole('button',{name:'Archived'}));
+  expect(open).toHaveBeenCalledWith(id,true);
+  view.rerender(<ChatPage id={id} archived onOpen={open}/>);
+  expect(field).toHaveProperty('value','A draft');
+});

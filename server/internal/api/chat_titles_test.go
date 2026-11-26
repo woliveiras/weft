@@ -70,3 +70,26 @@ func TestChatTitleRetryRetitlesWithoutRepeatingTheOriginalAction(t *testing.T) {
 		t.Fatalf("title invoked the original write: %d", status)
 	}
 }
+
+func TestArchivedChatMustBeRestoredBeforeSending(t *testing.T) {
+	srv, _ := setupApp(t, nil)
+	const id = "a4154ae9cee7436ca37f848ef78c410e"
+	const sessions = "/api/v1/chat/sessions"
+	const path = sessions + "/" + id
+	const message = `{"requestId":"b4154ae9cee7436ca37f848ef78c410e","text":"/inspect tasks"}`
+	if code := call(t, srv, "POST", sessions, adminTok, "application/json", `{"requestId":"`+id+`","text":"/inspect projects"}`, nil); code != 200 {
+		t.Fatal(code)
+	}
+	if code := call(t, srv, "POST", path+"/archive", adminTok, "", "", nil); code != 200 {
+		t.Fatal(code)
+	}
+	if code := call(t, srv, "POST", path+"/messages", adminTok, "application/json", message, nil); code != 409 {
+		t.Fatal(code)
+	}
+	if code := call(t, srv, "POST", path+"/restore", adminTok, "", "", nil); code != 200 {
+		t.Fatal(code)
+	}
+	if code := call(t, srv, "POST", path+"/messages", adminTok, "application/json", message, nil); code != 200 {
+		t.Fatal(code)
+	}
+}

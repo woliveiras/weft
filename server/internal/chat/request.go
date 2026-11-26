@@ -37,6 +37,9 @@ func (s Sessions) Append(ctx context.Context, owner, id, requestID, text string)
 				return false, storage.ErrConflict
 			}
 		}
+		if session.Archived {
+			return false, storage.ErrConflict
+		}
 		if n >= maxUserMessages {
 			return false, ErrMessageLimit
 		}
@@ -54,6 +57,9 @@ func (s Sessions) ClaimInterpretation(ctx context.Context, owner, id, requestID 
 	var claim time.Time
 	session, err := s.update(ctx, owner, id, func(session *Session) (bool, error) {
 		claim = time.Time{}
+		if retry && session.Archived {
+			return false, storage.ErrConflict
+		}
 		now := time.Now().UTC()
 		for i := range session.Messages {
 			message := &session.Messages[i]
