@@ -172,5 +172,15 @@ after text, published version 2, inspected the preserved workflow pin through
 the API and returned from Agents. TypeScript, twelve focused component
 checks, OpenAPI parsing and `git diff --check` passed.
 
+## 2026-11-26 — Catalog adoption on a workflow node
+
+S34 passed targeted Go unit and real HTTP/SQLite tests. A node adopted the
+requested version after a further publication. The sibling pin, parameters
+and local override stayed intact. The save recorded its operation and fenced
+another workflow identity. Versions with other shared changes went to the
+manual editor. Chromium published a version, then adopted it after a separate
+review and returned from the selected node. TypeScript, twelve focused
+component checks, OpenAPI parsing and `git diff --check` passed.
+
 Device and assistive-technology review, external provider qualification and
 production backup and restore remain open.

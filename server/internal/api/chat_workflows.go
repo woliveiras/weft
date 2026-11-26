@@ -119,10 +119,10 @@ func selectChatAgentVersion(agent agentcatalog.Agent, selector string) (agentcat
 		return agent.Versions[len(agent.Versions)-1], true
 	}
 	version, err := strconv.Atoi(selector)
-	if err == nil && version > 0 && version <= len(agent.Versions) && agent.Versions[version-1].Version == version {
-		return agent.Versions[version-1], true
+	if err != nil {
+		return agentcatalog.Version{}, false
 	}
-	return agentcatalog.Version{}, false
+	return catalogVersion(agent, version)
 }
 
 func (s *Server) applyReviewedChatWorkflow(ctx context.Context, actor Identity, sessionID string, review *chat.OperationReview) (*chat.Session, error) {

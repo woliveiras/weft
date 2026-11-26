@@ -54,6 +54,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		content = `{"kind":"task.retry","task":"Failed documentation task fixture","title":"Retry documentation task"}`
 	case "Publish new shared instructions for Publishing reader to check revised notes.":
 		content = `{"kind":"agent.publish","publishAgent":"publishing-reader","sharedInstructions":"Check the revised notes.","title":"Publish shared reader instructions"}`
+	case "Adopt version two for the reader node in chat-pinned-reader.":
+		content = `{"kind":"workflow.adopt_agent","adoptWorkflow":"chat-pinned-reader","adoptNode":"reader","adoptVersion":"2"}`
 	default:
 		return nil, errors.New("unknown Chat fixture request")
 	}

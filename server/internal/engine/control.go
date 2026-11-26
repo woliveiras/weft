@@ -141,7 +141,24 @@ func (e *Engine) SaveGraph(ctx context.Context, g *domain.Graph, expectedVersion
 	if err := e.ResolveAgentBindings(ctx, g); err != nil {
 		return nil, nil, err
 	}
-	return e.saveGraphDocument(ctx, g, expectedVersion, false, actor)
+	return e.saveGraphDocument(ctx, g, expectedVersion, false, actor, nil)
+}
+
+type GraphSaveReview struct {
+	CreatedAt time.Time
+	Operation string
+}
+
+// SaveReviewedGraph is the normal graph save with an additional identity
+// fence and a receipt on the resulting native workflow record.
+func (e *Engine) SaveReviewedGraph(ctx context.Context, g *domain.Graph, expectedVersion int, actor string, review GraphSaveReview) (*domain.Graph, *domain.GraphRecord, error) {
+	if expectedVersion < 1 || review.CreatedAt.IsZero() || review.Operation == "" {
+		return nil, nil, ErrInvalid
+	}
+	if err := e.ResolveAgentBindings(ctx, g); err != nil {
+		return nil, nil, err
+	}
+	return e.saveGraphDocument(ctx, g, expectedVersion, false, actor, &review)
 }
 
 // CreateGraph saves a new workflow, checking absence under the same
@@ -150,7 +167,7 @@ func (e *Engine) CreateGraph(ctx context.Context, g *domain.Graph, actor string)
 	if err := e.ResolveAgentBindings(ctx, g); err != nil {
 		return nil, nil, err
 	}
-	return e.saveGraphDocument(ctx, g, 0, true, actor)
+	return e.saveGraphDocument(ctx, g, 0, true, actor, nil)
 }
 
 // SaveTaskGraph persists the already reviewed execution copy. Its task-owned
@@ -159,10 +176,10 @@ func (e *Engine) SaveTaskGraph(ctx context.Context, g *domain.Graph, actor strin
 	if !strings.HasPrefix(g.Metadata.ID, domain.TaskRunGraphPrefix) || g.Metadata.Labels[domain.LabelTask] == "" {
 		return nil, nil, fmt.Errorf("%w: expected a task execution copy", ErrInvalid)
 	}
-	return e.saveGraphDocument(ctx, g, 0, false, actor)
+	return e.saveGraphDocument(ctx, g, 0, false, actor, nil)
 }
 
-func (e *Engine) saveGraphDocument(ctx context.Context, g *domain.Graph, expectedVersion int, createOnly bool, actor string) (*domain.Graph, *domain.GraphRecord, error) {
+func (e *Engine) saveGraphDocument(ctx context.Context, g *domain.Graph, expectedVersion int, createOnly bool, actor string, review *GraphSaveReview) (*domain.Graph, *domain.GraphRecord, error) {
 	authored, err := cloneGraph(g)
 	if err != nil {
 		return nil, nil, err
@@ -183,26 +200,29 @@ func (e *Engine) saveGraphDocument(ctx context.Context, g *domain.Graph, expecte
 	var record *domain.GraphRecord
 	err = e.WithGraphTransition(ctx, g.Metadata.ID, func(ctx context.Context) error {
 		var err error
-		saved, record, err = e.saveGraph(ctx, g, effective, expectedVersion, createOnly, actor)
+		saved, record, err = e.saveGraph(ctx, g, effective, expectedVersion, createOnly, actor, review)
 		return err
 	})
 	return saved, record, err
 }
 
-func (e *Engine) saveGraph(ctx context.Context, g, effective *domain.Graph, expectedVersion int, createOnly bool, actor string) (*domain.Graph, *domain.GraphRecord, error) {
+func (e *Engine) saveGraph(ctx context.Context, g, effective *domain.Graph, expectedVersion int, createOnly bool, actor string, review *GraphSaveReview) (*domain.Graph, *domain.GraphRecord, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
 	if err := e.checkDeferredDeletion(ctx, g.Metadata.ID); err != nil {
 		return nil, nil, err
 	}
-	_, existsErr := e.store.GetGraph(ctx, g.Metadata.ID, 0)
+	current, existsErr := e.store.GetGraph(ctx, g.Metadata.ID, 0)
 	isNew := errors.Is(existsErr, storage.ErrNotFound)
 	if existsErr != nil && !isNew {
 		return nil, nil, existsErr
 	}
 	if createOnly && !isNew {
 		return nil, nil, fmt.Errorf("%w: graph %q already exists (use PUT to update)", ErrConflict, g.Metadata.ID)
+	}
+	if review != nil && (isNew || !current.Metadata.CreatedAt.Equal(review.CreatedAt)) {
+		return nil, nil, fmt.Errorf("%w: the reviewed workflow identity changed", ErrConflict)
 	}
 	if isNew {
 		if err := e.retryBrokerCleanup(ctx, g.Metadata.ID); err != nil {
@@ -230,6 +250,10 @@ func (e *Engine) saveGraph(ctx context.Context, g, effective *domain.Graph, expe
 	}
 	rec.Version = v
 	rec.UpdatedAt = now
+	rec.ChangeOperation = ""
+	if review != nil {
+		rec.ChangeOperation = review.Operation
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}

@@ -464,7 +464,7 @@ test('a reviewed workflow keeps the requested catalog version and opens in the m
   await expect(viewDraft).toBeVisible();
 });
 
-test('publishes shared instructions and keeps the existing workflow pinned', async ({ page, request }) => {
+test('publishes and separately adopts a reviewed catalog version on one workflow node', async ({ page, request }) => {
   await selectFixtureModel(request);
   const agentId = 'publishing-reader';
   const agentPath = `/api/v1/agents/${agentId}`;
@@ -498,4 +498,18 @@ test('publishes shared instructions and keeps the existing workflow pinned', asy
   await expect(page).toHaveURL(/#\/agents\/publishing-reader$/);
   await page.goBack();
   await expect(card).toBeVisible();
+
+  await send(page,'Adopt version two for the reader node in chat-pinned-reader.');
+  const adoption = page.getByRole('region',{name:'Adopt agent version for chat-pinned-reader / reader'});
+  await expect(adoption.getByText('Version 1 → Version 2')).toBeVisible();
+  expect((await(await request.get(graphPath,{headers})).json()).graph.spec.nodes[0].agent.version).toBe(1);
+  await adoption.getByRole('button',{name:'Adopt agent version',exact:true}).click();
+  await expect(adoption.getByText('Workflow version 2 saved with catalog version 2.')).toBeVisible();
+  const updated:GraphSummary = await (await request.get(graphPath,{headers})).json();
+  expect(updated.graph.metadata.version).toBe(2);
+  expect(updated.graph.spec.nodes[0]).toMatchObject({agent:{id:agentId,version:2},localInstructions:'Observe the local constraint.'});
+  await adoption.getByRole('link',{name:'Open selected node',exact:true}).click();
+  await expect(page).toHaveURL(/#\/g\/chat-pinned-reader\/canvas\?sel=node%3Areader/);
+  await page.goBack();
+  await expect(adoption).toBeVisible();
 });

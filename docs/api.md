@@ -231,6 +231,12 @@ revision and prior definition. The publication appends one immutable version
 with the operation receipt and preserves the other catalog fields. Workflow
 pins and node-local instructions are governed by separate workflow changes.
 
+Workflow adoption is a separate administrative review. It binds the current
+workflow version and identity, node, old catalog pin and exact reviewed target
+version. Chat can adopt versions that differ only in shared instructions.
+The native save preserves local overrides and records the new workflow
+version. An already admitted task uses its existing workflow copy.
+
 ## Native issue connections
 
 Native Jira Data Center connections have their own credential store, independent

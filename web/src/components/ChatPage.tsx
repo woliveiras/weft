@@ -6,7 +6,9 @@ import { ChatConfigurationCard } from './ChatConfigurationCard';
 import { ChatManualLink } from './ChatManualLink';
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, errorMessage, MOCK } from '../api/client';
-import type { ChatCatalogPublicationReview, ChatMessage, ChatOperationReview, ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview, ChatTaskRetryReview } from '../api/chat';
+import type { ChatAgentAdoptionReview, ChatCatalogPublicationReview, ChatMessage, ChatOperationReview,
+  ChatSession, ChatSessionSummary, ChatTask, ChatTaskDraftReview, ChatTaskStartReview, ChatWorkflowControlReview,
+  ChatTaskRetryReview } from '../api/chat';
 import { useAsync } from '../hooks/useData';
 import { Btn, ErrorBox, Modal } from './common';
 import { taskSectionLink } from './taskDetailPresentation';
@@ -309,6 +311,7 @@ function OperationReviewCard({review, now, canConfirm, onDecide, onView}: {
   if ('workflowControl' in review) return <WorkflowControlCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('taskRetry' in review) return <TaskRetryReviewCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   if ('publication' in review) return <CatalogPublicationCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
+  if ('adoption' in review) return <AgentAdoptionCard review={review} now={now} canConfirm={canConfirm} onDecide={onDecide} onView={onView}/>;
   const workflow = review.workflow;
   const name = review.workflow ? review.workflow.graph.metadata.name : review.definition.name;
   const kind = workflow ? 'workflow' : 'agent';
@@ -510,6 +513,33 @@ function CatalogPublicationCard({review, now, canConfirm, onDecide, onView}: {
     {review.state === 'declined' && <p role="status">Proposal declined.</p>}
     {review.state === 'created' && <p role="status">Catalog version {review.resultVersion} published.</p>}
     <a id={anchor} href={`#/agents/${encodeURIComponent(publication.id)}`} onClick={() => onView(anchor)}>View agent</a>
+  </section>;
+}
+
+function AgentAdoptionCard({review, now, canConfirm, onDecide, onView}: {
+  review:ChatAgentAdoptionReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
+}) {
+  const {adoption:pinned} = review;
+  const anchor = `chat-adoption-${review.id}`;
+  return <section className="chat-agent-review" aria-label={`Adopt agent version for ${pinned.workflowId} / ${pinned.nodeId}`}>
+    <h3>{pinned.agentId}</h3>
+    <dl>
+      <dt>Workflow node</dt><dd>{pinned.workflowId} / {pinned.nodeId} · Workflow version {pinned.workflowVersion}</dd>
+      <dt>Catalog version</dt><dd>Version {pinned.currentVersion} → Version {pinned.targetVersion}</dd>
+    </dl>
+    <h4>Current shared instructions</h4><p>{pinned.before || 'None'}</p>
+    <h4>New shared instructions</h4><p>{pinned.after || 'None'}</p>
+    {review.state === 'awaiting_confirmation' && <>
+      <p>This saves a workflow version with this node's new pin and preserves its local instructions and parameters. Subsequent turns use the saved workflow version.</p>
+      <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm} confirmLabel="Adopt agent version" onDecide={onDecide}/>
+    </>}
+    {review.state === 'applying' && <p role="status">Adoption requested. Checking the stored pin…</p>}
+    {review.state === 'conflict' && <p role="status">The workflow or catalog binding changed. Inspect the node before requesting another review.</p>}
+    {review.state === 'unknown' && <p role="status">The adoption outcome is temporarily unknown. Inspect the workflow before trying again.</p>}
+    {review.state === 'declined' && <p role="status">Proposal declined.</p>}
+    {review.state === 'created' && <p role="status">Workflow version {review.resultVersion} saved with catalog version {pinned.targetVersion}.</p>}
+    <a id={anchor} href={`#/g/${encodeURIComponent(pinned.workflowId)}/canvas?sel=${encodeURIComponent('node:' + pinned.nodeId)}`}
+      onClick={() => onView(anchor)}>Open selected node</a>
   </section>;
 }
 

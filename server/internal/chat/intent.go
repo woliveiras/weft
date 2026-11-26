@@ -47,6 +47,7 @@ Return exactly one JSON object. "kind" is one of:
 - "task.create": prepare a saved task draft using a named workflow. Add "taskTitle", "workflow" (the stated workflow ID or exact name), "request" (the intended work), and "outcome" (understand, implement, investigate, review, freeform). Add "workflowVersion" as a string only if the user named the version. Ask for the workflow if the target is unclear. Work requiring a repository or delivery settings must be configured in Tasks. Never include grants or start a task.
 - "agent.create": propose a reusable agent for the catalog. Add "agentId" (lowercase letters, digits and hyphens), "agentName" and concise "instructions". The operator reviews the proposal before anything is created. Never interpret a confirmation as a new create request.
 - "agent.publish": propose replacing shared catalog instructions in a new agent version. Add "publishAgent" with the exact catalog ID or name and "sharedInstructions" with the complete proposed text. A publication never changes existing workflow pins. Ask whether the user wants shared publication, workflow-local instructions or one-time guidance if that scope is unclear.
+- "workflow.adopt_agent": propose an explicit catalog version change for one workflow node. Add "adoptWorkflow" and "adoptNode" with their stated IDs or exact names and "adoptVersion" with the requested version as a string. Use "latest" only if explicitly requested. Ask about missing targets or version. Never infer adoption from a catalog publication.
 - "workflow.create": propose a stopped task workflow with one existing catalog agent. Add "workflowId" (lowercase letters, digits and hyphens), "workflowName" and "agent" (the stated catalog ID or exact name). Add "agentVersion" as a string only if the user requested that version or explicitly requested "latest". Ask which agent when the request is ambiguous. This capability never creates an agent or starts a workflow.
 - "workflow.control": propose a workflow runtime control. Add "controlWorkflow" with the exact workflow ID or name, "controlAction" (start, pause, resume, stop or kill), and "controlNode" only when the user identifies one agent in that workflow. Pause stops new turns and allows active work to finish. Stop requests a graceful drain. Kill interrupts active turns and must be explicitly intended. For a request like "disable the reviewer", clarify whether the intent is to pause future trigger intake, pause new turns, drain work or immediately interrupt active work. A workflow control cannot change trigger intake or a task-owned run.
 - "installation.plan": propose installation configuration using one or more weft.io/v1 YAML documents in "document". Use only supported installation kinds: InferencePlugin, ModelProvider, PriceCatalog, CostPolicy, Budget, NetworkPolicy, MCPConnection, SCMConnection, IssueConnection, IssueWorkflowMapping, JiraCloudProfile, JiraCloudWorkflowMapping, Project, Graph, PullRequestReviewRoute, IssueTrigger. Ask about missing consequential settings. For requested issue or PR intake activation, include "intakeConsent":"review" to show its separate scope to the administrator. Credential input goes to manual setup. Never set force, claim consent, or report a change as applied.
@@ -73,6 +74,7 @@ type Plan struct {
 	Destination   string `json:"destination,omitempty"`
 	Agent         AgentDraft
 	Publication   CatalogPublicationDraft
+	Adoption      AgentAdoptionDraft
 	Workflow      WorkflowDraft
 	Instructions  InstructionEdit
 	Guidance      Guidance
@@ -222,6 +224,12 @@ func decodePlan(body string) (Plan, error) {
 			plan.Publication.Agent = value
 		case "sharedInstructions":
 			plan.Publication.Instructions = value
+		case "adoptWorkflow":
+			plan.Adoption.Workflow = value
+		case "adoptNode":
+			plan.Adoption.Node = value
+		case "adoptVersion":
+			plan.Adoption.Version = value
 		default:
 			return Plan{}, ErrInvalidPlan
 		}
@@ -233,6 +241,9 @@ func decodePlan(body string) (Plan, error) {
 		return Plan{}, ErrInvalidPlan
 	}
 	if plan.Kind != PublishAgent && (seen["publishAgent"] || seen["sharedInstructions"]) {
+		return Plan{}, ErrInvalidPlan
+	}
+	if plan.Kind != AdoptAgentVersion && (seen["adoptWorkflow"] || seen["adoptNode"] || seen["adoptVersion"]) {
 		return Plan{}, ErrInvalidPlan
 	}
 	if plan.Kind != CreateWorkflow && (seen["workflowId"] || seen["workflowName"] || seen["agent"] || seen["agentVersion"]) {
@@ -263,6 +274,10 @@ func decodePlan(body string) (Plan, error) {
 		return Plan{}, ErrInvalidPlan
 	}
 	switch plan.Kind {
+	case AdoptAgentVersion:
+		if !plan.Adoption.valid() || seen["task"] || seen["question"] {
+			return Plan{}, ErrInvalidPlan
+		}
 	case PublishAgent:
 		if !plan.Publication.valid() || seen["task"] || seen["question"] {
 			return Plan{}, ErrInvalidPlan

@@ -192,6 +192,7 @@ type GraphRecord struct {
 	RunID            string     `json:"runId,omitempty"`
 	BudgetResumeID   string     `json:"budgetResumeId,omitempty"`
 	ControlOperation string     `json:"controlOperation,omitempty"`
+	ChangeOperation  string     `json:"changeOperation,omitempty"`
 	StartedAt        *time.Time `json:"startedAt,omitempty"`
 	UpdatedAt        time.Time  `json:"updatedAt"`
 }

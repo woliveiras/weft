@@ -3029,6 +3029,7 @@ components:
             - {$ref: "#/components/schemas/ChatWorkflowControlReview"}
             - {$ref: "#/components/schemas/ChatTaskRetryReview"}
             - {$ref: "#/components/schemas/ChatCatalogPublicationReview"}
+            - {$ref: "#/components/schemas/ChatAgentAdoptionReview"}
             - {$ref: "#/components/schemas/ChatConfigurationReview"}
             - {$ref: "#/components/schemas/ChatGuidanceReview"}
             - {$ref: "#/components/schemas/ChatInstructionReview"}
@@ -3288,6 +3289,27 @@ components:
                 previousVersion: {type: integer, minimum: 1}
                 revision: {type: integer, minimum: 1}
                 definitionDigest: {type: string, pattern: '^[0-9a-f]{64}$'}
+                before: {type: string}
+                after: {type: string}
+    ChatAgentAdoptionReview:
+      allOf:
+        - {$ref: "#/components/schemas/ChatReviewState"}
+        - type: object
+          required: [adoption]
+          properties:
+            adoption:
+              type: object
+              required: [workflowId, nodeId, workflowVersion, workflowCreated, workflowDigest, agentId, currentVersion, targetVersion, agentDigest, before, after]
+              properties:
+                workflowId: {type: string}
+                nodeId: {type: string}
+                workflowVersion: {type: integer, minimum: 1}
+                workflowCreated: {type: string, format: date-time}
+                workflowDigest: {type: string, pattern: '^[0-9a-f]{64}$'}
+                agentId: {type: string}
+                currentVersion: {type: integer, minimum: 1}
+                targetVersion: {type: integer, minimum: 1}
+                agentDigest: {type: string, pattern: '^[0-9a-f]{64}$'}
                 before: {type: string}
                 after: {type: string}
     ChatReviewState:
@@ -3981,6 +4003,7 @@ components:
         state: {$ref: "#/components/schemas/GraphState"}
         runId: {type: string}
         controlOperation: {type: string, readOnly: true, description: ID of the reviewed operation recorded by the latest workflow control}
+        changeOperation: {type: string, readOnly: true, description: ID of the reviewed operation that saved this workflow version, when available}
         startedAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}
     GraphSummary:

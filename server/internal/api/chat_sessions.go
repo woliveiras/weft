@@ -255,6 +255,8 @@ func (s *Server) resolveChatPlan(ctx context.Context, actor Identity, sessionID 
 		return s.reviewChatAgent(ctx, actor, sessionID, plan)
 	case chat.PublishAgent:
 		return s.reviewChatCatalogPublication(ctx, actor, sessionID, plan)
+	case chat.AdoptAgentVersion:
+		return s.reviewChatAdoption(ctx, actor, sessionID, plan)
 	case chat.CreateWorkflow:
 		return s.reviewChatWorkflow(ctx, actor, sessionID, plan)
 	case chat.CreateTask:

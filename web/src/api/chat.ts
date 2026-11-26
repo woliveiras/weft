@@ -139,8 +139,16 @@ export interface ChatCatalogPublicationReview extends ChatReviewState {
   publication: {id: string; name: string; previousVersion: number; revision: number; before: string; after: string};
 }
 
+export interface ChatAgentAdoptionReview extends ChatReviewState {
+  adoption: {
+    workflowId: string; nodeId: string; workflowVersion: number; agentId: string;
+    currentVersion: number; targetVersion: number; before: string; after: string;
+  };
+}
+
 export type ChatOperationReview = ChatPRReview | ChatInstructionReview | ChatGuidanceReview | ChatAgentReview | ChatWorkflowReview |
-  ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview | ChatTaskRetryReview | ChatCatalogPublicationReview;
+  ChatConfigurationReview | ChatTaskDraftReview | ChatTaskStartReview | ChatWorkflowControlReview |
+  ChatTaskRetryReview | ChatCatalogPublicationReview | ChatAgentAdoptionReview;
 
 export interface ChatSession {
   id: string;

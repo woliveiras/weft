@@ -120,7 +120,7 @@ are **kept** (audit trail) — prune them with SQL if required.
 |---|---|---|---|
 | `graphs` | `id` | — | One row per graph; `latest_version` is the optimistic-concurrency counter |
 | `graph_versions` | `(id, version)` | PK | Immutable documents; every save appends one. Author from label `weft.io/author` |
-| `graph_records` | `id` | — | Desired and observed state, active version, run ID and latest reviewed workflow control receipt (`domain.GraphRecord`). Read by every reconcile. |
+| `graph_records` | `id` | — | Desired and observed state, active version, run ID and the latest reviewed runtime-control and workflow-save receipts (`domain.GraphRecord`). Read by every reconcile. |
 | `events` | `seq` (auto) | `(graph_id, seq)`, `(type)`, unique `id` | Append-only log; tailed by SSE (`seq > after`) |
 | `messages` | `(message_id, channel, grp)` | `(graph_id, channel, created_at)`, `(graph_id, created_at)`, `(correlation_id)` | Message history, upserted per status change; `created_at` keeps the original value |
 | `processed` | `(grp, message_id)` | PK | Dedupe log: `MarkProcessed` is insert-if-absent |

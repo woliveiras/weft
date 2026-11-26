@@ -69,6 +69,16 @@ and choose **Publish agent version**. The new version appears in Agents.
 Each workflow continues to use its own pinned version until it adopts a
 different one.
 
+## Adopt a catalog version in a workflow
+
+Name the workflow, node and version to adopt. Review the old and new shared
+instructions before choosing **Adopt agent version**. The save changes the
+pin of the selected node and preserves its local instructions and parameters.
+Later turns in the reusable workflow pick up the saved version at rollout.
+A task that already started keeps the workflow copied at admission. Use the
+workflow editor to review versions that change runtime, grants or other
+shared settings.
+
 ## Create a workflow using an existing agent
 
 As an administrator, name the workflow and the catalog agent it should use.
