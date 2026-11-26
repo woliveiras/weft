@@ -16,11 +16,19 @@ When a saved conversation stays **Untitled chat**, use **Retry title** to
 generate a title from the first request. The transcript and any open reviews
 remain available while the title is generated.
 
+When inference fails, the saved reply identifies the next step. A budget rejection opens Budgets, an unavailable model opens Chat model settings, and a busy model can be retried after a slot becomes available. With a proposal open, **Confirm** and **Decline** and their explicit text equivalents (“confirm this proposal” or “decline this proposal”) use the reviewed operation directly. Weft still checks the current role, revision and expiry before acting.
+
 ## Inspect installation state
 
 Ask which workflows are active, which providers are configured, how much the installation spent this month or which approvals are pending. The reply shows a dated snapshot from the corresponding Weft service and a link to inspect it. Lists show up to eight entries. A dependency failure leaves the result unavailable.
 
 Use `/inspect` to see the supported resources, or enter a shortcut such as `/inspect budgets`. These explicit reads work without a Chat model and incur no inference cost. Connection inspection uses stored status. Testing reachability remains a separate action.
+
+Use `/inspect execution <id>` or ask about an exact execution to see its observed state, tree root and number of active executions. **View execution** opens the selected execution. A cancellation request and the execution's eventual terminal status are shown separately.
+
+An operator can ask to cancel an execution tree or only a particular delegated child. The review identifies the root, selected execution, workflow and run. Confirmation records a cooperative request. Chat continues to observe the reviewed scope and reports whether an execution actually reached the cancelled state. **View execution** opens its native evidence.
+
+Ask about the delegation policy or type `/inspect delegation` for the saved approval mode, limits and policy revision. Open **Delegation** to inspect or edit the full policy.
 
 ## Open a console page from a conversation
 
@@ -35,7 +43,7 @@ Use a task ID or a unique exact title. For example, “Let me know when my
 release notes review finishes.” If Weft cannot resolve a unique task, supply
 the ID from Tasks. Open Approvals to inspect held requests.
 
-Start another chat or close the browser. Weft keeps observing active tasks.
+Start another chat while Weft follows the task. With a named static credential or shared local history, Weft also checks for results while the browser is closed. With OIDC, Weft reconciles task state on your next authenticated visit. The task continues in the execution engine in all three cases.
 Recents shows the running indicator and signals an unread result, with a
 green dot for success. Failure, cancellation and a required decision have
 their own accessible status. Open the original conversation and follow the
@@ -136,10 +144,7 @@ task**. The start goes through the task's normal budget and approval checks.
 Chat follows the admitted task in the same conversation and provides a
 separate link when its result is available.
 
-Use Tasks to configure and start work with repositories, environment
-preparation or delivery settings. If the task or its authorization changes
-while you are reviewing, inspect the updated setup and request a fresh start
-proposal.
+Chat can prepare a saved task’s environment and separately start it against the ready build. Use Tasks for a checkout that still needs configuration or for external delivery. If the task or its authorization changes during review, inspect its updated scope and request a fresh proposal.
 
 For registered repositories, the start card shows each alias, project revision, pinned commit and declared checks. A concurrent project edit invalidates the proposal. Issue-backed drafts identify the connection and issue. For a task configured to deliver changes through SCM, inspect and start from Tasks.
 
@@ -234,7 +239,7 @@ The card shows when the runtime picked up the message. The runtime can return it
 
 As an administrator, ask for a concrete change such as “Set the task budget to two dollars with an eighty percent warning.” Review the object names, current revisions, field changes and any intake consent before choosing **Apply configuration**. A plan can include up to eight objects. The installation service validates the complete plan before applying its first change.
 
-Use `/inspect projects` to find a registered project ID. Ask for an explicit
+Use `/inspect projects` to find a registered project ID. Follow-ups can refer to the displayed order, such as “use the first project”. Ask for an explicit
 environment preference such as “Set project `prj_…` to prefer sandbox for
 new tasks.” To replace its checks, specify the intended list with each
 command, workspace-relative directory and timeout as applicable. Review the
@@ -243,6 +248,8 @@ settings on the server. A preference guides future task setup. Checks remain
 subject to each agent's tool permissions when a task uses them.
 
 Each result names the object and its outcome. If a plan stops midway, inspect the applied objects, correct the failure and request a fresh plan. An unknown outcome requires inspection of the installation. Use the existing setup form or installation CLI to enter or rotate credentials. Chat can preserve existing credentials.
+
+Administrators can type `/export` or ask to download the current installation configuration. **Download installation YAML** retrieves the export with the current credentials. The file uses the same secret-preservation markers as the CLI export. The conversation stores the download action and leaves the YAML out of its transcript and model context.
 
 ## Archive and access
 
@@ -255,14 +262,6 @@ are browsing Recents. Use **Older conversations** to load the next page.
 In an authenticated installation the owner can access their conversations.
 Auth-disabled local installations show **Shared local history**. People using
 that local installation can access the same conversations. Private history is
-scoped to the authenticated static or OIDC principal.
-
-When inference fails, the saved reply identifies the next step. A budget rejection opens Budgets, an unavailable model opens Chat model settings, and a busy model can be retried after a slot becomes available. With a proposal open, **Confirm** and **Decline** and their explicit text equivalents (“confirm this proposal” or “decline this proposal”) use the reviewed operation directly. Weft still checks the current role, revision and expiry before acting.
-
-Administrators can type `/export` or ask to download the current installation configuration. **Download installation YAML** retrieves the export with the current credentials. The file uses the same secret-preservation markers as the CLI export. The conversation stores the download action and leaves the YAML out of its transcript and model context.
-
-Use `/inspect execution <id>` or ask about an exact execution to see its observed state, tree root and number of active executions. **View execution** opens the selected execution. A cancellation request and the execution's eventual terminal status are shown separately.
-
-An operator can ask to cancel an execution tree or only a particular delegated child. The review identifies the root, selected execution, workflow and run. Confirmation records a cooperative request. Chat continues to observe the reviewed scope and reports whether an execution actually reached the cancelled state. **View execution** opens its native evidence.
+scoped to the authenticated static or OIDC principal. If your role changes, Chat filters historical operation details before displaying them or building model context.
 
 When you switch chats before a reply arrives, Recents keeps that reply unread until you view it. A hollow dot indicates an unread reply and the green dot indicates a successful operational result. Both can appear alongside the running indicator.

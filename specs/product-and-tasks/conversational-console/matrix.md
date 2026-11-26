@@ -64,6 +64,19 @@ a write. Live transport/data tests support only the editions actually exercised.
 | S41 | AC-008. An administrator has an active issue trigger with a stored consent scope | Confirm a pause, review a resume and edit the associated workflow before confirming. Review and confirm again, then open Triggers. | The pause and resumption are recorded once each. The admitted task reference and existing consent survive the pause. A stale resumption conflicts. A fresh resumption records the reviewed workflow and consent scope under the actor. A non-admin receives no action. | P/C RUN-006 and OPS-003 | U action and consent binding; I authenticated native trigger/SQLite and workflow edit; E pause, resume and inspect Triggers | P3 |
 | S43 | AC-006. An operator has a reusable workflow with a saved inline environment | Review and confirm its build, repeat the decision and submit a second review across an editor change. Observe successful and failed fixture builds. | One normal build records the reviewed hash and receipt. The stopped workflow keeps its lifecycle state. A stale version causes no build, and Chat reports failure separately from readiness. Viewers receive no executable review. | P/C ENV-001 | U typed intent and version/hash binding; I authenticated API, native environment/SQLite and fixture daemon; E inspect Environment and return | P2 |
 
+## Locally verified coverage
+
+The inventory below records the starting contracts and delivery phases. The following table identifies the paths available in the console and their current boundaries. The [operator guide](../../../docs/features/chat/README.md) gives the exact commands, roles and evidence links.
+
+| Area | Available in Chat | Native surface or remaining qualification |
+| --- | --- | --- |
+| Navigation and history | Chat home, flat Recents, generated titles, full-title disclosure, archive/restore, unread and running indicators, independent requests in concurrent sessions | Manual routes remain available. Hardware and assistive-technology qualification is open. |
+| Lookup and monitoring | Bounded installation snapshots, ordered follow-ups, exact execution tree inspection, persistent task watches, per-repository evidence | Named static users and local shared history support detached observation. OIDC checks the current identity when the user returns. |
+| Reusable agents and workflows | Versioned creation, publication and adoption, local instructions, one-time guidance, reviewed runtime controls, scaling and inline environment builds | Configure custom topology, checkout-dependent environments and reset in the editor. A receipt for guidance records delivery to a matching turn. |
+| Tasks | Draft and correct a request, review registered project pins, prepare environment, authorize, start, decide approvals, cancel a task or exact execution, prepare a linked retry | Complex submission from the prompt editor, protected application preview, external delivery and cleanup use their native controls. |
+| Installation | Review and apply supported declarative objects, project preferences and checks, download YAML, raise a current budget, pause/resume issue intake, inspect delegation | Enter credentials, consent to browser OAuth, test live connections and manage protected administrative controls on their respective pages. Chat can return to its originating message. |
+| PR analysis | Review repository, workflow, base and head before running a tool-free analysis. GitHub, Bitbucket Cloud and Bitbucket Data Center passed with local fixtures. | Publishing, real provider accounts and deployment qualification are separate. |
+
 ## Operation inventory
 
 Every current endpoint below uses the `/api/v1` prefix unless shown
