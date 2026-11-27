@@ -12,16 +12,23 @@ spec:
   selector: {app: weftd}
   ports: [{name: http, port: 8080, targetPort: 8080}]
 ---
+apiVersion: v1
+kind: Service
+metadata: {name: weftd-callback}
+spec:
+  clusterIP: None
+  selector: {app: weftd}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: weftd
 spec:
-  # Instances share work through leases in PostgreSQL and consumer groups in
-  # NATS; any number can run. Each pod advertises its own callback URL
-  # (pod IP) because external agents call back the instance running the turn.
+  # The agents allow the origin of each replica (see agents.yaml).
+  serviceName: weftd-callback
   replicas: 2
-  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  updateStrategy: {type: RollingUpdate}
   selector: {matchLabels: {app: weftd}}
   template:
     metadata:
@@ -40,9 +47,8 @@ spec:
           args: ["--config", "/etc/weft/weft.yaml"]
           ports: [{name: http, containerPort: 8080}]
           env:
-            - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
             - {name: WEFT_INSTANCE, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
-            - {name: WEFT_INTERNAL_URL, value: "http://$(POD_IP):8080"}
+            - {name: WEFT_INTERNAL_URL, value: "http://$(WEFT_INSTANCE).weftd-callback:8080"}
             - {name: WEFT_ADMIN_TOKEN, valueFrom: {secretKeyRef: {name: weft, key: admin-token}}}
             - {name: WEFT_RUNTIME_SECRET, valueFrom: {secretKeyRef: {name: weft, key: runtime-secret}}}
             - {name: WEFT_SECRET_KEY, valueFrom: {secretKeyRef: {name: weft, key: secret-key}}}

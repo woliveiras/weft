@@ -7,7 +7,7 @@ data:
     server:
       addr: ":8080"
       maxBodyBytes: 8388608
-      # internalUrl is set per pod from POD_IP (WEFT_INTERNAL_URL)
+      # internalUrl is set per pod from the StatefulSet pod name (WEFT_INTERNAL_URL)
     storage:
       type: postgres            # DSN from the secret (WEFT_STORAGE_DSN)
     queue:

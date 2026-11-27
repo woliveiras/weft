@@ -108,6 +108,10 @@ Start with the external reviewer. Port its `analyse → decide` graph as two typ
 
 **Completion evidence.** From a clean build and test environment without Python, pip or LangGraph, build the distribution and production images, run the root test and lint targets, browser provider journey, Chat evaluations, event validation, native upgrade, sandbox and preview checks. Start the factory with the replacement service and drive an input through review, QA and human approval. Inspect final images and executable entry points for residual interpreter dependencies. Record commands, versions and outcomes against the existing specifications. Historical evidence and language-aware handling of user files can still mention Python. Removing a check or silently skipping its dependencies cannot establish parity.
 
+### Kubernetes controller identity
+
+The maintainer selected stable per-controller callback addresses for this migration. A two-replica StatefulSet and a headless Service provide `weftd-0.weftd-callback` and `weftd-1.weftd-callback`. The agent checks the advertised HTTP origin and execution path before sending the capability. The existing public controller Service still balances API traffic. The private callback returns to its originating controller. [Manifests and migration procedure](../../deploy/kubernetes/README.md#controller-callbacks-and-upgrades)
+
 ## Consequences and ownership
 
 External agents gain independent upgrades and require a reachable service. Native turns add Eino to the server build and share its upgrade cycle with Chat. The platform team owns protocol compatibility and evidence that usage and decisions still reconcile. Before wider use, compare the same fixture against an equivalent plain Go external turn. Record end-to-end latency, model/tool call counts, peak memory at the target concurrency, and the agent/image size. Separate framework overhead from inference latency. These measurements are open.

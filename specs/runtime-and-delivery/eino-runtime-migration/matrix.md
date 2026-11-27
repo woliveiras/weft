@@ -28,3 +28,6 @@ On Linux/arm64 the Protocol v1 service and Eino v0.9.23 summary graph passed `go
 For M06, the Go service registers the compiled reviewer. `go test -count=1 ./factory` in `agents/eino` exercises both Eino stages, real HTTP callbacks, batched and unrelated inputs, objective file findings, model comments, heuristic verdicts, failure with no emits and preservation of task fields. Routing through the complete bundled factory remains open.
 
 For M07, `TestResearchRoundTripResumesSavedPlan` ran the planner and researcher through Protocol v1. It restarted their handlers on the same callback state, delivered the final research result twice with the same message ID, and sent a distinct duplicate. Replay returned the original logical task ID. The separate duplicate produced no task. The gateway KV and the broker publish remain separate operations.
+
+
+For M03 and M08 on Kubernetes, the controller workload is a StatefulSet. `kubectl kustomize deploy/kubernetes` rendered both controller and NATS StatefulSets, the public and headless controller Services, and the agents Deployment. `TestKubernetesReplicaOrigins` verifies both configured ordinal names against the service's actual callback binding code. Cluster DNS, pod restart and live callback qualification are tracked separately from manifest validation.

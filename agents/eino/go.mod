@@ -6,6 +6,7 @@ require (
 	github.com/cloudwego/eino v0.9.23
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	go.opentelemetry.io/otel v1.47.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -42,5 +43,4 @@ require (
 	golang.org/x/arch v0.11.0 // indirect
 	golang.org/x/exp v0.0.0-20230713183714-613f0c0eb8a1 // indirect
 	golang.org/x/sys v0.29.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

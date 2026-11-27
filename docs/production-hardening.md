@@ -26,7 +26,7 @@ setting or file that implements it.
 - [ ] **TLS termination** at the ingress/load balancer; weftd speaks plain
       HTTP inside the cluster/host network.
 - [ ] **Do not expose `/internal/v1`** publicly — only agent runtimes need it,
-      and they reach instances directly (`server.internalUrl` = pod IP).
+      and they reach instances directly (`server.internalUrl` = stable per-pod DNS name).
 - [ ] **Restrict `/metrics`** to the monitoring network.
 - [ ] **NetworkPolicies** (`deploy/kubernetes/networkpolicies.yaml`): default
       deny; agents may only reach weftd; weftd egress limited to broker,

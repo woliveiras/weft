@@ -21,7 +21,7 @@ provider, duplicate provider names, invalid roles, no API credentials).
 |---|---|---|---|
 | `instance` | `WEFT_INSTANCE` | hostname | Unique instance name; holder of replica leases and recorded on executions. Must differ per instance. |
 | `server.addr` | `WEFT_ADDR` | `:8080` | Listen address (API, console, `/metrics`, `/internal`). |
-| `server.internalUrl` | `WEFT_INTERNAL_URL` | `http://127.0.0.1:8080` | URL external agent runtimes use to call back **this** instance. Per instance (pod IP), never a load balancer. |
+| `server.internalUrl` | `WEFT_INTERNAL_URL` | `http://127.0.0.1:8080` | URL external agent runtimes use to call back **this** instance. Use the originating instance’s address. The bundled Kubernetes manifests use per-pod DNS. |
 | `server.webDir` | `WEFT_WEB_DIR` | — (image: `/app/web`) | Serve the built console from this directory. |
 | `server.corsOrigins` | — | `[]` | Allowed CORS origins (`*` allowed; avoid in production). |
 | `server.maxBodyBytes` | — | `8388608` | Request body limit. |
@@ -195,7 +195,7 @@ providers (Ollama, vLLM, ...) still work.
 instance: ${HOSTNAME}
 server:
   addr: ":8080"
-  internalUrl: "http://${POD_IP}:8080"
+  internalUrl: "http://${WEFT_INSTANCE}.weftd-callback:8080"
 storage: {type: postgres}                      # DSN from WEFT_STORAGE_DSN
 queue: {type: nats, url: "nats://nats:4222", options: {replicas: "3"}}
 workspaces: {root: /var/lib/weft/workspaces}

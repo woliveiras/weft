@@ -20,3 +20,10 @@ Notes:
   (`engine.SandboxFactory`). Use a sandboxed RuntimeClass (gVisor, Kata) for weftd if agents get
   `shell.exec`.
 - The workspace volume must be ReadWriteMany when weftd has more than one replica.
+
+
+## Controller callbacks and upgrades
+
+The public `weftd` Service balances API requests. Each controller advertises its own address through the headless `weftd-callback` Service. For example, a turn started by `weftd-1` calls back to `http://weftd-1.weftd-callback:8080`. The agents deployment lists both controller origins in `WEFT_URL`. When scaling up, roll out the extended list to agents before adding the controller replica. When scaling down, drain work and remove the retired origin after its turns settle. A restarted controller retains its DNS name and invalidates the capabilities from the previous process. Weft redelivers interrupted work with a fresh capability. [Kubernetes StatefulSet network identity](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#stable-network-id)
+
+For an existing installation, schedule a maintenance window, stop new admissions and drain active turns. Bring the previous `Deployment/weftd` to zero replicas before starting `StatefulSet/weftd`. Applying the new manifests alone leaves the old Deployment in the namespace. Preserve PostgreSQL, the broker and the RWX workspace claim. Check readiness for both controller ordinals and exercise a turn from each before reopening admissions. For rollback, drain the StatefulSet before restoring the previous controller and agents together.

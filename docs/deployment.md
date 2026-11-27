@@ -66,7 +66,7 @@ flowchart TB
   f1 & f2 & f3 --> pg[(PostgreSQL HA<br/>primary + replica)]
   f1 & f2 & f3 --> nats[(NATS cluster ×3<br/>JetStream R3)]
   f1 & f2 & f3 --> ws[(RWX workspaces<br/>NFS / CephFS)]
-  agents[Agent runtime pool] -->|callback to the pod IP<br/>of the calling instance| f1 & f2 & f3
+  agents[Agent runtime pool] -->|callback to the pod DNS name<br/>of the calling instance| f1 & f2 & f3
   f1 & f2 & f3 -->|POST /v1/turn| agents
 ```
 
@@ -84,9 +84,9 @@ Requirements:
 ### 3. Kubernetes
 
 `deploy/kubernetes/` contains kustomize manifests: namespace (restricted Pod
-Security), ConfigMap (`weft.yaml`), Secret template, `weftd` Deployment
+Security), ConfigMap (`weft.yaml`), Secret template, `weftd` StatefulSet
 (2 replicas, `WEFT_INSTANCE` from the pod name, `WEFT_INTERNAL_URL` from
-the pod IP, PDB, topology spread), RWX workspace PVC, example agents
+the pod name and headless callback Service, PDB, topology spread), RWX workspace PVC, example agents
 Deployment + Service + HPA + PDB, a single-node NATS StatefulSet for
 evaluation, NetworkPolicies, and an optional ServiceMonitor/PrometheusRule.
 

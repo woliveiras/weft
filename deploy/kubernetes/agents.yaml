@@ -1,4 +1,4 @@
-# Example Python agents (Runtime Protocol v1). The process is stateless per
+# Bundled workflow agents (Runtime Protocol v1). The process is stateless per
 # turn, so it scales horizontally behind a Service. Graph nodes point at it
 # with runtime.endpoint: http://weft-agents:8000
 apiVersion: v1
@@ -27,6 +27,8 @@ spec:
           ports: [{name: http, containerPort: 8000}]
           env:
             - {name: PORT, value: "8000"}
+            - {name: HOST, value: "0.0.0.0"}
+            - {name: WEFT_URL, value: "http://weftd-0.weftd-callback:8080,http://weftd-1.weftd-callback:8080"}
             - {name: WEFT_RUNTIME_SECRET, valueFrom: {secretKeyRef: {name: weft, key: runtime-secret}}}
           readinessProbe: {httpGet: {path: /v1/health, port: http}}
           livenessProbe: {httpGet: {path: /v1/health, port: http}, initialDelaySeconds: 10}
