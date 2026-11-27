@@ -1,6 +1,6 @@
 # RUN-010 behavior and oracle matrix
 
-The native Chat and factory, external protocol and factory, provider selection, and single-node Kubernetes rehearsals have local results below. Full Compose qualification remains open. Compare outputs and stored effects against the governing contract and fixture inputs. Earlier Python and native results can identify regressions but cannot qualify the replacement. **U** denotes unit checks, **I** checks between real components and **E** operator or installation journeys. [Acceptance criteria](./spec.md) · [Chat qualification](../../product-and-tasks/conversational-console/matrix.md#eino-turn-qualification)
+The native Chat and factory, external protocol and factory, provider selection, single-node Kubernetes and disposable Compose rehearsals have local results below. Compare outputs and stored effects against the governing contract and fixture inputs. Earlier Python and native results can identify regressions but cannot qualify the replacement. **U** denotes unit checks, **I** checks between real components and **E** operator or installation journeys. [Acceptance criteria](./spec.md) · [Chat qualification](../../product-and-tasks/conversational-console/matrix.md#eino-turn-qualification)
 
 | ID | Criterion and fixture | Observable oracle | Provenance | Planned verification |
 | --- | --- | --- | --- | --- |
@@ -74,4 +74,16 @@ Three native Chromium journeys ran together against a fresh profile. The Chat us
 
 The full native-browser run also exposed failures outside these three journeys. Seven cases covering first-use UI, registration/worktrees, MCP, preparation failure, stopped-task cleanup, parallel tasks and repository import still need reconciliation with current product behavior. For example, the old suite expects a single seeded workflow and a first-use preview button which the current console intentionally omits. The live Ollama scenario was skipped without a configured endpoint. These outcomes are recorded separately from the three passing cutover scenarios.
 
-The Compose configuration rendered with isolated project names, loopback ports and fixture credentials. Live Compose factory routing, the dedicated daemon's sandbox checks and protected previews remain pending an authorized disposable project run. Existing local installations were not used for these checks.
+## Disposable Compose qualification
+
+On 2026-11-27, project `weft-eino-qa` ran the shipped software factory on Colima Linux/arm64 with Docker 29.5.2 and Compose 5.6.0. The installation used loopback host ports, fixture credentials, project-scoped volumes, PostgreSQL 17 and NATS 2.11. The controller dispatched turns to the Go service at `http://agents:8000` with `WEFT_DEV_MOCK=true`. The QA replica ran `go test ./...` with Go 1.26.11 as UID/GID 10001:10001 on the dedicated Docker 28.5.2 daemon with networking disabled.
+
+| Factory journey (M06–M09) | Observed result on named volumes |
+| --- | --- |
+| Research through release | A feature request produced a research question, a research result, a development task, a reviewed revision and a passing Go test. The integrator had zero turns before operator approval. Approval produced one successful integrator turn and one acknowledged release. |
+| Restart with approval pending | Restarting only `weftd` preserved the approval ID and the held message ID. After readiness returned, the operator approved the original request. Its release was acknowledged once and the integrator completed once. |
+| Failed QA with unchanged source | A fixture test in the disposable workspace failed once with exit code 1. The developer returned the same task at iteration 2 with unchanged source. The next real Go test exited 0. The release waited for approval and was acknowledged once. |
+
+`TestEinoFactoryReworkThroughController` also passed the review-change, failed-QA and unchanged-source retry sequence against the controller. The agent race suite covered repeated delivery of a QA message and verified that it retained its development round. The root `make test` passed on repeat, including all 875 console tests. The first run failed a deletion-history assertion in `SkillsView.test.tsx`. Both `make lint` and `make build` passed.
+
+`make test-sandbox` verified mTLS, process capabilities, private-network restrictions and outbound HTTPS on the dedicated daemon. All three real-daemon tests in `make test-sandbox-capacity` passed, including removal of a container between inventory listing and inspection. `make test-preview` passed on named volumes. After the Colima disk filled, the final preview repeat against the inventory fix passed with temporary memory-backed volumes for nested Docker data and the fixture workspace. The Compose containers, networks, volumes and project images were removed after the run.
