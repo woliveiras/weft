@@ -971,17 +971,18 @@ test('returns to the same unsent guided request from each manual configuration a
   await more.press('Escape');
   await expect(more).toBeFocused();
   await more.click();
-  for(const [category,label,hash] of [
-    ['Projects','Open project registration','#/projects/new'],
-    ['Connections','Open connection settings','#/connections'],
-    ['Models','Open model settings','#/models'],
-    ['Skills & instructions','Open Skills & instructions editor','#/skills'],
+  for(const [category,label,hash,heading] of [
+    ['Projects','Open project registration','#/projects/new','Add project'],
+    ['Connections','Open connection settings','#/connections','Connections'],
+    ['Models','Open model settings','#/models','Models'],
+    ['Skills & instructions','Open Skills & instructions editor','#/skills','Skills & instructions'],
   ]){
     const origin=guide.getByRole('button',{name:category,exact:true});
     await origin.click();
     const link=guide.getByRole('link',{name:label});
     await link.click();
     expect(new URL(page.url()).hash).toBe(hash);
+    await expect(page.getByRole('heading',{level:1,name:heading,exact:true})).toBeVisible();
     await page.goBack();
     await expect(link).toBeFocused();
     await expect(field).toHaveValue('Keep this draft.');

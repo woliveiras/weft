@@ -67,6 +67,9 @@ func TestRegistrationRecoveryPersistsHistoryAndSerializesNewAttempt(t *testing.T
 	if recovered.Status != "untested" || provider.Registrations.Load() != 1 || recovered.OAuth.RegistrationStatus != "" || len(recovered.OAuth.RegistrationHistory) != 1 {
 		t.Fatal("recovery called provider or lost history", recovered.OAuth)
 	}
+	if recovered.Tools == nil || len(recovered.Tools) != 0 {
+		t.Fatal("expected an empty tool list in the recovered connection")
+	}
 	history := recovered.OAuth.RegistrationHistory[0]
 	if history.Revision != old.Revision || history.Diagnostic == nil || history.Diagnostic.Code != "http_rejected" || history.RecoveredAt.IsZero() {
 		t.Fatal(history)

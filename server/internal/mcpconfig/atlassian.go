@@ -45,6 +45,9 @@ func blockedDispatcher(v View, name string) bool {
 	return false
 }
 func operationCatalogue(v View) View {
+	if v.Tools == nil {
+		v.Tools = []Tool{}
+	}
 	if !atlassianConnection(v) && len(v.ArgumentPolicy) == 0 {
 		return v
 	}

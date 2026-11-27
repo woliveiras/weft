@@ -30,6 +30,29 @@ func testManager(t *testing.T) *Manager {
 func input() Input {
 	return Input{ID: "team", Name: "Team", Service: "github", Endpoint: "https://example.com/mcp", Enabled: true}
 }
+func TestListAndGetHistoricalConnectionWithNullTools(t *testing.T) {
+	m := testManager(t)
+	ctx := t.Context()
+	data := []byte(`{"id":"legacy","service":"generic","status":"untested","tools":null}`)
+	revision, err := m.Store.PutSetting(ctx, prefix+"legacy", data, 0, "fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := m.List(ctx)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("list returned %d connections, error = %v", len(items), err)
+	}
+	item, err := m.Get(ctx, "legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, view := range []View{item, items[0]} {
+		if view.ID != "legacy" || view.Revision != revision || view.Tools == nil || len(view.Tools) != 0 || view.Status != "untested" {
+			t.Fatal("historical connection lost its status or has an invalid tool list")
+		}
+	}
+}
+
 func TestValidation(t *testing.T) {
 	for _, endpoint := range []string{"http://example.com", "https://user:pass@example.com", "https://example.com/?token=x", "https://example.com/#x", "file:///tmp/socket"} {
 		in := input()

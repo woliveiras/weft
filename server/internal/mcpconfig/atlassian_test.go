@@ -102,6 +102,14 @@ func TestAtlassianOperationCatalogue(t *testing.T) {
 	}
 }
 
+func TestMissingCatalogueSerializesAsAnEmptyToolList(t *testing.T) {
+	v := operationCatalogue(View{Service: "generic", Status: "untested"})
+	raw, err := json.Marshal(v.Tools)
+	if err != nil || string(raw) != "[]" || v.Status != "untested" {
+		t.Fatalf("catalogue = %s, status = %s, error = %v", raw, v.Status, err)
+	}
+}
+
 func TestAtlassianLegacyDispatchersDeniedAtEveryBoundary(t *testing.T) {
 	m := testManager(t)
 	ctx := t.Context()
