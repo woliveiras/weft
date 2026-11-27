@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/app"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/storage"
@@ -58,8 +60,13 @@ func (m *factoryModel) Chat(_ context.Context, r *llm.ChatRequest) (*llm.ChatRes
 }
 
 func TestEinoFactoryReworkThroughController(t *testing.T) {
+	srv, controller, binary := setupEinoController(t)
+	exerciseEinoFactory(t, srv, controller, "", []string{binary})
+}
+
+func exerciseEinoFactory(t *testing.T, srv *httptest.Server, app *app.App, endpoint string, command []string) {
+	t.Helper()
 	ctx := t.Context()
-	srv, app, binary := setupEinoController(t)
 	model := new(factoryModel)
 	app.Models.Add(llm.ProviderConfig{Name: "factory-fixture", DefaultModel: "fixture"}, model)
 	raw, err := os.ReadFile("../../../examples/graphs/software-factory.yaml")
@@ -70,8 +77,8 @@ func TestEinoFactoryReworkThroughController(t *testing.T) {
 	if err := yaml.Unmarshal(raw, &g); err != nil {
 		t.Fatal(err)
 	}
-	g.Spec.Defaults.Runtime.Endpoint = ""
-	g.Spec.Defaults.Runtime.Command = []string{binary}
+	g.Spec.Defaults.Runtime.Endpoint = endpoint
+	g.Spec.Defaults.Runtime.Command = command
 	g.Spec.Defaults.Model.Provider = "factory-fixture"
 	g.Node("integrator").Model = domain.ModelRef{Provider: "mock"}
 	qa := g.Node("qa")
