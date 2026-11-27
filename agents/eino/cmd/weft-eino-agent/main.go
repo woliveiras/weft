@@ -23,7 +23,15 @@ func serve() error {
 	if err != nil {
 		return fmt.Errorf("compile reviewer: %w", err)
 	}
-	handler, err := protocol.NewHandler(strings.Split(os.Getenv("WEFT_URL"), ","), os.Getenv("WEFT_RUNTIME_SECRET"), map[string]protocol.Agent{"summarize": agent, "reviewer": reviewer})
+	planner, err := factory.Planner(context.Background())
+	if err != nil {
+		return fmt.Errorf("compile planner: %w", err)
+	}
+	researcher, err := factory.Researcher(context.Background())
+	if err != nil {
+		return fmt.Errorf("compile researcher: %w", err)
+	}
+	handler, err := protocol.NewHandler(strings.Split(os.Getenv("WEFT_URL"), ","), os.Getenv("WEFT_RUNTIME_SECRET"), map[string]protocol.Agent{"summarize": agent, "reviewer": reviewer, "planner": planner, "researcher": researcher})
 	if err != nil {
 		return err
 	}

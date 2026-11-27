@@ -120,8 +120,7 @@ func analyse(ctx context.Context, r *review) (*review, error) {
 		Verdict  string
 		Comments json.RawMessage
 	}
-	start := strings.IndexByte(resp.Message.Content, '{')
-	if start >= 0 && json.NewDecoder(strings.NewReader(resp.Message.Content[start:])).Decode(&verdict) == nil && (verdict.Verdict == "approved" || verdict.Verdict == "changes_requested") {
+	if decodeObject(resp.Message.Content, &verdict) && (verdict.Verdict == "approved" || verdict.Verdict == "changes_requested") {
 		r.verdict = verdict.Verdict
 		r.comments = stringList(verdict.Comments)
 	}

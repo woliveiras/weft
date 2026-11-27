@@ -4,12 +4,14 @@ package protocol
 import "encoding/json"
 
 type TurnInput struct {
-	ExecutionID string    `json:"executionId"`
-	NodeID      string    `json:"nodeId"`
-	Agent       string    `json:"agent"`
-	Prompt      string    `json:"prompt"`
-	System      string    `json:"system"`
-	Inputs      []Message `json:"inputs"`
+	Config      map[string]json.RawMessage `json:"config,omitempty"`
+	Branch      string                     `json:"branch,omitempty"`
+	ExecutionID string                     `json:"executionId"`
+	NodeID      string                     `json:"nodeId"`
+	Agent       string                     `json:"agent"`
+	Prompt      string                     `json:"prompt"`
+	System      string                     `json:"system"`
+	Inputs      []Message                  `json:"inputs"`
 	Callback    struct {
 		URL   string `json:"url"`
 		Token string `json:"token"`
