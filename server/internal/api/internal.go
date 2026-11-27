@@ -1,14 +1,17 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/observability"
@@ -86,18 +89,45 @@ func (s *Server) cbInvoke(w http.ResponseWriter, r *http.Request, env runtime.Tu
 	return nil
 }
 
-func (s *Server) cbChat(w http.ResponseWriter, r *http.Request, env runtime.TurnEnv, _ *tools.Principal) error {
+func (s *Server) cbChat(w http.ResponseWriter, r *http.Request, env runtime.TurnEnv, p *tools.Principal) error {
 	var req llm.ChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return badRequest("invalid ChatRequest: %v", err)
 	}
 	resp, err := env.Chat(r.Context(), &req)
 	if err != nil {
-		writeErr(w, http.StatusBadGateway, "llm_error", err.Error(), nil)
+		ev := domain.NewEvent(domain.EvLog, p.GraphID, modelCallbackDiagnostic(err)).WithNode(p.NodeID, p.Replica).WithExecution(p.ExecutionID).WithActor(p.Actor).WithTrace(observability.TraceID(r.Context()))
+		ev.Level = "error"
+		s.Bus.Publish(context.WithoutCancel(r.Context()), ev)
+		writeErr(w, http.StatusBadGateway, "llm_error", "model call failed", nil)
 		return nil
 	}
 	writeJSON(w, 200, resp)
 	return nil
+}
+
+// Error bodies, prompt text and transport errors can contain user data. Build
+// a diagnostic from recognized error types and HTTP status only.
+func modelCallbackDiagnostic(err error) map[string]any {
+	data := map[string]any{"message": "Model callback failed", "operation": "llm.chat"}
+	var upstream *llm.APIError
+	switch {
+	case errors.As(err, &upstream):
+		data["retryable"] = upstream.Retryable
+		if upstream.Status >= 100 && upstream.Status <= 599 {
+			data["providerStatus"] = upstream.Status
+			data["message"] = fmt.Sprintf("Model provider returned HTTP %d %s", upstream.Status, http.StatusText(upstream.Status))
+		} else {
+			data["message"] = "Model provider reported a streaming error"
+		}
+	case errors.Is(err, llm.ErrModelTimeout), errors.Is(err, context.DeadlineExceeded):
+		data["message"] = "Model callback timed out"
+	case errors.Is(err, llm.ErrCredentials):
+		data["message"] = "Model provider credentials unavailable"
+	case errors.Is(err, context.Canceled):
+		data["message"] = "Model callback canceled"
+	}
+	return data
 }
 
 func (s *Server) cbEmit(w http.ResponseWriter, r *http.Request, env runtime.TurnEnv, _ *tools.Principal) error {

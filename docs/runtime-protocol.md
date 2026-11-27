@@ -108,6 +108,8 @@ provider), emits into this turn, this node's state, narration and questions for 
 A token for a finished or unknown execution gets `401`. Tokens are held in memory by the instance
 running the turn, so `callback.url` always points at that instance (`server.internalUrl`).
 
+A failed model callback returns HTTP 502 with code `llm_error` and message `model call failed`. Weft records a diagnostic in the execution’s event history. For an upstream HTTP failure the diagnostic includes its status and retryability. Provider response bodies are excluded from both surfaces.
+
 ## Timeouts, failures and retries
 
 | Situation | Outcome |
