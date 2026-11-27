@@ -102,7 +102,7 @@ person declines to leave a dirty editor, the editor remains mounted and the
 session remains available. Preserve the respective persisted and in-memory
 draft guarantees.
 
-The composer stays at the bottom of the visible conversation. Slash suggestions complete supported commands without submitting. Ctrl+Enter and Command+Enter send through the same path as Send.
+The composer stays at the bottom of the visible conversation. Slash suggestions complete supported commands without submitting. Ctrl+Enter and Command+Enter send through the same path as Send. Submission immediately moves the text into a provisional user message and locks the empty composer. A waiting indicator appears below the message until a reply or failure arrives. Server snapshots reconcile by request ID. On unconfirmed delivery, an unchanged retry reuses that ID.
 
 Use **New chat** as the temporary title, and **Untitled chat** with a visible
 title-generation failure state after a failure or a filtered result. Preserve

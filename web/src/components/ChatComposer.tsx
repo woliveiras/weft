@@ -55,7 +55,7 @@ export function ChatComposer({draft, onChange, onSend, disabled, sending, admin,
         <strong>{option.label}</strong>{option.detail && <span>{option.detail}</span>}
       </li>)}
     </ul>}
-    <textarea ref={field} aria-label="Message" aria-autocomplete="list" aria-controls={options.length ? id : undefined}
+    <textarea disabled={sending} ref={field} aria-label="Message" aria-autocomplete="list" aria-controls={options.length ? id : undefined}
       aria-activedescendant={active >= 0 ? id+'-'+active : undefined} aria-keyshortcuts="Control+Enter Meta+Enter"
       placeholder="Ask Weft or type / for commands" value={draft} rows={2} maxLength={4096}
       onChange={event => {onChange(event.target.value); setIndex(0); setDismissed(false);}}

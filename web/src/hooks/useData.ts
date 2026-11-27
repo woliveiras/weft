@@ -38,7 +38,15 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[], clearOnError?
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
-  return { data, error, loading, reload, setData };
+  // A mutation response supersedes a poll that started before it completed.
+  const replaceData = useCallback((next: T) => {
+    ++gen.current;
+    setData(next);
+    setError(undefined);
+    setLoading(false);
+  }, []);
+
+  return { data, error, loading, reload, setData, replaceData };
 }
 
 /** Calls fn at most once per `ms`, trailing. */

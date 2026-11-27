@@ -350,7 +350,13 @@ it.each([true,false])('keeps a late response in its original chat (success %s)',
   fireEvent.change(input,{target:{value:'Follow the earlier request'}});
   fireEvent.click(screen.getByRole('button',{name:'Send'}));
   await screen.findByRole('button',{name:'Sending…'});
+  expect(input).toHaveProperty('value','');
+  expect(input).toHaveProperty('disabled',true);
+  expect(screen.getByText('Follow the earlier request')).toBeTruthy();
+  expect(screen.getByText('Waiting for Weft…')).toBeTruthy();
   fireEvent.click(screen.getByRole('button',{name:'New chat'}));
+  expect(screen.queryByText('Follow the earlier request')).toBeNull();
+  expect(screen.queryByText('Waiting for Weft…')).toBeNull();
   const newInput = screen.getByRole('textbox',{name:'Message'});
   fireEvent.change(newInput,{target:{value:'A different request'}});
   expect((screen.getByRole('button',{name:'Send'}) as HTMLButtonElement).disabled).toBe(false);
@@ -443,4 +449,71 @@ it('retries the saved message from its own bubble',async () => {
   await act(async()=>{});
   expect(backend.find('POST',path)).toHaveLength(1);
   expect(screen.queryByRole('button',{name:'Retry'})).toBeNull();
+});
+
+it('restores an unconfirmed draft and reuses its request ID on retry', async () => {
+  const path = paths+'/'+id+'/messages';
+  const session = {id,title:'Delivery test',messages:[]};
+  const text = 'Show recent tasks';
+  let attempts = 0;
+  const backend = fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'configured'}),
+    [`GET ${paths}`]: () => ({items:[]}),
+    [`GET ${paths}/${id}`]: () => session,
+    [`POST ${path}`]: ({body}) => {
+      if (++attempts === 1) return new Response('Disconnected',{status:503});
+      return {...session,messages:[{id:(body as {requestId:string}).requestId,role:'user',text,state:'interpreted'},
+        {id:'reply',role:'assistant',text:'Done'}]};
+    },
+  });
+  render(<ChatPage id={id} archived={false} onOpen={vi.fn()}/>);
+  const field = await screen.findByRole('textbox',{name:'Message'});
+  fireEvent.change(field,{target:{value:text}});
+  fireEvent.click(screen.getByRole('button',{name:'Send'}));
+  await screen.findByRole('alert');
+  expect(field).toHaveProperty('value',text);
+  expect(field).toHaveProperty('disabled',false);
+  expect(screen.queryByRole('article')).toBeNull();
+  expect(screen.queryByText('Waiting for Weft…')).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'Send'}));
+  await screen.findByText('Done');
+  const requests = backend.find('POST',path);
+  expect(requests).toHaveLength(2);
+  expect(requests[1].body).toEqual(requests[0].body);
+  expect(field).toHaveProperty('value','');
+  expect(screen.getAllByText(text)).toHaveLength(1);
+});
+
+it('keeps the saved reply when an older poll finishes after the send', async () => {
+  const session = {id,title:'Polling test',messages:[]};
+  let finishPoll!:(value:unknown)=>void, finishSend!:(value:unknown)=>void;
+  const poll = new Promise(resolve=>{finishPoll=resolve;});
+  const send = new Promise(resolve=>{finishSend=resolve;});
+  let reads = 0;
+  fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'configured'}),
+    [`GET ${paths}`]: () => ({items:[]}),
+    [`GET ${paths}/${id}`]: () => ++reads === 1 ? session : poll,
+    [`POST ${paths}/${id}/messages`]: () => send,
+  });
+  vi.useFakeTimers();
+  try {
+    render(<ChatPage id={id} archived={false} onOpen={vi.fn()}/>);
+    await act(async()=>{});
+    const field = screen.getByRole('textbox',{name:'Message'});
+    fireEvent.change(field,{target:{value:'List tasks'}});
+    fireEvent.click(screen.getByRole('button',{name:'Send'}));
+    await act(async()=>{await vi.advanceTimersByTimeAsync(2000);});
+    expect(reads).toBe(2);
+    await act(async()=>finishSend({...session,messages:[
+      {id:'user',role:'user',text:'List tasks',state:'interpreted'},
+      {id:'reply',role:'assistant',text:'No tasks found'},
+    ]}));
+    await act(async()=>finishPoll(session));
+    expect(screen.getByText('No tasks found')).toBeTruthy();
+    expect(screen.getAllByText('List tasks')).toHaveLength(1);
+    expect(field).toHaveProperty('disabled',false);
+  } finally {
+    vi.useRealTimers();
+  }
 });

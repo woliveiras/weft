@@ -41,6 +41,7 @@
 }
 .chat-transcript { display: flex; flex-direction: column; gap: 0.8rem; }
 .chat-message { border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem; max-width: 45rem; }
+.chat-reply-progress { display: flex; align-items: center; gap: var(--space-2); }
 .chat-message-user { align-self: flex-end; }
 .chat-message p { margin-block: 0.3rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-markdown { min-width: 0; overflow-wrap: anywhere; margin-block: var(--space-2); }

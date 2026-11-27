@@ -23,6 +23,48 @@ for (const width of [1440,390]) {
   });
 }
 
+test('shows a pending turn once while polling reconciles the saved reply',async({page,request})=>{
+  const id='8d54ac82688b43c6a39b95e7c5530001';
+  const path='/api/v1/chat/sessions';
+  const text='/inspect tasks';
+  const headers={Authorization:'Bearer e2e-viewer-token'};
+  expect((await request.post(path,{headers,data:{requestId:id,text:'/inspect'}})).ok()).toBe(true);
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.goto('/#/chat/'+id);
+  const field=page.getByRole('textbox',{name:'Message'});
+  const history=page.getByRole('region',{name:'Conversation history'});
+  let deliver!:()=>void, acknowledge!:()=>void;
+  const beforeSave=new Promise<void>(resolve=>{deliver=resolve;});
+  const beforeResponse=new Promise<void>(resolve=>{acknowledge=resolve;});
+  await page.route('**'+path+'/'+id+'/messages', async route=>{
+    await beforeSave;
+    const response=await route.fetch();
+    await beforeResponse;
+    await route.fulfill({response});
+  });
+  try {
+    await field.fill(text);
+    await page.getByRole('button',{name:'Send',exact:true}).click();
+    await expect(field).toHaveValue('');
+    await expect(field).toBeDisabled();
+    await expect(history.getByText(text,{exact:true})).toHaveCount(1);
+    await expect(history.getByRole('status')).toHaveText('Waiting for Weft…');
+    await expect(history.getByRole('status').locator('.chat-running')).toHaveCSS('animation-name','none');
+    deliver();
+    // Polling observes the real stored reply before the POST reaches the browser.
+    await expect(history.getByRole('link',{name:'Open Tasks',exact:true})).toBeVisible();
+    await expect(history.getByText(text,{exact:true})).toHaveCount(1);
+    await expect(history.getByText('Waiting for Weft…')).toHaveCount(0);
+  } finally {
+    deliver();
+    acknowledge();
+  }
+  await expect(field).toBeEnabled();
+  await page.reload();
+  await expect(history.getByText(text,{exact:true})).toHaveCount(1);
+});
+
 test('retries a saved request in place with a distinct action below its text',async({page,request})=>{
   const headers={Authorization:'Bearer e2e-admin-token'};
   const {revision}=await(await request.get('/api/v1/chat/settings',{headers})).json();

@@ -2,7 +2,9 @@
 
 The message field stays at the bottom while the conversation scrolls above it.
 Type `/` for commands. Use the arrow keys and Enter or Tab to complete a suggestion.
-Send with **Ctrl+Enter** or **Command+Enter**, or select **Send**.
+Send with **Ctrl+Enter** or **Command+Enter**, or select **Send**. Your message appears immediately with a sending label.
+The field clears and stays locked while Weft prepares its reply. If delivery
+cannot be confirmed, the text returns to the field for another attempt.
 
 Open Chat from the left navigation or the console's home URL. Start with
 **New chat** above **Recents** on the right. The magnifier next to **Recents** and **Archived** searches titles across the chosen list. Filtering keeps the current conversation and draft open.

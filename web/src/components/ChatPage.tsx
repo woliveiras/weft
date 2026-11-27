@@ -25,6 +25,7 @@ import { taskSectionLink } from './taskDetailPresentation';
 import { settingsPath } from './graphSettingsSections';
 import './chat.css';
 
+type ChatDraft = {text:string; requestId?:string; submitting?:boolean};
 type OpenChat = (id?: string, archived?: boolean) => void;
 
 const accessLost = (error: unknown) => error instanceof ApiError && [401,403,404].includes(error.status);
@@ -41,7 +42,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   const visiblePage = list.data?.pageKey === pageKey ? list.data : undefined;
   const conversation = useAsync(() => id ? api.chatSession(id) : Promise.resolve(undefined), [id], accessLost);
   const session = conversation.data?.id === id ? conversation.data : undefined;
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, ChatDraft>>({});
   const [newDraft, setNewDraft] = useState(0);
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const pending = useRef(new Set<string>());
@@ -83,13 +84,9 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   }
   const [details, setDetails] = useState<string>();
   const [now, setNow] = useState(Date.now);
-  const keys = useRef(new Map<string, {id:string; text:string}>());
   const history = useRef<HTMLDivElement>(null);
   const followLatest = useRef(true);
   useLayoutEffect(() => { followLatest.current = true; }, [id]);
-  useLayoutEffect(() => {
-    if (followLatest.current && history.current) history.current.scrollTop = history.current.scrollHeight;
-  }, [session?.id, session?.messages.length]);
   const heading = useRef<HTMLHeadingElement>(null);
   const drawerButton = useRef<HTMLButtonElement>(null);
 
@@ -97,9 +94,16 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   const requestedRead = useRef(new Set<string>());
   const draftKey = id ?? `new-${newDraft}`;
   const sending = busy.has(draftKey);
-  const draft = drafts[draftKey] ?? '';
+  const entry = drafts[draftKey];
+  const savedSubmission = entry?.requestId && session?.messages.some(message => message.id === entry.requestId);
+  const optimistic = entry?.submitting && !savedSubmission && (!id || !!session);
+  const draft = entry?.submitting || savedSubmission ? '' : entry?.text ?? '';
   const modelAvailable = !MOCK && settings.data?.status === 'configured';
   const waiting = session?.messages.some(message => message.state === 'pending' || message.state === 'interpreting');
+  const awaitingReply = !!optimistic || !!waiting;
+  useLayoutEffect(() => {
+    if (followLatest.current && history.current) history.current.scrollTop = history.current.scrollHeight;
+  }, [session?.id, session?.messages.length, optimistic, awaitingReply]);
   const headingTitle = session ? session.title || 'New chat' : 'Chat';
   const titlePending = session?.titleRetryState === 'pending' && !!session.titleRetryStarted &&
     now - Date.parse(session.titleRetryStarted) < 60_000;
@@ -153,15 +157,23 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
 
   async function send() {
     if (session?.archived || !canSend || !draft.trim() || sending || waiting) return;
-    const previous = keys.current.get(draftKey);
-    const requestId = previous?.text === draft ? previous.id
-      : Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2,'0')).join('');
-    keys.current.set(draftKey, {id:requestId,text:draft});
+    const requestId = entry?.requestId ??
+      Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2,'0')).join('');
     await mutate(async () => {
-      const next = await api.sendConversationMessage(id, requestId, draft);
-      keys.current.delete(draftKey);
-      setDrafts(previous => previous[draftKey] === draft ? {...previous, [draftKey]:''} : previous);
-      return next;
+      setDrafts(previous => ({...previous, [draftKey]:{requestId,text:draft,submitting:true}}));
+      try {
+        const next = await api.sendConversationMessage(id, requestId, draft);
+        setDrafts(previous => {
+          const remaining = {...previous};
+          delete remaining[draftKey];
+          return remaining;
+        });
+        return next;
+      } catch (cause) {
+        // The server may already have saved the request. Reuse its ID for an unchanged retry.
+        setDrafts(previous => ({...previous, [draftKey]:{requestId,text:draft}}));
+        throw cause;
+      }
     }, next => { if (!id) { if (listFilter.current) onOpen(next.id,true); else onOpen(next.id); } });
   }
 
@@ -174,7 +186,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
     try {
       const result = await action();
       if (view.current === origin) {
-        conversation.setData(result);
+        conversation.replaceData(result);
         whenVisible?.(result);
       }
     } catch (error) {
@@ -276,7 +288,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       {id && !session && conversation.loading && <p role="status">Loading conversation…</p>}
       {id && conversation.error && <><ErrorBox error={session ? conversation.error : 'Conversation unavailable.'}/>
         <Btn onClick={() => void conversation.reload()}>Retry loading conversation</Btn></>}
-      {!id && modelAvailable && <div className="chat-welcome">
+      {!id && !optimistic && modelAvailable && <div className="chat-welcome">
         <h2>What would you like to do?</h2>
         <p className="muted">Follow a task, create an agent, or review a pull request.</p>
       </div>}
@@ -295,14 +307,21 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
           onView={anchor => { evidence.current = anchor; }}
           onRead={() => void markRead(message.id)}
           onRetry={!session.archived && modelAvailable && !sending && canRetry(message,now) ? () => void mutate(() => api.retryChat(session.id,message.id)) : undefined}/>)}
+        {optimistic && <article className="chat-message chat-message-user">
+          <span className="small muted">You · Sending…</span>
+          <p>{entry.text}</p>
+        </article>}
+        {awaitingReply && <div className="chat-reply-progress small muted" role="status">
+          <span className="chat-running" aria-hidden="true"/> Waiting for Weft…
+        </div>}
       </div>
       </div>
       {session?.archived && <p className="muted">This conversation is archived. <Btn disabled={sending}
         onClick={() => void mutate(() => api.archiveChat(session.id,false), next => onOpen(next.id,false))}>Restore conversation</Btn></p>}
       {(!id || session) && !session?.archived && <ChatComposer key={draftKey} draft={draft}
-        onChange={text => setDrafts(previous => ({...previous,[draftKey]:text}))}
+        onChange={text => setDrafts(previous => ({...previous,[draftKey]:{text}}))}
         onSend={() => void send()} disabled={!canSend || sending || !!waiting}
-        sending={sending} admin={canCreateAgent} choicePending={session?.messages.at(-1)?.state === 'discovery'}/>}
+        sending={!!entry?.submitting || !!waiting} admin={canCreateAgent} choicePending={session?.messages.at(-1)?.state === 'discovery'}/>}
     </section>
 
     <aside className="chat-panel" aria-label="Chat sessions">
@@ -468,7 +487,6 @@ function Message({sessionId, value, now, canCreateAgent, canOperate, onView, onR
     {value.role === 'assistant' ? <ChatMarkdown text={value.text}/> : <p>{value.text}</p>}
     {value.destination === 'chat-model' && onModelSettings && <Btn onClick={onModelSettings}>Choose Chat model here</Btn>}
     {value.destination && <ChatManualLink destination={value.destination} message={value.id} onView={onView}/>}
-    {(value.state === 'pending' || value.state === 'interpreting') && <p role="status">Interpreting request…</p>}
     {onRetry && <Btn className="chat-message-retry" onClick={onRetry}>Retry</Btn>}
     {value.execution && <section aria-label="Execution evidence">
       <p>{value.execution.id} · {value.execution.state} · {value.execution.active} of {value.execution.nodes} executions active</p>
