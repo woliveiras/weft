@@ -36,3 +36,28 @@ func TestOfflineScaffoldRunsWithoutDependencies(t *testing.T) {
 		}
 	}
 }
+
+func TestNextDevelopmentProgress(t *testing.T) {
+	for _, tc := range []struct {
+		state, id string
+		want      int
+	}{
+		{"2", "retry", 3},
+		{`{"iteration":3,"inputId":"qa"}`, "qa", 3},
+		{`{"iteration":3,"inputId":"qa"}`, "another", 4},
+		{`{"iteration":2}`, "", 3},
+		{`{invalid}`, "qa", 0},
+		{"0", "qa", 0},
+	} {
+		got, err := nextDevelopmentProgress([]byte(tc.state), tc.id)
+		if tc.want == 0 {
+			if err == nil {
+				t.Error("expected invalid saved state", tc.state)
+			}
+			continue
+		}
+		if err != nil || got.Iteration != tc.want || got.InputID != tc.id {
+			t.Errorf("state %s, input %q: %+v %v", tc.state, tc.id, got, err)
+		}
+	}
+}

@@ -68,12 +68,12 @@ func TestDeveloperUsesScopedFilesAndEscalatesRework(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	})
-	for n := 1; n <= 5; n++ {
+	for turnIndex, n := range []int{1, 2, 2, 3, 4, 5} {
 		kind := "task.ready"
 		if n > 1 {
 			kind = "qa.failed"
 		}
-		out, err := protocoltest.Run(t, protocol.TurnInput{Agent: "developer", Inputs: []protocol.Message{{Type: kind, Payload: json.RawMessage(`{"request_id":"r","task_id":"task","title":"Build"}`)}}}, agent, gateway)
+		out, err := protocoltest.Run(t, protocol.TurnInput{Agent: "developer", Inputs: []protocol.Message{{ID: "input-" + strconv.Itoa(n), Type: kind, Payload: json.RawMessage(`{"request_id":"r","task_id":"task","title":"Build"}`)}}}, agent, gateway)
 		if err != nil || len(out.Emits) != 1 || out.Emits[0].Type != "code.ready" {
 			t.Fatalf("turn %d: %+v %v", n, out, err)
 		}
@@ -89,7 +89,11 @@ func TestDeveloperUsesScopedFilesAndEscalatesRework(t *testing.T) {
 		if err := json.Unmarshal(raw, &p); err != nil {
 			t.Fatal(err)
 		}
-		if p.Iteration != n || p.Escalated != (n == 5) || !slices.Equal(p.Files, []string{"src/a.go"}) || len(writes) != n || writes[n-1] != "src/a.go" || string(saved) != strconv.Itoa(n) {
+		var progress developmentProgress
+		if err := json.Unmarshal(saved, &progress); err != nil {
+			t.Fatal(err)
+		}
+		if p.Iteration != n || p.Escalated != (n == 5) || !slices.Equal(p.Files, []string{"src/a.go"}) || len(writes) != turnIndex+1 || writes[turnIndex] != "src/a.go" || progress.Iteration != n || progress.InputID != "input-"+strconv.Itoa(n) {
 			t.Fatalf("turn %d: %+v %v", n, p, writes)
 		}
 	}

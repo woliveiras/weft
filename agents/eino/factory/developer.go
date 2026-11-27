@@ -3,6 +3,7 @@ package factory
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -57,16 +58,22 @@ func develop(ctx context.Context, j *job) error {
 	}
 	title := first(j.text("title"), id)
 	key := "iter:" + id
-	iteration := 1
+	progress := developmentProgress{Iteration: 1, InputID: j.message.ID}
 	if j.message.Type != "task.ready" {
-		if _, err := j.load(ctx, key, &iteration); err != nil {
+		raw, found, err := j.client.StateGet(ctx, key)
+		if err != nil {
 			return err
 		}
-		iteration++
+		if found {
+			progress, err = nextDevelopmentProgress(raw, j.message.ID)
+			if err != nil {
+				return err
+			}
+		} else {
+			progress.Iteration = 2
+		}
 	}
-	if err := j.save(ctx, key, iteration); err != nil {
-		return err
-	}
+	iteration := progress.Iteration
 	feedback := append(stringList(j.item["comments"]), stringList(j.item["failures"])...)
 	if reason := j.text("reason"); reason != "" {
 		feedback = append(feedback, reason)
@@ -124,6 +131,9 @@ func develop(ctx context.Context, j *job) error {
 	if err := commitFiles(ctx, j.client, written, first(changes.CommitMessage, id+": "+title)); err != nil {
 		return err
 	}
+	if err := j.save(ctx, key, progress); err != nil {
+		return err
+	}
 	item := map[string]any{"request_id": j.text("request_id"), "task_id": id, "title": title, "description": first(j.text("description"), title), "files": written, "summary": first(changes.Summary, "implemented "+title), "branch": j.in.Branch, "iteration": iteration, "research": paths}
 	if escalated {
 		item["escalated"] = true
@@ -131,6 +141,29 @@ func develop(ctx context.Context, j *job) error {
 	j.emit("code.ready", item)
 	j.summary = fmt.Sprintf("%s: wrote %d files (iteration %d)", id, len(written), iteration)
 	return nil
+}
+
+type developmentProgress struct {
+	Iteration int    `json:"iteration"`
+	InputID   string `json:"inputId,omitempty"`
+}
+
+func nextDevelopmentProgress(raw []byte, inputID string) (developmentProgress, error) {
+	var saved developmentProgress
+	if err := json.Unmarshal(raw, &saved); err != nil {
+		// The earlier factory stored only the last iteration number.
+		if err := json.Unmarshal(raw, &saved.Iteration); err != nil {
+			return saved, fmt.Errorf("decode development progress: %w", err)
+		}
+	}
+	if saved.Iteration < 1 {
+		return saved, errors.New("invalid saved development iteration")
+	}
+	if inputID == "" || inputID != saved.InputID {
+		saved.Iteration++
+	}
+	saved.InputID = inputID
+	return saved, nil
 }
 
 // A QA retry can produce the same files as the previous turn. Staging is
