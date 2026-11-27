@@ -76,12 +76,7 @@ fi
 # Probe helper: prints "open" or "blocked" for host:port from a sandbox.
 probe() { # network host port
 	in_daemon docker run --rm --pull=never --network "$1" --cap-drop ALL --security-opt no-new-privileges "$IMAGE" \
-		python3 -c "import socket,sys
-s=socket.socket(); s.settimeout(4)
-try:
-    s.connect((sys.argv[1], int(sys.argv[2]))); print('open')
-except Exception:
-    print('blocked')" "$2" "$3"
+        sh -ec 'command -v nc >/dev/null; if nc -z -w 4 "$1" "$2"; then echo open; else echo blocked; fi' sh "$2" "$3"
 }
 
 # Addresses on the platform side: sandbox-daemon on the Compose network,

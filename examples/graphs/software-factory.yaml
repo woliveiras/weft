@@ -1,4 +1,4 @@
-# Software factory: five framework-agnostic Python agents (Runtime Protocol v1)
+# Software factory: five Go agents built with Eino (Runtime Protocol v1)
 # wired into a graph with two feedback cycles and a human release gate.
 #
 #   requests ─▶ planner ─research.question─▶ researcher
@@ -22,9 +22,9 @@ spec:
   workspace: {git: true}
   maxHops: 40
   defaults:
-    # Every Python agent is served by one runtime process (compose service
+    # Every external Eino agent is served by one runtime process (compose service
     # "agents"); the platform keeps tools and model keys on its side.
-    runtime: {kind: external, framework: custom, endpoint: http://agents:8000}
+    runtime: {kind: external, framework: eino, endpoint: http://agents:8000}
     model: {provider: "", name: ""}   # platform default provider (mock offline, or e.g. ollama)
 
   nodes:
@@ -62,8 +62,8 @@ spec:
 
     - id: reviewer
       name: Reviewer
-      description: Reviews changes (LangGraph StateGraph when the agents image is built with EXTRAS=langgraph).
-      runtime: {agent: reviewer, framework: langgraph}
+      description: Analyses changed files and routes the review verdict.
+      runtime: {agent: reviewer}
       tools: [filesystem.read, git.read]
       position: {x: 540, y: 320}
 
@@ -71,10 +71,11 @@ spec:
       name: QA
       description: Runs the test suite in the sandbox.
       runtime: {agent: qa}
-      config: {test_command: "python3 -m unittest discover -s tests -v", test_timeout_sec: 300}
+      isolation: {mode: docker}
+      config: {test_command: "go test ./...", test_timeout_sec: 300}
       tools:
         - filesystem.read
-        - {name: shell.exec, commands: ["python3", "python"]}
+        - {name: shell.exec, commands: ["go test ./..."]}
       position: {x: 800, y: 320}
 
     - id: integrator

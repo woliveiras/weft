@@ -81,12 +81,12 @@ func exerciseEinoFactory(t *testing.T, srv *httptest.Server, app *app.App, endpo
 	g.Spec.Defaults.Runtime.Command = command
 	g.Spec.Defaults.Model.Provider = "factory-fixture"
 	g.Node("integrator").Model = domain.ModelRef{Provider: "mock"}
-	qa := g.Node("qa")
-	qa.Config["test_command"] = "go test ./..."
-	for i, grant := range qa.Tools {
-		if grant.Name == "shell.exec" {
-			qa.Tools[i].Commands = []string{"go test ./..."}
-		}
+	// Compose uses the shipped Docker setting. These two fixtures supply a
+	// disposable host process or a controller with the Kubernetes sandbox profile.
+	if app.Config.Isolation.Kubernetes != nil {
+		g.Node("qa").Isolation.Mode = domain.IsolationKubernetes
+	} else {
+		g.Node("qa").Isolation.Mode = domain.IsolationProcess
 	}
 	gid := g.Metadata.ID
 	body, err := json.Marshal(g)

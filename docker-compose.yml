@@ -76,9 +76,10 @@ services:
     stop_grace_period: 60s   # lets in-flight turns finish (graceful stop)
 
   agents:
-    build: {context: ., dockerfile: agents/Dockerfile}
+    build: {context: ./agents/eino}
     image: weft/agents:dev
     environment:
+      WEFT_URL: http://weftd:8080
       WEFT_RUNTIME_SECRET: ${WEFT_RUNTIME_SECRET:?Set WEFT_RUNTIME_SECRET in .env}
     # Agents hold no credentials and reach nothing but the platform callback.
     read_only: true

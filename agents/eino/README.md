@@ -1,6 +1,8 @@
-# Eino document-summary pilot
+# Bundled Go agents with Eino
 
 The `summarize` agent reads one document through the execution's Weft tool gateway. It calls the selected node model and returns a `summary.proposed` message carrying the original input ID. The example workflow holds that message for an operator decision. [Example workflow](../../examples/graphs/eino-summary.yaml) · [Runtime Protocol v1](../../docs/runtime-protocol.md)
+
+The bundled service also dispatches the software factory’s planner, researcher, developer, reviewer and QA roles. Compose exposes this service to the controller at `http://agents:8000`. Kubernetes uses `http://weft-agents:8000`.
 
 Run `make build` to build the Linux binaries using Docker. For a host binary, run `go build -o weft-eino-agent ./cmd/weft-eino-agent` from this module. A Weft process-isolated node can launch that binary by absolute path in `runtime.command` with `runtime.endpoint` omitted. The controller supplies its callback origin, a listening port and the configured runtime secret.
 

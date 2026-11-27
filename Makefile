@@ -81,7 +81,7 @@ logs: ## Follow control-plane logs
 
 images: ## Build all container images
 	docker build --build-arg VERSION=$(VERSION) -t weft/weftd:$(VERSION) .
-	docker build -f agents/Dockerfile -t weft/agents:$(VERSION) .
+	docker build -t weft/agents:$(VERSION) agents/eino
 	docker build -f Dockerfile.sandbox -t weft/sandbox:$(VERSION) .   # outside Compose; Compose builds it inside sandbox-daemon
 
 k8s-render: ## Render platform manifests (kustomize) and agent runtimes for GRAPH

@@ -28,3 +28,6 @@ For an existing installation, schedule a maintenance window, stop new admissions
 ## Automatic replica command sandboxes
 
 The base profile permits model and file callbacks. To enable commands for graphs created through the console, Chat or API, install the [replica sandbox overlay](../kubernetes-sandboxes/README.md).
+
+
+For the bundled Eino factory, import `examples/graphs/software-factory.yaml` with two installation-specific values. Set `spec.defaults.runtime.endpoint` to `http://weft-agents:8000` and the `qa` node’s `isolation.mode` to `kubernetes`. The replica sandbox overlay supplies the Go toolchain. The factory uses the same message routes, release gate and exact `go test ./...` command as Compose.

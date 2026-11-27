@@ -1,7 +1,7 @@
 # Weft control plane: weftd (API + engine + console) and the weft CLI.
 #   docker build -t weft/weftd .
 # Multi-stage: the console is built with Node, the binaries with Go, and the
-# runtime image carries only what agents' tools need (git, python3, a shell).
+# runtime image carries only what agents' tools need (Git, a shell and the Docker CLI).
 
 FROM node:22-alpine AS web-source
 RUN corepack enable
@@ -26,11 +26,10 @@ RUN go build -ldflags "-s -w -X github.com/woliveiras/weft/server/internal/api.V
  && go build -ldflags "-s -w" -o /out/weft-preview-linux ./cmd/weft-preview
 
 FROM alpine:3.22
-# git: workspaces and worktrees; python3: QA agents run test suites through
-# shell.exec in the process sandbox; docker-cli: docker isolation, talking to
+# git: workspaces and worktrees; docker-cli: docker isolation, talking to
 # the dedicated sandbox daemon (WEFT_SANDBOX_DOCKER_HOST); tini: signal
 # handling for children.
-RUN apk add --no-cache ca-certificates git python3 tini docker-cli docker-cli-buildx tzdata \
+RUN apk add --no-cache ca-certificates git tini docker-cli docker-cli-buildx tzdata \
  && addgroup -S -g 10001 weft && adduser -S -u 10001 -G weft -h /var/lib/weft weft \
  && mkdir -p /var/lib/weft/data /var/lib/weft/workspaces /app \
  && chown -R weft:weft /var/lib/weft

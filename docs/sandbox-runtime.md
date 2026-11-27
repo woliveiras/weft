@@ -140,7 +140,7 @@ nodes:
 
 ### 3. Use a different toolchain
 
-The default image is Python 3.12 with git and make. For a project's toolchain,
+The default image includes Go, Git and Make. QA can run Go tests offline when the workspace provides its dependencies. For a project's toolchain,
 define a [project environment](environments.md) in the graph **Settings** tab →
 **Environment**. Weft builds it on this daemon. Every docker-isolated agent
 of the graph without an image of its own runs in it. An agent's **Image**

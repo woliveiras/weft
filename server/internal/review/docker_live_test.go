@@ -42,23 +42,15 @@ func TestPreviewRealDocker(t *testing.T) {
 	m, r := fixture(t)
 	r.ID = fmt.Sprintf("%032x", time.Now().UnixNano())
 	r.Revision = 0
-	r.Request.Command = []string{"python3", "app.py"}
+	r.Request.Command = []string{"/workspace/preview-fixture"}
 	r.Request.Port = 5173
 	r.Directory = filepath.Join(m.Root, r.ID)
-	source := `cache='/home/sandbox/.preview-cache/value'
-assert open(cache).read() == 'seeded'
-open(cache,'w').write('private')
-from http.server import HTTPServer, BaseHTTPRequestHandler
-class App(BaseHTTPRequestHandler):
- def do_GET(self):
-  self.send_response(200); self.send_header('Content-Type','text/html'); self.end_headers(); self.wfile.write(b'<h1>Review candidate</h1>')
- def do_POST(self):
-  body=self.rfile.read(int(self.headers.get('Content-Length','0')))
-  self.send_response(201); self.end_headers(); self.wfile.write(body)
-HTTPServer(('127.0.0.1',5173),App).serve_forever()
-`
-	if e := os.WriteFile(filepath.Join(r.Source, "app.py"), []byte(source), 0644); e != nil {
-		t.Fatal(e)
+	fixture, err := os.ReadFile(os.Getenv("WEFT_TEST_PREVIEW_APP"))
+	if err != nil {
+		t.Fatalf("read compiled preview fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(r.Source, "preview-fixture"), fixture, 0755); err != nil {
+		t.Fatal(err)
 	}
 	hash, e := Candidate(ctx, r.Source, filepath.Join(r.Directory, "candidate"))
 	if e != nil {
