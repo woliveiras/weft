@@ -50,6 +50,7 @@ type Plan struct {
 	ExecutionID           string
 	Budget                BudgetRaiseDraft
 	Correction            taskconfig.DraftText
+	CorrectionPayload     string
 	Skill                 SkillDraft
 	Area                  string
 	PRSelector            PRSelector
@@ -240,6 +241,8 @@ func decodePlan(body string) (Plan, error) {
 			plan.Correction.Request = value
 		case "newOutcome":
 			plan.Correction.Outcome = value
+		case "newPayloadJson":
+			plan.CorrectionPayload = value
 		case "taskTitle":
 			plan.TaskDraft.Title = value
 		case "workflow":
@@ -313,7 +316,8 @@ func decodePlan(body string) (Plan, error) {
 	if plan.Kind != GuideNode && (seen["guideWorkflow"] || seen["guideNode"] || seen["guideReplica"] || seen["guidance"]) {
 		return Plan{}, ErrInvalidPlan
 	}
-	if (seen["newTitle"] || seen["newRequest"] || seen["newOutcome"]) && plan.Kind != CorrectTask {
+	textCorrection := seen["newTitle"] || seen["newRequest"] || seen["newOutcome"]
+	if (textCorrection || seen["newPayloadJson"]) && plan.Kind != CorrectTask {
 		return Plan{}, ErrInvalidPlan
 	}
 	if plan.Kind != CreateTask && (seen["repositories"] || seen["taskTitle"] || seen["workflow"] || seen["workflowVersion"] || seen["request"] || seen["outcome"]) {
@@ -427,7 +431,14 @@ func decodePlan(body string) (Plan, error) {
 			return Plan{}, ErrInvalidPlan
 		}
 	case CorrectTask:
-		if !shortLabel(plan.Task) || seen["question"] || !validCorrection(plan.Correction, true) || (seen["newTitle"] && plan.Correction.Title == "") || (seen["newRequest"] && plan.Correction.Request == "") || (seen["newOutcome"] && plan.Correction.Outcome == "") {
+		if !shortLabel(plan.Task) || seen["question"] {
+			return Plan{}, ErrInvalidPlan
+		}
+		if seen["newPayloadJson"] {
+			if textCorrection || !validTaskPayload(plan.CorrectionPayload) {
+				return Plan{}, ErrInvalidPlan
+			}
+		} else if !validCorrection(plan.Correction, true) || (seen["newTitle"] && plan.Correction.Title == "") || (seen["newRequest"] && plan.Correction.Request == "") || (seen["newOutcome"] && plan.Correction.Outcome == "") {
 			return Plan{}, ErrInvalidPlan
 		}
 	case WatchTask, InspectTask, StartTask, RetryTask, CancelTask, PrepareTaskEnvironment:

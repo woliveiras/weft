@@ -8,6 +8,7 @@ Run `make eval-chat` from the repository root. Each case starts its own Weft API
 | PullRequest | Two loopback repositories both contain PR 418. “o do mobile” prepares a review of the chosen head. No diff is read and no comments are published. |
 | AgentCreation | The definition covers the requested release-review work. The catalog changes only on confirmation. Replaying confirmation leaves exactly one published version. |
 | UnavailableRead | An unreadable SQLite task record makes the running-task query unavailable. The session retains a retryable diagnostic without reporting zero matches. |
+| TaskPayload | An operator replaces the complete JSON for a channel draft. A manual edit invalidates the initial review. Confirming a fresh review changes only the payload, and replay keeps the saved revision. |
 | WorkspaceCheckpoints | A viewer asks for the latest checkpoint of a fixture Git workspace. The answer identifies the saved checkpoint and tool; the file edited afterward retains its current contents. |
 | SpendBreakdown | A viewer asks for the highest-spend provider and model in a historical month. Two calls on one model outrank a competing model. The higher-cost record from the following month is excluded. |
 | TaskLink | A viewer asks for a task link by ID and then asks for it again by reference. Both replies identify the same verified task. A missing ID returns no link, even when another task has that ID as its title. |

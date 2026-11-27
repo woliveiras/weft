@@ -896,3 +896,26 @@ test('opens a verified task detail link from a saved conversation', async ({ pag
   await expect(page.getByRole('heading', {name:'Task draft'})).toBeVisible();
   await expect(page.getByRole('textbox', {name:'Request', exact:true})).toHaveValue('Editorial checklist for the task link');
 });
+
+test('reviews a task payload in Chat before saving it to the draft', async ({ page, request }) => {
+  await selectFixtureModel(request);
+  const draft = await draftTaskWithApproval(request, 'chat-payload-review', 'Editorial payload fixture');
+  const readDraft = async () => {
+    const response = await request.get('/api/v1/tasks/' + draft.id, { headers });
+    expect(response.ok()).toBe(true);
+    return response.json();
+  };
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-operator-token'));
+  await page.goto('/');
+  await send(page, 'Replace the editorial payload with a JSON object setting section to release.');
+  const review = page.getByRole('region', { name: 'Task draft correction' });
+  await expect(review.getByRole('heading', { name: 'Replace task input payload' })).toBeVisible();
+  await expect(review.getByText('Channel requests · Message type feature.request')).toBeVisible();
+  await expect(review.locator('pre')).toHaveText(['{}', '{"section":"release"}']);
+  expect(await readDraft()).toMatchObject({ revision: draft.revision, payloadJson: '{}' });
+  await review.getByRole('button', { name: 'Save payload replacement' }).click();
+  await expect.poll(readDraft).toMatchObject({
+    revision: draft.revision + 1, payloadJson: '{"section":"release"}', status: 'draft',
+    title: 'Editorial payload fixture', channelId: 'requests', messageType: 'feature.request',
+  });
+});

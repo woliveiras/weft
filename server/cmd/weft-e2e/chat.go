@@ -59,6 +59,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		toolName, arguments = "prepare_task_environment", `{"task":"Release sandbox fixture"}`
 	case "Build the environment for the shared build workflow.":
 		toolName, arguments = "prepare_workflow_environment", `{"environmentWorkflow":"chat-shared-build","title":"Build shared environment"}`
+	case "Replace the editorial payload with a JSON object setting section to release.":
+		toolName, arguments = "edit_task_draft", `{"task":"Editorial payload fixture","newPayloadJson":"{\"section\":\"release\"}"}`
 	case "Correct the release checklist draft to review dates.":
 		toolName, arguments = "edit_task_draft", `{"task":"Correctable release checklist","newRequest":"Review the release dates."}`
 	case "Set the task budget to two dollars with an eighty percent warning.":

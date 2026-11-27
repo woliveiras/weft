@@ -1,20 +1,22 @@
 package chat
 
 import (
-	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"time"
+
+	"github.com/woliveiras/weft/server/internal/taskconfig"
 )
 
 const CorrectTask = "task.edit"
 
 type TaskCorrection struct {
-	Task            string               `json:"task"`
-	Revision        int64                `json:"revision"`
-	Workflow        string               `json:"workflow"`
-	WorkflowVersion int                  `json:"workflowVersion"`
-	WorkflowDigest  string               `json:"workflowDigest"`
-	Before          taskconfig.DraftText `json:"before"`
-	After           taskconfig.DraftText `json:"after"`
+	Task            string                `json:"task"`
+	Revision        int64                 `json:"revision"`
+	Workflow        string                `json:"workflow"`
+	WorkflowVersion int                   `json:"workflowVersion"`
+	WorkflowDigest  string                `json:"workflowDigest"`
+	Before          *taskconfig.DraftText `json:"before,omitempty"`
+	After           *taskconfig.DraftText `json:"after,omitempty"`
+	Payload         *TaskPayloadChange    `json:"payload,omitempty"`
 }
 
 func validCorrection(text taskconfig.DraftText, partial bool) bool {
@@ -58,5 +60,5 @@ func NewTaskCorrection(owner, session string, draft *taskconfig.Draft, change ta
 	if _, err := draft.CorrectedInput(after); err != nil {
 		return nil, err
 	}
-	return newReview(owner, session, now, OperationReview{TaskCorrection: &TaskCorrection{Task: draft.ID, Revision: draft.Revision, Workflow: draft.GraphID, WorkflowVersion: draft.GraphVersion, WorkflowDigest: workflowDigest, Before: before, After: after}})
+	return newReview(owner, session, now, OperationReview{TaskCorrection: &TaskCorrection{Task: draft.ID, Revision: draft.Revision, Workflow: draft.GraphID, WorkflowVersion: draft.GraphVersion, WorkflowDigest: workflowDigest, Before: &before, After: &after}})
 }

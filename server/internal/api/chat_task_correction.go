@@ -50,6 +50,15 @@ func (s *Server) reviewChatTaskCorrection(ctx context.Context, actor Identity, i
 		out.Text, out.Retryable = "Could not verify the workflow revision.", true
 		return out
 	}
+	if plan.CorrectionPayload != "" {
+		out.Review, err = chat.NewTaskPayloadCorrection(actor.chatOwner, id, d, plan.CorrectionPayload, digest, time.Now())
+		if err == nil {
+			out.Text, out.Destination = "Compare the JSON for this channel and message type before saving the replacement.", ""
+		} else {
+			out.Text = "The input payload could not be reviewed in Chat. Open Tasks to check the saved channel and current payload."
+		}
+		return out
+	}
 	out.Review, err = chat.NewTaskCorrection(actor.chatOwner, id, d, plan.Correction, digest, time.Now())
 	if err != nil {
 		out.Text = "Open Tasks to review the current text, channel payload and bindings before editing."
@@ -78,10 +87,20 @@ func (s *Server) applyChatTaskCorrection(ctx context.Context, actor Identity, id
 		if err != nil {
 			return err
 		}
-		if d.Revision != p.Revision || d.GraphID != p.Workflow || d.Text() != p.Before {
+		if d.Revision != p.Revision || d.GraphID != p.Workflow {
 			return storage.ErrConflict
 		}
-		_, err = manager.CorrectForOperation(ctx, d, p.After, actor.Name, r.ID)
+		if q := p.Payload; q != nil {
+			if d.ChannelID != q.Channel || d.MessageType != q.MessageType || d.PayloadJSON != q.Before {
+				return storage.ErrConflict
+			}
+			_, err = manager.ReplacePayloadForOperation(ctx, d.ID, d.Revision, q.After, actor.Name, r.ID)
+			return err
+		}
+		if p.Before == nil || p.After == nil || d.Text() != *p.Before {
+			return storage.ErrConflict
+		}
+		_, err = manager.CorrectForOperation(ctx, d, *p.After, actor.Name, r.ID)
 		return err
 	})
 	state := chat.ReviewApplied

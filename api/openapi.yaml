@@ -3624,7 +3624,10 @@ components:
           properties:
             taskCorrection:
               type: object
-              required: [task, workflow, revision, workflowVersion, workflowDigest, before, after]
+              required: [task, workflow, revision, workflowVersion, workflowDigest]
+              oneOf:
+                - required: [before, after]
+                - required: [payload]
               properties:
                 task: {type: string}
                 workflow: {type: string}
@@ -3633,6 +3636,14 @@ components:
                 workflowDigest: {type: string}
                 before: {$ref: "#/components/schemas/ChatDraftText"}
                 after: {$ref: "#/components/schemas/ChatDraftText"}
+                payload:
+                  type: object
+                  required: [channel, messageType, before, after]
+                  properties:
+                    channel: {type: string}
+                    messageType: {type: string}
+                    before: {type: string, description: Current channel input in JSON.}
+                    after: {type: string, description: Complete replacement channel input in JSON.}
     ChatTaskRetryReview:
       allOf:
         - {$ref: "#/components/schemas/ChatReviewState"}

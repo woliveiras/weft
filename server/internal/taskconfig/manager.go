@@ -273,18 +273,8 @@ func (m Manager) saveDraft(ctx context.Context, id string, in Input, revision in
 	if err := Validate(in); err != nil {
 		return nil, err
 	}
-	// Saving is allowed only against the explicitly selected current version.
-	// Retained drafts may later become stale; reads do not discard them.
-	g, err := m.Store.GetGraph(ctx, in.GraphID, 0)
-	if err != nil {
+	if err := m.validateDraftBinding(ctx, in); err != nil {
 		return nil, err
-	}
-	if g.Metadata.Version != in.GraphVersion {
-		return nil, storage.ErrConflict
-	}
-	n := g.Node(in.NodeID)
-	if n == nil || n.Disabled {
-		return nil, fmt.Errorf("%w: select an enabled agent in the workflow", ErrInvalid)
 	}
 	now := time.Now().UTC()
 	d := &Draft{TriggerIssueOrigin: origin, Input: in, ID: id, TriggerGitHubIssue: githubIssueKey, Status: "draft", CreatedBy: actor, UpdatedBy: actor, CreatedAt: now, UpdatedAt: now}
@@ -329,12 +319,32 @@ func (m Manager) saveDraft(ctx context.Context, id string, in Input, revision in
 		d.CreatedAt = old.CreatedAt
 		d.CreatedBy = old.CreatedBy
 	}
-	// Audit intent before the CAS; success is represented by the persisted record.
-	// Failure to audit prevents mutation. The event includes no request content.
 	if in.Repositories != nil {
 		d.RepositoryRevision = revision + 1
 	}
-	ev := domain.NewEvent("task.draft_save_requested", in.GraphID, map[string]any{"taskId": d.ID, "expectedRevision": revision}).WithActor(actor)
+	return m.persistDraft(ctx, d, revision, actor, guards...)
+}
+
+// Saving requires the selected workflow to still be current and the entry
+// agent to be enabled. Retained drafts may be older than this workflow.
+func (m Manager) validateDraftBinding(ctx context.Context, in Input) error {
+	g, err := m.Store.GetGraph(ctx, in.GraphID, 0)
+	if err != nil {
+		return err
+	}
+	if g.Metadata.Version != in.GraphVersion {
+		return storage.ErrConflict
+	}
+	if n := g.Node(in.NodeID); n == nil || n.Disabled {
+		return fmt.Errorf("%w: select an enabled agent in the workflow", ErrInvalid)
+	}
+	return nil
+}
+
+func (m Manager) persistDraft(ctx context.Context, d *Draft, revision int64, actor string, guards ...storage.SettingRevision) (*Draft, error) {
+	// Audit intent before the CAS; a failure stops the save. The event
+	// includes no request content or payload.
+	ev := domain.NewEvent("task.draft_save_requested", d.GraphID, map[string]any{"taskId": d.ID, "expectedRevision": revision}).WithActor(actor)
 	if err := m.Store.AppendEvent(ctx, ev); err != nil {
 		return nil, err
 	}

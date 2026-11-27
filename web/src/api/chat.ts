@@ -173,7 +173,10 @@ export interface ChatWorkflowEnvironmentReview extends ChatReviewState {
 }
 export interface ChatDraftText { title:string; request:string; outcome:string }
 export interface ChatCorrectionReview extends ChatReviewState {
-  taskCorrection:{task:string; revision:number; workflow:string; workflowVersion:number; workflowDigest:string; before:ChatDraftText; after:ChatDraftText};
+  taskCorrection: {task:string; revision:number; workflow:string; workflowVersion:number; workflowDigest:string} & (
+    {before:ChatDraftText; after:ChatDraftText; payload?:undefined} |
+    {payload:{channel:string; messageType:string; before:string; after:string}}
+  );
 }
 export interface ChatTaskRetryReview extends ChatReviewState {
   taskRetry: {id: string; title: string; revision: number; workflowId: string; workflowVersion: number; repositoryCount: number};

@@ -61,6 +61,7 @@
 .chat-agent-review dt { font-weight: 600; }
 .chat-agent-review dd { margin: 0; overflow-wrap: anywhere; }
 .chat-pr-diff { max-height: 24rem; overflow: auto; border: 1px solid var(--border); padding: 0.75rem; }
+.chat-task-payload { max-height: 16rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); padding: 0.75rem; }
 .chat-composer { display: grid; gap: 0.5rem; margin-block: 1rem; }
 .chat-composer button { justify-self: end; }
 @keyframes chat-running { to { transform: rotate(360deg); } }

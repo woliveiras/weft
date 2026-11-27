@@ -832,11 +832,17 @@ function CorrectionCard({review, now, canConfirm, onDecide, onView}: {
   const {taskCorrection: edit} = review;
   const anchor = 'chat-correction-' + review.id;
   return <section className="chat-agent-review" aria-label="Task draft correction">
-    <h3>Edit task draft</h3>
+    <h3>{edit.payload ? 'Replace task input payload' : 'Edit task draft'}</h3>
     <p>{edit.task} · {edit.workflow} v{edit.workflowVersion} · draft revision {edit.revision}</p>
-    <h4>Current</h4><p>{edit.before.title}</p><p>{edit.before.request}</p><p>{edit.before.outcome}</p>
-    <h4>Proposed</h4><p>{edit.after.title}</p><p>{edit.after.request}</p><p>{edit.after.outcome}</p>
-    {review.state === 'awaiting_confirmation' && <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm} confirmLabel="Save draft correction" onDecide={onDecide}/>}
+    {edit.payload ? <>
+      <p>Channel {edit.payload.channel} · Message type {edit.payload.messageType}</p>
+      <h4>Current payload</h4><pre className="chat-task-payload" tabIndex={0}>{edit.payload.before}</pre>
+      <h4>Proposed replacement</h4><pre className="chat-task-payload" tabIndex={0}>{edit.payload.after}</pre>
+    </> : <>
+      <h4>Current</h4><p>{edit.before.title}</p><p>{edit.before.request}</p><p>{edit.before.outcome}</p>
+      <h4>Proposed</h4><p>{edit.after.title}</p><p>{edit.after.request}</p><p>{edit.after.outcome}</p>
+    </>}
+    {review.state === 'awaiting_confirmation' && <ReviewDecisionControls expiresAt={review.expiresAt} now={now} canConfirm={canConfirm} confirmLabel={edit.payload ? 'Save payload replacement' : 'Save draft correction'} onDecide={onDecide}/>}
     {review.state === 'applied' && <p role="status">Task draft revision {review.resultVersion} saved.</p>}
     {review.state === 'applying' && <p role="status">Saving the draft correction…</p>}
     {review.state === 'unknown' && <p role="status">Save outcome unknown. Open the task to inspect its current revision.</p>}

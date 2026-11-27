@@ -134,7 +134,7 @@ workflow environment** for logs, repository-backed builds and reset controls.
 
 ## Correct a task draft
 
-Identify the draft by its ID or unique title and specify the replacement title, request, or outcome. Compare the current and proposed text, then select **Save draft correction**. The draft keeps its workflow and repository bindings. When it uses a generated channel payload, the title and request update there as well. Open **Tasks** to review custom payloads, resolve incomplete bindings or change repositories. A newer draft or workflow revision requires a fresh review.
+Identify the draft by its ID or unique title and specify the replacement title, request, or outcome. Compare the current and proposed text, then select **Save draft correction**. The draft keeps its workflow and repository bindings. When it uses a generated channel payload, the title and request update there as well. For a channel-bound draft, you can also ask to replace its complete JSON payload in a separate edit. Compare the channel, message type and both payloads before saving. The change preserves the other draft fields and repository bindings. Use **Tasks** for payloads outside the Chat size or content limits, incomplete bindings and repository changes. A newer draft or workflow revision requires a fresh review.
 
 ## Save a managed skill
 
