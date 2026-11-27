@@ -18,7 +18,7 @@ should use [Contributing](../CONTRIBUTING.md) for toolchains and checks.
 | Run commands and review applications in containers | [Sandbox runtime](sandbox-runtime.md), [sandbox acceptance evidence](sandbox-acceptance.md) |
 | Prepare a project's toolchain and network policy | [Environments](environments.md), [mise example](../examples/projects/mise-node/README.md) |
 | Grant tools and guide agents | [Tool permissions](tool-permissions.md), [skills and steering](instructions.md), [delegation](delegation.md) |
-| Configure models and budgets | [Model setup](getting-started.md#3-use-a-real-model), [cost control](cost-control.md), [LangGraph qualification](provider-langgraph-validation.md) |
+| Configure models and budgets | [Model setup](getting-started.md#3-use-a-real-model), [cost control](cost-control.md), [Provider qualification with Eino](provider-eino-validation.md) |
 | Connect MCP services | [Connections and permissions](mcp.md), [integration contracts](mcp-integrations.md), [template candidates](mcp-templates.md), [Atlassian and Bitbucket setup](atlassian-bitbucket-setup.md) |
 | Understand native coding and evaluations | [Native runtime](native-coding-runtime.md), [evaluation specification and evidence](../specs/runtime-and-delivery/coding-evaluation-and-model-benchmarks/spec.md) |
 | Extend Weft | [Extension guide](extensibility.md), [Python SDK](../sdk/python/README.md), [example agents](../agents/README.md), [web console](../web/README.md) |

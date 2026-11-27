@@ -1,7 +1,7 @@
 //go:build e2e
 
-// weft-provider-e2e is a disposable loopback installation with a real Python
-// LangGraph runtime and simulated external inference. It never uses Docker.
+// weft-provider-e2e is a disposable loopback installation with a compiled Go
+// Eino runtime and simulated external inference. It never uses Docker.
 package main
 
 import (
@@ -28,13 +28,14 @@ import (
 const adminToken = "e2e-provider-admin-token"
 
 type fixture struct {
-	app     *app.App
-	server  *httptest.Server
-	model   *httptest.Server
-	cancel  context.CancelFunc
-	runtime *exec.Cmd
-	root    string
-	logs    *os.File
+	app             *app.App
+	server          *httptest.Server
+	model           *httptest.Server
+	cancel          context.CancelFunc
+	runtime         *exec.Cmd
+	root            string
+	logs            *os.File
+	callbackFailure chan string
 }
 
 func (f *fixture) close() {
@@ -68,7 +69,7 @@ func newFixture(addr string) (_ *fixture, err error) {
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	f := &fixture{root: root, cancel: cancel}
+	f := &fixture{root: root, cancel: cancel, callbackFailure: make(chan string, 1)}
 	defer func() {
 		if err != nil {
 			f.close()
@@ -88,7 +89,7 @@ func newFixture(addr string) (_ *fixture, err error) {
 		return nil, err
 	}
 	for {
-		if _, statErr := os.Stat(filepath.Join(repo, "sdk/python/pyproject.toml")); statErr == nil {
+		if _, statErr := os.Stat(filepath.Join(repo, "agents/eino/go.mod")); statErr == nil {
 			break
 		}
 		parent := filepath.Dir(repo)
@@ -97,18 +98,20 @@ func newFixture(addr string) (_ *fixture, err error) {
 		}
 		repo = parent
 	}
-	python := os.Getenv("WEFT_E2E_PYTHON")
-	if python == "" {
-		return nil, fmt.Errorf("set WEFT_E2E_PYTHON to a Python with the langgraph extra installed")
+	binary := filepath.Join(root, "provider-fixture")
+	build := exec.CommandContext(ctx, "go", "build", "-tags", "e2e", "-o", binary, "./cmd/provider-fixture")
+	build.Dir = filepath.Join(repo, "agents/eino")
+	if out, e := build.CombinedOutput(); e != nil {
+		return nil, fmt.Errorf("build Eino fixture: %w: %s", e, out)
 	}
 	f.logs, err = os.Create(filepath.Join(root, "runtime.log"))
 	if err != nil {
 		return nil, err
 	}
-	f.runtime = exec.CommandContext(ctx, python, filepath.Join(repo, "scripts/provider-e2e/runtime.py"), root)
+	f.runtime = exec.CommandContext(ctx, binary, root)
 	// Explicit allowlist: no host credentials or provider configuration enters
 	// this process. It receives only execution-scoped callbacks over HTTP.
-	f.runtime.Env = []string{"PATH=" + os.Getenv("PATH"), "PYTHONPATH=" + filepath.Join(repo, "sdk/python"), "PYTHONUNBUFFERED=1"}
+	f.runtime.Env = []string{"WEFT_URL=" + base}
 	f.runtime.Stdout, f.runtime.Stderr = f.logs, f.logs
 	if err = f.runtime.Start(); err != nil {
 		f.runtime = nil
@@ -123,7 +126,7 @@ func newFixture(addr string) (_ *fixture, err error) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("real LangGraph runtime did not start; install the langgraph extra: %w", err)
+		return nil, fmt.Errorf("Eino fixture did not start: %w", err)
 	}
 	f.model = httptest.NewServer(&modelFixture{})
 	cfg := config.Default()
@@ -146,7 +149,7 @@ func newFixture(addr string) (_ *fixture, err error) {
 		return nil, err
 	}
 	for _, id := range []string{"provider-success", "provider-failure", "provider-missing"} {
-		g := &domain.Graph{Metadata: domain.GraphMetadata{Name: id}, Spec: domain.GraphSpec{Nodes: []domain.Node{{ID: "writer", Prompt: "Use the selected provider.", Runtime: domain.RuntimeRef{Kind: domain.RuntimeExternal, Framework: "langgraph", Agent: "writer", Endpoint: string(runtimeURL)}, Loop: domain.LoopSpec{Mode: domain.LoopOnce}}}}}
+		g := &domain.Graph{Metadata: domain.GraphMetadata{Name: id}, Spec: domain.GraphSpec{Nodes: []domain.Node{{ID: "writer", Prompt: "Use the selected provider.", Runtime: domain.RuntimeRef{Kind: domain.RuntimeExternal, Framework: "eino", Agent: "writer", Endpoint: string(runtimeURL)}, Loop: domain.LoopSpec{Mode: domain.LoopOnce}}}}}
 		if id == "provider-missing" {
 			g.Spec.Nodes[0].Model.Provider = "not-configured"
 		}
@@ -162,7 +165,27 @@ func newFixture(addr string) (_ *fixture, err error) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]string{"modelURL": f.model.URL + "/v1"})
 	})
-	mux.Handle("/", f.app.API.Handler())
+	api := f.app.API.Handler()
+	mux.HandleFunc("/internal/", func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/llm/chat") {
+			api.ServeHTTP(w, r)
+			return
+		}
+		rec := httptest.NewRecorder()
+		api.ServeHTTP(rec, r)
+		if rec.Code == http.StatusBadGateway {
+			select {
+			case f.callbackFailure <- rec.Body.String():
+			default:
+			}
+		}
+		for k, vs := range rec.Header() {
+			w.Header()[k] = vs
+		}
+		w.WriteHeader(rec.Code)
+		_, _ = w.Write(rec.Body.Bytes())
+	})
+	mux.Handle("/", api)
 	f.server.Config.Handler = mux
 	f.server.Start()
 	if err = f.app.Engine.Start(ctx); err != nil {

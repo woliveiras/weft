@@ -19,12 +19,13 @@ async function read(page: Page, path: string) {
 
 async function configure(page: Page, name: string, model: string) {
   const fixture = await read(page, '/fixture');
-  await page.goto('/#/models');
+  await page.goto('/#/models/plugins');
   const openaiPlugin=page.getByRole('listitem',{name:'Inference plugin OpenAI'});await expect(openaiPlugin).toBeVisible();
   if(await openaiPlugin.getByRole('button',{name:'Enable',exact:true}).isVisible())await openaiPlugin.getByRole('button',{name:'Enable',exact:true}).click();
   await expect(openaiPlugin.getByText('Enabled',{exact:true})).toBeVisible();
+  await page.goto('/#/models/providers');
   await page.getByRole('button', { name: 'Add provider', exact: true }).click();
-  const dialog = page.getByRole('dialog');
+  const dialog = page.getByRole('form', { name: 'Provider settings' });
   await dialog.getByLabel(/^Name/).fill(name);
   await dialog.getByRole('combobox', { name: /^Type/ }).selectOption('openai');
   await dialog.getByLabel(/^Base URL/).fill(fixture.modelURL);
@@ -38,15 +39,20 @@ async function configure(page: Page, name: string, model: string) {
 async function selectAndRun(page: Page, id: string, provider: string, model?: string) {
   await page.goto(`/#/g/${id}/canvas`);
   await page.locator('.react-flow__node').filter({ hasText: 'writer' }).click();
+  await page.getByRole('button', { name: 'Configure agent', exact: true }).click();
   const editor = page.getByRole('region', { name: 'Agent configuration' });
   await editor.getByLabel(/^Provider/).selectOption(provider);
   if (model) await editor.getByLabel(/^Model/).fill(model);
-  await page.getByRole('button', { name: 'Save graph', exact: true }).click();
+  await page.getByRole('button', { name: 'Review & save', exact: true }).click();
+  await page.getByRole('button', { name: 'Save graph draft', exact: true }).click();
   await expect.poll(async () => (await read(page, `/api/v1/graphs/${id}`)).graph.spec.nodes[0].model.provider).toBe(provider);
+  await page.goto(`/#/g/${id}/canvas`);
   await page.getByRole('button', { name: 'Run all', exact: true }).click();
 }
 
-test('configure, test, select and run the real LangGraph adapter without returning the key', async ({ page }) => {
+test('configure, test, select and run the real Eino adapter without returning the key', async ({ page }) => {
+  const originalDefault = (await read(page, '/api/v1/provider-settings')).default;
+  expect(originalDefault).not.toBe('browser-selected');
   const dialog = await configure(page, 'browser-selected', 'journey-ok');
   await dialog.getByRole('button', { name: 'Test settings', exact: true }).click();
   await expect(dialog.getByRole('status')).toContainText('Inference works with journey-ok');
@@ -57,14 +63,17 @@ test('configure, test, select and run the real LangGraph adapter without returni
   await card.getByRole('button', { name: 'Test connection', exact: true }).click();
   await expect(card).toContainText('Inference works with journey-ok');
   await card.getByRole('button', { name: 'Edit', exact: true }).click();
-  await expect(page.getByRole('dialog').getByLabel(/^API key/)).toHaveValue('');
+  await expect(page.getByRole('form', { name: 'Provider settings' }).getByLabel(/^API key/)).toHaveValue('');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
-  expect((await read(page, '/api/v1/provider-settings')).default).toBe('unselected-default');
+  expect((await read(page, '/api/v1/provider-settings')).default).toBe(originalDefault);
   await selectAndRun(page, 'provider-success', 'browser-selected');
   await expect.poll(async () => (await read(page, '/api/v1/graphs/provider-success/executions')).some(
-    (e: { status: string; summary: string }) => e.status === 'succeeded' && e.summary === 'LANGGRAPH_GATEWAY_OK',
+    (e: { status: string; summary: string }) => e.status === 'succeeded' && e.summary === 'EINO_GATEWAY_OK',
   )).toBe(true);
-  await expect(page.getByText('LANGGRAPH_GATEWAY_OK', { exact: true }).first()).toBeVisible();
+  const runs = await read(page, '/api/v1/graphs/provider-success/executions');
+  const completed = runs.find((e: { status: string }) => e.status === 'succeeded');
+  await page.goto(`/#/g/provider-success/runs?execution=${encodeURIComponent(completed.id)}&section=result`);
+  await expect(page.getByText('EINO_GATEWAY_OK', { exact: true }).first()).toBeVisible();
   for (const path of ['providers', 'providers/browser-selected', 'provider-settings', 'graphs/provider-success/events']) {
     await read(page, `/api/v1/${path}`);
   }
@@ -94,7 +103,10 @@ test('invalid configuration and provider errors remain failures with redacted cr
   await expect.poll(async () => (await read(page, '/api/v1/graphs/provider-failure/executions')).some(
     (e: { status: string }) => e.status === 'failed',
   )).toBe(true);
-  await read(page, '/api/v1/graphs/provider-failure/events');
+  const events = await read(page, '/api/v1/graphs/provider-failure/events');
+  expect(events.some((e: { executionId?: string; data?: { operation?: string; providerStatus?: number } }) =>
+    e.executionId && e.data?.operation === 'llm.chat' && e.data?.providerStatus === 503,
+  )).toBe(true);
   expect(await page.locator('body').innerText()).not.toContain(key);
   await page.getByRole('button', { name: 'Stop all', exact: true }).click();
 });

@@ -1,5 +1,7 @@
 # Provider selection through the real Python LangGraph adapter
 
+Historical qualification of the Python adapter. Current commands and behavior are in the [Eino provider guide](provider-eino-validation.md).
+
 `make test-e2e-providers` verifies the managed-provider journey without a Docker
 daemon, production installation, paid inference, or real provider credentials.
 It uses the production web console, Go API/engine, SQLite, encrypted credential

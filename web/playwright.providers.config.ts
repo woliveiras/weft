@@ -7,7 +7,7 @@ export default defineConfig({
   reporter: [['list']], outputDir: 'test-results-providers',
   use: { baseURL: `http://127.0.0.1:${port}`, actionTimeout: 15000,
     trace: 'retain-on-failure', screenshot: 'only-on-failure' },
-  projects: [{ name: 'chromium-provider-langgraph', use: { ...devices['Desktop Chrome'] } }],
+  projects: [{ name: 'chromium-provider-eino', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: 'pnpm run build && cd ../server && go build -tags e2e -o bin/weft-provider-e2e ./cmd/weft-provider-e2e && exec bin/weft-provider-e2e',
     url: `http://127.0.0.1:${port}/healthz`, reuseExistingServer: false,

@@ -69,7 +69,7 @@ func (m *modelFixture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		for _, msg := range body.Messages {
 			if msg.Content == "provider journey" {
-				message["content"] = "LANGGRAPH_GATEWAY_OK"
+				message["content"] = "EINO_GATEWAY_OK"
 			}
 		}
 	}

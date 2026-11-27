@@ -127,9 +127,8 @@ eval-cloud: ## Measure the native coding runtime with hosted models (CLOUD_MODEL
 		$(GO) test ./internal/eval -run TestCloudModels -count=1 -timeout 4h -v
 
 .PHONY: test-e2e-providers
-test-e2e-providers: ## Real LangGraph + browser provider journey, no Docker (set WEFT_E2E_PYTHON)
-	@test -n "$(WEFT_E2E_PYTHON)" || (echo "Set WEFT_E2E_PYTHON to Python with the langgraph extra installed"; exit 1)
-	PYTHONPATH=sdk/python "$(WEFT_E2E_PYTHON)" -m unittest discover -s scripts/provider-e2e -v
+test-e2e-providers: ## Real Eino and browser provider journey (host Go, pnpm and Chromium)
+	cd agents/eino && go test -tags e2e ./cmd/provider-fixture
 	cd server && go test -tags e2e ./cmd/weft-provider-e2e
 	cd web && pnpm run test:e2e:providers
 

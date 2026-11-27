@@ -22,7 +22,7 @@ func TestModelProtocol(t *testing.T) {
 		status          int
 		want            string
 	}{
-		{"success", fixtureKey, `{"model":"journey-ok","messages":[{"role":"user","content":"provider journey"}]}`, 200, "LANGGRAPH_GATEWAY_OK"},
+		{"success", fixtureKey, `{"model":"journey-ok","messages":[{"role":"user","content":"provider journey"}]}`, 200, "EINO_GATEWAY_OK"},
 		{"tool", fixtureKey, `{"model":"journey-ok","messages":[{}],"tools":[{"function":{"name":"connection_check"}}]}`, 200, "tool_calls"},
 		{"failure", fixtureKey, `{"model":"journey-fail","messages":[{}]}`, 503, fixtureKey},
 		{"bad credential", wrongKey, `{}`, 401, wrongKey},
@@ -42,8 +42,8 @@ func TestModelProtocol(t *testing.T) {
 	}
 }
 
-// No skip: this dedicated suite requires the real optional SDK dependencies.
-func TestRealLangGraphManagedProvider(t *testing.T) {
+// No skip: this dedicated suite requires a compiled external Eino graph.
+func TestRealEinoManagedProvider(t *testing.T) {
 	f, err := newFixture("127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -108,13 +108,19 @@ func TestRealLangGraphManagedProvider(t *testing.T) {
 			deadline := time.Now().Add(15 * time.Second)
 			for {
 				b := call(t, "GET", "/api/v1/graphs/"+tc.id+"/executions", nil, 200)
-				var executions []struct{ Status, Summary string }
+				var executions []struct {
+					Status, Summary string
+					Usage           struct{ InputTokens, OutputTokens int }
+				}
 				_ = json.Unmarshal(b, &executions)
 				found := false
 				for _, e := range executions {
 					if e.Status == tc.status {
 						found = true
-						if tc.status == "succeeded" && e.Summary != "LANGGRAPH_GATEWAY_OK" {
+						if tc.status == "succeeded" && (e.Usage.InputTokens != 12 || e.Usage.OutputTokens != 1) {
+							t.Fatalf("gateway usage counted incorrectly: %+v", e.Usage)
+						}
+						if tc.status == "succeeded" && e.Summary != "EINO_GATEWAY_OK" {
 							t.Fatalf("unexpected summary: %s", e.Summary)
 						}
 					}
@@ -137,8 +143,17 @@ func TestRealLangGraphManagedProvider(t *testing.T) {
 	if containsCredential(turns) {
 		t.Fatal("runtime input/result exposed artificial credential")
 	}
-	if !bytes.Contains(turns, []byte(`"provider": "selected"`)) || !bytes.Contains(turns, []byte("LANGGRAPH_GATEWAY_OK")) || !bytes.Contains(turns, []byte(`"status": 500`)) || !bytes.Contains(turns, []byte("deterministic provider failure")) {
+	if !bytes.Contains(turns, []byte(`"provider":"selected"`)) || !bytes.Contains(turns, []byte("EINO_GATEWAY_OK")) || !bytes.Contains(turns, []byte(`"status":500`)) || !bytes.Contains(turns, []byte("agent turn failed")) || bytes.Contains(turns, []byte("deterministic provider failure")) {
 		t.Fatal("missing real adapter evidence")
+	}
+	select {
+	case raw := <-f.callbackFailure:
+		var failure struct{ Code, Error string }
+		if json.Unmarshal([]byte(raw), &failure) != nil || failure.Code != "llm_error" || failure.Error != "model call failed" || containsCredential([]byte(raw)) || strings.Contains(raw, "deterministic provider failure") {
+			t.Fatal("unsafe or missing failure on the callback wire")
+		}
+	default:
+		t.Fatal("missing provider failure on the callback wire")
 	}
 	model := f.model.Config.Handler.(*modelFixture)
 	model.mu.Lock()
@@ -171,6 +186,22 @@ func TestRealLangGraphManagedProvider(t *testing.T) {
 	b, err := json.Marshal(events)
 	if err != nil {
 		t.Fatal(err)
+	}
+	var diagnostic bool
+	for _, ev := range events {
+		if ev.GraphID != "provider-failure" || ev.ExecutionID == "" || ev.NodeID != "writer" || ev.Level != "error" {
+			continue
+		}
+		var d struct {
+			Operation, Message string
+			ProviderStatus     int
+		}
+		if json.Unmarshal(ev.Data, &d) == nil && d.Operation == "llm.chat" && d.ProviderStatus == 503 && strings.Contains(d.Message, "Service Unavailable") {
+			diagnostic = true
+		}
+	}
+	if !diagnostic {
+		t.Fatal("redacted upstream failure missing from execution history")
 	}
 	if containsCredential(b) {
 		t.Fatal("event exposed artificial credential")
