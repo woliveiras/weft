@@ -1,5 +1,5 @@
 // Package native is the built-in agent runtime: a tool-calling loop over
-// any configured model provider. It needs no framework and no external
+// any configured model provider. It runs in-process and needs no external
 // process - a node with a prompt, a model and tool grants is a complete
 // agent. Tools execute in the platform's gateway under the node's grants;
 // the model never touches the host.
@@ -50,7 +50,10 @@ func (*Runtime) SupportsProgressiveGuidance() bool { return true }
 
 func (r *Runtime) Kind() domain.RuntimeKind { return domain.RuntimeNative }
 
-func (r *Runtime) Prepare(context.Context, runtime.ReplicaContext) error { return nil }
+func (r *Runtime) Prepare(context.Context, runtime.ReplicaContext) error {
+	_, err := compiledTurn()
+	return err
+}
 func (r *Runtime) Release(context.Context, runtime.ReplicaContext) error { return nil }
 
 var platformTools = []llm.ToolSchema{
@@ -95,7 +98,10 @@ func (r *Runtime) Turn(ctx context.Context, in *runtime.TurnInput, env runtime.T
 	if in.AnalysisOnly {
 		return analyzePullRequest(ctx, in, env)
 	}
-	res := &runtime.TurnResult{}
+	graph, err := compiledTurn()
+	if err != nil {
+		return nil, err
+	}
 	toolset := append(append([]llm.ToolSchema(nil), in.Tools...), platformTools...)
 	if in.Guidance != nil {
 		toolset = append(toolset, llm.ToolSchema{
@@ -113,7 +119,6 @@ func (r *Runtime) Turn(ctx context.Context, in *runtime.TurnInput, env runtime.T
 		conv.originalTask = &in.Prompt
 	}
 	cm := newContextManager(ctx, env, in.System, toolset)
-	var lastText string
 	rounds := r.MaxRounds
 	if rounds <= 0 {
 		rounds = 40
@@ -121,105 +126,124 @@ func (r *Runtime) Turn(ctx context.Context, in *runtime.TurnInput, env runtime.T
 	if in.MaxToolCalls+1 > rounds {
 		rounds = in.MaxToolCalls + 1
 	}
-	calls, corrections := 0, 0
-	finished := false
-	for round := 0; round < rounds && !finished; round++ {
-		if in.Guidance != nil {
-			conv.task.Content = in.Guidance.Prompt()
-		}
-		if err := cm.fit(ctx, conv); err != nil {
+	turn := &nativeTurn{in: in, env: env, tools: toolset, conv: conv, cm: cm, small: small, maxRounds: rounds}
+	return invokeTurn(ctx, graph, turn)
+}
+
+type nativeTurn struct {
+	in                                   *runtime.TurnInput
+	env                                  runtime.TurnEnv
+	tools                                []llm.ToolSchema
+	conv                                 *conversation
+	cm                                   *contextManager
+	small                                bool
+	round, maxRounds, calls, corrections int
+	pending                              []llm.ToolCall
+	finished, yielded                    bool
+	lastText                             string
+	result                               runtime.TurnResult
+}
+
+func modelRound(ctx context.Context, t *nativeTurn) (*nativeTurn, error) {
+	if t.round >= t.maxRounds {
+		return nil, fmt.Errorf("%w (%d rounds, %d tool calls); raise the agent's Max tool calls or split the task", ErrOutOfRounds, t.maxRounds, t.calls)
+	}
+	t.round++
+	if t.in.Guidance != nil {
+		t.conv.task.Content = t.in.Guidance.Prompt()
+	}
+	if err := t.cm.fit(ctx, t.conv); err != nil {
+		return nil, err
+	}
+	if t.in.Guidance != nil {
+		if err := t.in.Guidance.Dispatch(ctx); err != nil {
 			return nil, err
 		}
-		if in.Guidance != nil {
-			if err := in.Guidance.Dispatch(ctx); err != nil {
+	}
+	resp, err := chatLive(ctx, t.env, &llm.ChatRequest{System: t.in.System, Messages: t.conv.messages(), Tools: t.tools})
+	if err != nil {
+		return nil, fmt.Errorf("model call: %w", err)
+	}
+	if t.in.Guidance != nil {
+		if err := t.in.Guidance.Confirm(ctx); err != nil {
+			return nil, err
+		}
+	}
+	// TurnEnv.Chat accounts for gateway model usage, including delegated children.
+	msg := resp.Message
+	msg.Role = llm.RoleAssistant
+	text := strings.TrimSpace(msg.Content)
+	if len(msg.ToolCalls) == 0 && text != "" {
+		recovered, looksLikeCall := TextToolCalls(text, t.tools, t.round-1)
+		switch {
+		case len(recovered) > 0:
+			msg.ToolCalls, msg.Content, text = recovered, "", ""
+			t.env.Output(ctx, fmt.Sprintf("note: the model wrote %d tool call(s) as text instead of calling them; Weft ran them", len(recovered)))
+		case looksLikeCall && t.corrections < maxCorrections:
+			// Small models invent tool names; say what exists and let
+			// them retry instead of failing the turn on the first slip.
+			t.corrections++
+			t.conv.add(msg)
+			t.conv.add(llm.ChatMessage{Role: llm.RoleUser, Content: "That reply looks like a tool call but it cannot be run: the tool name is not offered or the arguments are not a JSON object. Call one of the offered tools with a JSON object of arguments: " + toolNames(t.tools) + "."})
+			t.env.Output(ctx, "note: the model wrote an invalid tool call as text; Weft asked it to use an offered tool")
+			return t, nil
+		case looksLikeCall:
+			return nil, fmt.Errorf("%w: %s", ErrToolCallAsText, truncate(text, 300))
+		}
+	}
+	t.conv.add(msg)
+	if text != "" {
+		t.lastText = text
+		t.env.Output(ctx, text)
+	}
+	if len(msg.ToolCalls) == 0 {
+		switch {
+		case resp.StopReason == "length":
+			// A cut answer is incomplete (or a runaway generation).
+			return nil, fmt.Errorf("%w (%s)", ErrAnswerCutOff, truncate(text, 200))
+		case text == "" && t.calls == 0:
+			return nil, ErrEmptyAnswer
+		}
+		t.finished = true
+	}
+	t.pending = msg.ToolCalls
+	return t, nil
+}
+
+func runTools(ctx context.Context, t *nativeTurn) (*nativeTurn, error) {
+	for i, call := range t.pending {
+		if t.small && i > 0 {
+			// Small models chain calls that depend on each other's
+			// results; run one and say so, so the model waits.
+			t.conv.add(llm.ChatMessage{Role: llm.RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "not run: call one tool per reply and wait for its result"})
+			continue
+		}
+		var out string
+		var done bool
+		if t.in.Guidance != nil && call.Name == "guidance.load" {
+			var args struct{ Skill, Reference string }
+			if json.Unmarshal(call.Arguments, &args) != nil {
+				args.Skill, args.Reference = "", ""
+			}
+			var err error
+			out, err = t.in.Guidance.Load(ctx, args.Skill, args.Reference)
+			if err != nil {
 				return nil, err
 			}
+		} else {
+			out, done = callTool(ctx, t.env, &t.result, call)
 		}
-		resp, err := chatLive(ctx, env, &llm.ChatRequest{System: in.System, Messages: conv.messages(), Tools: toolset})
-		if err != nil {
-			return nil, fmt.Errorf("model call: %w", err)
-		}
-		if in.Guidance != nil {
-			if err := in.Guidance.Confirm(ctx); err != nil {
-				return nil, err
-			}
-		}
-		// TurnEnv.Chat accounts for gateway model usage, including delegated children.
-		msg := resp.Message
-		msg.Role = llm.RoleAssistant
-		text := strings.TrimSpace(msg.Content)
-		if len(msg.ToolCalls) == 0 && text != "" {
-			recovered, looksLikeCall := TextToolCalls(text, toolset, round)
-			switch {
-			case len(recovered) > 0:
-				msg.ToolCalls, msg.Content, text = recovered, "", ""
-				env.Output(ctx, fmt.Sprintf("note: the model wrote %d tool call(s) as text instead of calling them; Weft ran them", len(recovered)))
-			case looksLikeCall && corrections < maxCorrections:
-				// Small models invent tool names; say what exists and let
-				// them retry instead of failing the turn on the first slip.
-				corrections++
-				conv.add(msg)
-				conv.add(llm.ChatMessage{Role: llm.RoleUser, Content: "That reply looks like a tool call but it cannot be run: the tool name is not offered or the arguments are not a JSON object. Call one of the offered tools with a JSON object of arguments: " + toolNames(toolset) + "."})
-				env.Output(ctx, "note: the model wrote an invalid tool call as text; Weft asked it to use an offered tool")
-				continue
-			case looksLikeCall:
-				return nil, fmt.Errorf("%w: %s", ErrToolCallAsText, truncate(text, 300))
-			}
-		}
-		conv.add(msg)
-		if text != "" {
-			lastText = text
-			env.Output(ctx, text)
-		}
-		if len(msg.ToolCalls) == 0 {
-			switch {
-			case resp.StopReason == "length":
-				// A cut answer is incomplete (or a runaway generation).
-				return nil, fmt.Errorf("%w (%s)", ErrAnswerCutOff, truncate(text, 200))
-			case text == "" && calls == 0:
-				return nil, ErrEmptyAnswer
-			}
-			finished = true
+		t.calls++
+		t.conv.add(llm.ChatMessage{Role: llm.RoleTool, ToolCallID: call.ID, Name: call.Name, Content: t.cm.capResult(call.Name, out)})
+
+		if done {
+			t.finished = true
+			t.yielded = call.Name != "finish"
 			break
 		}
-		for i, call := range msg.ToolCalls {
-			if small && i > 0 {
-				// Small models chain calls that depend on each other's
-				// results; run one and say so, so the model waits.
-				conv.add(llm.ChatMessage{Role: llm.RoleTool, ToolCallID: call.ID, Name: call.Name, Content: "not run: call one tool per reply and wait for its result"})
-				continue
-			}
-			var out string
-			var done bool
-			if in.Guidance != nil && call.Name == "guidance.load" {
-				var args struct{ Skill, Reference string }
-				if json.Unmarshal(call.Arguments, &args) != nil {
-					args.Skill, args.Reference = "", ""
-				}
-				var err error
-				out, err = in.Guidance.Load(ctx, args.Skill, args.Reference)
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				out, done = r.call(ctx, env, res, call)
-			}
-			calls++
-			conv.add(llm.ChatMessage{Role: llm.RoleTool, ToolCallID: call.ID, Name: call.Name, Content: cm.capResult(call.Name, out)})
-			finished = finished || done
-			if done {
-				break
-			}
-		}
 	}
-	if !finished {
-		return nil, fmt.Errorf("%w (%d rounds, %d tool calls); raise the agent's Max tool calls or split the task", ErrOutOfRounds, rounds, calls)
-	}
-	applySentinels(ctx, env, res, lastText)
-	if res.Summary == "" {
-		res.Summary = truncate(lastText, 1000)
-	}
-	return res, nil
+	t.pending = nil
+	return t, nil
 }
 
 // CompactSchemas shortens tool schemas for small models: the description
@@ -287,7 +311,7 @@ func toolNames(ts []llm.ToolSchema) string {
 
 // call executes one tool call; it returns the text for the model and
 // whether the call ended the turn.
-func (r *Runtime) call(ctx context.Context, env runtime.TurnEnv, res *runtime.TurnResult, call llm.ToolCall) (string, bool) {
+func callTool(ctx context.Context, env runtime.TurnEnv, res *runtime.TurnResult, call llm.ToolCall) (string, bool) {
 	args := call.Arguments
 	if len(args) == 0 {
 		args = json.RawMessage(`{}`)

@@ -17,7 +17,7 @@ func TestFinishPreservesExplicitBlocker(t *testing.T) {
 
 func TestBlockedFinishRequiresAReason(t *testing.T) {
 	result := &runtime.TurnResult{}
-	message, done := New().call(context.Background(), &scriptedEnv{}, result, llm.ToolCall{Name: "finish", Arguments: []byte(`{"signal":"blocked"}`)})
+	message, done := callTool(context.Background(), &scriptedEnv{}, result, llm.ToolCall{Name: "finish", Arguments: []byte(`{"signal":"blocked"}`)})
 	if done || result.Signal != "" || message == "" {
 		t.Fatal(message, done, result)
 	}

@@ -2,7 +2,7 @@
 id: RUN-010
 title: Eino runtime migration and Python-free distribution
 summary: Run native turns and bundled workflow agents with Eino in Go and qualify the Weft distribution without Python or LangGraph.
-status: planned
+status: in-progress
 scope: [native turns, external agents, factory workflows, Go extension tooling, packaging, regression qualification]
 risk: high
 risk_domains: [tool authorization, budget accounting, message delivery, workflow compatibility, isolation]
@@ -13,8 +13,8 @@ navigation: [specs/README.md, specs/runtime-and-delivery/eino-runtime-migration/
 documentation: [docs/adr/0014-eino-agent-runtime.md, docs/adr/0015-eino-console-chat-turns.md, docs/runtime-protocol.md]
 dependencies: [RUN-003, TASK-006, TASK-007, TASK-012, ENV-004, INT-002, INT-004, OPS-001, OPS-002]
 authority:
-  granted: [specification, behavior and oracle matrices]
-  withheld: [implementation, deployment, release, remote push]
+  granted: [specification, behavior and oracle matrices, local implementation, local commits]
+  withheld: [deployment, release, remote push]
 ---
 
 # Eino runtime migration and Python-free distribution
@@ -60,4 +60,4 @@ Qualify the native turn, the external service and the Chat turn independently. D
 
 ## Qualification and open decisions
 
-Start with deterministic model fixtures, scoped tools and the real execution/store boundaries. Exercise the summary pilot before replacing the bundled factory image. Compare model calls, usage, latency, binary/image size and memory under recorded concurrency and fixture conditions. Record the Eino version and topology. The conversation sets no performance threshold and selects no production model. Chat-specific parity and rollback belong to [TASK-012](../../product-and-tasks/conversational-console/spec.md). All migration evidence is pending.
+Start with deterministic model fixtures, scoped tools and the real execution/store boundaries. Exercise the summary pilot before replacing the bundled factory image. Compare model calls, usage, latency, binary/image size and memory under recorded concurrency and fixture conditions. Record the Eino version and topology. The conversation sets no performance threshold and selects no production model. Chat-specific parity and rollback belong to [TASK-012](../../product-and-tasks/conversational-console/spec.md). The matrix records local native and Chat results and outstanding qualification.

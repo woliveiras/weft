@@ -185,7 +185,11 @@ func (e *yieldingEnv) InvokeTool(ctx context.Context, name string, args json.Raw
 }
 func TestDurableToolYieldEndsModelTurn(t *testing.T) {
 	env := &yieldingEnv{scriptedEnv: scriptedEnv{replies: []*llm.ChatResponse{{Message: llm.ChatMessage{ToolCalls: []llm.ToolCall{{ID: "one", Name: "review.request", Arguments: json.RawMessage(`{}`)}, {ID: "two", Name: "shell.exec", Arguments: json.RawMessage(`{}`)}}}}}}}
+	env.replies[0].Message.Content = `EMIT {"type":"after.review","payload":{}}`
 	_, err := New().Turn(context.Background(), &runtime.TurnInput{}, env)
+	if len(env.emits) != 0 {
+		t.Fatal("sentinel emitted after the tool yielded")
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,6 @@
 # RUN-010 behavior and oracle matrix
 
-All rows are planned. No Eino execution or clean-distribution result has been recorded. Compare outputs and stored effects against the governing contract and fixture inputs. Earlier Python and native results can identify regressions but cannot qualify the replacement. **U** denotes unit checks, **I** checks between real components and **E** operator or installation journeys. [Acceptance criteria](./spec.md) · [Chat qualification](../../product-and-tasks/conversational-console/matrix.md#eino-turn-qualification)
+Local native results appear below. External service, factory and clean-distribution qualification remain open. Compare outputs and stored effects against the governing contract and fixture inputs. Earlier Python and native results can identify regressions but cannot qualify the replacement. **U** denotes unit checks, **I** checks between real components and **E** operator or installation journeys. [Acceptance criteria](./spec.md) · [Chat qualification](../../product-and-tasks/conversational-console/matrix.md#eino-turn-qualification)
 
 | ID | Criterion and fixture | Observable oracle | Provenance | Planned verification |
 | --- | --- | --- | --- | --- |
@@ -16,3 +16,7 @@ All rows are planned. No Eino execution or clean-distribution result has been re
 | M10 | AC-005. Upgrade or roll back while an approval is pending. Separately interrupt a turn or fail publication after one successful output. | Pending work settles against its original record after restart. Redelivery has a fresh execution identity. An approval receipt alone does not prove consumption. Partial delivery and duplicate risk remain diagnosable by source and output identity. | independent, ADR 0014 and Weft delivery contract | U compatible payload decoding. I restart with the same store and broker, inject publication failure, inspect downstream receipts, retry/dead-letter history and business-effect count. |
 
 Record fresh evidence with the revision, dependency versions, topology and exact commands. Record framework overhead separately from inference latency. A release exercised on one topology qualifies only that topology.
+
+## Local native qualification
+
+The Go controller invokes a shared Eino v0.9.23 graph for each ordinary native turn. The restricted PR-analysis path continues to use its dedicated read-only implementation. With the Docker Go toolchain on Linux/arm64, `go test -count=1 ./internal/runtime/native ./internal/engine` passed. This exercised M02 streaming and failure accounting, context management, model round limits, guidance, blocked signals and the M05 durable review path. The yield test also supplied a text emit and a queued tool after a yielding tool, and observed neither effect. `TestReusableAgentVersionAndWorkflowRuntime` passed through the real API and store for independently bound replicas. Restoring pre-cutover data, the Docker-backed review journey and production rollout remain open.

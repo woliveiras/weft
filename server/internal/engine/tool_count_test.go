@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/queue/memory"
@@ -48,6 +49,9 @@ spec:
 		xs, err := r.store.ListExecutions(r.ctx, storage.ExecutionFilter{GraphID: "tool-count", Limit: 1})
 		if err != nil || len(xs) == 0 || xs[0].CompletedAt == nil {
 			return false
+		}
+		if xs[0].Status != domain.ExecSucceeded || xs[0].Summary != "done" {
+			t.Fatalf("tool observations did not return to the model: %+v", xs[0])
 		}
 		if xs[0].ToolCalls != 2 {
 			t.Fatalf("expected two attempts, got %d", xs[0].ToolCalls)

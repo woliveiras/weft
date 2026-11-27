@@ -117,12 +117,12 @@ The [historical source map](./historical-source-map.md) records the migration of
 ### In progress
 
 - [RUN-002 — Dynamic Delegation and Execution Trees](./runtime-and-delivery/dynamic-delegation-and-execution-trees/spec.md) — `in-progress`. Run bounded native children under inherited grants and preserve execution-tree control and token accounting.
+- [RUN-010 — Eino runtime migration and Python-free distribution](./runtime-and-delivery/eino-runtime-migration/spec.md) — `in-progress`. Qualify native agents, the bundled Go factory and a clean distribution without Python or LangGraph. [Behavior matrix](./runtime-and-delivery/eino-runtime-migration/matrix.md).
 - [RUN-005 — Gateway-mediated Source Control Delivery](./runtime-and-delivery/gateway-mediated-source-control-delivery/spec.md) — `in-progress`. Push and open pull requests through the reviewed SCM gateway with task-scoped credentials and evidence.
 
 ### Planned
 
 - [RUN-008 — Agent Context Usage Breakdown](./runtime-and-delivery/agent-context-usage/spec.md) — `planned`, pending maintainer review. Show how each native agent's context window is spent, by category, for every model call.
-- [RUN-010 — Eino runtime migration and Python-free distribution](./runtime-and-delivery/eino-runtime-migration/spec.md) — `planned`. Qualify native agents, the bundled Go factory and a clean distribution without Python or LangGraph. [Behavior matrix](./runtime-and-delivery/eino-runtime-migration/matrix.md).
 - [RUN-009 — Manual Dependency Security Remediation](./runtime-and-delivery/manual-dependency-security-remediation/spec.md) — `in-progress`. Read scoped alerts and manually prepare a bounded, verified dependency security PR.
 
 ## Installation and operations
