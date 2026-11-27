@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -68,6 +69,9 @@ func (m *modelFixture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reason = "tool_calls"
 	} else {
 		for _, msg := range body.Messages {
+			if strings.HasSuffix(msg.Content, "\n\nThe pilot counted seven green apples.") {
+				message["content"] = "Seven green apples."
+			}
 			if msg.Content == "provider journey" {
 				message["content"] = "EINO_GATEWAY_OK"
 			}

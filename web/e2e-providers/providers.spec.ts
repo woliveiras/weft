@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { parse } from "yaml";
+import type { Execution, MessageRecord } from "../src/api/types";
 import { expect, test, type Page } from '@playwright/test';
 
 const key = 'sk-artificial-provider-journey';
@@ -116,4 +119,66 @@ test('missing provider blocks execution before reaching the runtime', async ({ p
   await page.getByRole('button', { name: 'Run all', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'not-configured' }).first()).toBeVisible();
   expect(await read(page, '/api/v1/graphs/provider-missing/executions')).toHaveLength(0);
+});
+
+test('save, export and reopen the summary pilot and settle its two proposals', async ({ page }) => {
+  const pilot = parse(readFileSync('../examples/graphs/eino-summary.yaml', 'utf8'));
+  const id = pilot.metadata.id;
+  const graph = `/api/v1/graphs/${id}`;
+  const { runtimeURL } = await read(page, '/fixture');
+  expect((await page.request.post('/api/v1/graphs', { headers, data: pilot })).status()).toBe(201);
+  const dialog = await configure(page, 'pilot-model', 'journey-ok');
+  await dialog.getByRole('button', { name: 'Add provider', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  const openEditor = async () => {
+    await page.goto(`/#/g/${id}/canvas`);
+    await page.locator('.react-flow__node').filter({ hasText: 'summarize' }).click();
+    await page.getByRole('button', { name: 'Configure agent', exact: true }).click();
+    return page.getByRole('region', { name: 'Agent configuration' });
+  };
+  const editor = await openEditor();
+  await editor.getByLabel(/^Endpoint/).fill(runtimeURL);
+  await editor.getByLabel(/^Provider/).selectOption('pilot-model');
+  await page.getByRole('button', { name: 'Review & save', exact: true }).click();
+  await page.getByRole('button', { name: 'Save graph draft', exact: true }).click();
+  await expect.poll(async () => (await read(page, graph)).record.version).toBe(2);
+  await page.goto(`/#/g/${id}/settings/general`);
+  await page.getByRole('tab', { name: 'Definition', exact: true }).click();
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export saved' }).click();
+  const exported = parse(readFileSync((await (await download).path())!, 'utf8'));
+  expect(exported.spec.nodes[0]).toMatchObject({
+    runtime: { kind: 'external', framework: 'eino', agent: 'summarize', endpoint: runtimeURL },
+    model: { provider: 'pilot-model' }, tools: [{ name: 'filesystem.read', paths: ['docs/**'] }],
+  });
+  expect(exported.spec.channels.find((c: { id: string }) => c.id === 'summaries')).toMatchObject({ approval: true, to: ['accepted'] });
+  await page.reload();
+  const reopened = await openEditor();
+  await expect(reopened.getByLabel(/^Endpoint/)).toHaveValue(runtimeURL);
+  await expect(reopened.getByLabel(/^Framework/)).toHaveValue('eino');
+  await expect(reopened.getByLabel(/^Provider/)).toHaveValue('pilot-model');
+  await page.goto(`/#/g/${id}/canvas`);
+  await page.getByRole('button', { name: 'Run all', exact: true }).click();
+  for (const decision of ['Reject', 'Approve']) {
+    const submitted = await page.request.post(`${graph}/channels/requests/messages`, {
+      headers, data: { type: 'summary.requested', payload: { path: 'docs/input.md' } },
+    });
+    expect(submitted.status()).toBe(201);
+    const input = await submitted.json();
+    const pending = `/api/v1/approvals?graph=${id}&status=pending`;
+    await expect.poll(async () => (await read(page, pending)).length).toBe(1);
+    const [approval] = await read(page, pending);
+    expect(approval.detail.message.payload).toEqual({ sourceMessageId: input.id, summary: 'Seven green apples.' });
+    await expect.poll(async () => (await read(page, `${graph}/executions`)).find((x: Execution) => x.id === approval.executionId)).toMatchObject({
+      status: 'succeeded', toolCalls: 1, usage: { inputTokens: 12, outputTokens: 1 },
+    });
+    expect((await read(page, `${graph}/executions`)).filter((x: Execution) => x.nodeId === 'accepted')).toHaveLength(0);
+    await page.goto('/#/approvals');
+    await page.getByRole('table', { name: 'Approval history' }).locator('.approval-request-link').click();
+    await page.getByRole('dialog').getByRole('button', { name: decision, exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect.poll(async () => (await read(page, `${graph}/messages?channel=summaries`)).some((r: MessageRecord) =>
+      r.message.id === approval.detail.message.id && r.status === (decision === 'Reject' ? 'rejected' : 'acked'),
+    )).toBe(true);
+  }
 });

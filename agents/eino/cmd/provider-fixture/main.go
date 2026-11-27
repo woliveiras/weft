@@ -21,6 +21,7 @@ import (
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/woliveiras/weft/agents/eino/protocol"
+	"github.com/woliveiras/weft/agents/eino/summary"
 )
 
 type turn struct {
@@ -52,7 +53,11 @@ func serve(dir string) error {
 	if err != nil {
 		return err
 	}
-	handler, err := protocol.NewHandler([]string{os.Getenv("WEFT_URL")}, "", map[string]protocol.Agent{"writer": agent})
+	summarize, err := summary.New(context.Background())
+	if err != nil {
+		return err
+	}
+	handler, err := protocol.NewHandler([]string{os.Getenv("WEFT_URL")}, "", map[string]protocol.Agent{"writer": agent, "summarize": summarize})
 	if err != nil {
 		return err
 	}

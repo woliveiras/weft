@@ -157,13 +157,20 @@ func newFixture(addr string) (_ *fixture, err error) {
 			return nil, err
 		}
 	}
+	docs := filepath.Join(cfg.Workspaces.Root, "eino-summary", "docs")
+	if err = os.MkdirAll(docs, 0700); err != nil {
+		return nil, err
+	}
+	if err = os.WriteFile(filepath.Join(docs, "input.md"), []byte("The pilot counted seven green apples."), 0600); err != nil {
+		return nil, err
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/fixture", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+adminToken {
 			http.Error(w, "unauthorized", 401)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"modelURL": f.model.URL + "/v1"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"modelURL": f.model.URL + "/v1", "runtimeURL": string(runtimeURL)})
 	})
 	api := f.app.API.Handler()
 	mux.HandleFunc("/internal/", func(w http.ResponseWriter, r *http.Request) {
