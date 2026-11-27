@@ -1,0 +1,17 @@
+apiVersion: weft.io/v1
+kind: Graph
+metadata: {id: eino-summary, name: Eino summary pilot}
+spec:
+  nodes:
+    - id: summarize
+      runtime: {kind: external, framework: eino, agent: summarize, endpoint: "http://eino-agent:8000"}
+      prompt: Summarize the requested document for operator review.
+      loop: {mode: event, batchSize: 1}
+      limits: {turnTimeout: 90s, maxToolCalls: 3, maxTokens: 4000}
+      tools: [{name: filesystem.read, paths: ["docs/**"]}]
+    - id: accepted
+      runtime: {kind: echo}
+      loop: {mode: event}
+  channels:
+    - {id: requests, to: [summarize], types: [summary.requested]}
+    - {id: summaries, from: summarize, to: [accepted], types: [summary.proposed], approval: true}

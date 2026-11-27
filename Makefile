@@ -20,6 +20,7 @@ help: ## Show targets
 
 build: ## Build weftd and weft binaries into server/bin
 	$(GO) build -o bin/weftd ./cmd/weftd
+	$(GO) -C ../agents/eino build -o ../../server/bin/weft-eino-agent ./cmd/weft-eino-agent
 	$(GO) build -o bin/weft ./cmd/weft
 	$(GO) build -o bin/weft-egress ./cmd/weft-egress
 	GOOS=linux CGO_ENABLED=0 $(GO) build -o bin/weft-preview-linux ./cmd/weft-preview
@@ -38,6 +39,7 @@ test: test-go test-python test-web ## Run all test suites
 
 test-go: ## Go unit + integration tests (memory/fs/sqlite; live brokers via WEFT_TEST_* env)
 	$(GO) test ./...
+	$(GO) -C ../agents/eino test ./...
 
 test-python: ## SDK and example agent tests (stdlib unittest)
 	cd sdk/python && $(PYTHON) -m unittest discover -s tests -v
@@ -61,12 +63,13 @@ test-environment-context: ## Real COPY/ADD sandbox checks (running dedicated dae
 	./scripts/test-environment-context.sh
 
 lint: ## gofmt check and go vet
-	@out=$$(docker run --rm -v "$$(pwd)/server:/src" -w /src golang:1.26-alpine gofmt -l .); \
+	@out=$$(docker run --rm -v "$$(pwd):/repo" -w /repo golang:1.26-alpine gofmt -l server agents/eino); \
 	  if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 	$(GO) vet ./...
+	$(GO) -C ../agents/eino vet ./...
 
 fmt: ## Format Go code
-	docker run --rm -v "$$(pwd)/server:/src" -w /src golang:1.26-alpine gofmt -w .
+	docker run --rm -v "$$(pwd):/repo" -w /repo golang:1.26-alpine gofmt -w server agents/eino
 
 up: ## Start the full stack (platform + observability)
 	$(COMPOSE) up -d --build

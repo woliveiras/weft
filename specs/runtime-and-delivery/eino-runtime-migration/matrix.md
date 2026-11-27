@@ -1,6 +1,6 @@
 # RUN-010 behavior and oracle matrix
 
-Local native results appear below. External service, factory and clean-distribution qualification remain open. Compare outputs and stored effects against the governing contract and fixture inputs. Earlier Python and native results can identify regressions but cannot qualify the replacement. **U** denotes unit checks, **I** checks between real components and **E** operator or installation journeys. [Acceptance criteria](./spec.md) · [Chat qualification](../../product-and-tasks/conversational-console/matrix.md#eino-turn-qualification)
+Local native and external summary results appear below. Factory and distribution qualification remain open. Compare outputs and stored effects against the governing contract and fixture inputs. Earlier Python and native results can identify regressions but cannot qualify the replacement. **U** denotes unit checks, **I** checks between real components and **E** operator or installation journeys. [Acceptance criteria](./spec.md) · [Chat qualification](../../product-and-tasks/conversational-console/matrix.md#eino-turn-qualification)
 
 | ID | Criterion and fixture | Observable oracle | Provenance | Planned verification |
 | --- | --- | --- | --- | --- |
@@ -20,3 +20,7 @@ Record fresh evidence with the revision, dependency versions, topology and exact
 ## Local native qualification
 
 The Go controller invokes a shared Eino v0.9.23 graph for each ordinary native turn. The restricted PR-analysis path continues to use its dedicated read-only implementation. With the Docker Go toolchain on Linux/arm64, `go test -count=1 ./internal/runtime/native ./internal/engine` passed. This exercised M02 streaming and failure accounting, context management, model round limits, guidance, blocked signals and the M05 durable review path. The yield test also supplied a text emit and a queued tool after a yielding tool, and observed neither effect. `TestReusableAgentVersionAndWorkflowRuntime` passed through the real API and store for independently bound replicas. Restoring pre-cutover data, the Docker-backed review journey and production rollout remain open.
+
+## Local external summary qualification
+
+On Linux/arm64 the Protocol v1 service and Eino v0.9.23 summary graph passed `go test -race -count=1 ./...` in `agents/eino`. Fixtures exercised concurrent controller callbacks, yields, secret checks, failed tools delivered as HTTP 200, error response redaction and redirects. `TestEinoSummaryThroughController` ran the compiled service as a process through HTTP with the actual controller, tool and model gateways, SQLite, a filesystem broker and a deterministic model. It checked the original input ID, one charged tool call and model usage, rejection, downstream acknowledgement after approval, and a denied path with zero model usage or outputs (M03–M05). A locally built pilot image ran as UID 65532, answered its health check and contained no Python or pip executable on PATH. This exercises the pilot image only. Factory, controller and default sandbox image qualification remain open.
