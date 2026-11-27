@@ -72,7 +72,21 @@ At the Go cutover, `make test` passed the controller and agent suites and all 87
 
 Three native Chromium journeys ran together against a fresh profile. The Chat used an inspection command and restored its archived transcript. The preinstalled factory produced an editable draft and stayed stopped when launch requirements were missing. With a local fixture provider and a private Git repository, a fresh task then went through planning, research, development, review and QA. No integrator ran before approval. After the operator approved, the task succeeded, the handoff appeared after reload and both source files retained their initial contents. Run with the native Playwright configuration and the filter `opens an unconfigured native Chat|preinstalled factory supplies editable task inputs|configures a model and runs the preinstalled factory`. The provider browser harness separately exercised three external Eino journeys.
 
-The full native-browser run also exposed failures outside these three journeys. Seven cases covering first-use UI, registration/worktrees, MCP, preparation failure, stopped-task cleanup, parallel tasks and repository import still need reconciliation with current product behavior. For example, the old suite expects a single seeded workflow and a first-use preview button which the current console intentionally omits. The live Ollama scenario was skipped without a configured endpoint. These outcomes are recorded separately from the three passing cutover scenarios.
+On 2026-11-27 the seven previously failing journeys passed on a fresh macOS/arm64 native profile with Chromium. The tests exercised the following observable effects.
+
+| Native journey | Verified result |
+| --- | --- |
+| First use | With no model configured, a user saved an echo task from New task, reloaded the draft, reviewed it and ran it successfully. Saving recorded no execution. |
+| Registration and worktrees | Both bundled factory versions were stopped. A registered project retained its local environment preference after reload. Git inspection showed separate diffs in the task and replica workspaces while the source checkout retained its original contents. |
+| MCP discovery and repair | The operator reviewed the process, saw the missing executable fail and repaired it. The tool was then discoverable. The graphs and grants stayed unchanged, and the fixture secret was absent from browser storage and the public connection record. |
+| Preparation failure | A file obstructing creation of a replica worktree survived the failed attempt. The console displayed a durable blocker and the execution list stayed empty. |
+| Reviewed cleanup | An operator stopped a task waiting for approval, reviewed its clean checkout and authorized removal. Git resolved the task branch at its original commit in the retained repository, and the source checkout kept its HEAD and dirty file. |
+| Parallel tasks | Two tasks started concurrently from the same commit. A write to one checkout stayed isolated. Cancelling that task preserved the other's pending approval, which the operator then approved to complete the second task. |
+| Repository import | Selecting either the host Git helper or GitHub CLI required explicit consent to start an import. Switching methods left the import log empty. |
+
+The full `make test-native-browser` run passed 11 journeys in 33.9 seconds, including the native Chat, factory handoff and a real Google Gemini task. It built the console and native controller and type-checked the browser tests. To repeat the hosted journey, supply `WEFT_CLOUD_API_KEY` in the test environment and run `WEFT_E2E_GEMINI_MODEL=gemini-3.5-flash make test-native-browser`. The native writer had a single file grant. The test checked the contents of `hello.txt`, the successful `filesystem.write` event and positive input and output token counts on gateway records for the same execution and model. [Gemini browser test](../../../web/e2e-native/real-gemini.spec.ts) · [Writer assertions](../../../web/e2e-native/live-writer.ts)
+
+The optional Ollama case was excluded from the final run at the operator's request. In a separate attempt, `llama3.2:latest` returned a textual tool call and produced no file. The `qwen3.6:27b-q4_K_M` attempt ended when local inference caused host resource pressure. Neither attempt qualified the local writer on this revision.
 
 ## Disposable Compose qualification
 
