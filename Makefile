@@ -149,9 +149,9 @@ build-native: ## Build the current host's native bundle without Docker; does not
 test-native-browser: ## Chromium against a disposable production native profile; no Docker required
 	./scripts/test-native-browser.sh
 
-.PHONY: test-native-upgrade
-test-native-upgrade: ## Disposable format-1 native binary upgrade and safe failure qualification (host Go/Git/Python)
-	$(PYTHON) scripts/test-native-upgrade.py
+.PHONY: test-native-recovery
+test-native-recovery: ## Restart and restore a disposable current-version profile (host Go and Git)
+	cd server && go test -count=1 -tags nativerecovery -run "^TestNativeProfileRecovery$$" ./internal/localinstall
 
 .PHONY: eval-chat
 eval-chat: ## Exercise conversational Chat evals against isolated local fixtures

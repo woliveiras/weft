@@ -185,7 +185,7 @@ redeliver interrupted work; this does not guarantee exactly-once external effect
 - Backups of repositories outside the native profile remain the user's responsibility.
 
 Task flows, native capability checks, local MCP lifecycle, exact per-agent grants,
-reservation reconciliation and format-1 upgrade coverage are implemented. No silent
+reservation reconciliation and current-profile recovery coverage are implemented. No silent
 sandbox fallback, secret import, Docker data migration or service activation occurs.
 The Docker-toolchain `make build` is separate from the `make build-native` bundle.
 See [task workflows](task-workflows.md) and [server operations](deployment.md).
@@ -274,12 +274,7 @@ Do not run `--init-local` against existing data. The configured web directory mu
 continue pointing to the intended bundle's assets; update that path explicitly
 when relocating assets. Never share this profile with the Docker installation.
 
-`make test-native-upgrade` qualifies the first format-1 native launcher from commit
-`faf4644` against the current launcher using disposable binaries/profile data. It
-verifies a retained custom graph, first-time Software Factory seeding, unchanged
-factory version on restart, no unintended execution, and byte-for-byte state
-preservation when an unsupported installation format is rejected. This is a
-format-1 compatibility test, not a promise of arbitrary future downgrade safety.
+`make test-native-recovery` builds the current launcher and exercises a fresh disposable profile. It verifies the saved workflow, seeded factory version, absence of unintended executions, restored archived Chat and byte-for-byte preservation when an unknown format is rejected. Use Go and Git on the host. See the [fresh-install decision](../specs/runtime-and-delivery/eino-runtime-migration/spec.md).
 
 If a future format requires migration, that release must supply its own reviewed
 migration and recovery procedure. The current launcher refuses unknown formats
@@ -315,8 +310,8 @@ waits at its human approval gate and retains the final result after reload. Orig
 tracked and dirty source files remain intact. This is synthetic model behavior,
 not a claim that an actual model produced correct software.
 
-Native storage/lifecycle integration and `make test-native-upgrade` separately cover
-restart, reservation reconciliation, backup/restore and format-1 upgrade preservation.
+Native storage/lifecycle integration and `make test-native-recovery` separately cover
+restart, reservation reconciliation, backup/restore and unknown-format refusal.
 `make test-e2e` retains the disposable server-mode regression suite. Neither fixture
 mode validates Docker daemon isolation or real provider credentials.
 
