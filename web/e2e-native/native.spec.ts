@@ -333,10 +333,16 @@ test('native import offers explicitly selected host authentication without invok
  await page.getByRole('link',{name:'Add project',exact:true}).click();
  await page.getByRole('link',{name:'Import from URL',exact:true}).click();
  const section=page.getByRole('region',{name:'Import repository'});
+ await section.getByRole('textbox',{name:'Clone URL',exact:true}).fill('https://example.invalid/native-import.git');
+ const consent=section.getByRole('checkbox',{name:/Authorize the selected Git authentication/});
+ const submit=section.getByRole('button',{name:'Import repository',exact:true});
  await section.getByRole('combobox',{name:'Git authentication'}).selectOption('local_git');
  await expect(section).toContainText('Helpers may execute local commands');
- await expect(section.getByRole('button',{name:'Import repository',exact:true})).toBeDisabled();
+ await expect(submit).toBeDisabled();
+ await consent.check();
+ await expect(submit).toBeEnabled();
  await section.getByRole('combobox',{name:'Git authentication'}).selectOption('local_gh');
- await expect(section.getByRole('button',{name:'Import repository',exact:true})).toBeDisabled();
+ await expect(consent).not.toBeChecked();
+ await expect(submit).toBeDisabled();
  const records=await(await page.request.get('/api/v1/repository-imports',{headers:{Authorization:`Bearer ${token}`}})).json();expect(records).toEqual([]);
 });
