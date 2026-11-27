@@ -574,6 +574,8 @@ coverage and live-provider qualification separately identified. The
 
 ## Delivery plan
 
+The proposed Eino migration changes the model-assisted turn inside the server. The graph receives bounded, role-filtered history, the registered read tools and Weft's model-call function. It returns a grounded answer, clarification or typed proposal. Weft persists and settles reviewed operations independently of the graph. Qualify this path against AC-003/004/007/009 with the [Eino turn scenarios](./matrix.md#eino-turn-qualification). [Chat architecture decision](../../../docs/adr/0015-eino-console-chat-turns.md)
+
 | Phase | Usable vertical slice | Completion gate |
 | --- | --- | --- |
 | P1 — Chat home and follow work | Chat shell, durable sessions and narrow layout, deterministic bootstrap, authorized task lookup/status/watch, one reviewed catalog-create operation and manual evidence links. First demo is the full monitor → New chat → create agent → browser exit/return journey. | AC-001/002/003/005/009 plus scoped AC-004/006. Real HTTP/storage/worker E2E fixture with restart, archive, failed task and role denial. |

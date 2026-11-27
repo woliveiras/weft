@@ -33,6 +33,8 @@ Keeping the existing Go loop has the lowest dependency and migration cost. It re
 
 ## Confirmation and rollback
 
+[TASK-012](../../specs/product-and-tasks/conversational-console/spec.md) owns Chat behavior. Its [Eino qualification rows](../../specs/product-and-tasks/conversational-console/matrix.md#eino-turn-qualification) define the observable results for this change.
+
 1. Exercise both turn implementations with the same scripted model and read catalog. Compare observable answers, plans, calls and errors for a grounded query, an ambiguous follow-up, a mixed read/proposal batch, invalid arguments, a provider failure and cancellation. Run concurrent turns with disjoint histories and permissions. [Turn unit tests](../../server/internal/chat/turn_test.go)
 2. Through the real Chat API and a durable local store, ask for a task list, propose a start and verify that the task remains a draft. Reopen the store, confirm the review and verify one admission when confirmation is retried. Exercise decline, role loss, a different session owner and a changed task revision. Verify explicit commands still avoid model calls. [Session integration tests](../../server/internal/chat/sessions_integration_test.go) · [Task-start binding tests](../../server/internal/chat/task_start_review_test.go)
 3. Qualify the Eino path in a local installation with `make eval-chat`, `make test`, `make lint` and `make build`. Compare results and resource measurements with the Go loop before selecting Eino by default. Select one implementation per request. Roll back new turns to the qualified Go loop while the usual Weft handlers continue to settle pending reviews. [Project commands](../../Makefile)

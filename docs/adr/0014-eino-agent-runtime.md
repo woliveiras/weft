@@ -12,6 +12,8 @@ This is a proposal for implementation. The review covered the control plane, run
 
 ## Context and decision drivers
 
+[RUN-010](../../specs/runtime-and-delivery/eino-runtime-migration/spec.md) defines migration acceptance and the [verification matrix](../../specs/runtime-and-delivery/eino-runtime-migration/matrix.md) tracks the scenarios to qualify before cutover.
+
 Console Chat has a separate integration decision. Its proposed in-process turn uses the operator's session and reviewed operations. Native workflow turns receive execution-scoped capabilities through the engine. External turns receive their scoped HTTP callbacks. [ADR 0015 — Eino for Console Chat](0015-eino-console-chat-turns.md)
 
 There are two graphs with different lifetimes. A **Weft graph** is a versioned operator document. Its nodes may run concurrently on different controllers. Channels, consumer groups, replica leases and message history survive the process that handled a turn. An **Eino graph** is Go code compiled by an agent author. It can branch on a model response, call a tool and loop until it can produce a result. An Eino turn can choose its next internal step and construct an output. Weft decides which downstream replica receives that output and when it runs. [Architecture](../architecture.md) · [Replica leases](0002-reconciler-and-leases.md) · [Broker delivery](0003-pull-broker-abstraction.md)
