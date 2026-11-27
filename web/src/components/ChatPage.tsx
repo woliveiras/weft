@@ -2,6 +2,8 @@ import { ChatTitleForm } from './ChatTitleForm';
 import { Search } from 'lucide-react';
 import { ChatSessionSearch } from './ChatSessionSearch';
 import { ChatMarkdown } from './ChatMarkdown';
+import { ChatActionGuide } from './ChatActionGuide';
+import { guideAction, guidedMessage, type GuideDraft } from './chatGuide';
 import { ChatComposer } from './ChatComposer';
 import { ChatModelSection } from './ChatModelSection';
 import { ChatSkillCard } from './ChatSkillCard';
@@ -25,7 +27,7 @@ import { taskSectionLink } from './taskDetailPresentation';
 import { settingsPath } from './graphSettingsSections';
 import './chat.css';
 
-type ChatDraft = {text:string; requestId?:string; submitting?:boolean};
+type ChatDraft = {text:string; guide?:GuideDraft; requestId?:string; submitting?:boolean};
 type OpenChat = (id?: string, archived?: boolean) => void;
 
 const accessLost = (error: unknown) => error instanceof ApiError && [401,403,404].includes(error.status);
@@ -152,17 +154,23 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
     navigate();
   };
 
+  const showGuide = !id && modelAvailable && !optimistic;
+  const guide = entry?.guide ?? {};
+  const action = showGuide ? guideAction(guide, canCreateAgent) : undefined;
+  const message = guidedMessage(action, guide.target, draft);
+  const tooLong = !!action && new TextEncoder().encode(message).length > 4096;
+
   const textDecision = /^(confirm this proposal|confirme esta proposta|decline this proposal|recuse esta proposta)$/i.test(draft.trim().replace(/\.$/, '').trim());
-  const canSend = modelAvailable || (!MOCK && (draft.trim() === '/export' || /^\s*\/(?:inspect|find|choose)(?:\s|$)/.test(draft) || (!!session && (textDecision || session.messages.at(-1)?.state === 'discovery'))));
+  const canSend = modelAvailable || (!MOCK && (draft.trim() === '/export' || /^\s*\/(?:inspect|find|choose|follow|lookup)(?:\s|$)/.test(draft) || (!!session && (textDecision || session.messages.at(-1)?.state === 'discovery'))));
 
   async function send() {
-    if (session?.archived || !canSend || !draft.trim() || sending || waiting) return;
+    if (session?.archived || !canSend || !message.trim() || tooLong || sending || waiting) return;
     const requestId = entry?.requestId ??
       Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2,'0')).join('');
     await mutate(async () => {
-      setDrafts(previous => ({...previous, [draftKey]:{requestId,text:draft,submitting:true}}));
+      setDrafts(previous => ({...previous, [draftKey]:{...entry,requestId,text:message,submitting:true}}));
       try {
-        const next = await api.sendConversationMessage(id, requestId, draft);
+        const next = await api.sendConversationMessage(id, requestId, message);
         setDrafts(previous => {
           const remaining = {...previous};
           delete remaining[draftKey];
@@ -171,7 +179,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
         return next;
       } catch (cause) {
         // The server may already have saved the request. Reuse its ID for an unchanged retry.
-        setDrafts(previous => ({...previous, [draftKey]:{requestId,text:draft}}));
+        setDrafts(previous => ({...previous, [draftKey]:{...entry,requestId,text:draft}}));
         throw cause;
       }
     }, next => { if (!id) { if (listFilter.current) onOpen(next.id,true); else onOpen(next.id); } });
@@ -288,7 +296,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       {id && !session && conversation.loading && <p role="status">Loading conversation…</p>}
       {id && conversation.error && <><ErrorBox error={session ? conversation.error : 'Conversation unavailable.'}/>
         <Btn onClick={() => void conversation.reload()}>Retry loading conversation</Btn></>}
-      {!id && !optimistic && modelAvailable && <div className="chat-welcome">
+      {!id && !optimistic && modelAvailable && !guide.category && <div className="chat-welcome">
         <h2>What would you like to do?</h2>
         <p className="muted">Follow a task, create an agent, or review a pull request.</p>
       </div>}
@@ -318,10 +326,13 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       </div>
       {session?.archived && <p className="muted">This conversation is archived. <Btn disabled={sending}
         onClick={() => void mutate(() => api.archiveChat(session.id,false), next => onOpen(next.id,false))}>Restore conversation</Btn></p>}
-      {(!id || session) && !session?.archived && <ChatComposer key={draftKey} draft={draft}
-        onChange={text => setDrafts(previous => ({...previous,[draftKey]:{text}}))}
-        onSend={() => void send()} disabled={!canSend || sending || !!waiting}
-        sending={!!entry?.submitting || !!waiting} admin={canCreateAgent} choicePending={session?.messages.at(-1)?.state === 'discovery'}/>}
+      {showGuide && !sending && <ChatActionGuide key={'guide-'+draftKey} admin={canCreateAgent} draft={guide}
+        onChange={next=>{setError(undefined);setDrafts(previous=>({...previous,[draftKey]:{text:draft,guide:next}}));}}/>}
+      {tooLong && <p role="alert">Shorten the message to fit the selected action and details within 4096 bytes.</p>}
+      {(!id || session) && !session?.archived && <ChatComposer key={draftKey} draft={draft} hasContext={!!action && message !== draft}
+        onChange={text => setDrafts(previous => ({...previous,[draftKey]:{text,guide:entry?.guide}}))}
+        onSend={() => void send()} disabled={!canSend || tooLong || sending || !!waiting}
+        sending={sending || !!entry?.submitting || !!waiting} admin={canCreateAgent} choicePending={session?.messages.at(-1)?.state === 'discovery'}/>}
     </section>
 
     <aside className="chat-panel" aria-label="Chat sessions">

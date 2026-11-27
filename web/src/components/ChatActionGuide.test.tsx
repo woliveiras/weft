@@ -1,0 +1,93 @@
+import {cleanup, fireEvent, render, screen, within} from '@testing-library/react';
+import {afterEach, expect, it, vi} from 'vitest';
+import {ChatPage} from './ChatPage';
+import {apiError, fakeApi} from '../test/fakeApi';
+import {guideAction, guidedMessage} from './chatGuide';
+
+afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+const sessions = '/api/v1/chat/sessions';
+const candidates = '/api/v1/chat/candidates';
+const ready = {
+  'GET /api/v1/chat/settings':()=>({status:'configured'}),
+  ['GET '+sessions]:()=>({items:[]}),
+};
+const click = (name:string) => fireEvent.click(screen.getByRole('button',{name}));
+
+it('shows the ordered categories and restores keyboard focus when navigating back',async()=>{
+  fakeApi(ready);
+  render(<ChatPage archived={false} onOpen={vi.fn()}/>);
+  const guide = within(await screen.findByRole('region',{name:'Chat actions'}));
+  const labels = () => guide.getAllByRole('button').map(el=>el.textContent);
+  expect(labels()).toEqual(['Tasks','Agents','Workflows','Mais']);
+  click('Mais');
+  expect(labels().slice(4)).toEqual(['Projects','Connections','Models','Skills & instructions']);
+  click('Models');
+  expect(guide.queryByRole('link',{name:'Open model settings'})).toBeNull();
+  click('View configured models');
+  expect(screen.getByRole('button',{name:'Send'})).toHaveProperty('disabled',false);
+  click('Back');
+  expect(document.activeElement?.textContent).toBe('View configured models');
+  click('Back');
+  expect(document.activeElement?.textContent).toBe('Models');
+  fireEvent.keyDown(document.activeElement!,{key:'Escape'});
+  expect(document.activeElement?.textContent).toBe('Mais');
+  expect(labels()).toEqual(['Tasks','Agents','Workflows','Mais']);
+});
+
+it('preserves notes through failed search, partial results and a stale target',async()=>{
+  let attempt=0;
+  const target={id:'tsk_second',label:'Release · tsk_second · draft'};
+  const backend=fakeApi({...ready,['POST '+sessions]:()=>apiError(400,'This selection is unavailable. Change or clear it before sending.','invalid'),['GET '+candidates]:()=>{
+    attempt++;
+    if(attempt===1)return apiError(503,'temporarily offline','unavailable');
+    if(attempt===2)return {items:[target],partial:true};
+    return {items:[],partial:false};
+  }});
+  render(<ChatPage archived={false} onOpen={vi.fn()}/>);
+  await screen.findByRole('button',{name:'Tasks'});
+  const field=screen.getByRole('textbox',{name:'Message'});
+  fireEvent.change(field,{target:{value:'my notes'}});
+  click('Tasks');click('Follow a task');
+  await screen.findByText('temporarily offline');
+  click('Retry search');
+  await screen.findByText(/Search incomplete/);
+  click(target.label);
+  expect(backend.find('POST',sessions)).toHaveLength(0);
+  click('Send');
+  await screen.findByText('This selection is unavailable. Change or clear it before sending.');
+  expect(backend.find('POST',sessions)).toHaveLength(1);
+  click('Change selection');
+  await screen.findByText('No matches. Try another name or ID.');
+  expect(field).toHaveProperty('value','my notes');
+});
+
+it('uses a complete eligible choice and keeps an incomplete branch out of the submitted text',()=>{
+  const follow=guideAction({category:'Tasks',action:'Follow a task'},false);
+  const target={id:'tsk_a',label:'Duplicate · tsk_a · draft'};
+  expect(guidedMessage(follow,target,'')).toBe('/follow tsk_a');
+  expect(guidedMessage(follow,target,'Watch this one')).toBe('/follow tsk_a\nWatch this one');
+  expect(guidedMessage(follow,undefined,'/inspect tasks')).toBe('/inspect tasks');
+  expect(guideAction({category:'Agents',action:'Create a catalog agent'},false)).toBeUndefined();
+});
+
+it('restores the guided draft after a lost acknowledgement and retries with the same key',async()=>{
+  const target={id:'tsk_a',label:'Release · tsk_a · draft'};
+  const open=vi.fn();
+  const backend=fakeApi({...ready,['GET '+candidates]:()=>({items:[target],partial:false}),
+    ['POST '+sessions]:()=>apiError(503,'Reply lost','network')});
+  render(<ChatPage archived={false} onOpen={open}/>);
+  await screen.findByRole('button',{name:'Tasks'});
+  click('Tasks');click('Follow a task');
+  fireEvent.click(await screen.findByRole('button',{name:target.label}));
+  const field=screen.getByRole('textbox',{name:'Message'});
+  fireEvent.change(field,{target:{value:'Notify me'}});
+  fireEvent.keyDown(field,{key:'Enter',ctrlKey:true});
+  await screen.findByText('Reply lost');
+  expect(field).toHaveProperty('value','Notify me');
+  fireEvent.keyDown(field,{key:'Enter',metaKey:true});
+  await screen.findByText('Reply lost');
+  const requests=backend.find('POST',sessions).map(r=>r.body);
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual(requests[0]);
+  expect(requests[0]).toMatchObject({text:'/follow tsk_a\nNotify me'});
+});

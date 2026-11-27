@@ -23,17 +23,17 @@ function suggestions(input: string, admin: boolean, choicePending: boolean): Sug
     .map(area => ({label:command+' '+area, value:command+' '+area+(command === '/find' || area === 'execution' ? ' ' : '')}));
 }
 
-export function ChatComposer({draft, onChange, onSend, disabled, sending, admin, choicePending}: {
-  draft:string; onChange:(draft:string)=>void; onSend:()=>void; disabled:boolean; sending:boolean; admin:boolean; choicePending:boolean;
+export function ChatComposer({draft, hasContext = false, onChange, onSend, disabled, sending, admin, choicePending}: {
+  draft:string; hasContext?:boolean; onChange:(draft:string)=>void; onSend:()=>void; disabled:boolean; sending:boolean; admin:boolean; choicePending:boolean;
 }) {
   const [focused,setFocused] = useState(false);
   const [dismissed,setDismissed] = useState(false);
   const [index,setIndex] = useState(0);
   const field = useRef<HTMLTextAreaElement>(null);
   const id = useId();
-  const options = focused && !dismissed ? suggestions(draft,admin,choicePending) : [];
+  const options = focused && !dismissed && !hasContext ? suggestions(draft,admin,choicePending) : [];
   const active = Math.min(index, options.length - 1);
-  const canSend = !disabled && !!draft.trim();
+  const canSend = !disabled && (hasContext || !!draft.trim());
   useEffect(() => {
     if (active >= 0) document.getElementById(id+'-'+active)?.scrollIntoView?.({block:'nearest'});
   }, [id,active,draft]);
@@ -57,7 +57,7 @@ export function ChatComposer({draft, onChange, onSend, disabled, sending, admin,
     </ul>}
     <textarea disabled={sending} ref={field} aria-label="Message" aria-autocomplete="list" aria-controls={options.length ? id : undefined}
       aria-activedescendant={active >= 0 ? id+'-'+active : undefined} aria-keyshortcuts="Control+Enter Meta+Enter"
-      placeholder="Ask Weft or type / for commands" value={draft} rows={2} maxLength={4096}
+      placeholder={hasContext ? "Add details (optional)" : "Ask Weft or type / for commands"} value={draft} rows={2} maxLength={4096}
       onChange={event => {onChange(event.target.value); setIndex(0); setDismissed(false);}}
       onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
       onKeyDown={event => {

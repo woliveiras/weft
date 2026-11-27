@@ -920,3 +920,115 @@ test('reviews a task payload in Chat before saving it to the draft', async ({ pa
     title: 'Editorial payload fixture', channelId: 'requests', messageType: 'feature.request',
   });
 });
+
+test('composes a guided first turn and watches only the chosen same-name task',async({page,request})=>{
+  await selectFixtureModel(request);
+  const title='Guided release review';
+  const first=await draftTaskWithApproval(request,'guided-release-one',title);
+  const second=await draftTaskWithApproval(request,'guided-release-two',title);
+  const viewer={Authorization:'Bearer e2e-viewer-token'};
+  const index=async()=> (await (await request.get('/api/v1/chat/sessions',{headers:viewer})).json() as ChatList).items.map(item=>item.id);
+  const before=await index();
+  await page.setViewportSize({width:390,height:844});
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
+  await page.goto('/#/chat');
+  const guide=page.getByRole('region',{name:'Chat actions'});
+  await guide.getByRole('button',{name:'Tasks',exact:true}).click();
+  await guide.getByRole('button',{name:'Follow a task'}).press('Enter');
+  const search=guide.getByRole('searchbox',{name:'Search tasks'});
+  await expect(search).toBeFocused();
+  await search.fill(title);
+  await guide.getByRole('button',{name:new RegExp(first.id)}).click();
+  await guide.getByRole('button',{name:'Change selection'}).click();
+  await guide.getByRole('button',{name:new RegExp(second.id)}).click();
+  expect(await index()).toEqual(before);
+  await expect(page.getByRole('button',{name:'Send',exact:true})).toBeEnabled();
+  const field=page.getByRole('textbox',{name:'Message'});
+  await field.fill('Notify me when this finishes.');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
+  await field.press('Control+Enter');
+  await expect(page).toHaveURL(/#\/chat\/[a-f0-9]{32}/);
+  const id=page.url().split('/').at(-1);
+  const saved=await (await request.get('/api/v1/chat/sessions/'+id,{headers:viewer})).json();
+  expect(saved.messages.filter((m:{role:string})=>m.role==='user')).toEqual([
+    expect.objectContaining({text:'/follow '+second.id+'\nNotify me when this finishes.'}),
+  ]);
+  expect(saved.watches).toEqual([expect.objectContaining({task:expect.objectContaining({id:second.id})})]);
+  await page.reload();
+  await expect(page.getByText(/Following task:/).first()).toBeVisible();
+  await expect(guide).toHaveCount(0);
+});
+
+test('returns to the same unsent guided request from each manual configuration area',async({page,request})=>{
+  await selectFixtureModel(request);
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+  await page.goto('/#/chat');
+  const field=page.getByRole('textbox',{name:'Message'});
+  await field.fill('Keep this draft.');
+  const guide=page.getByRole('region',{name:'Chat actions'});
+  const more=guide.getByRole('button',{name:'Mais'});
+  await more.click();
+  await more.press('Escape');
+  await expect(more).toBeFocused();
+  await more.click();
+  for(const [category,label,hash] of [
+    ['Projects','Open project registration','#/projects/new'],
+    ['Connections','Open connection settings','#/connections'],
+    ['Models','Open model settings','#/models'],
+    ['Skills & instructions','Open Skills & instructions editor','#/skills'],
+  ]){
+    const origin=guide.getByRole('button',{name:category,exact:true});
+    await origin.click();
+    const link=guide.getByRole('link',{name:label});
+    await link.click();
+    expect(new URL(page.url()).hash).toBe(hash);
+    await page.goBack();
+    await expect(link).toBeFocused();
+    await expect(field).toHaveValue('Keep this draft.');
+    await guide.getByRole('button',{name:'Back'}).click();
+    await expect(origin).toBeFocused();
+  }
+});
+
+test('prepares a guided catalog agent for review before creating its first version',async({page,request})=>{
+  await selectFixtureModel(request);
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+  await page.goto('/#/chat');
+  const guide=page.getByRole('region',{name:'Chat actions'});
+  await guide.getByRole('button',{name:'Agents'}).click();
+  await guide.getByRole('button',{name:'Create a catalog agent'}).click();
+  await page.getByRole('textbox',{name:'Message'}).fill('Guide reader should summarize release notes.');
+  const path='/api/v1/agents/guide-reader';
+  expect((await request.get(path,{headers})).status()).toBe(404);
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  const confirm=page.getByRole('button',{name:'Create agent',exact:true});
+  await expect(confirm).toBeEnabled();
+  expect((await request.get(path,{headers})).status()).toBe(404);
+  await confirm.click();
+  await expect(page.getByRole('link',{name:'View agent'})).toHaveAttribute('href','#/agents/guide-reader');
+  expect((await (await request.get(path,{headers})).json()).versions).toHaveLength(1);
+});
+
+test('recovers a guided lookup and keeps an incomplete branch out of a free-text turn',async({page,request})=>{
+  await selectFixtureModel(request);
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
+  await page.goto('/#/chat');
+  const guide=page.getByRole('region',{name:'Chat actions'});
+  await guide.getByRole('button',{name:'Mais'}).click();
+  await guide.getByRole('button',{name:'Models'}).click();
+  await expect(guide.getByRole('link',{name:'Open model settings'})).toHaveCount(0);
+  await expect(guide.getByRole('button',{name:'View configured models'})).toBeEnabled();
+  await guide.getByRole('button',{name:'Back'}).click();
+  await page.route('**/api/v1/chat/candidates?*',route=>route.abort(),{times:1});
+  await guide.getByRole('button',{name:'Workflows'}).click();
+  await guide.getByRole('button',{name:'Find a workflow'}).click();
+  await guide.getByRole('button',{name:'Retry search'}).click();
+  await guide.getByRole('searchbox').fill('No-workflow-has-this-fixture-name');
+  await expect(guide.getByRole('status')).toContainText('No matches');
+  await page.getByRole('textbox',{name:'Message'}).fill('/inspect models');
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page).toHaveURL(/#\/chat\/[a-f0-9]{32}/);
+  const id=page.url().split('/').at(-1);
+  const response=await request.get('/api/v1/chat/sessions/'+id,{headers:{Authorization:'Bearer e2e-viewer-token'}});
+  expect((await response.json()).messages[0].text).toBe('/inspect models');
+});

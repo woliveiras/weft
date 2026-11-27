@@ -83,6 +83,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		toolName, arguments = "inspect_task", `{"task":"Release notes for Chat fixture","title":"Inspect release notes"}`
 	case "Follow the documentation check until it finishes.":
 		toolName, arguments = "watch_task", `{"task":"Documentation check for Chat fixture","title":"Follow documentation check"}`
+	case "Prepare a new catalog agent for review.\nGuide reader should summarize release notes.":
+		toolName, arguments = "create_catalog_agent", `{"agentId":"guide-reader","agentName":"Guide reader","instructions":"Summarize release notes.","title":"Create guide reader"}`
 	case "Create a reusable agent called Release reader to summarize release notes.":
 		toolName, arguments = "create_catalog_agent", `{"agentId":"release-reader","agentName":"Release reader","instructions":"Summarize release notes.","title":"Create release reader"}`
 	case "Create a workflow named Editorial check using version one of the Editorial reader.":

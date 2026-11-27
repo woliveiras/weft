@@ -1,6 +1,6 @@
 import type { Agent, AgentDefinition, AgentSummary } from './agents';
 import type {TaskInput, TaskDraft, TaskPage, TaskReview, TaskProgress, Project} from './tasks';
-import type { ChatList, ChatSession } from './chat';
+import type { ChatCandidates, ChatPickerArea, ChatList, ChatSession } from './chat';
 import type { ExecutionTree, CancelScope, Cancellation } from './executionTree';
 import type { ActivityQuery, ActivityView, HealthQuery, HealthView } from './activity';
 import type { DelegationPolicy, DelegationPolicyView, DelegationProfile, DelegationProfileView } from './delegation';
@@ -113,6 +113,7 @@ export function onUnauthorized(fn: UnauthorizedListener): () => void {
 }
 
 interface RequestOptions {
+  signal?: AbortSignal;
   method?: string;
   body?: unknown;
   /** Send body verbatim with this content type (YAML). */
@@ -147,7 +148,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     body = JSON.stringify(opts.body);
   }
   const url = buildUrl(path, opts.query);
-  const init: RequestInit = { method: opts.method ?? 'GET', headers, body };
+  const init: RequestInit = { method: opts.method ?? 'GET', headers, body, signal:opts.signal };
   let res: Response;
   try {
     res = MOCK ? await (await import('../mock/server')).mockFetch(url, init) : await fetch(url, init);
@@ -344,6 +345,8 @@ export const api = {
   models: (provider: string) => request<ModelInfo[]>(`${V1}/providers/${enc(provider)}/models`),
   providerSettings: () => request<ProviderSettings>(`${V1}/provider-settings`),
   chatModelSettings: () => request<ChatModelSettings>(`${V1}/chat/settings`),
+  chatCandidates: (area:ChatPickerArea, q:string, signal?:AbortSignal) =>
+    request<ChatCandidates>(`${V1}/chat/candidates`, {query:{area,q},signal}),
   chatSessions: (archived: boolean, after?: string) =>
     request<ChatList>(`${V1}/chat/sessions`, {query:{archived:String(archived),after}}),
   chatSession: (id: string) => request<ChatSession>(`${V1}/chat/sessions/${enc(id)}`),

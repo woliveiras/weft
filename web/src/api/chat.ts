@@ -280,3 +280,7 @@ export interface ChatList {
   archivedUnread: number;
   next?: string;
 }
+
+export type ChatPickerArea = 'tasks' | 'agents' | 'workflows' | 'projects' | 'skills';
+export type ChatCandidate = {id:string; label:string};
+export type ChatCandidates = {items:ChatCandidate[]; partial:boolean};
