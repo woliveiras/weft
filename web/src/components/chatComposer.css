@@ -54,8 +54,9 @@
 .guide-task-search [role=status] { color: var(--text-muted); font-size: .875rem; }
 .guide-task-search .guide-results {
   min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-  scrollbar-gutter: stable; padding: 3px;
+  scrollbar-width: none; padding: 3px;
 }
+.guide-task-search .guide-results::-webkit-scrollbar { display: none; }
 .guide-task-search .guide-results button { padding: var(--space-2) var(--space-3); border-radius: 0; background: transparent; }
 .guide-task-search .guide-results button:is(:hover,:focus-visible) { background: var(--primary-soft); }
 .guide-task-identity { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: start; gap: .15rem var(--space-2); }

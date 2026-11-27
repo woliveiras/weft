@@ -950,9 +950,15 @@ test('composes a guided first turn and watches only the chosen same-name task',a
   await row.getByRole('button').hover();
   await expect(row.getByRole('button')).toHaveCSS('border-top-left-radius','0px');
   await expect(row).toHaveCSS('border-top-width','0px');
+  await expect(list).toHaveCSS('scrollbar-width','none');
+  await page.mouse.wheel(0,240);
+  await expect.poll(()=>list.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
   await page.setViewportSize({width:390,height:844});
   const searchTop=(await search.boundingBox())!.y;
-  await list.getByRole('button').last().focus();
+  const buttons=list.getByRole('button');
+  await buttons.first().focus();
+  for(let i=1, count=await buttons.count();i<count;i++) await page.keyboard.press('Tab');
+  await expect(buttons.last()).toBeFocused();
   expect(await list.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
   expect((await search.boundingBox())!.y).toBe(searchTop);
   await search.fill(title);
