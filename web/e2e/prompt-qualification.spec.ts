@@ -57,7 +57,8 @@ test('Full access cannot grant an unavailable tool and project preference stays 
  expect((await page.request.put(`/api/v1/tasks/${draft.id}/authorization`,{headers:{...headers,'If-Match':'0'},data:{mode:'full',scope:consent.scope,confirm:true}})).status()).toBe(200);
  expect((await page.request.post(`/api/v1/tasks/${draft.id}/start`,{headers:{...headers,'If-Match':String(draft.revision)},data:{confirm:true}})).status()).toBe(202);
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));await page.goto(`/#/tasks/${draft.id}`);
- await expect(page.getByRole('heading',{name:'Ready for review',exact:true})).toBeVisible();await expect(page.getByRole('article',{name:'Task progress'})).toContainText('denied');
+ await expect(page.getByRole('heading',{name:'Ready for review',exact:true})).toBeVisible();
+ await expect(page.getByRole('region',{name:'Result',exact:true})).toContainText('permission denied: shell.exec');
  const progress=await(await page.request.get(`/api/v1/tasks/${draft.id}/progress`,{headers})).json();expect(progress.pendingApprovals).toHaveLength(0);
  // An unrelated project suggestion is not applied to this task.
  const auth=await(await page.request.get(`/api/v1/tasks/${draft.id}/authorization`,{headers})).json();expect(auth.preference).toBeUndefined();

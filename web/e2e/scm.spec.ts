@@ -1,3 +1,4 @@
+import {openTaskSettings} from './task-settings';
 import { expect, test } from '@playwright/test';
 
 const admin = { Authorization: 'Bearer e2e-admin-token' };
@@ -140,15 +141,16 @@ test('administrators add a source control connection and tasks choose it as thei
   await expect(page.locator('body')).not.toContainText('synthetic-scm-token');
 
   await page.goto('/#/tasks/new');
-  await page.getByText('Review settings').click();
+  await openTaskSettings(page);
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Hand-off task');
   await page.getByRole('textbox', { name: 'Request', exact: true }).fill('Change the parser and open a pull request.');
   await page.getByRole('combobox', { name: 'Workflow', exact: true }).selectOption('git-inspect');
-  await page.getByLabel(/^Source control hand-off/).selectOption('e2e-github');
+  await page.getByRole('combobox', { name: 'Source control hand-off', exact:true }).selectOption('e2e-github');
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Draft saved' })).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel(/^Source control hand-off/)).toHaveValue('e2e-github');
+  await openTaskSettings(page);
+  await expect(page.getByRole('combobox', { name: 'Source control hand-off', exact:true })).toHaveValue('e2e-github');
 
   // Clean up for later journeys.
   page.on('dialog', (d) => void d.accept());

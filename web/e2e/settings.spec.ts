@@ -18,7 +18,7 @@ test('opens settings by section, preserves the graph draft in history and links 
   await expect(workspace.getByRole('heading')).toBeFocused();
   await expect(page.locator('.react-flow')).toHaveCount(0);
   await expect(nav.getByRole('link')).toHaveText([
-    'General', 'Workspace · local', 'Environment · not built', 'Network', 'Triggers · 0', 'Parameters · 0', 'Safety',
+    'General', 'Task defaults', 'Workspace · local', 'Environment · not built', 'Network', 'Triggers · 0', 'Parameters · 0', 'Safety',
   ]);
   await repository.fill('/var/lib/weft/other');
   await nav.getByRole('link', { name: 'Network', exact: true }).press('Enter');

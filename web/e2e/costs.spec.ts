@@ -38,7 +38,6 @@ test('administrators price models and set budgets; viewers only read them', asyn
 
   // New tasks show the budget they are held to.
   await page.goto('/#/tasks/new');
-  await page.getByText('Review settings').click();
   await page.getByRole('combobox', { name: 'Workflow', exact: true }).selectOption('git-inspect');
   await expect(page.getByRole('region', { name: 'Budget' })).toContainText('This run may spend up to $1.50');
 
@@ -69,6 +68,7 @@ test('pending budget resumes survive a page reload and clear after recovery', as
   };
   // The API integration test holds and releases a real graph lease. Here
   // drive the browser with the corresponding persisted ledger responses.
+  await page.route('**/api/v1/cost/budgets', route => route.fulfill({ json: { budgets: [], period: '2026-11' } }));
   await page.route('**/api/v1/cost/ledgers', route => route.fulfill({ json: ledger.paused ? [ledger] : [] }));
   await page.route(`**/api/v1/cost/budgets/run/${graph}/raise`, route => {
     expect(route.request().postDataJSON()).toEqual({ limitMicros: 2_000_000 });
