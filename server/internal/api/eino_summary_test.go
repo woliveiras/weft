@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/app"
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/llm"
@@ -29,7 +30,8 @@ func (summaryModel) Chat(_ context.Context, req *llm.ChatRequest) (*llm.ChatResp
 	return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, Content: "The document describes green apples."}, StopReason: "stop", Usage: llm.Usage{InputTokens: 17, OutputTokens: 6}}, nil
 }
 
-func TestEinoSummaryThroughController(t *testing.T) {
+func setupEinoController(t *testing.T) (*httptest.Server, *app.App, string) {
+	t.Helper()
 	ctx := t.Context()
 	base := filepath.Join("..", "..", "..")
 	binary := filepath.Join(t.TempDir(), "weft-eino-agent")
@@ -46,8 +48,14 @@ func TestEinoSummaryThroughController(t *testing.T) {
 	cb.Config.Handler = app.API.Handler()
 	cb.Start()
 	t.Cleanup(cb.Close)
+	return srv, app, binary
+}
+
+func TestEinoSummaryThroughController(t *testing.T) {
+	ctx := t.Context()
+	srv, app, binary := setupEinoController(t)
 	app.Models.Add(llm.ProviderConfig{Name: "summary-fixture", DefaultModel: "summary-model"}, summaryModel{})
-	raw, err := os.ReadFile(filepath.Join(base, "examples", "graphs", "eino-summary.yaml"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "examples", "graphs", "eino-summary.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
