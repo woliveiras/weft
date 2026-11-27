@@ -61,3 +61,13 @@ func TestTaskChoiceMetadataFollowsRankedMatch(t *testing.T) {
 		t.Fatal(search.Choices)
 	}
 }
+
+func TestCatalogChoiceMetadataFollowsRankedResults(t *testing.T) {
+	search := ResourceSearch{Query: "reader"}
+	search.AddCatalog("other-reader", "Other reader", CatalogCandidate{Name: "Other reader", Version: 1})
+	entry := CatalogCandidate{Name: "Editorial · reader", Version: 3}
+	search.AddCatalog("reader", "Editorial · reader", entry)
+	if len(search.Choices) != 1 || search.Choices[0].Catalog == nil || *search.Choices[0].Catalog != entry {
+		t.Fatal(search.Choices)
+	}
+}

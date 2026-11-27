@@ -2239,6 +2239,14 @@ paths:
                       properties:
                         id: {type: string}
                         label: {type: string}
+                        catalog:
+                          type: object
+                          description: Display name and published version or revision of a catalog match.
+                          required: [name]
+                          properties:
+                            name: {type: string}
+                            version: {type: integer}
+                            revision: {type: integer, format: int64}
                         task:
                           type: object
                           description: Display fields for a task match.

@@ -82,7 +82,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return err
 		}
 		for _, a := range rows {
-			v.Named(a.ID, a.Name, fmt.Sprintf("%s · %s · version %d", a.ID, a.Name, a.Latest))
+			v.CatalogResource(a.ID, fmt.Sprintf("%s · %s · version %d", a.ID, a.Name, a.Latest), chat.CatalogCandidate{Name: a.Name, Version: a.Latest})
 		}
 	case "projects":
 		rows, err := (projectconfig.Manager{Store: s.Store}).List(ctx)
@@ -90,7 +90,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return err
 		}
 		for _, p := range rows {
-			v.Named(p.ID, p.Name, fmt.Sprintf("%s · %s · revision %d", p.ID, p.Name, p.Revision))
+			v.CatalogResource(p.ID, fmt.Sprintf("%s · %s · revision %d", p.ID, p.Name, p.Revision), chat.CatalogCandidate{Name: p.Name, Revision: p.Revision})
 		}
 	case "skills":
 		rows, err := (instructions.Manager{Store: s.Store}).List(ctx)
@@ -99,7 +99,7 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 		}
 		for _, sk := range rows {
 			if !sk.Deleted {
-				v.Named(sk.ID, sk.Title, fmt.Sprintf("%s · %s · revision %d", sk.ID, sk.Title, sk.Revision))
+				v.CatalogResource(sk.ID, fmt.Sprintf("%s · %s · revision %d", sk.ID, sk.Title, sk.Revision), chat.CatalogCandidate{Name: sk.Title, Revision: sk.Revision})
 			}
 		}
 	case "approvals":

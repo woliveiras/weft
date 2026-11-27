@@ -129,7 +129,7 @@ func (s *Server) searchChatResources(ctx context.Context, actor Identity, b disc
 				continue
 			}
 			if b.area == "workflows" {
-				result.Add(g.Metadata.ID, g.Metadata.Name, fmt.Sprintf("%s · %s · version %d", g.Metadata.Name, g.Metadata.ID, g.Metadata.Version))
+				result.AddCatalog(g.Metadata.ID, fmt.Sprintf("%s · %s · version %d", g.Metadata.Name, g.Metadata.ID, g.Metadata.Version), chat.CatalogCandidate{Name: g.Metadata.Name, Version: g.Metadata.Version})
 				continue
 			}
 			if b.workflow != nil && *b.workflow != "" && *b.workflow != g.Metadata.ID {

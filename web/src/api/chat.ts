@@ -282,5 +282,5 @@ export interface ChatList {
 }
 
 export type ChatPickerArea = 'tasks' | 'agents' | 'workflows' | 'projects' | 'skills';
-export type ChatCandidate = {id:string; label:string; task?:{title:string; status:string; projectId?:string}};
+export type ChatCandidate = {id:string; label:string; catalog?:{name:string; version?:number; revision?:number}; task?:{title:string; status:string; projectId?:string}};
 export type ChatCandidates = {items:ChatCandidate[]; partial:boolean};

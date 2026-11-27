@@ -67,6 +67,14 @@ func (v *Inspection) AddResource(id, line string) {
 	}
 }
 
+func (v *Inspection) CatalogResource(id, line string, entry CatalogCandidate) {
+	if v.Search != nil {
+		v.Search.AddCatalog(id, line, entry)
+		return
+	}
+	v.AddResource(id, line)
+}
+
 func (v *Inspection) Named(id, name, line string) {
 	if v.Search != nil {
 		v.Search.Add(id, name, line)

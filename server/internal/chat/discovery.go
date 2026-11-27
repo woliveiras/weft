@@ -9,9 +9,16 @@ import (
 )
 
 type Choice struct {
-	ID    string
-	Label string
-	Task  *TaskCandidate `json:"-"` // Picker presentation only, omitted from persisted discovery.
+	ID      string
+	Label   string
+	Catalog *CatalogCandidate `json:"-"`
+	Task    *TaskCandidate    `json:"-"` // Picker presentation only, omitted from persisted discovery.
+}
+
+type CatalogCandidate struct {
+	Name     string `json:"name"`
+	Version  int    `json:"version,omitempty"`
+	Revision int64  `json:"revision,omitempty"`
 }
 
 type TaskCandidate struct {
@@ -162,6 +169,10 @@ type ResourceSearch struct {
 
 func (s *ResourceSearch) Add(id, name, label string) {
 	s.addChoice(name, Choice{ID: id, Label: label})
+}
+
+func (s *ResourceSearch) AddCatalog(id, label string, entry CatalogCandidate) {
+	s.addChoice(entry.Name, Choice{ID: id, Label: label, Catalog: &entry})
 }
 
 func (s *ResourceSearch) AddTask(id, label string, task TaskCandidate) {

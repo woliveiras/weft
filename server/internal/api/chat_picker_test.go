@@ -111,3 +111,22 @@ func TestChatPickerPartialSearchAndExactResourceReplay(t *testing.T) {
 		t.Fatal(status)
 	}
 }
+
+func TestChatPickerWorkflowIncludesCatalogFields(t *testing.T) {
+	srv, _ := setupApp(t, nil)
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", taskGraph, nil); c != 201 {
+		t.Fatal(c)
+	}
+	var matches struct {
+		Items []struct {
+			ID      string
+			Catalog *chat.CatalogCandidate
+		}
+	}
+	if c := call(t, srv, "GET", "/api/v1/chat/candidates?area=workflows&q=task-fixture", viewerTok, "", "", &matches); c != 200 {
+		t.Fatal(c)
+	}
+	if len(matches.Items) != 1 || matches.Items[0].ID != "task-fixture" || matches.Items[0].Catalog == nil || *matches.Items[0].Catalog != (chat.CatalogCandidate{Name: "Task fixture", Version: 1}) {
+		t.Fatal(matches)
+	}
+}
