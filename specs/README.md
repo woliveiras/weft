@@ -17,7 +17,7 @@ sequences. IDs and slugs remain stable after assignment.
 
 | Area directory | ID range | Capabilities |
 | --- | --- | --- |
-| `product-and-tasks` | `TASK-001`–`TASK-012` | Release contracts, console navigation, graph editing, Activity, prompt tasks, consent, admission, registered projects, guided journeys, multi-repository tasks, failed-task recovery and the conversational console |
+| `product-and-tasks` | `TASK-001`–`TASK-013` | Release contracts, console navigation, graph editing, Activity, prompt tasks, consent, admission, registered projects, guided journeys, multi-repository tasks, failed-task recovery, the conversational console and contextual chat action pills |
 | `workspaces-and-environments` | `ENV-001`–`ENV-009` | Repository imports, workspace review, journal, human review, Docker isolation, capacity, definitions, build/reuse, and network policy |
 | `providers-and-integrations` | `INT-001`–`INT-009` | Built-in inference plugins, adapters, external plugins, budgets, MCP invocation, MCP OAuth, vendor profiles, hosting, and portable issue/SCM integrations |
 | `runtime-and-delivery` | `RUN-001`–`RUN-009` | Steering, delegation, native coding, evaluation, SCM, issue triggers, issue readiness, context usage, and manual dependency security |
@@ -41,6 +41,10 @@ diagnostic evidence, independent qualification remains open.
 The [historical source map](./historical-source-map.md) records the migration of the planning and evidence files. See the [architecture decisions](../docs/adr/README.md) for cross-cutting policy.
 
 ## Product and tasks
+
+### Planned
+
+- [TASK-013 — Contextual Chat Action Pills](./product-and-tasks/contextual-chat-action-pills/spec.md) — `planned`. Compose a first request through role-aware categories, actions and target selection before sending. See the [behavior matrix](./product-and-tasks/contextual-chat-action-pills/matrix.md).
 
 ### In progress
 

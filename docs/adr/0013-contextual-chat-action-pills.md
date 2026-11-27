@@ -11,6 +11,9 @@ We want someone to be able to identify the intended action and its target
 before sending the first message. Whether this helps people unfamiliar with
 prompting is a usability hypothesis.
 
+[TASK-013](../../specs/product-and-tasks/contextual-chat-action-pills/spec.md)
+defines the planned interaction and its acceptance criteria.
+
 ## Decision
 
 Place optional **Tasks**, **Agents**, **Workflows** and **Mais** pills alongside
