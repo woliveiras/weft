@@ -570,7 +570,7 @@ Qualify a journey with a browser run starting from the user's request, using
 the same domain services as the manual console. Verify actual saved state or
 provider receipts, including the scope of any partial result. Keep fixture
 coverage and live-provider qualification separately identified. The
-[coverage table](./matrix.md#locally-verified-coverage) records what works today.
+[coverage table](./matrix.md#locally-verified-coverage) records what works today. The [manual screen comparison](./matrix.md#manual-screens-against-native-chat-tools) identifies each surface’s supported tools and remaining handoffs, including monthly spend breakdowns, workspace checkpoint reads and reviewed channel payload edits (S57–S59).
 
 ## Delivery plan
 
