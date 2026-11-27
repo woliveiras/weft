@@ -329,10 +329,10 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       {showGuide && !sending && <ChatActionGuide key={'guide-'+draftKey} admin={canCreateAgent} draft={guide}
         onChange={next=>{setError(undefined);setDrafts(previous=>({...previous,[draftKey]:{text:draft,guide:next}}));}}/>}
       {tooLong && <p role="alert">Shorten the message to fit the selected action and details within 4096 bytes.</p>}
-      {(!id || session) && !session?.archived && <ChatComposer key={draftKey} draft={draft} hasContext={!!action && message !== draft}
+      {(!id || session) && !session?.archived && <ChatComposer key={draftKey} draft={draft} detailsHint={action?.kind === 'prompt' ? action.detailsHint : undefined} hasContext={!!action && message !== draft}
         onChange={text => setDrafts(previous => ({...previous,[draftKey]:{text,guide:entry?.guide}}))}
         onSend={() => void send()} disabled={!canSend || tooLong || sending || !!waiting}
-        sending={sending || !!entry?.submitting || !!waiting} admin={canCreateAgent} choicePending={session?.messages.at(-1)?.state === 'discovery'}/>}
+        sending={!!entry?.submitting || !!waiting} admin={canCreateAgent} choicePending={session?.messages.at(-1)?.state === 'discovery'}/>}
     </section>
 
     <aside className="chat-panel" aria-label="Chat sessions">

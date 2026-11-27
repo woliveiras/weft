@@ -10,7 +10,7 @@ export type GuideAction = {
 } & (
   | {kind: 'pick'; area: ChatPickerArea; follow?: boolean}
   | {kind: 'project'; area: 'projects'}
-  | {kind: 'prompt'; prompt: string; command?: string}
+  | {kind: 'prompt'; prompt: string; command?: string; detailsHint?:string}
   | {kind: 'link'; href: string}
 );
 
@@ -22,7 +22,7 @@ const actions: Record<ChatCategory, GuideAction[]> = {
   ],
   Agents: [
     {label:'Find a catalog agent', kind:'pick', area:'agents'},
-    {label:'Create a catalog agent', kind:'prompt', prompt:'Prepare a new catalog agent for review.', admin:true},
+    {label:'Create a catalog agent', kind:'prompt', prompt:'Prepare a new catalog agent for review.', detailsHint:'What should the agent be called, and what should it do?', admin:true},
   ],
   Workflows: [
     {label:'Find a workflow', kind:'pick', area:'workflows'},
@@ -64,6 +64,7 @@ export function guidedMessage(action: GuideAction | undefined, target: ChatCandi
   if (action?.kind === 'pick' && target) {
     prefix = action.follow ? '/follow ' + target.id : '/lookup ' + action.area + ' ' + target.id;
   } else if (action?.kind === 'prompt') {
+    if (action.detailsHint && !text.trim()) return text;
     prefix = (!text.trim() && action.command) || action.prompt;
   } else {
     return text;

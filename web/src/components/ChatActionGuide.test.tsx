@@ -67,7 +67,10 @@ it('uses a complete eligible choice and keeps an incomplete branch out of the su
   expect(guidedMessage(follow,target,'')).toBe('/follow tsk_a');
   expect(guidedMessage(follow,target,'Watch this one')).toBe('/follow tsk_a\nWatch this one');
   expect(guidedMessage(follow,undefined,'/inspect tasks')).toBe('/inspect tasks');
-  expect(guideAction({category:'Agents',action:'Create a catalog agent'},false)).toBeUndefined();
+  const creation={category:'Agents',action:'Create a catalog agent'} as const;
+  expect(guideAction(creation,false)).toBeUndefined();
+  expect(guidedMessage(guideAction(creation,true),undefined,'')).toBe('');
+  expect(guidedMessage(guideAction(creation,true),undefined,'Reader checks notes')).toContain('Reader checks notes');
 });
 
 it('restores the guided draft after a lost acknowledgement and retries with the same key',async()=>{

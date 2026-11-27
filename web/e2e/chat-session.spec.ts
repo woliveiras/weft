@@ -997,6 +997,8 @@ test('prepares a guided catalog agent for review before creating its first versi
   const guide=page.getByRole('region',{name:'Chat actions'});
   await guide.getByRole('button',{name:'Agents'}).click();
   await guide.getByRole('button',{name:'Create a catalog agent'}).click();
+  await expect(page.getByText('What should the agent be called, and what should it do?')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Send',exact:true})).toBeDisabled();
   await page.getByRole('textbox',{name:'Message'}).fill('Guide reader should summarize release notes.');
   const path='/api/v1/agents/guide-reader';
   expect((await request.get(path,{headers})).status()).toBe(404);

@@ -23,8 +23,8 @@ function suggestions(input: string, admin: boolean, choicePending: boolean): Sug
     .map(area => ({label:command+' '+area, value:command+' '+area+(command === '/find' || area === 'execution' ? ' ' : '')}));
 }
 
-export function ChatComposer({draft, hasContext = false, onChange, onSend, disabled, sending, admin, choicePending}: {
-  draft:string; hasContext?:boolean; onChange:(draft:string)=>void; onSend:()=>void; disabled:boolean; sending:boolean; admin:boolean; choicePending:boolean;
+export function ChatComposer({draft, hasContext = false, detailsHint, onChange, onSend, disabled, sending, admin, choicePending}: {
+  draft:string; hasContext?:boolean; detailsHint?:string; onChange:(draft:string)=>void; onSend:()=>void; disabled:boolean; sending:boolean; admin:boolean; choicePending:boolean;
 }) {
   const [focused,setFocused] = useState(false);
   const [dismissed,setDismissed] = useState(false);
@@ -55,9 +55,10 @@ export function ChatComposer({draft, hasContext = false, onChange, onSend, disab
         <strong>{option.label}</strong>{option.detail && <span>{option.detail}</span>}
       </li>)}
     </ul>}
-    <textarea disabled={sending} ref={field} aria-label="Message" aria-autocomplete="list" aria-controls={options.length ? id : undefined}
+    {detailsHint && <span className="small" id={id+'-hint'}>{detailsHint}</span>}
+    <textarea aria-describedby={detailsHint ? id+'-hint' : undefined} disabled={sending} ref={field} aria-label="Message" aria-autocomplete="list" aria-controls={options.length ? id : undefined}
       aria-activedescendant={active >= 0 ? id+'-'+active : undefined} aria-keyshortcuts="Control+Enter Meta+Enter"
-      placeholder={hasContext ? "Add details (optional)" : "Ask Weft or type / for commands"} value={draft} rows={2} maxLength={4096}
+      placeholder={detailsHint ? undefined : hasContext ? "Add details (optional)" : "Ask Weft or type / for commands"} value={draft} rows={2} maxLength={4096}
       onChange={event => {onChange(event.target.value); setIndex(0); setDismissed(false);}}
       onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
       onKeyDown={event => {

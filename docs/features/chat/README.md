@@ -34,8 +34,9 @@ choose a new target. For an incomplete search, refine the name or enter
 the exact ID. A failed search offers **Retry search**.
 
 Links labelled **Open** take you to the named editor. Browser Back restores
-your place in the guide and your unsent text. Preparing an agent creation
-in Chat still leads to its normal review and confirmation.
+your place in the guide and your unsent text. To prepare a catalog agent,
+enter its name and purpose, then select **Send**. Review the proposed
+definition before confirming creation.
 
 ## Choose the model
 

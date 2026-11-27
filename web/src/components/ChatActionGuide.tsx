@@ -39,7 +39,8 @@ function CandidateSearch({area, query, onQuery, onPick, restoreId}: {
     <div role="status">
       {!current ? 'Searching…' : current.error ? 'Search unavailable. ' : current.result?.partial
         ? 'Search incomplete. Refine your search or choose a displayed result.'
-        : !current.result?.items.length ? 'No matches. Try another name or ID.' : ''}
+        : !current.result?.items.length ? 'No matches. Try another name or ID.'
+        : current.result.items.length === 1 ? '1 match' : current.result.items.length+' matches'}
       {current?.error && <><span>{current.error}</span> <button type="button" onClick={()=>setAttempt(n=>n+1)}>Retry search</button></>}
     </div>
     {!!current?.result?.items.length && <ul ref={list} className="guide-results" aria-label="Matching resources">
