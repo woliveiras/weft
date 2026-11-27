@@ -6,7 +6,7 @@ test('hosted CIMD publishes public metadata and completes consent without DCR',a
  const config=await (await page.request.get('http://127.0.0.1:18090/api/v1/mcp/connections/oauth-fixture-config',{headers:{Authorization:'Bearer e2e-admin-token'}})).json();
  await page.goto('/#/integrations');
  await page.getByLabel('Connection ID',{exact:true}).fill('cimd-browser');await page.getByLabel('Connection name',{exact:true}).fill('CIMD browser');
- await page.getByLabel('MCP endpoint',{exact:true}).fill(config.endpoint);await page.getByLabel('Use browser OAuth').check();await page.getByLabel('Client registration method').selectOption('auto');
+ await page.getByLabel('MCP endpoint',{exact:true}).fill(config.endpoint);await page.getByRole('checkbox',{name:'Use browser OAuth',exact:true}).check();await page.getByRole('combobox',{name:'Client registration method',exact:true}).selectOption('auto');
  await page.getByLabel('OAuth issuer',{exact:true}).fill(config.oauth.issuer);await page.getByLabel('OAuth scopes (space separated)',{exact:true}).fill('read');await page.getByRole('button',{name:'Save MCP connection',exact:true}).click();
  const card=page.getByRole('article',{name:'MCP CIMD browser',exact:true});await card.getByRole('button',{name:'Review OAuth setup CIMD browser'}).click();await expect(card).toContainText('Selected mechanism: cimd');
  await card.getByRole('button',{name:'Confirm cimd and authorize CIMD browser'}).click();await page.getByRole('button',{name:'Allow fixture access'}).click();await page.getByRole('button',{name:'Complete OAuth connection'}).click();await expect(page.getByRole('region',{name:'OAuth return',exact:true}).getByRole('status')).toContainText('OAuth connected');
