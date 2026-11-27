@@ -13,18 +13,26 @@ func TestChatPickerReadsWithoutSessionAndFollowsOnlySelectedTask(t *testing.T) {
 	manager := taskconfig.Manager{Store: app.Store}
 	var tasks [2]*taskconfig.Draft
 	for i := range tasks {
-		task, err := manager.SavePrompt(t.Context(), taskconfig.PromptInput{Request: "Review release", Settings: &taskconfig.PromptSettings{Title: "Twin reviews"}}, "fixture")
+		task, err := manager.SavePrompt(t.Context(), taskconfig.PromptInput{Request: "Review release", Settings: &taskconfig.PromptSettings{Title: "Twin · reviews"}}, "fixture")
 		if err != nil {
 			t.Fatal(err)
 		}
 		tasks[i] = task
 	}
 	var matches struct {
-		Items   []struct{ ID, Label string }
+		Items []struct {
+			ID, Label string
+			Task      *chat.TaskCandidate
+		}
 		Partial bool
 	}
 	if status := call(t, srv, "GET", "/api/v1/chat/candidates?area=tasks&q=Twin", viewerTok, "", "", &matches); status != 200 || matches.Partial || len(matches.Items) != 2 {
 		t.Fatal(status, matches)
+	}
+	for _, match := range matches.Items {
+		if match.Task == nil || match.Task.Title != "Twin · reviews" || match.Task.Status != "draft" {
+			t.Fatal("browse lost structured task fields", match)
+		}
 	}
 	var sessions struct{ Items []jsonChatSummary }
 	const path = "/api/v1/chat/sessions"
@@ -62,7 +70,10 @@ func TestChatPickerPartialSearchAndExactResourceReplay(t *testing.T) {
 		selected = task
 	}
 	var result struct {
-		Items   []struct{ ID, Label string }
+		Items []struct {
+			ID, Label string
+			Task      *chat.TaskCandidate
+		}
 		Partial bool
 	}
 	const lookup = "/api/v1/chat/candidates?area=tasks&q="
@@ -74,6 +85,9 @@ func TestChatPickerPartialSearchAndExactResourceReplay(t *testing.T) {
 	}
 	if status := call(t, srv, "GET", lookup+"Release", "", "", "", nil); status != 401 {
 		t.Fatal(status)
+	}
+	if task := result.Items[0].Task; task == nil || task.Title != selected.Title || task.Status != selected.Status {
+		t.Fatal("exact lookup lost task metadata", result.Items[0])
 	}
 	const sessionID = "aa000000000000000000000000000002"
 	const path = "/api/v1/chat/sessions"

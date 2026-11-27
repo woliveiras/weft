@@ -24,12 +24,13 @@ func (s *Server) chatCandidates(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	type item struct {
-		ID    string `json:"id"`
-		Label string `json:"label"`
+		ID    string              `json:"id"`
+		Label string              `json:"label"`
+		Task  *chat.TaskCandidate `json:"task,omitempty"`
 	}
 	items := make([]item, 0, len(result.Choices))
 	for _, c := range result.Choices {
-		items = append(items, item{c.ID, c.Label})
+		items = append(items, item{ID: c.ID, Label: c.Label, Task: c.Task})
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "partial": result.Incomplete()})

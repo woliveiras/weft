@@ -104,6 +104,18 @@ func (b discoverySlot) bind(id string) {
 	}
 }
 
+func addChatTaskChoice(result *chat.ResourceSearch, t *taskconfig.Draft, label string) {
+	status := t.ObservedState
+	if status == "" {
+		status = t.Status
+	}
+	project := t.ProjectID
+	if len(t.Repositories) == 1 {
+		project = t.Repositories[0].ProjectID
+	}
+	result.AddTask(t.ID, label, chat.TaskCandidate{Title: t.Title, Status: status, ProjectID: project})
+}
+
 func (s *Server) searchChatResources(ctx context.Context, actor Identity, b discoverySlot, query string) (chat.ResourceSearch, error) {
 	result := chat.ResourceSearch{Query: query}
 	switch b.area {
@@ -168,7 +180,7 @@ func (s *Server) searchChatResources(ctx context.Context, actor Identity, b disc
 		if query != "" {
 			t, err := (taskconfig.Manager{Store: s.Store}).Get(ctx, query)
 			if err == nil {
-				result.Add(t.ID, t.Title, fmt.Sprintf("%s · %s · %s", t.Title, t.ID, t.Status))
+				addChatTaskChoice(&result, t, fmt.Sprintf("%s · %s · %s", t.Title, t.ID, t.Status))
 				return result, nil
 			}
 			if !errors.Is(err, storage.ErrNotFound) {

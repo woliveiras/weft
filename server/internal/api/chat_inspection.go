@@ -58,7 +58,12 @@ func (s *Server) readChatInspection(ctx context.Context, caller Identity, v *cha
 			return err
 		}
 		for _, t := range rows.Items {
-			v.Named(t.ID, t.Title, fmt.Sprintf("%s · %s · %s", t.ID, t.Title, t.Status))
+			line := fmt.Sprintf("%s · %s · %s", t.ID, t.Title, t.Status)
+			if v.Search != nil {
+				addChatTaskChoice(v.Search, t, line)
+			} else {
+				v.AddResource(t.ID, line)
+			}
 		}
 		v.More = rows.Next != ""
 	case "workflows":

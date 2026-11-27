@@ -2239,6 +2239,14 @@ paths:
                       properties:
                         id: {type: string}
                         label: {type: string}
+                        task:
+                          type: object
+                          description: Display fields for a task match.
+                          required: [title, status]
+                          properties:
+                            title: {type: string}
+                            status: {type: string}
+                            projectId: {type: string}
         "400": {description: Unsupported area or invalid query}
   /api/v1/chat/sessions:
     get:

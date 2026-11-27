@@ -11,6 +11,13 @@ import (
 type Choice struct {
 	ID    string
 	Label string
+	Task  *TaskCandidate `json:"-"` // Picker presentation only, omitted from persisted discovery.
+}
+
+type TaskCandidate struct {
+	Title     string `json:"title"`
+	Status    string `json:"status"`
+	ProjectID string `json:"projectId,omitempty"`
 }
 
 // Discovery is a server-generated continuation saved with the assistant reply.
@@ -154,6 +161,18 @@ type ResourceSearch struct {
 }
 
 func (s *ResourceSearch) Add(id, name, label string) {
+	s.addChoice(name, Choice{ID: id, Label: label})
+}
+
+func (s *ResourceSearch) AddTask(id, label string, task TaskCandidate) {
+	if !validReferenceID(task.ProjectID) {
+		task.ProjectID = ""
+	}
+	s.addChoice(task.Title, Choice{ID: id, Label: label, Task: &task})
+}
+
+func (s *ResourceSearch) addChoice(name string, choice Choice) {
+	id, label := choice.ID, choice.Label
 	q := strings.ToLower(strings.TrimSpace(s.Query))
 	rank := 1
 	switch {
@@ -180,7 +199,7 @@ func (s *ResourceSearch) Add(id, name, label string) {
 		s.overflow = true
 		return
 	}
-	s.Choices = append(s.Choices, Choice{ID: id, Label: label})
+	s.Choices = append(s.Choices, choice)
 }
 
 func (s *ResourceSearch) Incomplete() bool { return s.overflow || (s.Partial && s.rank != 3) }

@@ -7,7 +7,7 @@ import (
 )
 
 func TestDiscoveryMatchingIsBoundedAndUsesDisplayedOrder(t *testing.T) {
-	d := AskDiscovery(Plan{Kind: AnalyzePR}, "pr-repository", []Choice{{"a", "pagamentos/api · Corrigir estorno"}, {"b", "mobile/ios · Ajustar login"}}, "Which repository?", false).Discovery
+	d := AskDiscovery(Plan{Kind: AnalyzePR}, "pr-repository", []Choice{{ID: "a", Label: "pagamentos/api · Corrigir estorno"}, {ID: "b", Label: "mobile/ios · Ajustar login"}}, "Which repository?", false).Discovery
 	for input, want := range map[string]string{"2": "b", "use o primeiro": "a", "o do estorno": "a", "/choose 9": "", "opção 0": "", "mobile/ios": "b"} {
 		c, recognized := d.Match(input)
 		if !recognized || c.ID != want {
@@ -29,7 +29,7 @@ func TestDiscoveryMatchingIsBoundedAndUsesDisplayedOrder(t *testing.T) {
 	if search.Incomplete() || len(search.Choices) != 1 || search.Choices[0].ID != "review" {
 		t.Fatal(search)
 	}
-	unsafe := AskDiscovery(Plan{Kind: FindResource}, "projects", []Choice{{"a", "x\ny"}, {"b", "token=private"}}, "Choose", false)
+	unsafe := AskDiscovery(Plan{Kind: FindResource}, "projects", []Choice{{ID: "a", Label: "x\ny"}, {ID: "b", Label: "token=private"}}, "Choose", false)
 	if !unsafe.Discovery.Incomplete || len(unsafe.Discovery.Choices) != 0 {
 		t.Fatal("unsafe label retained")
 	}
@@ -44,11 +44,20 @@ func TestDiscoveryUsesOnlyPrecedingConversationTurn(t *testing.T) {
 }
 
 func TestDiscoveryNeverSendsCandidateLabelsOrPrivateContinuationToTheModel(t *testing.T) {
-	d := AskDiscovery(Plan{Kind: AnalyzePR}, "pr-repository", []Choice{{"a", "untrusted-candidate-title"}}, "Which repo?", false)
+	d := AskDiscovery(Plan{Kind: AnalyzePR}, "pr-repository", []Choice{{ID: "a", Label: "untrusted-candidate-title"}}, "Which repo?", false)
 	session := Session{Messages: []Message{{ID: "reply-a", Role: "assistant", Text: d.Text, State: "clarification", Discovery: d.Discovery}, {ID: "b", Role: "user", Text: "find a workflow"}}}
 	for _, m := range session.Context("b") {
 		if strings.Contains(m.Content, "untrusted-candidate-title") {
 			t.Fatal("provider received a candidate title")
 		}
+	}
+}
+
+func TestTaskChoiceMetadataFollowsRankedMatch(t *testing.T) {
+	search := ResourceSearch{Query: "review"}
+	search.AddTask("tsk_first", "review first", TaskCandidate{Title: "review first", Status: "running"})
+	search.AddTask("review", "review exact", TaskCandidate{Title: "review exact", Status: "blocked", ProjectID: "docs"})
+	if len(search.Choices) != 1 || search.Choices[0].ID != "review" || *search.Choices[0].Task != (TaskCandidate{Title: "review exact", Status: "blocked", ProjectID: "docs"}) {
+		t.Fatal(search.Choices)
 	}
 }
