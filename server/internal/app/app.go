@@ -94,8 +94,8 @@ type App struct {
 func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	var chatTurn chat.TurnRunner = chat.RunTurn
 	switch os.Getenv("WEFT_CHAT_ORCHESTRATOR") {
-	case "", "direct":
-	case "eino":
+	case "direct":
+	case "", "eino":
 		runner, err := chat.NewEinoTurn(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("compile Eino Chat graph: %w", err)

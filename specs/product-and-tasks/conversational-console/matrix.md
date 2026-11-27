@@ -95,9 +95,9 @@ These rows exercise the existing Chat criteria with the in-process model-assiste
 
 ### Local Eino pilot
 
-Start the controller with `WEFT_CHAT_ORCHESTRATOR=eino` to compile the graph at startup. The default is `direct`. Restarting with `direct` selects the existing turn loop for new messages. Both use the same session store and domain review handlers.
+The controller compiles the Eino graph at startup by default. Set `WEFT_CHAT_ORCHESTRATOR=eino` to select it explicitly. Restarting with `direct` selects the existing turn loop for new messages. Both use the same session store and domain review handlers.
 
-On Linux/arm64 with Eino v0.9.23, the shared unit suite passed for both runners, including provider metadata, mixed batches, the three-read bound, corrections, truncation and typed proposals. Concurrent Eino turns with disjoint catalogs and cancellation before a read passed. The HTTP/SQLite task query integration passed with each runner. All nine fixture evaluations passed with `WEFT_CHAT_ORCHESTRATOR=eino make eval-chat`. The full restart/rollback journey in EINO-03/04 and deployment measurements remain open.
+On Linux/arm64 with Eino v0.9.23, the shared unit suite passed for both runners, including provider metadata, mixed batches, the three-read bound, corrections, truncation and typed proposals. Concurrent Eino turns with disjoint catalogs and cancellation before a read passed. The HTTP/SQLite task query integration passed with each runner. All nine fixture evaluations passed with `WEFT_CHAT_ORCHESTRATOR=eino make eval-chat`. `TestChatReviewSurvivesControllerAndRunnerChange` reopened SQLite after shutting down the first controller, switched runners in both directions, and confirmed the stored task start twice with its original model offline. Each run recorded one admission and one held input. Deployment measurements remain open.
 
 A single-process benchmark with one scripted proposal and zero network latency measured 95.2 µs and 129,206 B per direct turn versus 100.3 µs and 138,122 B with Eino (`go test ./internal/chat -bench BenchmarkChatOrchestration`). The unstripped Linux/arm64 controller built with the project toolchain grew from 67,498,661 bytes at the spec revision to 75,777,887 bytes in the pilot build. These measurements apply to this fixture and build.
 

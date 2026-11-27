@@ -9,6 +9,9 @@ cannot be confirmed, the text returns to the field for another attempt.
 Open Chat from the left navigation or the console's home URL. Start with
 **New chat** above **Recents** on the right. The magnifier next to **Recents** and **Archived** searches titles across the chosen list. Filtering keeps the current conversation and draft open.
 
+
+Model-assisted turns run in the controller using Eino. The server owns session history, authorization and pending reviews. To roll back orchestration for new turns, start the controller with `WEFT_CHAT_ORCHESTRATOR=direct`. Existing reviews can be confirmed after restart. [Architecture and local verification](../../../specs/product-and-tasks/conversational-console/matrix.md#local-eino-pilot)
+
 ## Choose the model
 
 An administrator can select a configured provider and model directly in Chat.

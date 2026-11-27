@@ -4,13 +4,16 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/chat"
+	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/llm"
+	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskauth"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 )
@@ -142,5 +145,70 @@ func TestChatTaskStartKeepsApprovalAndTracksTheObservedResult(t *testing.T) {
 	if untouched, err := drafts.Get(t.Context(), stale.ID); err != nil || untouched.StartOperation != "" ||
 		!strings.EqualFold(untouched.Status, "draft") {
 		t.Fatalf("stale task was admitted: %+v %v", untouched, err)
+	}
+}
+
+func TestChatReviewSurvivesControllerAndRunnerChange(t *testing.T) {
+	for _, backends := range [][2]string{{"direct", "eino"}, {"eino", "direct"}} {
+		t.Run(backends[0]+"_to_"+backends[1], func(t *testing.T) {
+			dir := t.TempDir()
+			configure := func(cfg *config.Config) {
+				cfg.Storage.Dir = dir
+				cfg.Workspaces.Root = filepath.Join(dir, "ws")
+				cfg.Queue = config.Queue{Type: "fs", Dir: filepath.Join(dir, "queue")}
+			}
+			var session chat.Session
+			var id string
+			if !t.Run("propose", func(t *testing.T) {
+				t.Setenv("WEFT_CHAT_ORCHESTRATOR", backends[0])
+				srv, app := setupApp(t, configure)
+				app.Models.Add(llm.ProviderConfig{Name: "chat-fixture", Type: "mock", DefaultModel: "fixture"}, chatTaskStartFixture{})
+				if _, err := app.Store.PutSetting(t.Context(), "chat/model", []byte(`{"provider":"chat-fixture","name":"fixture"}`), 0, "fixture"); err != nil {
+					t.Fatal(err)
+				}
+				workflow := `{"metadata":{"id":"restart-flow"},"spec":{"nodes":[{"id":"w","runtime":{"kind":"echo"},"loop":{"mode":"event"}}],"channels":[{"id":"in","to":["w"],"approval":true}]}}`
+				if s := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", workflow, nil); s != 201 {
+					t.Fatal(s)
+				}
+				drafts := taskconfig.Manager{Store: app.Store}
+				d, err := drafts.Save(t.Context(), "", taskconfig.Input{Title: "Restart review", Request: "Start fixture", GraphID: "restart-flow", GraphVersion: 1, NodeID: "w", ChannelID: "in", Outcome: "freeform", MessageType: "fixture", PayloadJSON: "{}"}, 0, "fixture")
+				if err != nil {
+					t.Fatal(err)
+				}
+				id = d.ID
+				body := fmt.Sprintf(`{"requestId":"%032x","text":"Start %s"}`, 42, id)
+				if s := call(t, srv, "POST", "/api/v1/chat/sessions", adminTok, "application/json", body, &session); s != 200 || len(session.Messages) != 2 || session.Messages[1].Review == nil {
+					t.Fatal("missing review", s, session)
+				}
+				current, err := drafts.Get(t.Context(), id)
+				if err != nil || current.Status != "draft" || current.ExecutionGraphID != "" {
+					t.Fatal(current, err)
+				}
+			}) {
+				return
+			}
+			t.Run("confirm_after_restart", func(t *testing.T) {
+				t.Setenv("WEFT_CHAT_ORCHESTRATOR", backends[1])
+				srv, app := setupApp(t, configure)
+				// The first instance's model fixture was never registered here.
+				review := session.Messages[1].Review
+				path := fmt.Sprintf("/api/v1/chat/sessions/%s/operations/%s/confirm", session.ID, review.ID)
+				for range 2 {
+					var settled chat.Session
+					if s := call(t, srv, "POST", path, adminTok, "application/json", fmt.Sprintf(`{"digest":%q}`, review.Digest), &settled); s != 200 || len(settled.Messages) < 2 || settled.Messages[1].Review.State != chat.ReviewAccepted || len(settled.Watches) != 1 {
+						t.Fatal(s, settled)
+					}
+				}
+				drafts := taskconfig.Manager{Store: app.Store}
+				task, err := drafts.Get(t.Context(), id)
+				if err != nil || task.StartOperation != review.ID || task.ExecutionGraphID == "" {
+					t.Fatal(task, err)
+				}
+				pending, err := app.Store.ListApprovals(t.Context(), storage.ApprovalFilter{GraphID: task.ExecutionGraphID, Status: domain.ApprovalPending})
+				if err != nil || len(pending) != 1 {
+					t.Fatal("expected one task input after replay", pending, err)
+				}
+			})
+		})
 	}
 }
