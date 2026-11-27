@@ -78,3 +78,20 @@ func TestUnconfiguredKubernetesShellCannotRunOnController(t *testing.T) {
 		})
 	}
 }
+
+func TestKubernetesInstallationNeverUsesProcessSandbox(t *testing.T) {
+	cfg := config.Default()
+	cfg.Isolation.Kubernetes = &config.KubernetesIsolation{}
+	factory := sandboxFactory(cfg, nil, nil, nil)
+	for _, mode := range []domain.IsolationMode{"", domain.IsolationProcess, domain.IsolationKubernetes} {
+		root := t.TempDir()
+		sb, err := factory(t.Context(), engine.SandboxSpec{Graph: &domain.Graph{}, Node: &domain.Node{Isolation: domain.IsolationSpec{Mode: mode}}, Workdir: root})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = sb.Exec(t.Context(), tools.ExecRequest{Argv: []string{"touch", "marker"}})
+		if _, stat := os.Stat(filepath.Join(root, "marker")); err == nil || !os.IsNotExist(stat) {
+			t.Fatalf("%s: command escaped disabled sandbox", mode)
+		}
+	}
+}

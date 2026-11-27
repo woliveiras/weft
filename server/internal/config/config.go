@@ -178,8 +178,14 @@ type Runtimes struct {
 	SharedSecretEnv string `yaml:"sharedSecretEnv"`
 }
 
+// A configured Kubernetes profile keeps all workload commands out of the controller.
+type KubernetesIsolation struct {
+	Image string `yaml:"image"`
+}
+
 type Isolation struct {
-	Docker DockerIsolation `yaml:"docker"`
+	Kubernetes *KubernetesIsolation `yaml:"kubernetes"`
+	Docker     DockerIsolation      `yaml:"docker"`
 }
 
 type DockerIsolation struct {
@@ -317,6 +323,9 @@ func applyEnv(c *Config) {
 	str("WEFT_WORKSPACES_HOST", &c.Workspaces.HostRoot)
 	if v := os.Getenv("WEFT_DEV_MOCK"); v != "" {
 		c.LLM.DevMock, _ = strconv.ParseBool(v)
+	}
+	if image := os.Getenv("WEFT_KUBERNETES_SANDBOX_IMAGE"); image != "" {
+		c.Isolation.Kubernetes = &KubernetesIsolation{Image: image}
 	}
 	str("WEFT_SANDBOX_IMAGE", &c.Isolation.Docker.Image)
 	str("WEFT_SANDBOX_DOCKER_HOST", &c.Isolation.Docker.Host)

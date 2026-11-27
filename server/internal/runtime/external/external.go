@@ -46,6 +46,7 @@ import (
 )
 
 type Options struct {
+	EndpointOnly bool // Kubernetes installs external runtimes as separate services.
 	// SharedSecret is sent as X-Weft-Runtime-Secret on every call.
 	SharedSecret string
 	// DockerBin and DockerNetwork are used to launch image-based runtimes.
@@ -101,7 +102,7 @@ func (r *Runtime) Prepare(ctx context.Context, rc runtime.ReplicaContext) error 
 	case n.Runtime.Endpoint != "":
 		// An already-running service: nothing to launch, just check it is up.
 		inst = &instance{endpoint: n.Runtime.Endpoint, stop: func() {}}
-	case n.Isolation.Mode == domain.IsolationKubernetes:
+	case r.opt.EndpointOnly || n.Isolation.Mode == domain.IsolationKubernetes:
 		return errors.New("kubernetes isolation needs runtime.endpoint (deploy the agent with the manifests from `weft k8s render`)")
 	case n.Isolation.Mode == domain.IsolationDocker && n.Runtime.Image != "":
 		inst, err = r.launchDocker(ctx, rc)

@@ -30,6 +30,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/hitl"
 	"github.com/woliveiras/weft/server/internal/jiracloud"
 	"github.com/woliveiras/weft/server/internal/jiradc"
+	"github.com/woliveiras/weft/server/internal/kubesandbox"
 	"github.com/woliveiras/weft/server/internal/llm"
 	_ "github.com/woliveiras/weft/server/internal/llm/providers"
 	"github.com/woliveiras/weft/server/internal/llmconfig"
@@ -233,7 +234,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		domain.RuntimeNative: native.New(),
 		domain.RuntimeEcho:   echo.New(),
 		domain.RuntimeExternal: external.New(external.Options{
-			SharedSecret: secret, DockerBin: cfg.Isolation.Docker.Bin,
+			EndpointOnly: cfg.Isolation.Kubernetes != nil, SharedSecret: secret, DockerBin: cfg.Isolation.Docker.Bin,
 			DockerNetwork: os.Getenv("WEFT_RUNTIME_NETWORK"), CallbackURL: cfg.Server.InternalURL,
 		}),
 	}
@@ -494,6 +495,20 @@ func sandboxFactory(cfg *config.Config, envs *environment.Manager, store storage
 	capacity := capacityManager(cfg, store)
 
 	return func(ctx context.Context, s engine.SandboxSpec) (tools.Sandbox, error) {
+		if cfg.Isolation.Kubernetes != nil {
+			if s.Node.Isolation.Mode == domain.IsolationDocker || s.Name != "" || len(s.Command) > 0 || len(s.ExtraVolumes) > 0 {
+				return nil, errors.New("Kubernetes sandbox requires the installation image and a replica workspace")
+			}
+			if cfg.Isolation.Kubernetes.Image == "" {
+				return unconfiguredKubernetesSandbox{}, nil
+			}
+			return kubesandbox.New(kubesandbox.Replica{
+				Graph: s.Graph.Metadata.ID, Node: s.Node.ID, Index: s.Replica,
+				Root: cfg.Workspaces.Root, Workdir: s.Workdir, Image: cfg.Isolation.Kubernetes.Image,
+				Isolation: s.Node.Isolation, ReadOnly: s.Node.Workspace.ReadOnly,
+				Repositories: s.Graph.Spec.Workspace.Repositories,
+			})
+		}
 		switch s.Node.Isolation.Mode {
 		case domain.IsolationDocker:
 			img := s.Node.Isolation.Image
