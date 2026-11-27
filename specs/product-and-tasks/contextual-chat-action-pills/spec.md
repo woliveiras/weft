@@ -2,20 +2,20 @@
 id: TASK-013
 title: Contextual Chat Action Pills
 summary: Compose a first chat request by choosing an action and an authorized target before sending.
-status: planned
+status: implemented
 scope: [new chat, guided composition, resource selection, manual configuration handoff]
 risk: medium
 risk_domains: [target selection, authorization, unintended submission, draft loss]
 reversibility: Additive composer controls using the existing chat and manual entry points.
-change_surfaces: [web/src, chat request handling, web/e2e, docs/features/chat]
+change_surfaces: [web/src, server/internal/chat, server/internal/api, api/openapi.yaml, web/e2e, docs/features/chat]
 contracts: [draft context, explicit send, role-aware choices]
 review_policy: Review unit and integration results against the behavior matrix before claiming delivery.
 navigation: [specs/README.md, specs/product-and-tasks/contextual-chat-action-pills/matrix.md, docs/adr/0013-contextual-chat-action-pills.md]
 documentation: [docs/features/chat/README.md]
 dependencies: [TASK-002, TASK-012]
 authority:
-  granted: [decision record, specification, local documentation commits]
-  withheld: [implementation, deployment, remote push]
+  granted: [decision record, specification, local implementation, fixture verification, local commits]
+  withheld: [deployment, remote push]
 ---
 
 # Contextual Chat Action Pills
@@ -27,6 +27,17 @@ first message**. [TASK-012](../conversational-console/spec.md) owns session
 creation, authorized discovery, accepted messages, operation review and
 execution. [TASK-002](../console-navigation-and-configuration/spec.md) owns
 manual destinations.
+
+## Delivered request contract
+
+The composer reads `GET /api/v1/chat/candidates` with an allowed resource
+area and optional search text. The response contains up to eight ID/label
+pairs and a partial-result flag. An explicit Send uses the existing chat
+submission and request ID. For an exact target, the first message line is
+`/follow <task-id>` or `/lookup <area> <id>`. Any operator notes follow on
+subsequent lines. The server checks the current selection before accepting a
+new draft and uses its exact ID when answering. A replay of an accepted
+turn returns to the original submission.
 
 ## Acceptance criteria
 
@@ -121,9 +132,10 @@ outside this work. Administration through the pills and suggestions after a
 reply are also outside scope. Existing independently typed operations remain
 governed by TASK-012, including its conversational parity criteria.
 
-The [behavior and oracle matrix](matrix.md) defines planned unit and real
+The [behavior and oracle matrix](matrix.md) records unit and real
 boundary integration coverage. For formative usability verification, ask
 someone unfamiliar with prompting to follow a named task, change their
 selection and say when monitoring starts. Record unaided completion, the
-selected target and the participant's prediction before Send. Usability
-and implementation evidence are pending.
+selected target and the participant's prediction before Send. The matrix
+links the automated evidence. The participant study, physical touch and
+manual screen-reader checks are pending.

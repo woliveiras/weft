@@ -42,10 +42,6 @@ The [historical source map](./historical-source-map.md) records the migration of
 
 ## Product and tasks
 
-### Planned
-
-- [TASK-013 — Contextual Chat Action Pills](./product-and-tasks/contextual-chat-action-pills/spec.md) — `planned`. Compose a first request through role-aware categories, actions and target selection before sending. See the [behavior matrix](./product-and-tasks/contextual-chat-action-pills/matrix.md).
-
 ### In progress
 
 - [TASK-012 — Conversational Console](./product-and-tasks/conversational-console/spec.md) — `in-progress`. Chat home, indexed history, detached monitoring, resource discovery by name, and reviewed operations are available. PR discovery across connected repositories has local fixture coverage. [Remaining journeys for conversational parity](./product-and-tasks/conversational-console/matrix.md#remaining-journeys-for-conversational-parity) track AC-011. See the [delivery evidence and remaining qualification](./product-and-tasks/conversational-console/evidence.md).
@@ -53,6 +49,7 @@ The [historical source map](./historical-source-map.md) records the migration of
 
 ### Implemented
 
+- [TASK-013 — Contextual Chat Action Pills](./product-and-tasks/contextual-chat-action-pills/spec.md) — `implemented`. Compose a first request through role-aware categories, actions and target selection before sending. See the [behavior matrix](./product-and-tasks/contextual-chat-action-pills/matrix.md).
 - [TASK-010 — Multi-repository Tasks](./product-and-tasks/multi-repository-tasks/spec.md) — `implemented`. Run one agent across several repositories, verify the combined change and track delivery per repository.
 - [TASK-011 — Failed Task Retry](./product-and-tasks/failed-task-retry/spec.md) — `implemented`. Prepare a fresh linked draft after a failed manual attempt, with independent review and approvals.
 - [TASK-001 — Release 1 Product Contracts](./product-and-tasks/release-one-product-contracts/spec.md) — `implemented`. Define shared release boundaries, observable errors, and audit identity.

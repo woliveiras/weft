@@ -1,6 +1,6 @@
 # Contextual chat action pills — behavior and oracle matrix
 
-All rows are planned. The expected outcomes were written from
+The expected outcomes were written from
 [ADR 0013](../../../docs/adr/0013-contextual-chat-action-pills.md) and the
 [acceptance criteria](spec.md) before implementation. Integration checks
 use a browser and a disposable Weft API/store with seeded roles and
@@ -19,3 +19,14 @@ resources. Inspect persisted turns, watches and review state where relevant.
 | AC-004 | Prepare a catalog agent creation through the guide | Browsing creates no proposal. Send opens the ordinary review. The agent is created only after authorized confirmation. | spec-derived | Unit check for prepare versus confirm. Browser-to-catalog check before Send, after Send and after confirmation. |
 | AC-005 | Use keyboard, screen reader and a narrow touch viewport | Mais announces its state, Escape returns focus, Back restores the originating choice and all labels and the composer remain reachable. | spec-derived | Unit check for accessible names and focus transitions. Browser keyboard and narrow-viewport paths plus manual screen-reader and touch checks. |
 | AC-001, AC-004 | Open a model-unavailable installation or an archived conversation | The established recovery action remains reachable. An archived chat cannot submit a guided request. | spec-derived | Unit check for readiness and archive states. Open both fixture states through their normal chat entry points. |
+
+## Delivery evidence
+
+| Criteria | Executed coverage |
+| --- | --- |
+| AC-001, AC-002 | [Guide component tests](../../../web/src/components/ChatActionGuide.test.tsx) exercise category order, disclosure, role-specific settings, archived chats and model recovery. [Browser journeys](../../../web/e2e/chat-session.spec.ts) exercise all four manual handoffs, Back, retained input and focus. [Project preference tests](../../../web/src/components/ProjectsPage.test.tsx) check the selected ID when project names coincide. |
+| AC-003 | [API/store integration tests](../../../server/internal/api/chat_picker_test.go) query duplicate titles, bound partial results, deny an anonymous lookup and reject a vanished target even when another record's title matches its ID. The browser recovers an interrupted lookup and submits free text from an incomplete branch. |
+| AC-004 | [Exact command tests](../../../server/internal/chat/picker_test.go) and the API/store tests cover invalid targets, notes and idempotent replay. The browser checks the persisted watch for the chosen duplicate, reads catalog state before and after confirmation, and switches identity with an unsent draft. The guide component checks both send shortcuts and request-key reuse after a lost acknowledgement. |
+| AC-005 | The narrow Chromium journey selects and changes a task by keyboard at 390 px. The manual settings journeys verify focus on return. Component tests exercise disclosure state and Escape. Physical-device touch, a screen-reader walkthrough and unaided task completion with participants remain to be qualified. |
+
+See the [operator guide](../../../docs/features/chat/README.md#compose-a-first-request-with-action-pills) for the delivered interaction.

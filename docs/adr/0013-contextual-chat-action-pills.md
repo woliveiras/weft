@@ -1,6 +1,6 @@
 # 0013 — Compose a chat request with contextual action pills
 
-**Status:** Proposed
+**Status:** Accepted
 
 ## Context
 
@@ -12,7 +12,7 @@ before sending the first message. Whether this helps people unfamiliar with
 prompting is a usability hypothesis.
 
 [TASK-013](../../specs/product-and-tasks/contextual-chat-action-pills/spec.md)
-defines the planned interaction and its acceptance criteria.
+defines the interaction and its acceptance criteria.
 
 ## Decision
 

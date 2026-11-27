@@ -12,6 +12,31 @@ Open Chat from the left navigation or the console's home URL. Start with
 
 Model-assisted turns run in the controller using Eino. The server owns session history, authorization and pending reviews. To roll back orchestration for new turns, start the controller with `WEFT_CHAT_ORCHESTRATOR=direct`. Existing reviews can be confirmed after restart. [Architecture and local verification](../../../specs/product-and-tasks/conversational-console/matrix.md#local-eino-pilot)
 
+## Compose a first request with action pills
+
+In a new chat with a configured Chat model, choose **Tasks**, **Agents** or
+**Workflows** above the message field. **Mais** opens **Projects**,
+**Connections**, **Models** and **Skills & instructions**. Available choices
+follow your role. Open **Administration** from the main navigation.
+
+To follow a task, choose **Tasks → Follow a task**, search by title or ID, and
+select a result. Compare the IDs and states when tasks have the same name.
+The selection appears above the field. Add any notes and select **Send**, or
+use the Send shortcut. Browsing reads the catalogue without creating a chat
+or starting a watch. **Back**, **Change selection** and **Clear selection**
+let you revise the request and keep your own text. You can also type a request
+while exploring an incomplete branch.
+
+An exact selection is recorded as `/follow <task-id>` or
+`/lookup <area> <id>`. Additional lines stay with the saved request.
+These commands use the selected ID directly. If the resource disappears,
+choose a new target. For an incomplete search, refine the name or enter
+the exact ID. A failed search offers **Retry search**.
+
+Links labelled **Open** take you to the named editor. Browser Back restores
+your place in the guide and your unsent text. Preparing an agent creation
+in Chat still leads to its normal review and confirmation.
+
 ## Choose the model
 
 An administrator can select a configured provider and model directly in Chat.
