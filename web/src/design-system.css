@@ -372,7 +372,6 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--primary); }
 .modal-head { padding: var(--space-4) var(--space-5); }
 .modal-head h2 { font: var(--text-h2); }
 .modal-body { padding: var(--space-4) var(--space-5) var(--space-5); gap: var(--space-3); }
-.graph-selector > section { border-radius: var(--radius); }
 
 /* ---- app shell (§7) ---- */
 .topbar {

@@ -69,6 +69,7 @@ Common forms and controls remain usable at narrow widths and in the supported th
 
 - 2026-11-19. Maintainer refinement: Projects belongs to Configuration. Configuration remains visible with its divider and fixed heading; it has no collapse control. The approval inbox uses a newest-request-first table, combined filters and 20-row pages. Details and existing decision actions open on demand without changing authorization or approval contracts.
 
+- 2026-11-27. Workflow selection lives in the sidebar’s Workflows catalogue. The global header omits the graph picker. The catalogue shows unsaved draft status when switching workflows.
 - 2026-11-19. Maintainer refinement to workflow discovery and responsive presentation: the Workflows catalogue uses a newest-updated-first table with combined search/status filters, 20-row pages and expandable workflow-local agent links. Lifecycle actions, administrator deletion confirmation and deferred cleanup remain intact; loading, failure and empty states are explicit.
 
 - 2026-11-19. Maintainer refinement to canvas editing: separate draft and execution toolbar groups; named creation before full agent configuration; a sectioned inspector opens on Overview and defers activity requests until selected. Draft-only nodes show no runtime history or enabled controls. Contextual Remove preserves affected-element confirmation, and the inspector fits narrow viewports.

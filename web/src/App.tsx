@@ -16,7 +16,6 @@ import { api, errorMessage, getToken, MOCK, onStoredTokenChanged, onUnauthorized
 import type { GraphSummary } from './api/types';
 import { ApprovalsView } from './components/ApprovalsView';
 import { Badge, Btn, ErrorBox, Icon, Modal } from './components/common';
-import { GraphSelector } from './components/GraphSelector';
 import { GraphList } from './components/GraphList';
 import { GraphWorkspace, type GraphTab } from './components/GraphWorkspace';
 import { settingsPath, settingsSection, type SettingsSection } from './components/graphSettingsSections';
@@ -273,9 +272,6 @@ function Shell() {
         <button type="button" className="brand" aria-label="Weft" onClick={() => go({ view: 'graphs' })}>
           <BrandMark size={26} /><span className="brand-name" aria-hidden="true">weft</span>
         </button>
-        <GraphSelector graphs={workflows} currentId={route.view === 'graph' ? route.id : undefined} dirty={dirty} loading={graphs.loading} error={graphs.error}
-          onReload={() => void graphs.reload()}
-          onSelect={id => go(sessions[id]?.route ?? {view: 'graph', id, tab: 'canvas'})}/>
         <span className="spacer" />
         {info.data && (
           <span className="infra" title={`instance ${info.data.instance} · version ${info.data.version}`}>
@@ -316,6 +312,7 @@ function Shell() {
           {route.view === 'graphs' && !route.create && (
             <GraphList
               graphs={list}
+              dirty={dirty}
               canDelete={info.data?.identity?.role === 'admin'}
               canCreate={info.data?.identity?.role === 'admin'}
               canControl={info.data?.identity?.role === 'admin' || info.data?.identity?.role === 'operator'}

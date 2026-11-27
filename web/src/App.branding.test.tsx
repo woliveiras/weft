@@ -16,6 +16,7 @@ it('shows the Weft brand and switches theme without calling the API',async()=>{
   'GET /api/v1/approvals':()=>[],
  });
  render(<App/>);
+ expect(screen.queryByRole('button',{name:'Select graph'})).toBeNull();
  const brand=screen.getByRole('button',{name:'Weft'});
  expect(brand.querySelector('svg.brand-mark')).not.toBeNull();
  expect(brand.textContent).toBe('weft');

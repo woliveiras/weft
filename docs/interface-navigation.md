@@ -286,11 +286,11 @@ progress, replay/retry controls and execution-specific workspace snapshots are n
 introduced by this interface change.
 
 
-## Graph selector and agent list
+## Workflow and agent navigation
 
-The header's **Select graph** control searches graph names and IDs, shows saved
-runtime state and marks unsaved graph drafts. Switching to a visited graph restores
-its last destination. The canvas has a searchable agent list: select an agent to
+Open **Workflows** in the sidebar to search by name, description or ID. The
+catalogue shows runtime state and marks workflows with unsaved local drafts.
+Select a workflow name to open its canvas. The canvas has a searchable agent list: select an agent to
 inspect its panel or use **Configure** to open its dedicated configuration page.
 Names reflect the local draft; runtime state belongs to the saved graph and is
 explicitly unavailable when status loading fails. On narrow screens the list moves

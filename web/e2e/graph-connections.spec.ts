@@ -116,8 +116,9 @@ test('creates agents, drags connections, validates, cancels and confirms Delete,
   expect((await saved(page, id)).graph.spec).toEqual(connected.graph.spec);
   await save(page);
   await page.goto('/#/');
-  await page.getByRole('button', { name: 'Select graph', exact: true }).click();
-  await page.getByRole('region', { name: 'Graph selector' }).getByRole('button', { name: new RegExp(graphName) }).click();
+  await page.getByRole('button', { name: 'Workflows', exact: true }).click();
+  await page.getByLabel('Search workflows').fill(graphName);
+  await page.getByRole('button', { name: graphName, exact: true }).click();
   await expect(node(page, 'source')).toBeVisible();
   await expect(node(page, 'agent-3')).toBeVisible();
   await expect(node(page, 'agent-2')).toHaveCount(0);

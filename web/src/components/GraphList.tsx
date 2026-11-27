@@ -9,6 +9,7 @@ import { listedWorkflows, workflowStates } from './workflowPresentation';
 
 export function GraphList({
   graphs,
+  dirty,
   canDelete = false,
   canCreate = true,
   canControl = true,
@@ -19,6 +20,7 @@ export function GraphList({
   onAgent,
 }: {
   graphs: GraphSummary[];
+  dirty?: Record<string, boolean>;
   canDelete?: boolean;
   canCreate?: boolean;
   canControl?: boolean;
@@ -136,6 +138,7 @@ export function GraphList({
                 onOpen(id);
               }}>
                 <td><button type="button" className="link workflow-open" onClick={() => onOpen(id)}>{name}</button>
+                  {dirty?.[id] && <Badge tone="warn">Unsaved draft</Badge>}
                   {g.metadata.description && <p className="muted small workflow-description">{g.metadata.description}</p>}
                   <code className="small muted connection-meta">{id}</code></td>
                 <td><Badge tone={state === 'running' ? 'ok' : state === 'failed' ? 'bad' : state === 'paused' ? 'warn' : undefined}>{workflowStates[state] ?? state}</Badge></td>

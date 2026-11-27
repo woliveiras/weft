@@ -26,9 +26,8 @@ test('a blocked task stops its execution copy and stays outside editable workflo
  await page.goto('/#/graphs');
  await expect(page.getByRole('button',{name:'Blocked task workflow',exact:true})).toBeVisible();
  await expect(page.getByText('Blocked dependency update',{exact:true})).toHaveCount(0);
- await page.getByRole('button',{name:'Select graph'}).click();
- await expect(page.getByRole('region',{name:'Graph selector'})).not.toContainText(gid);
- await page.getByLabel('Search graphs').press('Escape');
+ await page.getByLabel('Search workflows').fill(gid);
+ await expect(page.getByText('No workflows match these filters.')).toBeVisible();
  await page.goto(`/#/g/${gid}/canvas`);
  await expect(page.getByRole('heading',{name:'Task execution',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:/^(Stop|Pause|Delete)$/})).toHaveCount(0);

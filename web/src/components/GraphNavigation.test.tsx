@@ -1,27 +1,25 @@
 import {cleanup,fireEvent,render,screen} from '@testing-library/react';
 import {afterEach,expect,it,vi} from 'vitest';
-import {GraphSelector} from './GraphSelector';
+import {GraphList} from './GraphList';
 import {AgentList} from './AgentList';
 import type {GraphSummary, Graph} from '../api/types';
 afterEach(cleanup);
 const graph={metadata:{id:'g',name:'Factory'},spec:{nodes:[{id:'reviewer',name:'Draft reviewer'}]}} as Graph;
-it('searches, selects and displays dirty graphs, with recoverable loading failures',()=>{
- const select=vi.fn(), reload=vi.fn();
- const props={graphs:[{graph,record:{state:'stopped'}} as GraphSummary],dirty:{g:true},loading:false,onSelect:select,onReload:reload};
- const view=render(<GraphSelector {...props}/>);
- fireEvent.click(screen.getByRole('button',{name:'Select graph'}));
- expect(screen.getByText(/unsaved draft/)).toBeTruthy();
- fireEvent.change(screen.getByLabelText('Search graphs'),{target:{value:'missing'}});
- expect(screen.getByText('No graphs match this search.')).toBeTruthy();
- fireEvent.change(screen.getByLabelText('Search graphs'),{target:{value:'factory'}});
- fireEvent.click(screen.getByRole('button',{name:/Factory.*unsaved draft/}));
- expect(select).toHaveBeenCalledWith('g');
- view.rerender(<GraphSelector {...props} error="Connection unavailable"/>);
- fireEvent.click(screen.getByRole('button',{name:'Select graph'}));
+it('finds a workflow with a local draft and can refresh after a loading failure',()=>{
+ const onOpen=vi.fn(), onChanged=vi.fn();
+ const props={graphs:[{graph,record:{state:'stopped'}} as GraphSummary],dirty:{g:true},onOpen,onChanged};
+ const view=render(<GraphList {...props}/>);
+ expect(screen.getByText('Unsaved draft')).toBeTruthy();
+ const search=screen.getByLabelText('Search workflows');
+ fireEvent.change(search,{target:{value:'missing'}});
+ expect(screen.getByText('No workflows match these filters.')).toBeTruthy();
+ fireEvent.change(search,{target:{value:'factory'}});
+ fireEvent.click(screen.getByRole('button',{name:'Factory'}));
+ expect(onOpen).toHaveBeenCalledWith('g');
+ view.rerender(<GraphList {...props} error="Connection unavailable"/>);
  expect(screen.getByText('Connection unavailable')).toBeTruthy();
- fireEvent.click(screen.getByRole('button',{name:'Reload graphs'}));expect(reload).toHaveBeenCalledOnce();
- fireEvent.keyDown(screen.getByLabelText('Search graphs'),{key:'Escape'});
- expect(screen.queryByRole('region',{name:'Graph selector'})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:'Refresh workflows'}));
+ expect(onChanged).toHaveBeenCalledOnce();
 });
 it('lists draft agents without inventing runtime state and delegates selection and configuration',()=>{
  const select=vi.fn(),configure=vi.fn();
