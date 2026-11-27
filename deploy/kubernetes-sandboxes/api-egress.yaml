@@ -1,0 +1,11 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: sandbox-kubernetes-api, namespace: weft}
+spec:
+  podSelector: {matchLabels: {app: weftd}}
+  policyTypes: [Egress]
+  egress:
+    # Replace this documentation address with the API endpoint /32 or /128
+    # observed by the installation's CNI and its HTTPS port.
+    - to: [{ipBlock: {cidr: 192.0.2.1/32}}]
+      ports: [{protocol: TCP, port: 443}]

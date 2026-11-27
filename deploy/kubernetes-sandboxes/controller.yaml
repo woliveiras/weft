@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: weftd, namespace: weft}
+spec:
+  template:
+    spec:
+      # Mount the short-lived API credential only in the controller.
+      automountServiceAccountToken: true
+      containers:
+        - name: weftd
+          env:
+            - {name: WEFT_KUBERNETES_SANDBOX_IMAGE, value: 'weft/sandbox-go:dev'}
