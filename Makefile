@@ -79,6 +79,10 @@ images: ## Build all container images
 	docker build -t weft/agents:$(VERSION) agents/eino
 	docker build -f Dockerfile.sandbox -t weft/sandbox:$(VERSION) .   # outside Compose; Compose builds it inside sandbox-daemon
 
+.PHONY: test-python-free-images
+test-python-free-images: ## Build and inspect Go/web build stages and shipped images in a clean checkout
+	./scripts/test-python-free-images.sh
+
 k8s-render: ## Render platform manifests (kustomize) and agent runtimes for GRAPH
 	kubectl kustomize deploy/kubernetes
 	@echo "---"
