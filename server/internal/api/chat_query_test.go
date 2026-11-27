@@ -306,3 +306,161 @@ func exerciseTaskQueries(t *testing.T) {
 		t.Fatalf("failed task read should stop before sending tool evidence: %+v, model calls=%d", failed, len(model.requests()))
 	}
 }
+
+// Both follow-ups must reach the model before either can request its SQLite read.
+type overlappingChatQueries struct {
+	chatTaskQueryModel
+	arrived chan struct{}
+	release chan struct{}
+}
+
+func (m *overlappingChatQueries) Chat(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+	last := req.Messages[len(req.Messages)-1]
+	if last.Role == llm.RoleUser && strings.HasPrefix(last.Content, "Check again") {
+		m.arrived <- struct{}{}
+		select {
+		case <-m.release:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return m.chatTaskQueryModel.Chat(ctx, req)
+}
+
+func TestEinoConcurrentAuthenticatedChatQueries(t *testing.T) {
+	t.Setenv("WEFT_CHAT_ORCHESTRATOR", "eino")
+	srv, app := setupApp(t, nil)
+	model := &overlappingChatQueries{arrived: make(chan struct{}, 2), release: make(chan struct{})}
+	model.arguments = map[string]string{}
+	type actor struct {
+		token, marker, status string
+		session               chat.Session
+	}
+	actors := []actor{{token: adminTok, marker: "June desk", status: "running"}, {token: viewerTok, marker: "July desk", status: "cancelled"}}
+	for _, a := range actors {
+		args := fmt.Sprintf(`{"mode":"exists","status":%q}`, a.status)
+		model.arguments["List tasks for "+a.marker] = args
+		model.arguments["Check again for "+a.marker] = args
+	}
+	app.Models.Add(llm.ProviderConfig{Name: "chat-fixture", Type: "mock", DefaultModel: "fixture"}, model)
+	if _, err := app.Store.PutSetting(t.Context(), "chat/model", []byte(`{"provider":"chat-fixture","name":"fixture"}`), 0, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	const path = "/api/v1/chat/sessions"
+	for i := range actors {
+		a := &actors[i]
+		if status := call(t, srv, "POST", path, a.token, "application/json", fmt.Sprintf(`{"requestId":"%032x","text":%q}`, 10+i, "List tasks for "+a.marker), &a.session); status != 200 || len(a.session.Messages) != 2 {
+			t.Fatal(status, a.session)
+		}
+	}
+	go func() {
+		defer close(model.release)
+		for range actors {
+			select {
+			case <-model.arrived:
+			case <-t.Context().Done():
+				return
+			case <-time.After(8 * time.Second):
+				t.Error("authenticated follow-ups did not overlap")
+				return
+			}
+		}
+	}()
+	t.Run("overlap", func(t *testing.T) {
+		for i, a := range actors {
+			t.Run(a.marker, func(t *testing.T) {
+				t.Parallel()
+				var result chat.Session
+				route := path + "/" + a.session.ID
+				body := fmt.Sprintf(`{"requestId":"%032x","text":%q}`, 2, "Check again for "+a.marker)
+				if status := call(t, srv, "POST", route+"/messages", a.token, "application/json", body, &result); status != 200 {
+					t.Fatal(status)
+				}
+				var saved chat.Session
+				if status := call(t, srv, "GET", route, a.token, "", "", &saved); status != 200 || len(saved.Messages) != 4 || saved.ID != result.ID {
+					t.Fatal("unexpected durable session", status, saved.ID)
+				}
+				for _, index := range []int{1, 3} {
+					inv := saved.Messages[index].Inventory
+					if inv == nil || inv.TaskStatus != a.status || inv.TaskMode != "exists" {
+						t.Fatal("incorrect observation", inv)
+					}
+				}
+				if status := call(t, srv, "GET", route, actors[1-i].token, "", "", nil); status != http.StatusNotFound {
+					t.Fatalf("other owner received HTTP %d", status)
+				}
+			})
+		}
+	})
+	requests := model.requests()
+	if len(requests) != 8 {
+		t.Fatalf("expected one model/read/answer exchange per question: %d calls", len(requests))
+	}
+	for _, req := range requests {
+		wire, err := json.Marshal(req.Messages)
+		if err != nil {
+			t.Fatal(err)
+		}
+		first, second := strings.Contains(string(wire), actors[0].marker), strings.Contains(string(wire), actors[1].marker)
+		if first == second {
+			t.Fatal("provider history missing its owner or mixed across owners")
+		}
+		if strings.Contains(string(wire), "Check again for") && !strings.Contains(string(wire), "List tasks for") {
+			t.Fatal("follow-up lost prior history")
+		}
+	}
+}
+
+func TestEinoSelectsSecondReadyTaskAfterClarification(t *testing.T) {
+	t.Setenv("WEFT_CHAT_ORCHESTRATOR", "eino")
+	srv, app := setupApp(t, nil)
+	app.Models.Add(llm.ProviderConfig{Name: "chat-fixture", Type: "mock", DefaultModel: "fixture"}, chatTaskStartFixture{})
+	if _, err := app.Store.PutSetting(t.Context(), "chat/model", []byte(`{"provider":"chat-fixture","name":"fixture"}`), 0, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	if c := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", taskGraph, nil); c != 201 {
+		t.Fatal(c)
+	}
+	drafts := taskconfig.Manager{Store: app.Store}
+	ids := map[string]bool{}
+	for _, title := range []string{"Report apples", "Report pears"} {
+		d, err := drafts.Save(t.Context(), "", taskconfig.Input{Title: title, Request: title, Outcome: "freeform", GraphID: "task-fixture", GraphVersion: 1, NodeID: "reader"}, 0, "fixture")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[d.ID] = true
+	}
+	const route = "/api/v1/chat/sessions"
+	var session chat.Session
+	if c := call(t, srv, "POST", route, adminTok, "application/json", `{"requestId":"eda2ebace56b4b50a83981d63b1a811b","text":"Start Report"}`, &session); c != 200 {
+		t.Fatal(c)
+	}
+	answer := session.Messages[1]
+	if answer.Review != nil || answer.State != "discovery" {
+		t.Fatal("expected a choice between the two tasks", answer)
+	}
+	// Read the second displayed choice independently of the store's ordering.
+	var second string
+	for id := range ids {
+		idx := strings.Index(answer.Text, id)
+		if idx < 0 {
+			t.Fatal("task absent from clarification", answer.Text)
+		}
+		if second == "" || idx > strings.Index(answer.Text, second) {
+			second = id
+		}
+	}
+	if c := call(t, srv, "POST", route+"/"+session.ID+"/messages", adminTok, "application/json", `{"requestId":"edc2ebace56b4b50a83981d63b1a811b","text":"the second"}`, &session); c != 200 {
+		t.Fatal(c)
+	}
+	result := session.Messages[3]
+	if result.Review == nil || result.Review.TaskStart == nil || result.Review.TaskStart.ID != second {
+		t.Fatal("wrong task proposed", result)
+	}
+	for id := range ids {
+		d, err := drafts.Get(t.Context(), id)
+		if err != nil || d.Status != "draft" {
+			t.Fatal("unconfirmed task changed", id, err)
+		}
+	}
+}
