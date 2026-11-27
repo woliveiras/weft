@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {openTaskSection,openTaskSettings} from './task-settings';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {execFile} from 'node:child_process';
@@ -15,16 +16,22 @@ for(const mode of ['ask','workspace','full'])test(`prompt to real Git worktree a
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));await page.goto('/#/tasks/new');
  await page.getByRole('textbox',{name:'Request',exact:true}).fill(`Implement the fixture change in ${repo}, without commit or push.`);
  if(mode!=='ask')await page.getByRole('combobox',{name:'Workflow',exact:true}).selectOption(graphId);
+ await openTaskSettings(page);
  await page.getByRole('button',{name:'Resolve request',exact:true}).click();await expect(page).toHaveURL(/#\/tasks\/tsk_/);
  const url=page.url();const taskId=url.split('/').pop()!;
+ await openTaskSettings(page);
  await expect(page.getByLabel('Request interpretation')).toContainText('repository');
- await page.getByRole('button',{name:'Prepare repository',exact:true}).click();
- const importer=page.getByRole('region',{name:'Import repository'});await importer.getByRole('checkbox').check();await importer.getByRole('button',{name:'Import repository',exact:true}).click();await expect(importer.getByRole('status')).toContainText('ready:');await importer.getByRole('button',{name:'Use imported repository'}).click();
+ await page.getByRole('button',{name:'Import repository from URL',exact:true}).click();
+ const importer=page.getByRole('region',{name:'Import repository'});
+ await expect(importer.getByRole('textbox',{name:'Clone URL'})).toHaveValue(repo);
+ await importer.getByRole('checkbox').check();await importer.getByRole('button',{name:'Import repository',exact:true}).click();await expect(importer.getByRole('status')).toContainText('ready:');await importer.getByRole('button',{name:'Use imported repository'}).click();
  await page.getByRole('button',{name:'Resolve request',exact:true}).click();await expect(page.getByLabel('Request interpretation')).toContainText('Request interpreted and draft saved');
+ const access=page.locator('summary').filter({hasText:/^Access settings/});
+ await access.click();
  const auth=page.getByRole('region',{name:'Task authorization'});await auth.getByLabel('Authorization mode',{exact:true}).selectOption(mode);
  if(mode==='full')await auth.getByLabel('Remember this mode as a project suggestion').check();
  await auth.getByLabel('I reviewed this task, its workflow permissions, execution location, file and network access, external actions and commit/push scope.').check();await auth.getByRole('button',{name:'Confirm authorization'}).click();await expect(auth).toContainText(`Current mode: ${mode}`);
- await page.reload();await expect(auth).toContainText(`Current mode: ${mode}`);
+ await page.reload();await access.click();await expect(auth).toContainText(`Current mode: ${mode}`);
  await page.getByRole('button',{name:'Run task',exact:true}).click();
  if(mode==='ask'){
   await expect(page.getByRole('heading',{name:'Needs your decision',exact:true})).toBeVisible();await page.reload();
@@ -39,11 +46,12 @@ for(const mode of ['ask','workspace','full'])test(`prompt to real Git worktree a
  expect(workspace).not.toBe(project.path);expect((await git('git',['show',`${project.head}:README.md`],{cwd:project.path,env:{PATH:process.env.PATH,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null'}})).stdout).toBe('Public import fixture\n');
  expect((await git('git',['rev-parse','HEAD'],{cwd:project.path,env:{PATH:process.env.PATH,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null'}})).stdout.trim()).toBe(project.head);await expect(readFile(join(project.path,'prompt-result.txt'))).rejects.toThrow();
  expect(progress.decisions.filter((a:{kind:string})=>a.kind==='tool')).toHaveLength(mode==='ask'?1:0);
+ await openTaskSection(page,'Changes & checks');
  await page.getByRole('button',{name:'Inspect changes',exact:true}).click();await expect(page.getByRole('region',{name:'Review task evidence'})).toContainText('prompt-result.txt');
  const original=await(await page.request.get(`/api/v1/graphs/${graphId}`,{headers})).json();expect(original.record.version).toBe(1);expect(original.graph.spec.nodes[0].tools).toEqual(graph.spec.nodes[0].tools);
  if(mode==='full'){
   const next=await(await page.request.post('/api/v1/tasks',{headers,data:{title:'Preference review',request:'Review suggestion',outcome:'freeform',graphId,graphVersion:1,nodeId:'worker',resultNodeId:'worker',projectId:project.id,baseCommit:project.head}})).json();
-  await page.goto(`/#/tasks/${next.id}`);await expect(auth).toContainText('Project suggestion: full');await expect(auth).toContainText('Ask for approval (default)');
+  await page.goto(`/#/tasks/${next.id}`);await access.click();await expect(auth).toContainText('Project suggestion: full');await expect(auth).toContainText('Ask for approval (default)');
   expect((await(await page.request.get(`/api/v1/tasks/${next.id}/authorization`,{headers})).json()).record).toBeUndefined();
  }
 
