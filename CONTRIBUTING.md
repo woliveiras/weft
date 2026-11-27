@@ -125,13 +125,12 @@ events. Other fixtures validate their logs when they use `eventtest.Capture`
 or `eventtest.ValidateStored`. Store conformance tests may use synthetic event
 types. The Go suite also checks event names against the schema and the
 documentation. For an
-optional capture to inspect or validate separately, use the native Go toolchain
-and Python with `jsonschema` installed. From the repository root:
+optional capture to inspect or validate separately, use the native Go toolchain. From the repository root:
 
 ```sh
 capture=$(mktemp -d)
 (cd server && WEFT_TEST_EVENT_CAPTURE="$capture" go test -count=1 ./internal/api ./internal/cost ./internal/engine)
-python3 scripts/check-event-contract.py "$capture"
+(cd server && go run ./cmd/check-event-contract "$capture")
 ```
 
 For the console development server:
