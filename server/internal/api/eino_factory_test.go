@@ -42,7 +42,17 @@ func (m *factoryModel) Chat(_ context.Context, r *llm.ChatRequest) (*llm.ChatRes
 			script += "// TODO implement\n"
 		case 2:
 			script += "t.Fatal(\"fixture regression\")"
-		case 3:
+		case 3, 4:
+			// The third revision fixes the original failure. A transient check
+			// fails once, so the fourth turn must test the identical revision.
+			script = `package feature
+import ("os"; "testing")
+func TestFeature(t *testing.T) {
+	file, err := os.OpenFile(".checked", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if os.IsExist(err) { return }
+	if err != nil { t.Fatal(err) }
+	if err := file.Close(); err != nil { t.Fatal(err) }
+	t.Fatal("fixture regression: retry the unchanged revision")`
 		default:
 			return nil, fmt.Errorf("unexpected extra development turn")
 		}
@@ -133,7 +143,7 @@ func exerciseEinoFactory(t *testing.T, srv *httptest.Server, app *app.App, endpo
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]int{"research.done": 1, "task.ready": 1, "code.ready": 3, "review.changes_requested": 1, "review.approved": 2, "qa.failed": 1, "qa.passed": 1}
+	want := map[string]int{"research.done": 1, "task.ready": 1, "code.ready": 4, "review.changes_requested": 1, "review.approved": 3, "qa.failed": 2, "qa.passed": 1}
 	for _, row := range rows {
 		m := row.Message
 		if _, ok := want[m.Type]; !ok || row.Channel == "review-audit" || row.Group != "" {

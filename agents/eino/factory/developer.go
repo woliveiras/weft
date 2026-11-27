@@ -121,15 +121,8 @@ func develop(ctx context.Context, j *job) error {
 		}
 		written = append(written, f.Path)
 	}
-	_, err = j.client.Tool(ctx, "git.add", map[string]any{"paths": written})
-	if err != nil && !forbidden(err) {
+	if err := commitFiles(ctx, j.client, written, first(changes.CommitMessage, id+": "+title)); err != nil {
 		return err
-	}
-	if err == nil {
-		_, err = j.client.Tool(ctx, "git.commit", map[string]any{"paths": written, "message": first(changes.CommitMessage, id+": "+title)})
-		if err != nil && !forbidden(err) {
-			return err
-		}
 	}
 	item := map[string]any{"request_id": j.text("request_id"), "task_id": id, "title": title, "description": first(j.text("description"), title), "files": written, "summary": first(changes.Summary, "implemented "+title), "branch": j.in.Branch, "iteration": iteration, "research": paths}
 	if escalated {
@@ -137,5 +130,33 @@ func develop(ctx context.Context, j *job) error {
 	}
 	j.emit("code.ready", item)
 	j.summary = fmt.Sprintf("%s: wrote %d files (iteration %d)", id, len(written), iteration)
+	return nil
+}
+
+// A QA retry can produce the same files as the previous turn. Staging is
+// idempotent, but committing an unchanged index is an error in Git.
+func commitFiles(ctx context.Context, client *protocol.Client, paths []string, message string) error {
+	_, err := client.Tool(ctx, "git.add", map[string]any{"paths": paths})
+	if forbidden(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
+		diff, err := client.Tool(ctx, "git.diff", map[string]any{"staged": true, "path": path})
+		// A node with write-only Git grants retains its ordinary commit path.
+		if err != nil && !forbidden(err) {
+			return err
+		}
+		if err == nil && !diff.Truncated && diff.Content == "no differences" {
+			continue
+		}
+		_, err = client.Tool(ctx, "git.commit", map[string]string{"message": message})
+		if forbidden(err) {
+			return nil
+		}
+		return err
+	}
 	return nil
 }
