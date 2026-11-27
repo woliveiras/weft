@@ -28,7 +28,7 @@ The native launcher bundles the UI and initializes private SQLite and filesystem
 
 ### AC-002 — Offline backup and versioned recovery
 
-A stopped profile backs up durable state and restores without overwriting a target. The qualified format-1 upgrade retains compatible state and rejects unsupported formats safely. External source repositories have a separate backup boundary.
+A stopped profile backs up durable state and restores without overwriting a target. A current-version restore retains graphs, tasks and archived Chat. The launcher rejects unsupported profile formats before changing files. The fresh Eino installation requires no migration from prior Forge or Weft installations. External source repositories have a separate backup boundary.
 
 ### AC-003 — Foreground shutdown
 

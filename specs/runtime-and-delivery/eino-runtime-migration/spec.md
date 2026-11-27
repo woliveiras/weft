@@ -6,7 +6,7 @@ status: in-progress
 scope: [native turns, external agents, factory workflows, Go extension tooling, packaging, regression qualification]
 risk: high
 risk_domains: [tool authorization, budget accounting, message delivery, workflow compatibility, isolation]
-reversibility: Restore a qualified server or agent binary while retaining Weft-owned definitions, messages and decisions.
+reversibility: Rebuild a fresh installation from the selected revision. Back up and restore durable state created by the current installation.
 change_surfaces: [server/internal/runtime, server/internal/engine, agents, sdk, examples, scripts, Makefile, Dockerfile, Dockerfile.sandbox, docker-compose.yml, deploy]
 contracts: [native runtime kind, Runtime Protocol v1, factory message contracts, execution-scoped callbacks, installation prerequisites]
 navigation: [specs/README.md, specs/runtime-and-delivery/eino-runtime-migration/matrix.md]
@@ -34,7 +34,7 @@ An operator can keep using published agents, inline workflow nodes and the bundl
 
 ### AC-001 — Existing native agents run without reconfiguration
 
-A published catalogue version bound to a workflow and an inline node saved before cutover both execute through Eino under `runtime.kind: native`. Neither requires republishing, rebinding or an HTTP agent service. Preserve prompts, parameters, guidance, context compaction, streaming, small-model correction, tool order, model-round and tool-call limits, stop/blocked signals, delegation accounting and the restricted PR-analysis path. A failed or cancelled turn retains its existing observable outcome. The runtime never publishes partial model output as a successful result. Weft gateways continue to enforce and record the actual actions. [Native coding contract](../native-coding-runtime/spec.md) · [Delegation contract](../dynamic-delegation-and-execution-trees/spec.md)
+A published catalogue version bound to a workflow and an inline node saved on the current installation both execute through Eino under `runtime.kind: native`. Neither requires republishing, rebinding or an HTTP agent service. Preserve prompts, parameters, guidance, context compaction, streaming, small-model correction, tool order, model-round and tool-call limits, stop/blocked signals, delegation accounting and the restricted PR-analysis path. A failed or cancelled turn retains its existing observable outcome. The runtime never publishes partial model output as a successful result. Weft gateways continue to enforce and record the actual actions. [Native coding contract](../native-coding-runtime/spec.md) · [Delegation contract](../dynamic-delegation-and-execution-trees/spec.md)
 
 ### AC-002 — Go extensions complete one external turn through Protocol v1
 
@@ -52,11 +52,13 @@ For each `code.ready` input, the reviewer reads the listed files and requests a 
 
 Build, test, lint, install and run the controller, native profile and bundled factory with Python, pip and LangGraph absent. Retire the shipped Python SDK and optional Python framework adapters, Python agent image, controller interpreter package, Python-based default sandbox and required Python scripts. Ship the Go service with working health checks at the existing Compose and Kubernetes service addresses. A project can supply Python in its own explicitly selected environment.
 
-Retain equivalent coverage for provider selection and redaction, SDK behavior, event-schema validation, Compose and wrapper contracts, workspace journal, native upgrade, sandbox isolation and preview probes. A skipped check or a successful build alone is insufficient. Record which installation profiles, artifacts and commands were actually exercised. Keep historical LangGraph evidence attributed to the original runtime. [OPS-001](../../installation-and-operations/compose-installation-and-operations/spec.md) · [OPS-002](../../installation-and-operations/standalone-installation-and-recovery/spec.md) · [INT-002](../../providers-and-integrations/model-provider-adapters-and-conformance/spec.md)
+For an external model callback failure, Weft records a redacted diagnostic against the execution. The agent receives a generic error. A typed upstream failure can supply its HTTP status and retryability to the controller history. Provider response bodies and credentials stay out of the event and the runtime response.
 
-### AC-005 — Cutover and rollback preserve pending work
+Retain equivalent coverage for provider selection and redaction, SDK behavior, event-schema validation, Compose and wrapper contracts, workspace journal, native profile recovery, sandbox isolation and preview probes. A skipped check or a successful build alone is insufficient. Record which installation profiles, artifacts and commands were actually exercised. Keep historical LangGraph evidence attributed to the original runtime. [OPS-001](../../installation-and-operations/compose-installation-and-operations/spec.md) · [OPS-002](../../installation-and-operations/standalone-installation-and-recovery/spec.md) · [INT-002](../../providers-and-integrations/model-provider-adapters-and-conformance/spec.md)
 
-Qualify the native turn, the external service and the Chat turn independently. Drain active turns before switching their implementation. Retain graph and channel identities until held messages settle. A previously recorded decision or compatible queued payload can complete after a binary change. Interrupted work follows the existing redelivery and idempotency rules. A partial publish can be redelivered, and an approved message can still fail publication. Reconcile message and execution history before repeating a business effect. Restoring the previous qualified binary preserves Weft-owned records without a database downgrade.
+### AC-005 — Restarts preserve pending work on the current installation
+
+The maintainer selected a fresh installation. Importing an earlier Forge or Weft profile, rolling durable state between binary versions and migrating a running installation are outside the cutover scope. Qualify native turns, external services and Chat against the current release. After a restart with the same store and broker, a held message retains its identity and can settle against its original approval. Interrupted work follows the existing redelivery and idempotency rules. A partial publication or a failed approved delivery remains visible in message and execution history. The native profile preserves graphs and archived Chat sessions through current-version backup and restore, and rejects an unknown format before changing its files.
 
 ## Qualification and open decisions
 

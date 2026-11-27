@@ -10,6 +10,9 @@ The target is a Weft distribution that builds, tests, installs and runs its bund
 
 This is a proposal for implementation. The review covered the control plane, runtime protocol, native and Python agents, storage and broker boundaries, operator surfaces, deployment and test harnesses at revision `cd2c6de`. The dependency and packaging inventory was reviewed at `e93048f`. Both execution paths and the removal below are proposed work.
 
+
+The maintainer selected a fresh Eino installation. Historical Forge and Weft profiles are outside this cutover. Qualify current-version restart, durable approvals, backup, restore and safe refusal of unknown formats using disposable state. Earlier upgrade rehearsals retain their historical scope.
+
 ## Context and decision drivers
 
 [RUN-010](../../specs/runtime-and-delivery/eino-runtime-migration/spec.md) defines migration acceptance and the [verification matrix](../../specs/runtime-and-delivery/eino-runtime-migration/matrix.md) tracks the scenarios to qualify before cutover.
