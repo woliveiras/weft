@@ -16,8 +16,8 @@ defines the interaction and its acceptance criteria.
 
 ## Decision
 
-Place optional **Tasks**, **Agents**, **Workflows** and **Mais** pills alongside
-the new-chat composer. **Mais** is a text-only disclosure. It reveals
+Place optional **Tasks**, **Agents**, **Workflows** and **More** pills alongside
+the new-chat composer. **More** is a text-only disclosure. It reveals
 **Projects**, **Connections**, **Models** and **Skills & instructions** for
 configuration and inspection. Administration is reached through manual
 navigation. This decision governs what the pills offer. The existing
@@ -51,7 +51,7 @@ on return. Platform onboarding has a separate scope.
 - **Show every category in the first row.** Configuration competes with daily
   work for space, particularly on narrow screens.
 - **Use an ellipsis for secondary categories.** Its meaning overlaps with
-  conversation-level controls. The visible word **Mais** names the choice.
+  conversation-level controls. The visible word **More** names the choice.
 - **Send a starter prompt on click.** This creates a conversation turn before
   the operator has selected a target or added details. The chosen approach
   preserves the opportunity to explore and correct the request.

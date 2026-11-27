@@ -18,8 +18,8 @@ it('shows the ordered categories and restores keyboard focus when navigating bac
   render(<ChatPage archived={false} onOpen={vi.fn()}/>);
   const guide = within(await screen.findByRole('region',{name:'Chat actions'}));
   const labels = () => guide.getAllByRole('button').map(el=>el.textContent);
-  expect(labels()).toEqual(['Tasks','Agents','Workflows','Mais']);
-  click('Mais');
+  expect(labels()).toEqual(['Tasks','Agents','Workflows','More']);
+  click('More');
   expect(labels().slice(4)).toEqual(['Projects','Connections','Models','Skills & instructions']);
   click('Models');
   expect(guide.queryByRole('link',{name:'Open model settings'})).toBeNull();
@@ -30,8 +30,8 @@ it('shows the ordered categories and restores keyboard focus when navigating bac
   click('Back');
   expect(document.activeElement?.textContent).toBe('Models');
   fireEvent.keyDown(document.activeElement!,{key:'Escape'});
-  expect(document.activeElement?.textContent).toBe('Mais');
-  expect(labels()).toEqual(['Tasks','Agents','Workflows','Mais']);
+  expect(document.activeElement?.textContent).toBe('More');
+  expect(labels()).toEqual(['Tasks','Agents','Workflows','More']);
 });
 
 it('preserves notes through failed search, partial results and a stale target',async()=>{
@@ -135,7 +135,7 @@ it.each([
   fakeApi({...ready,['GET '+candidates]:()=>({items,partial:true})});
   render(<ChatPage archived={false} onOpen={vi.fn()}/>);
   await screen.findByRole('button',{name:'Tasks'});
-  if(category==='Projects' || category==='Skills & instructions') click('Mais');
+  if(category==='Projects' || category==='Skills & instructions') click('More');
   click(category);click(action);
   await screen.findByText('Showing 2 '+noun+'s. Search by name or ID to narrow the list.');
   const name = 'Release · review '+badge+' second';
@@ -157,7 +157,7 @@ it.each([
   const backend=fakeApi({...ready,['POST '+sessions]:()=>apiError(503,'Reply lost','network')});
   render(<ChatPage archived={false} onOpen={vi.fn()}/>);
   await screen.findByRole('button',{name:'Tasks'});
-  if(category==='Connections' || category==='Models') click('Mais');
+  if(category==='Connections' || category==='Models') click('More');
   click(category);click(action);
   expect(screen.queryByRole('textbox',{name:'Message'})).toBeNull();
   expect(screen.getByRole('button',{name:'Add details'})).toBeTruthy();

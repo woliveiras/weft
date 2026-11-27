@@ -44,7 +44,7 @@ turn returns to the original submission.
 ### AC-001 — Enter through a category or type directly
 
 In a ready new chat, present **Tasks**, **Agents**, **Workflows**, then
-**Mais** near the composer. Use the visible word **Mais** alone. Opening it
+**More** near the composer. Use the visible word **More** alone. Opening it
 reveals eligible secondary categories in this order: **Projects**,
 **Connections**, **Models**, **Skills & instructions**. Closing it returns
 to the primary choices. Administration is accessible through the existing
@@ -123,7 +123,7 @@ cannot confirm the resulting proposal.
 ### AC-005 — Operate the guide with keyboard, touch or assistive technology
 
 Use named buttons for choices and links for navigation. Expose whether
-**Mais** is expanded. Support keyboard activation, Escape to close the
+**More** is expanded. Support keyboard activation, Escape to close the
 disclosure and focus return to its trigger. When drilling into a category,
 make the next choices and current selection discoverable to a screen reader.
 Back restores focus to the choice that opened the branch. At narrow widths

@@ -41,7 +41,7 @@ export function ChatActionGuide({draft, admin, onChange}: {
     } else if (category) {
       change({more:draft.more}, category);
     } else {
-      change({}, 'Mais');
+      change({}, 'More');
     }
   }
   function categoryButton(item: ChatCategory) {
@@ -54,8 +54,8 @@ export function ChatActionGuide({draft, admin, onChange}: {
     }}>
     {!category ? <>
       <div className="guide-pills">{primaryCategories.map(categoryButton)}
-        <button type="button" data-guide-focus="Mais" aria-expanded={!!draft.more} aria-controls={groupId}
-          onClick={()=>change({more:!draft.more},'Mais')}>Mais</button>
+        <button type="button" data-guide-focus="More" aria-expanded={!!draft.more} aria-controls={groupId}
+          onClick={()=>change({more:!draft.more},'More')}>More</button>
       </div>
       <div id={groupId} hidden={!draft.more}><div className="guide-pills">{moreCategories.map(categoryButton)}</div></div>
     </> : <>

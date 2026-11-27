@@ -997,7 +997,7 @@ test('returns to the same unsent guided request from each manual configuration a
   const field=page.getByRole('textbox',{name:'Message'});
   await field.fill('Keep this draft.');
   const guide=page.getByRole('region',{name:'Chat actions'});
-  const more=guide.getByRole('button',{name:'Mais'});
+  const more=guide.getByRole('button',{name:'More'});
   await more.click();
   await more.press('Escape');
   await expect(more).toBeFocused();
@@ -1048,7 +1048,7 @@ test('inspects models from a prepared action without typing a message',async({pa
   await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
   await page.goto('/#/chat');
   const guide=page.getByRole('region',{name:'Chat actions'});
-  await guide.getByRole('button',{name:'Mais'}).click();
+  await guide.getByRole('button',{name:'More'}).click();
   await guide.getByRole('button',{name:'Models'}).click();
   await guide.getByRole('button',{name:'View configured models'}).click();
   await expect(guide.getByText('Which models are configured?')).toBeVisible();
@@ -1094,7 +1094,7 @@ test('recovers a guided lookup and keeps an incomplete branch out of a free-text
   await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
   await page.goto('/#/chat');
   const guide=page.getByRole('region',{name:'Chat actions'});
-  await guide.getByRole('button',{name:'Mais'}).click();
+  await guide.getByRole('button',{name:'More'}).click();
   await guide.getByRole('button',{name:'Models'}).click();
   await expect(guide.getByRole('link',{name:'Open model settings'})).toHaveCount(0);
   await expect(guide.getByRole('button',{name:'View configured models'})).toBeEnabled();
@@ -1128,7 +1128,7 @@ test('keeps a guided draft private across an identity change in another tab',asy
   await other.goto('/#/chat');
   await other.evaluate(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
   await expect(field).toHaveValue('');
-  await expect(guide.getByRole('button',{name:'Mais'})).toBeVisible();
+  await expect(guide.getByRole('button',{name:'More'})).toBeVisible();
   await guide.getByRole('button',{name:'Agents'}).click();
   await expect(guide.getByRole('button',{name:'Create a catalog agent'})).toHaveCount(0);
   await expect(guide.getByRole('button',{name:'Find a catalog agent'})).toBeVisible();

@@ -15,7 +15,7 @@ Model-assisted turns run in the controller using Eino. The server owns session h
 ## Compose a first request with action pills
 
 In a new chat with a configured Chat model, choose **Tasks**, **Agents** or
-**Workflows** above the message field. **Mais** opens **Projects**,
+**Workflows** above the message field. **More** opens **Projects**,
 **Connections**, **Models** and **Skills & instructions**. Available choices
 follow your role. Open **Administration** from the main navigation.
 
