@@ -27,6 +27,12 @@ func New(ctx context.Context) (protocol.Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+	return summaryAgent(func(ctx context.Context, input *turn) (*turn, error) {
+		return runner.Invoke(ctx, input)
+	}), nil
+}
+
+func summaryAgent(invoke func(context.Context, *turn) (*turn, error)) protocol.Agent {
 	return func(ctx context.Context, in *protocol.TurnInput, client *protocol.Client) (protocol.TurnResult, error) {
 		if len(in.Inputs) != 1 || in.Inputs[0].ID == "" || in.Inputs[0].Type != "summary.requested" {
 			return protocol.TurnResult{}, errors.New("expected one summary request")
@@ -37,12 +43,12 @@ func New(ctx context.Context) (protocol.Agent, error) {
 		if json.Unmarshal(in.Inputs[0].Payload, &payload) != nil || !fs.ValidPath(payload.Path) || payload.Path == "." || strings.Contains(payload.Path, "\\") {
 			return protocol.TurnResult{}, errors.New("invalid document path")
 		}
-		out, err := runner.Invoke(ctx, &turn{in: in, client: client, path: payload.Path})
+		out, err := invoke(ctx, &turn{in: in, client: client, path: payload.Path})
 		if err != nil {
 			return protocol.TurnResult{}, err
 		}
 		return protocol.TurnResult{Summary: "Document summary prepared for review", Emits: []protocol.Emit{{Type: "summary.proposed", Payload: map[string]string{"sourceMessageId": in.Inputs[0].ID, "summary": out.summary}}}}, nil
-	}, nil
+	}
 }
 
 func readDocument(ctx context.Context, t *turn) (*turn, error) {

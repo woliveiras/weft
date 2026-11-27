@@ -56,3 +56,12 @@ For M09, `make test-e2e-providers` passed in a disposable macOS/arm64 checkout w
 For M03, M06, M07 and M09 the Go author harness and bundled roles passed `go test -race -count=1 ./...` on macOS/arm64 and `./scripts/go.sh -C ../agents/eino test -count=1 ./...` on Linux/arm64. These suites replace the former SDK, delegation, instructions, review-yield and factory Python tests. They cover registration, health, authenticated HTTP turns, callback failure, inert instructions, yield, delegated tool errors, local usage, granted and denied research, parsed model output, scoped developer writes, escalation, plain-text planning, unrelated input and a two-task offline pipeline. QA requires a structured exit status. A text-only success claim fails. `TestEinoFactoryReworkThroughController` exercised the shipped command and grant through the real controller, rework and approval.
 
 For M08 the controller, Eino service and default Docker sandbox images built on Linux/arm64. A read-only network-isolated container from each image verified the absence of python, python3 and pip. The agent health endpoint listed six compiled agents. The default sandbox ran Git and an offline Go test as UID 10001. These image checks complement the live topology journeys.
+
+A macOS/arm64 Go 1.26.9 benchmark compared the same summary stages, turn handler, JSON payload, file gateway and immediate model fixture. With one in-flight turn, each of 3,000 completed turns issued one read and one model callback and produced one proposal. Run `go test -c ./summary -o summary.bench` in the agent module, then `/usr/bin/time -l ./summary.bench -test.run '^$' -test.bench '^BenchmarkExternalSummary/direct$' -test.benchtime 3000x -test.benchmem`. Repeat with `/eino$` in a fresh process.
+
+| Summary invocation | Time per turn | Allocated bytes per turn | Peak RSS of the test process |
+| --- | ---: | ---: | ---: |
+| Direct Go | 247.7 µs | 31,954 | 27,049,984 bytes |
+| Eino v0.9.23 | 260.6 µs | 44,320 | 27,770,880 bytes |
+
+RSS includes the client, both loopback servers and the Go test runner. The root Linux/arm64 build produced a 22,534,384-byte external service binary. Docker reported 14,990,976 bytes for the separately built agent image. Vendor inference latency and production concurrency require independent measurements.
