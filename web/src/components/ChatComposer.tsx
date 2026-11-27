@@ -23,8 +23,8 @@ function suggestions(input: string, admin: boolean, choicePending: boolean): Sug
     .map(area => ({label:command+' '+area, value:command+' '+area+(command === '/find' || area === 'execution' ? ' ' : '')}));
 }
 
-export function ChatComposer({draft, hasContext = false, detailsHint, onChange, onSend, disabled, sending, admin, choicePending}: {
-  draft:string; hasContext?:boolean; detailsHint?:string; onChange:(draft:string)=>void; onSend:()=>void; disabled:boolean; sending:boolean; admin:boolean; choicePending:boolean;
+export function ChatComposer({draft, hasContext = false, sendLabel = 'Send', detailsHint, onChange, onSend, disabled, sending, admin, choicePending}: {
+  draft:string; hasContext?:boolean; sendLabel?:string; detailsHint?:string; onChange:(draft:string)=>void; onSend:()=>void; disabled:boolean; sending:boolean; admin:boolean; choicePending:boolean;
 }) {
   const [focused,setFocused] = useState(false);
   const [dismissed,setDismissed] = useState(false);
@@ -81,7 +81,7 @@ export function ChatComposer({draft, hasContext = false, detailsHint, onChange, 
       }}/>
     <div className="chat-composer-actions">
       <span className="muted">{/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'} + Enter to send</span>
-      <Btn tone="primary" type="submit" disabled={!canSend}>{sending ? 'Sending…' : 'Send'}</Btn>
+      <Btn tone="primary" type="submit" disabled={!canSend}>{sending ? 'Sending…' : sendLabel}</Btn>
     </div>
   </form>;
 }

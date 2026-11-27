@@ -924,6 +924,7 @@ test('reviews a task payload in Chat before saving it to the draft', async ({ pa
 test('composes a guided first turn and watches only the chosen same-name task',async({page,request})=>{
   await selectFixtureModel(request);
   const title='Guided release review';
+  for(let i=0;i<7;i++) await draftTaskWithApproval(request,'guided-scroll-'+i,'Older task '+i);
   const first=await draftTaskWithApproval(request,'guided-release-one',title);
   const second=await draftTaskWithApproval(request,'guided-release-two',title);
   const viewer={Authorization:'Bearer e2e-viewer-token'};
@@ -937,14 +938,25 @@ test('composes a guided first turn and watches only the chosen same-name task',a
   await guide.getByRole('button',{name:'Follow a task'}).press('Enter');
   const search=guide.getByRole('searchbox',{name:'Search tasks'});
   await expect(search).toBeFocused();
+  await expect(guide.getByRole('status')).toContainText('Showing 8 tasks.');
+  const list=guide.getByRole('list',{name:'Matching resources'});
+  const searchTop=(await search.boundingBox())!.y;
+  await list.getByRole('button').last().focus();
+  expect(await list.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+  expect((await search.boundingBox())!.y).toBe(searchTop);
   await search.fill(title);
-  await guide.getByRole('button',{name:new RegExp(first.id)}).click();
-  await guide.getByRole('button',{name:'Change selection'}).click();
-  await guide.getByRole('button',{name:new RegExp(second.id)}).click();
-  expect(await index()).toEqual(before);
-  await expect(page.getByRole('button',{name:'Send',exact:true})).toBeEnabled();
   const field=page.getByRole('textbox',{name:'Message'});
   await field.fill('Notify me when this finishes.');
+  await guide.getByRole('button',{name:new RegExp(first.id.slice(-6)+'$')}).click();
+  await expect(guide.getByText(first.id,{exact:true})).toBeVisible();
+  await guide.getByRole('button',{name:'Change task'}).click();
+  await search.fill(second.id);
+  await expect(list.getByRole('button')).toHaveCount(1);
+  await list.getByRole('button',{name:new RegExp(second.id.slice(-6)+'$')}).click();
+  await expect(guide.getByText(second.id,{exact:true})).toBeVisible();
+  await expect(field).toHaveValue('Notify me when this finishes.');
+  expect(await index()).toEqual(before);
+  await expect(page.getByRole('button',{name:'Send and follow',exact:true})).toBeEnabled();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(390);
   await field.press('Control+Enter');
   await expect(page).toHaveURL(/#\/chat\/[a-f0-9]{32}/);

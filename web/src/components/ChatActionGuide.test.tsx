@@ -36,7 +36,7 @@ it('shows the ordered categories and restores keyboard focus when navigating bac
 
 it('preserves notes through failed search, partial results and a stale target',async()=>{
   let attempt=0;
-  const target={id:'tsk_second',label:'Release · tsk_second · draft'};
+  const target={id:'tsk_second',label:'Release · tsk_second · draft', task:{title:'Release',status:'blocked',projectId:'weft'}};
   const backend=fakeApi({...ready,['POST '+sessions]:()=>apiError(400,'This selection is unavailable. Change or clear it before sending.','invalid'),['GET '+candidates]:()=>{
     attempt++;
     if(attempt===1)return apiError(503,'temporarily offline','unavailable');
@@ -50,15 +50,30 @@ it('preserves notes through failed search, partial results and a stale target',a
   click('Tasks');click('Follow a task');
   await screen.findByText('temporarily offline');
   click('Retry search');
-  await screen.findByText(/Search incomplete/);
-  click(target.label);
+  await screen.findByText('Showing 1 task. Search by name or ID to narrow the list.');
+  click('Release Blocked Project weft · …second');
+  expect(screen.getByText('tsk_second')).toBeTruthy();
+  expect(screen.queryByRole('searchbox')).toBeNull();
   expect(backend.find('POST',sessions)).toHaveLength(0);
-  click('Send');
+  click('Send and follow');
   await screen.findByText('This selection is unavailable. Change or clear it before sending.');
   expect(backend.find('POST',sessions)).toHaveLength(1);
-  click('Change selection');
+  click('Change task');
   await screen.findByText('No matches. Try another name or ID.');
   expect(field).toHaveProperty('value','my notes');
+});
+
+it('distinguishes equal titles and ID suffixes and keeps lookup separate from follow',async()=>{
+  const items=['tsk_a123456','tsk_b123456'].map((id,i)=>({id,label:id,task:{title:'Release review',status:i?'failed':'blocked'}}));
+  fakeApi({...ready,['GET '+candidates]:()=>({items,partial:false})});
+  render(<ChatPage archived={false} onOpen={vi.fn()}/>);
+  await screen.findByRole('button',{name:'Tasks'});
+  click('Tasks');click('Find a task');
+  await screen.findByRole('button',{name:'Release review Blocked …a123456'});
+  click('Release review Failed …b123456');
+  expect(screen.getByText('tsk_b123456')).toBeTruthy();
+  expect(screen.getByRole('button',{name:'Send'})).toHaveProperty('disabled',false);
+  expect(screen.queryByRole('button',{name:'Send and follow'})).toBeNull();
 });
 
 it('uses a complete eligible choice and keeps an incomplete branch out of the submitted text',()=>{
