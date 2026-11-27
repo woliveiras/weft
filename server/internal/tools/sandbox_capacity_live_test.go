@@ -147,3 +147,45 @@ func TestSandboxCapacityRealDaemon(t *testing.T) {
 	}
 	t.Log("real daemon: CPU-only wait/cancellation and 1-core cpu.max verified; one available slot; count-limited sandbox waits then starts after removal; memory-only queue cancels without starting; 64 MiB cgroup limit and no extra swap; restart reuses reservation; uid 10001/network none")
 }
+
+func TestSandboxInventoryRemovalRealDaemon(t *testing.T) {
+	bin := os.Getenv("WEFT_TEST_ENV_DOCKER_BIN")
+	if bin == "" {
+		t.Skip("run make test-sandbox-capacity")
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	docker := func(ctx context.Context, args ...string) (string, error) {
+		out, err := DockerCommand(ctx, bin, "", args...).CombinedOutput()
+		return strings.TrimSpace(string(out)), err
+	}
+	id, err := docker(ctx, "run", "-d", "--network=none", "--label=weft.sandbox=true", "--name", fmt.Sprintf("weft-inventory-test-%d", time.Now().UnixNano()), "weft/sandbox:latest", "sleep", "60")
+	if err != nil {
+		t.Fatalf("start test sandbox: %s %v", id, err)
+	}
+	removed := false
+	t.Cleanup(func() {
+		if !removed {
+			if out, err := docker(context.Background(), "rm", "-f", id); err != nil {
+				t.Errorf("remove test sandbox: %s %v", out, err)
+			}
+		}
+	})
+	lists := 0
+	_, err = DockerCapacityInventory(ctx, func(ctx context.Context, args ...string) (string, error) {
+		if args[0] == "ps" {
+			lists++
+		}
+		if args[0] == "inspect" && !removed {
+			out, err := docker(ctx, "rm", "-f", id)
+			if err != nil {
+				t.Fatalf("remove before inspect: %s %v", out, err)
+			}
+			removed = true
+		}
+		return docker(ctx, args...)
+	})
+	if err != nil || !removed || lists != 2 {
+		t.Fatalf("removed=%v lists=%d err=%v", removed, lists, err)
+	}
+}

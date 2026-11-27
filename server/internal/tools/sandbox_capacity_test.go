@@ -181,3 +181,65 @@ func TestCPUInventoryParsing(t *testing.T) {
 		}
 	}
 }
+
+func TestCapacityInventoryRequiresCompleteBatch(t *testing.T) {
+	for _, tc := range []struct {
+		name, diagnostic string
+		retryOK          bool
+		attempts         int
+	}{
+		{"one disappeared", "Error: No such object: removed", true, 2},
+		{"continued churn", "Error: No such container: removed", false, 2},
+		{"daemon error", "permission denied", false, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lists, inspects := 0, 0
+			got, err := DockerCapacityInventory(t.Context(), func(_ context.Context, args ...string) (string, error) {
+				if args[0] == "ps" {
+					lists++
+					if lists == 1 {
+						return "keep\nremoved", nil
+					}
+					return "keep\nnew", nil
+				}
+				inspects++
+				if inspects == 2 && tc.retryOK {
+					if args[len(args)-1] != "new" {
+						t.Fatal("did not inspect the new snapshot", args)
+					}
+					return "/keep true 64 1000000 -\n/new true 128 2000000 -", nil
+				}
+				return "/keep true 64 1000000 -\n" + tc.diagnostic, errors.New("inspect failed")
+			})
+			if lists != tc.attempts || inspects != tc.attempts {
+				t.Fatalf("list %d inspect %d", lists, inspects)
+			}
+			if tc.retryOK {
+				if err != nil || len(got) != 2 || got[1].Name != "new" || got[1].Memory != 128 {
+					t.Fatalf("incomplete capacity: %+v %v", got, err)
+				}
+			} else if err == nil || len(got) != 0 {
+				t.Fatalf("accepted partial inventory: %+v %v", got, err)
+			}
+		})
+	}
+}
+
+func TestCapacityInventoryPreservesCancellation(t *testing.T) {
+	for _, command := range []string{"ps", "inspect"} {
+		ctx, cancel := context.WithCancel(t.Context())
+		calls := 0
+		got, err := DockerCapacityInventory(ctx, func(_ context.Context, args ...string) (string, error) {
+			calls++
+			if args[0] == command {
+				cancel()
+				return "", errors.New("signal: killed")
+			}
+			return "active", nil
+		})
+		cancel()
+		if !errors.Is(err, context.Canceled) || len(got) != 0 || calls > 2 {
+			t.Fatalf("%s: %v %+v calls=%d", command, err, got, calls)
+		}
+	}
+}

@@ -522,19 +522,36 @@ func (s *DockerSandbox) inventory(ctx context.Context) ([]sandboxcapacity.Contai
 // DockerCapacityInventory accounts for running execution sandboxes. Environment
 // pipelines use durable reservations for their sequential temporary containers.
 func DockerCapacityInventory(ctx context.Context, docker func(context.Context, ...string) (string, error)) ([]sandboxcapacity.Container, error) {
-	out, err := docker(ctx, "ps", "-q", "--filter", "label=weft.sandbox=true")
-	if err != nil {
-		return nil, fmt.Errorf("list active sandboxes: %w: %s", err, out)
+	for attempt := 0; ; attempt++ {
+		idsOutput, err := docker(ctx, "ps", "-q", "--filter", "label=weft.sandbox=true")
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, fmt.Errorf("list active sandboxes: %w: %s", err, idsOutput)
+		}
+		ids := strings.Fields(idsOutput)
+		if len(ids) == 0 {
+			return nil, nil
+		}
+		args := append([]string{"inspect", "--format", `{{.Name}} {{.State.Running}} {{.HostConfig.Memory}} {{.HostConfig.NanoCpus}} {{if index .Config.Labels "weft.capacity-group"}}{{index .Config.Labels "weft.capacity-group"}}{{else}}-{{end}}`}, ids...)
+		out, err := docker(ctx, args...)
+		if err == nil {
+			return parseSandboxInventory(out)
+		}
+		// A container can disappear between ps and inspect. Discard the
+		// partial batch and obtain a fresh inventory once before admission.
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		disappeared := strings.Contains(out, "No such object:") || strings.Contains(out, "No such container:")
+		if attempt > 0 || !disappeared {
+			return nil, fmt.Errorf("inspect active sandboxes: %w: %s", err, out)
+		}
 	}
-	ids := strings.Fields(out)
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	args := append([]string{"inspect", "--format", `{{.Name}} {{.State.Running}} {{.HostConfig.Memory}} {{.HostConfig.NanoCpus}} {{if index .Config.Labels "weft.capacity-group"}}{{index .Config.Labels "weft.capacity-group"}}{{else}}-{{end}}`}, ids...)
-	out, err = docker(ctx, args...)
-	if err != nil {
-		return nil, fmt.Errorf("inspect active sandboxes: %w: %s", err, out)
-	}
+}
+
+func parseSandboxInventory(out string) ([]sandboxcapacity.Container, error) {
 	var result []sandboxcapacity.Container
 	groups := map[string]int{}
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {

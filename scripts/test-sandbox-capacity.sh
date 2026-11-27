@@ -14,4 +14,4 @@ chmod 700 "$task_tmp/docker-sandbox"
 export WEFT_TEST_SANDBOX_CONTAINER="$container"
 export WEFT_TEST_ENV_DOCKER_BIN="$task_tmp/docker-sandbox"
 cd "$(dirname "$0")/../server"
-go test ./internal/tools -run '^(TestSandboxCapacityRealDaemon|TestSandboxIdleRealDaemon)$' -count=1 -v -timeout 3m
+go test ./internal/tools -run '^(TestSandboxCapacityRealDaemon|TestSandboxIdleRealDaemon|TestSandboxInventoryRemovalRealDaemon)$' -count=1 -v -timeout 3m
