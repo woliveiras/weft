@@ -1,10 +1,9 @@
 # Weft developer tasks. Standard Go targets use Docker via scripts/go.sh.
 # build-native and test-native-browser use the installed host Go toolchain.
-# Console tests use the Dockerfile's web toolchain. Python tests run locally.
+# Console tests use the Dockerfile's web toolchain.
 
 GO        := ./scripts/go.sh
 COMPOSE   := docker compose
-PYTHON    ?= python3
 VERSION   ?= dev
 NAMESPACE ?= weft
 GRAPH     ?= examples/graphs/software-factory.yaml
@@ -13,7 +12,7 @@ GRAPH     ?= examples/graphs/software-factory.yaml
 CLOUD_URL   ?= https://generativelanguage.googleapis.com/v1beta/openai/
 CLOUD_MODEL ?= gemini-3.5-flash
 
-.PHONY: egress-image test-egress test-environment-policy help build test test-compose test-go test-python test-web test-sandbox test-sandbox-capacity test-environment-context lint fmt up down logs images k8s-render clean
+.PHONY: egress-image test-egress test-environment-policy help build test test-compose test-go test-web test-sandbox test-sandbox-capacity test-environment-context lint fmt up down logs images k8s-render clean
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -35,15 +34,11 @@ test-egress: ## Real runtime/build/setup HTTP/HTTPS allowlist and isolation chec
 test-environment-policy: ## Installation policy network checks on the dedicated daemon (cached alpine:3.22 required)
 	./scripts/test-environment-policy.sh
 
-test: test-go test-python test-web ## Run all test suites
+test: test-go test-web ## Run all test suites
 
 test-go: ## Go unit + integration tests (memory/fs/sqlite; live brokers via WEFT_TEST_* env)
 	$(GO) test ./...
 	$(GO) -C ../agents/eino test ./...
-
-test-python: ## SDK and example agent tests (stdlib unittest)
-	cd sdk/python && $(PYTHON) -m unittest discover -s tests -v
-	PYTHONPATH=sdk/python:agents $(PYTHON) -m unittest discover -s agents/tests -v
 
 test-web: ## Type-check and run the web console tests (Vitest, jsdom)
 	image=$$(docker build -q --target web-source .) && \

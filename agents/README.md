@@ -1,7 +1,6 @@
 # Example agents
 
-Five agents built with the `weft` Python SDK and served from one
-process (`python -m weft_agents`, port 8000). Together they make the
+Five agents built with Eino run in the bundled Go service on port 8000. Together they make the
 software-factory graph in `examples/graphs/software-factory.yaml`.
 
 | Agent | Consumes | Emits | Tools used |
@@ -36,7 +35,7 @@ unusable (for example the platform's `mock` provider returns
 `{"mock": true, ...}`), the agent falls back to a deterministic heuristic:
 
 * the planner splits the description into tasks, one per bullet or sentence;
-* the developer writes a real module (`src/<name>.py`) with a passing test (`tests/test_<name>.py`);
+* the developer writes Go source and a matching test under `src/<task>/`;
 * the reviewer approves unless a file is empty or contains `TODO`;
 * the researcher records that no answer was available.
 
@@ -45,24 +44,19 @@ executes the generated tests.
 
 ## Configuration (node `config`)
 
-* `qa.test_command` — default `python -m unittest discover -s tests -v`; it runs through `shell.exec` in argv form.
+* `qa.test_command` — default `go test ./...`; it runs through `shell.exec` in argv form.
 * `qa.test_timeout_sec` — default 600.
 * `researcher.search_url` — a URL template containing `{q}`, fetched with `http.fetch` when that tool is granted.
 
-## LangGraph
-
-The reviewer runs as a two-node LangGraph `StateGraph` (analyse → decide)
-when `langgraph` is installed. Without it, the same two steps run as plain
-functions. Build the image with LangGraph included:
-
-```bash
-docker build -f agents/Dockerfile --build-arg EXTRAS=langgraph -t weft/agents:dev .
-```
-
 ## Run and test
 
-```bash
-docker build -f agents/Dockerfile -t weft/agents:dev .        # from the repo root
-PYTHONPATH=sdk/python:agents python3 -m weft_agents           # or locally
-cd agents && PYTHONPATH=../sdk/python:. python3 -m unittest discover -s tests -v
+The reviewer compiles its two stages, `analyse` and `decide`, into an Eino graph at startup. The same binary registers all five roles and the document summary agent.
+
+```sh
+docker build -t weft/agents:dev agents/eino
+cd agents/eino
+go test -race ./...
+WEFT_URL=http://127.0.0.1:8080 go run ./cmd/weft-eino-agent
 ```
+
+For controller origins, authentication and graph wiring, see the [Go agent guide](eino/README.md).

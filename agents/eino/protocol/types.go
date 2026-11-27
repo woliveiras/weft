@@ -132,3 +132,12 @@ type ToolResult struct {
 	Truncated bool            `json:"truncated"`
 	Yield     bool            `json:"yield"`
 }
+
+// Add records usage from another runtime-local call. The controller accounts for
+// model calls made through Client.Chat independently.
+func (u *Usage) Add(local Usage) {
+	u.InputTokens += local.InputTokens
+	u.OutputTokens += local.OutputTokens
+	u.CacheReadTokens += local.CacheReadTokens
+	u.CacheWriteTokens += local.CacheWriteTokens
+}

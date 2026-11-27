@@ -191,3 +191,39 @@ func TestTurnWireCarriesSelectionSignalsAndLocalUsage(t *testing.T) {
 		}
 	}
 }
+
+func TestIndependentUsageAccumulatesAndOmitsEmptyCacheFields(t *testing.T) {
+	var u Usage
+	if err := json.Unmarshal([]byte(`{"inputTokens":20,"outputTokens":3,"cacheReadTokens":7,"cacheWriteTokens":2}`), &u); err != nil {
+		t.Fatal(err)
+	}
+	u.Add(Usage{InputTokens: 5, OutputTokens: 2, CacheReadTokens: 3, CacheWriteTokens: 1})
+	raw, err := json.Marshal(u)
+	if err != nil || string(raw) != `{"inputTokens":25,"outputTokens":5,"cacheReadTokens":10,"cacheWriteTokens":3}` {
+		t.Fatalf("%s %v", raw, err)
+	}
+	raw, err = json.Marshal(Usage{InputTokens: 1, OutputTokens: 2})
+	if err != nil || string(raw) != `{"inputTokens":1,"outputTokens":2}` {
+		t.Fatalf("%s %v", raw, err)
+	}
+}
+
+func TestHealthListsCompiledAgentsAndRejectsMissingImplementation(t *testing.T) {
+	a := func(context.Context, *TurnInput, *Client) (TurnResult, error) { return TurnResult{}, nil }
+	if _, err := NewHandler([]string{"http://127.0.0.1"}, "", map[string]Agent{"missing": nil}); err == nil {
+		t.Fatal("uncompiled agent made service ready")
+	}
+	h, err := NewHandler([]string{"http://127.0.0.1"}, "", map[string]Agent{"b": a, "a": a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/v1/health", nil))
+	var health struct {
+		Status string
+		Agents []string
+	}
+	if json.Unmarshal(w.Body.Bytes(), &health) != nil || health.Status != "ok" || len(health.Agents) != 2 || health.Agents[0] != "a" || health.Agents[1] != "b" {
+		t.Fatalf("health %s", w.Body.String())
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/woliveiras/weft/agents/eino/protocol"
@@ -24,6 +25,7 @@ func TestQAUsesGatewayExitStatus(t *testing.T) {
 		{"passed", 200, `{"data":{"exitCode":0,"stdout":"ok"}}`, "qa.passed"},
 		{"failed", 200, `{"data":{"exitCode":1,"stderr":"test failed"}}`, "qa.failed"},
 		{"timed out", 200, `{"data":{"exitCode":0,"timedOut":true}}`, "qa.failed"},
+		{"text claims success", 200, `{"content":"exitCode: 0"}`, "qa.failed"},
 		{"missing status", 200, `{"content":"ok"}`, "qa.failed"},
 		{"gateway error", 200, `{"content":"private fixture","isError":true}`, "qa.failed"},
 		{"denied", 403, `{}`, "qa.failed"},
@@ -48,6 +50,21 @@ func TestQAUsesGatewayExitStatus(t *testing.T) {
 			out := sendTurn(t, h, controller.URL, "qa", "qa1", "review.approved", map[string]string{"task_id": "task1"})
 			if len(out) != 1 || out[0].Type != tc.kind || stringValue(out[0].Payload["task_id"]) != "task1" {
 				t.Fatal(out)
+			}
+			payload := out[0].Payload
+			switch tc.name {
+			case "failed":
+				if !strings.Contains(string(payload["failures"]), "test failed") || string(payload["exit_code"]) != "1" {
+					t.Fatal(payload)
+				}
+			case "denied":
+				if stringValue(payload["reason"]) != "shell.exec not granted" {
+					t.Fatal(payload)
+				}
+			case "gateway error":
+				if strings.Contains(string(payload["failures"]), "private fixture") || len(payload["failures"]) == 0 {
+					t.Fatal(payload)
+				}
 			}
 		})
 	}

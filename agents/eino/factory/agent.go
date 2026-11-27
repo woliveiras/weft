@@ -74,8 +74,21 @@ func (j *job) model(ctx context.Context, prompt string, structured bool) (string
 }
 
 func decodeObject(s string, dst any) bool {
-	i := strings.IndexByte(s, '{')
-	return i >= 0 && json.NewDecoder(strings.NewReader(s[i:])).Decode(dst) == nil
+	// Model responses may contain a broken example before the actual object.
+	// Bound retries on malformed output; a JSON decoder handles braces in strings.
+	for attempts := 0; attempts < 64; attempts++ {
+		i := strings.IndexByte(s, '{')
+		if i < 0 {
+			return false
+		}
+		s = s[i:]
+		var raw json.RawMessage
+		if json.NewDecoder(strings.NewReader(s)).Decode(&raw) == nil {
+			return json.Unmarshal(raw, dst) == nil
+		}
+		s = s[1:]
+	}
+	return false
 }
 
 func (j *job) write(ctx context.Context, path, content string) error {

@@ -61,6 +61,9 @@ func TestResearchRoundTripResumesSavedPlan(t *testing.T) {
 				t.Error("invalid request")
 			}
 			answer := "Use the source."
+			if !req.JSON && (len(req.Messages) != 1 || !strings.Contains(req.Messages[0].Content, "verified research excerpt")) {
+				t.Error("researcher omitted fetched source")
+			}
 			if req.JSON {
 				answer = `{"tasks":[{"title":"Implement"}],"questions":[{"question":"Read https://example.invalid/doc?"}]}`
 			}
@@ -73,7 +76,7 @@ func TestResearchRoundTripResumesSavedPlan(t *testing.T) {
 			files[args.Path] = args.Content
 			_, _ = io.WriteString(w, `{"content":"ok"}`)
 		case strings.HasSuffix(r.URL.Path, "/tools/http.fetch"):
-			http.Error(w, "denied", 403)
+			_, _ = io.WriteString(w, `{"content":"verified research excerpt"}`)
 		case strings.HasSuffix(r.URL.Path, "/output"):
 			w.WriteHeader(204)
 		case strings.HasSuffix(r.URL.Path, "/state/plan:request"):
@@ -116,7 +119,7 @@ func TestResearchRoundTripResumesSavedPlan(t *testing.T) {
 		t.Fatal(ask, files)
 	}
 	done := sendTurn(t, h, controller.URL, "researcher", "research", "research.question", ask[0].Payload)
-	if len(done) != 1 || done[0].Type != "research.done" || !strings.Contains(files["research/request-q1.md"], "Use the source.") {
+	if len(done) != 1 || done[0].Type != "research.done" || !strings.Contains(files["research/request-q1.md"], "Use the source.") || !strings.Contains(files["research/request-q1.md"], "- https://example.invalid/doc") {
 		t.Fatal(done, files)
 	}
 	h = handler()
