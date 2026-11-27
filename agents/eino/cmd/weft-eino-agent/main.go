@@ -15,23 +15,19 @@ import (
 )
 
 func serve() error {
-	agent, err := summary.New(context.Background())
-	if err != nil {
-		return fmt.Errorf("compile summarize: %w", err)
+	constructors := map[string]func(context.Context) (protocol.Agent, error){
+		"summarize": summary.New, "reviewer": factory.Reviewer, "planner": factory.Planner,
+		"researcher": factory.Researcher, "developer": factory.Developer, "qa": factory.QA,
 	}
-	reviewer, err := factory.Reviewer(context.Background())
-	if err != nil {
-		return fmt.Errorf("compile reviewer: %w", err)
+	agents := make(map[string]protocol.Agent, len(constructors))
+	for name, compile := range constructors {
+		agent, err := compile(context.Background())
+		if err != nil {
+			return fmt.Errorf("compile %s: %w", name, err)
+		}
+		agents[name] = agent
 	}
-	planner, err := factory.Planner(context.Background())
-	if err != nil {
-		return fmt.Errorf("compile planner: %w", err)
-	}
-	researcher, err := factory.Researcher(context.Background())
-	if err != nil {
-		return fmt.Errorf("compile researcher: %w", err)
-	}
-	handler, err := protocol.NewHandler(strings.Split(os.Getenv("WEFT_URL"), ","), os.Getenv("WEFT_RUNTIME_SECRET"), map[string]protocol.Agent{"summarize": agent, "reviewer": reviewer, "planner": planner, "researcher": researcher})
+	handler, err := protocol.NewHandler(strings.Split(os.Getenv("WEFT_URL"), ","), os.Getenv("WEFT_RUNTIME_SECRET"), agents)
 	if err != nil {
 		return err
 	}

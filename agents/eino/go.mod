@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/cloudwego/eino v0.9.23
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	go.opentelemetry.io/otel v1.47.0
 )
 
