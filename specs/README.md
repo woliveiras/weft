@@ -118,7 +118,7 @@ The [historical source map](./historical-source-map.md) records the migration of
 ### In progress
 
 - [RUN-002 — Dynamic Delegation and Execution Trees](./runtime-and-delivery/dynamic-delegation-and-execution-trees/spec.md) — `in-progress`. Run bounded native children under inherited grants and preserve execution-tree control and token accounting.
-- [RUN-010 — Eino runtime migration and Python-free distribution](./runtime-and-delivery/eino-runtime-migration/spec.md) — `in-progress`. Qualify native agents, the bundled Go factory and a clean distribution without Python or LangGraph. [Behavior matrix](./runtime-and-delivery/eino-runtime-migration/matrix.md).
+- [RUN-010 — Eino runtime migration and Python-free distribution](./runtime-and-delivery/eino-runtime-migration/spec.md) — `implemented`. Native agents, the bundled Go factory and the Python-free distribution passed local cutover qualification. [Behavior matrix](./runtime-and-delivery/eino-runtime-migration/matrix.md).
 - [RUN-005 — Gateway-mediated Source Control Delivery](./runtime-and-delivery/gateway-mediated-source-control-delivery/spec.md) — `in-progress`. Push and open pull requests through the reviewed SCM gateway with task-scoped credentials and evidence.
 
 ### Planned

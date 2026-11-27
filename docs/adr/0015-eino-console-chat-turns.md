@@ -1,10 +1,10 @@
 # 0015 — Use Eino to orchestrate model-assisted turns in Console Chat
 
-**Status:** Proposed · **Date:** 2026-11-27 · **Decision owner:** Weft maintainers
+**Status:** Accepted · **Date:** 2026-11-27 · **Decision owner:** Weft maintainers
 
 ## Context
 
-An operator can ask “Which tasks are ready?” and then “Start the second one.” The first answer needs current, authorized records. The follow-up needs the previous selection, a verified target and a review the operator can confirm later. Today the API claims the submitted message, prepares role-filtered history and calls `chat.RunTurn`. That Go function coordinates model calls and reads, then returns a grounded answer or a typed plan. Weft resolves the plan and stores the outcome in the owner's session. Explicit commands and review decisions already have direct handlers. [Chat request handler](../../server/internal/api/chat_sessions.go) · [Current turn](../../server/internal/chat/turn.go) · [Conversational Console contract](../../specs/product-and-tasks/conversational-console/spec.md)
+An operator can ask “Which tasks are ready?” and then “Start the second one.” The first answer needs current, authorized records. The follow-up needs the previous selection, a verified target and a review the operator can confirm later. Before the migration, the API claimed the submitted message, prepared role-filtered history and called `chat.RunTurn`. That Go loop coordinated model calls and reads, then returned a grounded answer or a typed plan. Weft resolves the plan and stores the outcome in the owner's session. Explicit commands and review decisions already have direct handlers. [Chat request handler](../../server/internal/api/chat_sessions.go) · [Current turn](../../server/internal/chat/turn.go) · [Conversational Console contract](../../specs/product-and-tasks/conversational-console/spec.md)
 
 Eino supplies graph composition, tool orchestration and interrupt/resume. Chat already runs in Go and has no Python or LangGraph execution dependency. The [workflow-agent ADR](0014-eino-agent-runtime.md) covers native turns, the bundled external agents and the removal of Python tooling. Console Chat operates under the signed-in operator's identity and can prepare reviews of installation-wide actions.
 
@@ -12,7 +12,7 @@ Eino supplies graph composition, tool orchestration and interrupt/resume. Chat a
 
 Use a compiled Eino `compose.Graph` **inside the Go server** at the existing model-assisted turn boundary. Give each invocation the bounded conversation, the current request's authorized read tools and Weft's model-call function. It returns the existing `chat.Interpretation` and releases its state. **A turn that proposes an operation ends when it returns the plan.** Weft subsequently prepares and persists the review. A later confirmation applies to that stored review, even after a controller restart. [Eino compose API](https://pkg.go.dev/github.com/cloudwego/eino@v0.9.23/compose) · [Review decision handler](../../server/internal/api/chat_agents.go)
 
-| Stage | How the proposed flow works |
+| Stage | How the flow works |
 | --- | --- |
 | Receive a message | The API loads or appends to the owner's session, claims the request and supplies the history visible to the current role. Explicit lookup, choice, slash-command and review-decision paths retain their existing routing. Only a request reaching today's model branch invokes Eino. |
 | Interpret or consult | A graph node calls Weft's selected Chat model. A read branch validates the entire tool batch, invokes only registered request-scoped reads, and returns projected observations to the model. Preserve tool-call IDs and provider metadata, the current three-read limit, bounded argument correction and request deadline. A grounded answer requires observed data. |
@@ -26,6 +26,8 @@ Weft's session store remains authoritative for conversation history, reference r
 - **Server wiring.** Add the Eino dependency to the server module for Chat and isolate its imports in the turn implementation. Compile the graph once during wiring. Pass model and read functions at invocation time so concurrent sessions cannot share an actor, history or tool catalog. Feed model calls through the existing callback to preserve model-revision checks, usage accounting, operation telemetry and cancellation. [Server module](../../server/go.mod) · [Model-call wiring](../../server/internal/api/chat_sessions.go)
 - **Behavior and authorization.** Reuse Weft's operation schemas, validated plan decoding, read projections and domain review handlers. A model-selected operation describes intent. The only executable tools in the graph are the reads supplied for that authenticated request. Provider failures, truncated output and exhausted limits go through existing Chat recovery. The UI continues to consume the same answers, clarification prompts, review cards and recorded outcomes. [Operation schemas](../../server/internal/chat/operation_tools.go) · [Turn validation](../../server/internal/chat/turn.go)
 - **Deployment and ownership.** Chat and native agent turns use the same pinned Eino dependency in `weftd`, with separate graph definitions and request-scoped capabilities. Chat maintainers own Chat compatibility and must measure binary growth, turn latency and model-call counts. The console model path runs in process. Its adoption can be qualified independently of the external agent service.
+
+The maintainer accepted Eino as the default Chat runner on 2026-11-27. The direct runner remains available through `WEFT_CHAT_ORCHESTRATOR=direct`. Qualification covered concurrent authenticated sessions, clarification and selection, restart, repeat confirmation and switching runners with a pending review. [Chat evidence](../../specs/product-and-tasks/conversational-console/matrix.md#local-eino-pilot)
 
 ## Alternatives
 

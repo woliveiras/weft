@@ -15,8 +15,8 @@
 | [0011](0011-execution-boundaries.md) | Explicit native and sandbox execution boundaries | Accepted |
 | [0012](0012-installation-identity.md) | Separate installation identity from integration credentials | Accepted |
 | [0013](0013-contextual-chat-action-pills.md) | Compose a chat request with contextual action pills | Proposed |
-| [0014](0014-eino-agent-runtime.md) | Use Eino for native turns and ship Go workflow agents | Proposed |
-| [0015](0015-eino-console-chat-turns.md) | Use Eino to orchestrate model-assisted turns in Console Chat | Proposed |
+| [0014](0014-eino-agent-runtime.md) | Use Eino for native turns and ship Go workflow agents | Accepted |
+| [0015](0015-eino-console-chat-turns.md) | Use Eino to orchestrate model-assisted turns in Console Chat | Accepted |
 
 Format: context, decision, consequences, alternatives considered. New ADRs
 take the next number with status *Proposed* in the pull request that

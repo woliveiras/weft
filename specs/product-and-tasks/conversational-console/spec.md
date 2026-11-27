@@ -574,7 +574,7 @@ coverage and live-provider qualification separately identified. The
 
 ## Delivery plan
 
-The proposed Eino migration changes the model-assisted turn inside the server. The graph receives bounded, role-filtered history, the registered read tools and Weft's model-call function. It returns a grounded answer, clarification or typed proposal. Weft persists and settles reviewed operations independently of the graph. Qualify this path against AC-003/004/007/009 with the [Eino turn scenarios](./matrix.md#eino-turn-qualification). [Chat architecture decision](../../../docs/adr/0015-eino-console-chat-turns.md)
+The default model-assisted Chat turn runs through Eino inside the server. The graph receives bounded, role-filtered history, the registered read tools and Weft's model-call function. It returns a grounded answer, clarification or typed proposal. Weft persists and settles reviewed operations independently of the graph. Qualification for AC-003/004/007/009 is recorded in the [Eino turn scenarios](./matrix.md#eino-turn-qualification). [Chat architecture decision](../../../docs/adr/0015-eino-console-chat-turns.md)
 
 | Phase | Usable vertical slice | Completion gate |
 | --- | --- | --- |

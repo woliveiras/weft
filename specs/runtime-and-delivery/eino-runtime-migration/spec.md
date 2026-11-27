@@ -2,7 +2,7 @@
 id: RUN-010
 title: Eino runtime migration and Python-free distribution
 summary: Run native turns and bundled workflow agents with Eino in Go and qualify the Weft distribution without Python or LangGraph.
-status: in-progress
+status: implemented
 scope: [native turns, external agents, factory workflows, Go extension tooling, packaging, regression qualification]
 risk: high
 risk_domains: [tool authorization, budget accounting, message delivery, workflow compatibility, isolation]
@@ -19,7 +19,7 @@ authority:
 
 # Eino runtime migration and Python-free distribution
 
-An operator can keep using published agents, inline workflow nodes and the bundled software factory while Weft moves agent orchestration to Go. The maintainer confirmed a single-user installation with no projects depending on the Python SDK or the interpreter in the default sandbox. A direct cutover is appropriate once the replacement passes the [behavior matrix](./matrix.md). The ADRs remain proposed. [Agent architecture](../../../docs/adr/0014-eino-agent-runtime.md) · [Chat architecture](../../../docs/adr/0015-eino-console-chat-turns.md)
+An operator can keep using published agents, inline workflow nodes and the bundled software factory while Weft moves agent orchestration to Go. The maintainer confirmed a single-user installation with no projects depending on the Python SDK or the interpreter in the default sandbox. The maintainer accepted the direct cutover on 2026-11-27. The [behavior matrix](./matrix.md#final-cutover-qualification) records the fixtures, topologies, commands and observed outcomes. [Agent architecture](../../../docs/adr/0014-eino-agent-runtime.md) · [Chat architecture](../../../docs/adr/0015-eino-console-chat-turns.md)
 
 ## Ownership and invariants
 
@@ -60,6 +60,6 @@ Retain equivalent coverage for provider selection and redaction, SDK behavior, e
 
 The maintainer selected a fresh installation. Importing an earlier Forge or Weft profile, rolling durable state between binary versions and migrating a running installation are outside the cutover scope. Qualify native turns, external services and Chat against the current release. After a restart with the same store and broker, a held message retains its identity and can settle against its original approval. Interrupted work follows the existing redelivery and idempotency rules. A partial publication or a failed approved delivery remains visible in message and execution history. The native profile preserves graphs and archived Chat sessions through current-version backup and restore, and rejects an unknown format before changing its files.
 
-## Qualification and open decisions
+## Qualification
 
-Start with deterministic model fixtures, scoped tools and the real execution/store boundaries. Exercise the summary pilot before replacing the bundled factory image. Compare model calls, usage, latency, binary/image size and memory under recorded concurrency and fixture conditions. Record the Eino version and topology. The conversation sets no performance threshold and selects no production model. Chat-specific parity and rollback belong to [TASK-012](../../product-and-tasks/conversational-console/spec.md). The matrix records local native and Chat results and outstanding qualification.
+Start with deterministic model fixtures, scoped tools and the real execution/store boundaries. Exercise the summary pilot before replacing the bundled factory image. Compare model calls, usage, latency, binary/image size and memory under recorded concurrency and fixture conditions. Record the Eino version and topology. The conversation sets no performance threshold and selects no production model. Chat-specific parity and rollback belong to [TASK-012](../../product-and-tasks/conversational-console/spec.md). The completed qualification covers the fresh native installation, disposable Compose and single-node Kubernetes. Performance at production concurrency and multi-node shared storage remain outside the measured results.
