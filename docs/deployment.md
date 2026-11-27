@@ -113,6 +113,8 @@ flowchart LR
   hpa[HPA] -.-> a1 & a2
 ```
 
+For workflows with Git tools, declared checks or shell commands, the replica sandbox overlay provisions isolated pods automatically. Prepare shared storage in both namespaces and qualify the CNI before enabling it. [Kubernetes replica sandbox installation](../deploy/kubernetes-sandboxes/README.md)
+
 ## MCP servers in Compose and cloud deployments
 
 Outside the native profile, Weft supports only remote MCP servers over

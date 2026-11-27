@@ -14,8 +14,8 @@ See [docs/deployment.md](../../docs/deployment.md) and
 [docs/production-hardening.md](../../docs/production-hardening.md).
 
 Notes:
-- The service-account tokens are not mounted: weftd does not talk to the Kubernetes API.
-- Nodes using `isolation.mode: kubernetes` need a replica sandbox for command tools. An unconfigured sandbox returns a tool error. Ordinary model and file callbacks still work. A graph that explicitly selects process isolation runs commands under the controller UID. Per-replica workload qualification is tracked in [ENV-010](../../specs/workspaces-and-environments/kubernetes-replica-sandbox/matrix.md).
+- The base profile leaves the controller and agent service-account tokens unmounted.
+- The Kubernetes installation profile applies to both existing process-mode nodes and Kubernetes nodes. Command tools report an unavailable sandbox until the overlay is configured. External runtimes require an HTTP endpoint. Standalone installations retain their process mode. [Qualification results](../../specs/workspaces-and-environments/kubernetes-replica-sandbox/matrix.md)
 - The workspace volume must be ReadWriteMany when weftd has more than one replica.
 
 
@@ -24,3 +24,7 @@ Notes:
 The public `weftd` Service balances API requests. Each controller advertises its own address through the headless `weftd-callback` Service. For example, a turn started by `weftd-1` calls back to `http://weftd-1.weftd-callback:8080`. The agents deployment lists both controller origins in `WEFT_URL`. When scaling up, roll out the extended list to agents before adding the controller replica. When scaling down, drain work and remove the retired origin after its turns settle. A restarted controller retains its DNS name and invalidates the capabilities from the previous process. Weft redelivers interrupted work with a fresh capability. [Kubernetes StatefulSet network identity](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#stable-network-id)
 
 For an existing installation, schedule a maintenance window, stop new admissions and drain active turns. Bring the previous `Deployment/weftd` to zero replicas before starting `StatefulSet/weftd`. Applying the new manifests alone leaves the old Deployment in the namespace. Preserve PostgreSQL, the broker and the RWX workspace claim. Check readiness for both controller ordinals and exercise a turn from each before reopening admissions. For rollback, drain the StatefulSet before restoring the previous controller and agents together.
+
+## Automatic replica command sandboxes
+
+The base profile permits model and file callbacks. To enable commands for graphs created through the console, Chat or API, install the [replica sandbox overlay](../kubernetes-sandboxes/README.md).
