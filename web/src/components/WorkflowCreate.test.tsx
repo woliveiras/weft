@@ -130,7 +130,9 @@ it('does not replace a newer advanced edit when an uploaded file finishes readin
   let finish!: (value:string)=>void;
   const file=new File(['old document'],'old.yaml',{type:'application/yaml'});
   Object.defineProperty(file,'text',{value:()=>new Promise<string>(resolve=>{finish=resolve;})});
-  await userEvent.upload(screen.getByLabelText('Upload a workflow document'),file);
+  expect(screen.getByRole('button',{name:'Upload a workflow document',description:'No file selected'})).toBeTruthy();
+  await userEvent.upload(screen.getByLabelText('Workflow file'),file);
+  expect(screen.getByRole('button',{name:'Upload a workflow document',description:'old.yaml'})).toBeTruthy();
   expect(screen.getByRole('status').textContent).toBe('Reading workflow document…');
   expect(screen.getByRole('button',{name:'Review workflow'})).toHaveProperty('disabled',true);
   await userEvent.clear(screen.getByLabelText('Workflow document'));

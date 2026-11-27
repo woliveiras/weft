@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { parse, parseDocument, stringify } from 'yaml';
 import { api, errorMessage } from '../api/client';
 import { nodeWithAgent, type AgentBinding, type AgentDefinition } from '../api/agents';
@@ -13,6 +13,21 @@ import './workflowCreation.css';
 const blank: GuidedWorkflowInput = {id:'',name:'',description:'',purpose:'task',nodes:[],channels:[]};
 type DraftState = {dirty:boolean;busy:boolean};
 type Reviewed = {document:Graph | {yaml:string}; graph:Graph};
+
+function WorkflowDocumentUpload({onFile}: {onFile:(file:File)=>void}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [filename,setFilename] = useState('');
+  const filenameId = useId();
+  return <div className="btn-row">
+    <Btn aria-describedby={filenameId} onClick={()=>input.current?.click()}>Upload a workflow document</Btn>
+    <span id={filenameId} className="muted">{filename || 'No file selected'}</span>
+    <input ref={input} type="file" hidden accept=".yaml,.yml,.json" aria-label="Workflow file" onChange={event=>{
+      const file = event.currentTarget.files?.[0];
+      setFilename(file?.name ?? '');
+      if (file) onFile(file);
+    }}/>
+  </div>;
+}
 
 /** Guided and advanced drafts stay separate until the operator explicitly replaces a document. */
 export function WorkflowCreate({onCreated,onCancel,onDraftState,canCreate=true}: {
@@ -210,8 +225,7 @@ export function WorkflowCreate({onCreated,onCancel,onDraftState,canCreate=true}:
       </>:<section className="card form" aria-label="Advanced workflow definition">
         <h2>Workflow document</h2>
         <p className="muted">The visual draft is retained separately. Only this document will be reviewed and saved while Advanced YAML / JSON is selected.</p>
-        <label>Upload a workflow document<input type="file" accept=".yaml,.yml,.json" onChange={async event=>{
-          const file=event.target.files?.[0];if(!file)return;
+        <WorkflowDocumentUpload onFile={async file=>{
           const generation=++documentGeneration.current;setDocumentLoading(true);
           try {
             const text=await file.text();
@@ -220,7 +234,7 @@ export function WorkflowCreate({onCreated,onCancel,onDraftState,canCreate=true}:
           } catch(cause) {
             if(generation===documentGeneration.current){setDocumentLoading(false);setError(errorMessage(cause));}
           }
-        }}/></label>
+        }}/>
         <HelpField label="Workflow document" help="Define the workflow in YAML or JSON. The document includes agents, channels and optional defaults. Review checks the complete definition before it is saved.">
           <textarea className="code-editor mono" rows={20} spellCheck={false} value={advanced??''} onChange={event=>{setAdvanced(event.target.value);invalidate();}}/>
         </HelpField>

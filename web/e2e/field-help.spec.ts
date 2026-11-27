@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+test.use({ locale: 'pt-BR' });
+
 test('opens help on the workflow creation page and preserves a draft', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
   await page.setViewportSize({ width: 580, height: 850 });
@@ -8,6 +10,13 @@ test('opens help on the workflow creation page and preserves a draft', async ({ 
   await page.getByRole('button', { name: 'Advanced YAML / JSON',exact:true }).click();
   const workflow = page.getByRole('region', { name: 'Advanced workflow definition', exact: true });
   const document = workflow.getByRole('textbox', { name: 'Workflow document', exact: true });
+  const upload = workflow.getByRole('button', { name: 'Upload a workflow document' });
+  await expect(upload).toHaveAccessibleDescription('No file selected');
+  const chooser = page.waitForEvent('filechooser');
+  await upload.press('Enter');
+  await (await chooser).setFiles({ name: 'revisão.yaml', mimeType: 'application/yaml', buffer: Buffer.from('name: sample') });
+  await expect(upload).toHaveAccessibleDescription('revisão.yaml');
+  await expect(document).toHaveValue('name: sample');
   await document.fill('metadata: {name: draft}');
   const help = workflow.getByRole('button', { name: 'Help for Workflow document', exact: true });
   await help.focus();

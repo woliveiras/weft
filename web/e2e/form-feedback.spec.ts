@@ -1,5 +1,7 @@
 import {expect, test} from '@playwright/test';
 
+test.use({locale:'pt-BR'});
+
 test.beforeEach(async({page})=>{
  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
 });
@@ -14,7 +16,7 @@ test('native MCP fields reveal errors after submit and clear independently',asyn
  await expect(name).toHaveAttribute('aria-invalid','true');
  const describedBy=await id.getAttribute('aria-describedby');
  expect(describedBy).toBeTruthy();
- await expect(page.locator(`[id="${describedBy}"]`)).toHaveText(/.+/);
+ await expect(page.locator(`[id="${describedBy}"]`)).toHaveText('Fill in this field.');
  await id.fill('test-connection');
  await expect(id).not.toHaveAttribute('aria-invalid');
  await expect(name).toHaveAttribute('aria-invalid','true');

@@ -65,6 +65,7 @@ it('shows native constraint errors only after interaction and keeps callbacks an
  expect(field.getAttribute('aria-invalid')).toBeNull();
  fireEvent.invalid(field);
  expect(invalid).toHaveBeenCalledOnce();
+ expect(screen.getByRole('alert').textContent).toBe('Enter a value of 90 or lower.');
  expect(field.getAttribute('aria-invalid')).toBe('true');
  expect(field.getAttribute('aria-describedby')).toBe(screen.getByRole('alert').id);
  fireEvent.change(field,{target:{value:'99'}});
@@ -76,4 +77,21 @@ it('shows native constraint errors only after interaction and keeps callbacks an
  rerender(<HelpField label="Port" help="Optional"><input type="number" min={1} value="" onChange={changed}/></HelpField>);
  fireEvent.blur(field);
  expect(field.getAttribute('aria-invalid')).toBeNull();
+});
+
+it('uses English inline copy for built-in constraints and preserves custom validation details',()=>{
+ render(<HelpField label="Email" help="Account email"><input type="email" required/></HelpField>);
+ const field=screen.getByRole<HTMLInputElement>('textbox',{name:'Email'});
+ Object.defineProperty(field,'validationMessage',{configurable:true,value:'Preencha este campo.'});
+ fireEvent.blur(field);
+ expect(screen.getByRole('alert').textContent).toBe('Fill in this field.');
+ fireEvent.change(field,{target:{value:'invalid'}});
+ expect(screen.getByRole('alert').textContent).toBe('Enter a valid email address.');
+ Reflect.deleteProperty(field,'validationMessage');
+ field.setCustomValidity('Use your verified email address.');
+ fireEvent.invalid(field);
+ expect(screen.getByRole('alert').textContent).toBe('Use your verified email address.');
+ field.setCustomValidity('');
+ fireEvent.change(field,{target:{value:'reader@example.com'}});
+ expect(screen.queryByRole('alert')).toBeNull();
 });

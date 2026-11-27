@@ -49,6 +49,30 @@ export function FieldHelp({ label, children }: { label: string; children: ReactN
 
 type ControlProps = { id?: string; type?: string; value?: string | number | readonly string[]; checked?: boolean; 'aria-describedby'?: string; 'aria-invalid'?: boolean | 'true' | 'false' | 'grammar' | 'spelling' };
 
+type FormControl = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+// Use the browser's constraint result, with console copy for its built-in messages.
+function constraintMessage(field: FormControl): string | undefined {
+  const { validity } = field;
+  if (validity.valid) return undefined;
+  if (validity.customError) return field.validationMessage;
+  if (validity.badInput) return field.type === 'number' ? 'Enter a number.' : 'Enter a valid value.';
+  if (validity.valueMissing) {
+    if (field.type === 'checkbox') return 'Select this checkbox.';
+    if (field.type === 'radio' || field instanceof HTMLSelectElement) return 'Choose an option.';
+    return 'Fill in this field.';
+  }
+  if (validity.typeMismatch && field.type === 'email') return 'Enter a valid email address.';
+  if (validity.typeMismatch && field.type === 'url') return 'Enter a valid URL.';
+  if (validity.rangeUnderflow) return `Enter a value of ${field.getAttribute('min')} or higher.`;
+  if (validity.rangeOverflow) return `Enter a value of ${field.getAttribute('max')} or lower.`;
+  if (validity.tooShort) return `Enter at least ${field.getAttribute('minlength')} characters.`;
+  if (validity.tooLong) return `Use at most ${field.getAttribute('maxlength')} characters.`;
+  if (validity.patternMismatch) return field.title || 'Use the requested format.';
+  if (validity.stepMismatch) return 'Enter a value that matches the allowed increment.';
+  return 'Enter a valid value.';
+}
+
 /** One form control with a label and a separate action to read field help. */
 export function HelpField({ label, help, descriptionId, error, className = '', children }: {
   label: string;
@@ -73,7 +97,7 @@ export function HelpField({ label, help, descriptionId, error, className = '', c
     if (!nativeError) return;
     const field = container.current?.querySelector('input, select, textarea');
     if (field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement) {
-      setNativeError(field.validity.valid ? undefined : field.validationMessage);
+      setNativeError(constraintMessage(field));
     }
   }, [control?.props.value, control?.props.checked, nativeError]);
   const checkbox = control?.props.type === 'checkbox' || control?.props.type === 'radio';
@@ -82,19 +106,19 @@ export function HelpField({ label, help, descriptionId, error, className = '', c
     onBlurCapture={event => {
       const target = event.target;
       if ((target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) && target.willValidate && !target.validity.valid) {
-        setNativeError(target.validationMessage);
+        setNativeError(constraintMessage(target));
       }
     }}
     onInvalidCapture={event => {
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) {
-        setNativeError(target.validationMessage);
+        setNativeError(constraintMessage(target));
       }
     }}
     onChangeCapture={event => {
       const target = event.target;
       if (nativeError && (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement)) {
-        setNativeError(target.validity.valid ? undefined : target.validationMessage);
+        setNativeError(constraintMessage(target));
       }
     }}>
     <div className="field-help-caption">
