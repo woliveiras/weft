@@ -386,13 +386,21 @@ function SessionRow({item, current, expanded, archived, onRename, onArchive, onO
     </div>
     {expanded && actions.current && <SessionOverlay anchor={actions.current} variant="actions">
       <button type="button" onClick={()=>actions.current && onRename(actions.current)}>Rename</button>
-      <button type="button" onClick={onArchive}>{archived ? 'Unarchive' : 'Archive'}</button>
+      {archived ? <button type="button" onClick={onArchive}>Unarchive</button> : <ArchiveButton onConfirm={onArchive}/>}
     </SessionOverlay>}
     <span className="chat-session-description" id={`chat-row-${item.id}`}>{description}</span>
     {preview && row.current && <SessionOverlay anchor={row.current} variant="preview">
       <strong>{title}</strong><div>{description}</div>
     </SessionOverlay>}
   </li>;
+}
+
+function ArchiveButton({onConfirm}: {onConfirm: () => void}) {
+  const [confirming, setConfirming] = useState(false);
+  return <button type="button" onClick={() => {
+    if (confirming) onConfirm();
+    else setConfirming(true);
+  }}>{confirming ? 'Confirm' : 'Archive'}</button>;
 }
 
 function SessionOverlay({anchor, variant, children}: {

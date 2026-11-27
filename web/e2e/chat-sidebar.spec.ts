@@ -49,6 +49,12 @@ test('reads the full recent title with a mouse, keyboard and narrow touch search
   const renamed=page.getByRole('button',{name:'Actions for Renamed release session'});
   await renamed.click();
   await page.getByRole('button',{name:'Archive',exact:true}).click();
+  const confirm = page.getByRole('button',{name:'Confirm',exact:true});
+  await expect(confirm).toBeFocused();
+  const pending = await request.get('/api/v1/chat/sessions/'+input.requestId,{headers});
+  expect((await pending.json()).archived).toBe(false);
+  await confirm.press('Enter');
+  await expect(renamed).toHaveCount(0);
   await page.getByRole('button',{name:/^Archived/}).click();
   await expect(message).toHaveValue('Keep my other conversation draft');
   await renamed.click();

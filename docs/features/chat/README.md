@@ -317,7 +317,7 @@ Administrators can type `/export` or ask to download the current installation co
 
 ## Archive and access
 
-Use **Archive conversation** to move a conversation out of Recents. In
+In the conversation’s three-dot menu, select **Archive**, then **Confirm** to move it out of Recents. Close the menu to cancel. In
 **Archived**, open it to view new results or restore it. Archiving keeps the
 watch and read state. Active and archived conversations are retained without
 automatic expiration. The Archived tab shows an unread count even while you

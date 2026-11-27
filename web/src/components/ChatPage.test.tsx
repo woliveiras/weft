@@ -74,6 +74,29 @@ it('shows simultaneous running and unread success cues with metadata and keyboar
   expect(open).toHaveBeenCalledWith(id,false);
 });
 
+it('confirms archiving in place and clears the confirmation when the menu closes', async () => {
+  const path = paths + '/' + id + '/archive';
+  const backend = fakeApi({
+    'GET /api/v1/chat/settings': () => ({status:'unconfigured', revision:0}),
+    [`GET ${paths}`]: () => ({items:[{id, title:'Release notes'}]}),
+    [`POST ${path}`]: () => ({id, archived:true}),
+  });
+  render(<ChatPage archived={false} onOpen={vi.fn()}/>);
+  const actions = await screen.findByRole('button', {name:'Actions for Release notes'});
+  vi.spyOn(actions, 'getBoundingClientRect').mockReturnValue(new DOMRect(180, 48, 32, 32));
+  vi.spyOn(actions.closest('.chat-panel')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 32, 232, 240));
+  fireEvent.click(actions);
+  const archive = screen.getByRole('button', {name:'Archive'});
+  fireEvent.click(archive);
+  expect(screen.getByRole('button', {name:'Confirm'})).toBe(archive);
+  fireEvent.keyDown(archive, {key:'Escape'});
+  fireEvent.click(actions);
+  fireEvent.click(screen.getByRole('button', {name:'Archive'}));
+  expect(backend.find('POST',path)).toHaveLength(0);
+  await act(async () => { fireEvent.click(screen.getByRole('button', {name:'Confirm'})); });
+  expect(backend.find('POST',path)).toHaveLength(1);
+});
+
 it.each([false, true])('clears decisions until the current role has refreshed the session list (archived=%s)', async archived => {
   const title = 'Release review';
   const page = (decisions: number) => ({items:[{id, title, running:1, decisions}]});
