@@ -62,7 +62,7 @@ func InspectionArgs(view, path string) ([]string, error) {
 	case "diff":
 		args = []string{"diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=all", "HEAD"}
 	case "history":
-		args = []string{"log", "-50", "--format=%h %aI %s", "--no-decorate"}
+		args = []string{"log", "-50", "--format=%H %aI %s", "--no-decorate"}
 	default:
 		return nil, fmt.Errorf("invalid Git view")
 	}

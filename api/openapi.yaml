@@ -2521,6 +2521,43 @@ paths:
             text/plain: {schema: {type: string}}
         "400": {$ref: "#/components/responses/BadRequest"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/v1/graphs/{id}/nodes/{node}/replicas/{replica}/git/publish:
+    parameters:
+      - {$ref: "#/components/parameters/GraphId"}
+      - {$ref: "#/components/parameters/NodeId"}
+      - {name: replica, in: path, required: true, schema: {type: integer, minimum: 0}}
+    post:
+      tags: [workspace]
+      operationId: publishReplicaBranch
+      summary: Publish a reviewed private replica commit to its assigned local graph branch
+      x-weft-role: operator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [commit, previous]
+              properties:
+                commit: {type: string, pattern: '^[0-9a-f]{40}([0-9a-f]{24})?$'}
+                previous: {type: string, pattern: '^([0-9a-f]{40}([0-9a-f]{24})?)?$', description: 'Expected destination commit in the same object format, or empty for creation.'}
+      responses:
+        "200":
+          description: The destination branch now points at the requested commit, including after a retry.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [branch, commit]
+                properties:
+                  branch: {type: string}
+                  commit: {type: string}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
   /api/v1/graphs/{id}/git/{view}:
     parameters:
       - {$ref: "#/components/parameters/GraphId"}

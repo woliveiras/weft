@@ -3,12 +3,13 @@ package workspace
 import (
 	"context"
 	"errors"
-	"github.com/woliveiras/weft/server/internal/domain"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/woliveiras/weft/server/internal/domain"
 )
 
 func TestInspectionArgs(t *testing.T) {
@@ -79,7 +80,9 @@ func TestInspectRepositoryIntegration(t *testing.T) {
 	if !strings.Contains(inspect("diff", "").Content, "+after") {
 		t.Fatal("staged diff missing")
 	}
-	if !strings.Contains(inspect("history", "").Content, "initial fixture") {
+	history := inspect("history", "").Content
+	head, _, _ := strings.Cut(history, " ")
+	if !domain.ValidFullCommit(head) || !strings.Contains(history, "initial fixture") {
 		t.Fatal("history missing")
 	}
 	git("checkout", "--detach", "-q")

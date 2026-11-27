@@ -29,6 +29,8 @@ type Event struct {
 
 type EventType string
 
+const EvBranchPublication EventType = "workspace.branch_publication"
+
 const EvGraphBrokerCleanupCompleted EventType = "graph.broker_cleanup_completed"
 
 const (

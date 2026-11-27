@@ -91,6 +91,8 @@ func (m *Manager) privateClone(ctx context.Context, g *domain.Graph, n *domain.N
 	return dir, branch, nil
 }
 
+var ErrBranchUnavailable = errors.New("replica branch unavailable")
+
 var ErrBranchConflict = errors.New("replica branch publication conflict")
 
 // PublishReplicaBranch accepts commit IDs only. Destination paths, repository
@@ -98,7 +100,7 @@ var ErrBranchConflict = errors.New("replica branch publication conflict")
 func (m *Manager) PublishReplicaBranch(ctx context.Context, g *domain.Graph, node string, replica int, commit, previous string) (string, error) {
 	n := g.Node(node)
 	if m.TransferReplicaBranch == nil || n == nil || n.Workspace.Mode != domain.WorkspaceWorktree || n.Workspace.ReadOnly || replica < 0 || !validRefPart(node) || !validRefPart(g.Metadata.ID) {
-		return "", errors.New("private writable replica required")
+		return "", fmt.Errorf("%w: private writable replica required", ErrBranchUnavailable)
 	}
 	if !domain.ValidFullCommit(commit) || previous != "" && (!domain.ValidFullCommit(previous) || len(previous) != len(commit)) {
 		return "", errors.New("expected full commit IDs")
@@ -112,8 +114,11 @@ func (m *Manager) PublishReplicaBranch(ctx context.Context, g *domain.Graph, nod
 		return "", err
 	}
 	meta, err := os.Lstat(filepath.Join(dir, ".git"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("inspect private replica: %w", err)
+	}
 	if err != nil || !meta.IsDir() {
-		return "", errors.New("private clone unavailable")
+		return "", fmt.Errorf("%w: private clone unavailable", ErrBranchUnavailable)
 	}
 	branch := replicaBranch(g, node, replica)
 	req := ReplicaBranchTransfer{Graph: g.Metadata.ID, Node: node, Replica: replica, Source: dir, Destination: base, Branch: branch, Commit: commit, Previous: previous}

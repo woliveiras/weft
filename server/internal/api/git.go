@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/projectconfig"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"github.com/woliveiras/weft/server/internal/taskrun"
@@ -134,4 +135,29 @@ func browsePath(root, path string) (string, string, error) {
 // repository-controlled .git file or graph label cannot choose another project.
 func validInspectionTask(g *domain.Graph, d *taskconfig.Draft) bool {
 	return d != nil && g.Metadata.ID == taskrun.ExecutionID(d.ID) && d.ExecutionGraphID == g.Metadata.ID && g.Metadata.Labels["weft.task"] == d.ID && g.Metadata.Labels["weft.workflow"] == d.GraphID
+}
+
+func (s *Server) publishReplicaBranch(w http.ResponseWriter, r *http.Request) error {
+	replica, err := strconv.Atoi(r.PathValue("replica"))
+	if err != nil || replica < 0 {
+		return badRequest("invalid replica index")
+	}
+	req, err := workspace.DecodeBranchPublication(http.MaxBytesReader(w, r.Body, 1024))
+	if err != nil {
+		return badRequest("%v", err)
+	}
+	g, _, err := s.Engine.GetGraph(r.Context(), r.PathValue("id"), 0)
+	if err != nil {
+		return err
+	}
+	node := r.PathValue("node")
+	if g.Node(node) == nil {
+		return fmt.Errorf("%w: unknown graph node", engine.ErrNotFound)
+	}
+	receipt, err := s.Engine.PublishReplicaBranch(r.Context(), g, node, replica, req, identityFrom(r.Context()).Name, "")
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, receipt)
+	return nil
 }

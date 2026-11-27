@@ -111,6 +111,7 @@ be stored before proceeding.
 | `environment.deferred_cleanup_reservation_released` | after an abandonment or cancellation successfully releases the ID | `{decision}` (decision event ID, actor = administrator) |
 | `environment.deferred_cleanup_completed` | after retrying cleanup successfully on the original sandbox daemon and releasing the ID | — (actor = administrator) |
 | `checkpoint.created` | engine, before the first workspace change of a round when the replica's files differ from its newest checkpoint ([checkpoints](native-coding-runtime.md#checkpoints-nat-07)) | `{checkpoint, ref, commit, reason: "before_edit", tool}` (actor = `agent:<node>#<n>`, execution id) |
+| `workspace.branch_publication` | Operator publication API or granted agent tool | `{branch, commit, previous, outcome}`, with outcome `published`, `conflict`, `unavailable` or `error`. Includes actor, node and replica, and execution ID for agent calls. |
 | `checkpoint.restored` | `POST …/checkpoints/restore` or the agent's `checkpoint.restore` | `{checkpoint, saved, written, removed, source: "api"\|"agent"}` (actor = person or agent) |
 | `checkpoint.failed` | recording or restoring a checkpoint failed (the edit still runs; a failed restore may be partial) | `{operation: "record"\|"restore", reason?, tool?, checkpoint?, source?, saved?, written?, removed?, error}` |
 

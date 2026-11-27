@@ -882,6 +882,12 @@ graphs; saving is not a synchronous purge of every history. Storage failures ret
 an error. Lower limits can permanently discard history; higher limits do not
 restore discarded records. Publication: `installation.history_retention.updated`.
 
+## Publish a private replica branch
+
+An operator can call `POST /api/v1/graphs/{id}/nodes/{node}/replicas/{replica}/git/publish` for a writable Kubernetes replica with `workspace.mode: worktree`. Read the full source commit from the replica’s `git/history?node={node}&replica={replica}` view. Send that commit in `commit`. For first publication set `previous` to `""`. For an update, supply the last observed full commit of the destination branch, for example from the previous receipt or the graph's publication events.
+
+A successful call returns `{"branch":"…","commit":"…"}`. The destination is the replica’s assigned branch in the graph repository. Other branches and the graph checkout retain their state. Retrying an already applied commit succeeds. HTTP 409 indicates a changed tip, a refused ref update or an unavailable private workspace. Inspect the branch state before requesting another update. Agents use the same operation through an explicit `git.publish` grant.
+
 ## Worktree checkpoints
 
 `GET /api/v1/graphs/{id}/checkpoints` (viewer) lists the graph's
