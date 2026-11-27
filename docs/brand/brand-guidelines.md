@@ -326,4 +326,5 @@ Gaps between the console and this guide. Tokens live at the top of
 - [x] Redesign page layouts (app shell, lists, forms, graph editor) on top of the tokens.
 - [x] Add visual regression screenshots (Playwright) for light and dark themes
       on the main destinations: `pnpm run test:e2e:visual`; regenerate baselines
-      with `--update-snapshots` in the Linux Playwright container and review them.
+      with `--update-snapshots` on macOS and in the Linux Playwright container.
+      Review both sets against the expected layout before committing them.
