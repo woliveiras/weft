@@ -20,6 +20,12 @@ const maxResponse = 16 << 20
 
 var identifier = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 var toolName = regexp.MustCompile(`^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$`)
+
+type HTTPError struct{ Status int }
+
+func (e *HTTPError) Error() string { return fmt.Sprintf("controller returned HTTP %d", e.Status) }
+
+var ErrToolFailed = errors.New("gateway tool failed")
 var ErrYield = errors.New("turn yielded for review")
 var callbackHTTP = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 
@@ -67,7 +73,7 @@ func (c *Client) post(ctx context.Context, path string, input, output any) error
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("controller returned HTTP %d", resp.StatusCode)
+		return &HTTPError{Status: resp.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse+1))
 	if err != nil || len(raw) > maxResponse || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || json.Unmarshal(raw, output) != nil {
@@ -89,7 +95,7 @@ func (c *Client) Tool(ctx context.Context, name string, args any) (ToolResult, e
 		return ToolResult{}, ErrYield
 	}
 	if out.IsError {
-		return ToolResult{}, errors.New("gateway tool failed")
+		return ToolResult{}, ErrToolFailed
 	}
 	return out, nil
 }

@@ -48,6 +48,7 @@ type ToolCall struct {
 }
 
 type ChatRequest struct {
+	JSON     bool          `json:"json,omitempty"`
 	System   string        `json:"system,omitempty"`
 	Messages []ChatMessage `json:"messages"`
 }

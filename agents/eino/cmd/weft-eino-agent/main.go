@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/woliveiras/weft/agents/eino/factory"
 	"github.com/woliveiras/weft/agents/eino/protocol"
 	"github.com/woliveiras/weft/agents/eino/summary"
 )
@@ -18,7 +19,11 @@ func serve() error {
 	if err != nil {
 		return fmt.Errorf("compile summarize: %w", err)
 	}
-	handler, err := protocol.NewHandler(strings.Split(os.Getenv("WEFT_URL"), ","), os.Getenv("WEFT_RUNTIME_SECRET"), map[string]protocol.Agent{"summarize": agent})
+	reviewer, err := factory.Reviewer(context.Background())
+	if err != nil {
+		return fmt.Errorf("compile reviewer: %w", err)
+	}
+	handler, err := protocol.NewHandler(strings.Split(os.Getenv("WEFT_URL"), ","), os.Getenv("WEFT_RUNTIME_SECRET"), map[string]protocol.Agent{"summarize": agent, "reviewer": reviewer})
 	if err != nil {
 		return err
 	}
