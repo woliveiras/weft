@@ -198,6 +198,11 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		return nil, err
 	}
 
+	if cfg.Isolation.Kubernetes != nil && cfg.Isolation.Kubernetes.Image != "" {
+		ws.TransferReplicaBranch = func(ctx context.Context, r workspace.ReplicaBranchTransfer) error {
+			return kubesandbox.TransferBranch(ctx, ws.Root, cfg.Isolation.Kubernetes.Image, r)
+		}
+	}
 	a.WorkspaceMonitor = &tools.WorkspaceMonitor{Auditor: a.Bus, Targets: func(ctx context.Context) ([]tools.WorkspaceTarget, error) { return workspaceTargets(ctx, a.Store, ws) }}
 	var journalMetrics http.Handler
 	if path := os.Getenv("WEFT_WORKSPACE_JOURNAL"); path != "" {

@@ -266,22 +266,9 @@ func (s *Sandbox) Exec(ctx context.Context, req tools.ExecRequest) (*tools.ExecR
 }
 
 func (s *Sandbox) command(ctx context.Context, data []byte) (*tools.ExecResult, error) {
-	// The helper checks the downward-API UID in the destination container. A
-	// name lookup before exec alone cannot fence a pod replacement.
-	options := &v1.PodExecOptions{
-		Container: "sandbox",
-		Command:   []string{"/usr/local/bin/weft-sandbox-exec", string(s.pod.UID)},
-		Stdin:     true, Stdout: true, Stderr: true,
-	}
-	url := s.rest.Post().Namespace(Namespace).Resource("pods").Name(s.pod.Name).SubResource("exec").VersionedParams(options, scheme.ParameterCodec).URL()
-	runner, err := remotecommand.NewSPDYExecutor(s.config, http.MethodPost, url)
-	if err != nil {
-		return nil, err
-	}
 	var out boundedOutput
-	err = runner.StreamWithContext(ctx, remotecommand.StreamOptions{Stdin: bytes.NewReader(data), Stdout: &out, Stderr: io.Discard})
-	if err != nil {
-		return nil, fmt.Errorf("replica sandbox exec: %w", err)
+	if err := s.stream(ctx, []string{"/usr/local/bin/weft-sandbox-exec", string(s.pod.UID)}, bytes.NewReader(data), &out); err != nil {
+		return nil, err
 	}
 	var reply struct {
 		tools.ExecResult
@@ -295,4 +282,19 @@ func (s *Sandbox) command(ctx context.Context, data []byte) (*tools.ExecResult, 
 	}
 	reply.ExecResult.ExitCode = *reply.Code
 	return &reply.ExecResult, nil
+}
+
+// stream runs an installation-selected command in the already verified pod.
+// Each entry point checks the downward-API UID again inside the container.
+func (s *Sandbox) stream(ctx context.Context, argv []string, in io.Reader, out io.Writer) error {
+	options := &v1.PodExecOptions{Container: "sandbox", Command: argv, Stdin: in != nil, Stdout: true, Stderr: true}
+	url := s.rest.Post().Namespace(Namespace).Resource("pods").Name(s.pod.Name).SubResource("exec").VersionedParams(options, scheme.ParameterCodec).URL()
+	runner, err := remotecommand.NewSPDYExecutor(s.config, http.MethodPost, url)
+	if err != nil {
+		return err
+	}
+	if err := runner.StreamWithContext(ctx, remotecommand.StreamOptions{Stdin: in, Stdout: out, Stderr: io.Discard}); err != nil {
+		return fmt.Errorf("replica sandbox exec: %w", err)
+	}
+	return nil
 }
