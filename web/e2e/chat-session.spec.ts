@@ -1032,3 +1032,24 @@ test('recovers a guided lookup and keeps an incomplete branch out of a free-text
   const response=await request.get('/api/v1/chat/sessions/'+id,{headers:{Authorization:'Bearer e2e-viewer-token'}});
   expect((await response.json()).messages[0].text).toBe('/inspect models');
 });
+
+test('keeps a guided draft private across an identity change in another tab',async({context,page,request})=>{
+  await selectFixtureModel(request);
+  await context.addInitScript(()=>{
+    if(!localStorage.getItem('weftToken')) localStorage.setItem('weftToken','e2e-admin-token');
+  });
+  await page.goto('/#/chat');
+  const guide=page.getByRole('region',{name:'Chat actions'});
+  await guide.getByRole('button',{name:'Agents'}).click();
+  await guide.getByRole('button',{name:'Create a catalog agent'}).click();
+  const field=page.getByRole('textbox',{name:'Message'});
+  await field.fill('Private unsent instructions');
+  const other=await context.newPage();
+  await other.goto('/#/chat');
+  await other.evaluate(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
+  await expect(field).toHaveValue('');
+  await expect(guide.getByRole('button',{name:'Mais'})).toBeVisible();
+  await guide.getByRole('button',{name:'Agents'}).click();
+  await expect(guide.getByRole('button',{name:'Create a catalog agent'})).toHaveCount(0);
+  await expect(guide.getByRole('button',{name:'Find a catalog agent'})).toBeVisible();
+});

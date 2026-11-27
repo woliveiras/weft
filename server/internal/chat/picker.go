@@ -1,8 +1,9 @@
 package chat
 
 import (
-	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"strings"
+
+	"github.com/woliveiras/weft/server/internal/taskconfig"
 )
 
 // PickerArea bounds the read-only inventory available before a conversation exists.

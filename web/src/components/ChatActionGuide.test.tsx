@@ -91,3 +91,15 @@ it('restores the guided draft after a lost acknowledgement and retries with the 
   expect(requests[1]).toEqual(requests[0]);
   expect(requests[0]).toMatchObject({text:'/follow tsk_a\nNotify me'});
 });
+
+it('keeps guided actions out of the model recovery and archived conversation states',async()=>{
+  const id='8921e80ce56b4b50a83981d63b1a911b';
+  fakeApi({...ready,'GET /api/v1/chat/settings':()=>({status:'unconfigured'}),['GET '+sessions+'/'+id]:()=>({id,title:'Old conversation',archived:true,messages:[]})});
+  const page=render(<ChatPage archived={false} onOpen={vi.fn()}/>);
+  await screen.findByText('No Chat model selected.');
+  expect(screen.queryByRole('region',{name:'Chat actions'})).toBeNull();
+  page.rerender(<ChatPage archived id={id} onOpen={vi.fn()}/>);
+  await screen.findByRole('button',{name:'Restore conversation'});
+  expect(screen.queryByRole('region',{name:'Chat actions'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'Send'})).toBeNull();
+});

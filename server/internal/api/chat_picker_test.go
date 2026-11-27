@@ -49,3 +49,51 @@ func TestChatPickerReadsWithoutSessionAndFollowsOnlySelectedTask(t *testing.T) {
 		t.Fatal(status)
 	}
 }
+
+func TestChatPickerPartialSearchAndExactResourceReplay(t *testing.T) {
+	srv, app := setupApp(t, nil)
+	manager := taskconfig.Manager{Store: app.Store}
+	var selected *taskconfig.Draft
+	for range chat.InspectionLimit + 1 {
+		task, err := manager.SavePrompt(t.Context(), taskconfig.PromptInput{Request: "Check the release", Settings: &taskconfig.PromptSettings{Title: "Release review"}}, "fixture")
+		if err != nil {
+			t.Fatal(err)
+		}
+		selected = task
+	}
+	var result struct {
+		Items   []struct{ ID, Label string }
+		Partial bool
+	}
+	const lookup = "/api/v1/chat/candidates?area=tasks&q="
+	if status := call(t, srv, "GET", lookup+"Release", viewerTok, "", "", &result); status != 200 || !result.Partial || len(result.Items) != chat.InspectionLimit {
+		t.Fatal(status, result)
+	}
+	if status := call(t, srv, "GET", lookup+selected.ID, viewerTok, "", "", &result); status != 200 || result.Partial || len(result.Items) != 1 || result.Items[0].ID != selected.ID {
+		t.Fatal(status, result)
+	}
+	if status := call(t, srv, "GET", lookup+"Release", "", "", "", nil); status != 401 {
+		t.Fatal(status)
+	}
+	const sessionID = "aa000000000000000000000000000002"
+	const path = "/api/v1/chat/sessions"
+	text := "/lookup tasks " + selected.ID
+	body := fmt.Sprintf(`{"requestId":%q,"text":%q}`, sessionID, text)
+	var session chat.Session
+	if status := call(t, srv, "POST", path, viewerTok, "application/json", body, &session); status != 200 || len(session.Messages) != 2 || session.Messages[1].Text != result.Items[0].Label || len(session.Watches) != 0 {
+		t.Fatal(status, session)
+	}
+	if err := manager.DeleteDraft(t.Context(), selected.ID, selected.Revision, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	// A different resource can even have the missing ID as its title.
+	if _, err := manager.SavePrompt(t.Context(), taskconfig.PromptInput{Request: "Replacement", Settings: &taskconfig.PromptSettings{Title: selected.ID}}, "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	if status := call(t, srv, "POST", path, viewerTok, "application/json", body, &session); status != 200 || len(session.Messages) != 2 || session.Messages[1].Text != result.Items[0].Label {
+		t.Fatal(status, session)
+	}
+	if status := call(t, srv, "POST", path, viewerTok, "application/json", fmt.Sprintf(`{"requestId":"aa000000000000000000000000000003","text":%q}`, text), nil); status != 400 {
+		t.Fatal(status)
+	}
+}

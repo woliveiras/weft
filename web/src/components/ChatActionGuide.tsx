@@ -15,7 +15,7 @@ function CandidateSearch({area, query, onQuery, onPick, restoreId}: {
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
-        const result = await api.chatCandidates(area, query, controller.signal);
+        const result = await api.chatCandidates(area, query.trim(), controller.signal);
         if (!controller.signal.aborted) setLookup({query,attempt,result});
       } catch (error) {
         if (!controller.signal.aborted) setLookup({query,attempt,error:errorMessage(error)});

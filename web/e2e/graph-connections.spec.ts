@@ -116,7 +116,7 @@ test('creates agents, drags connections, validates, cancels and confirms Delete,
   expect((await saved(page, id)).graph.spec).toEqual(connected.graph.spec);
   await save(page);
   await page.goto('/#/');
-  await page.getByRole('button', { name: 'Workflows', exact: true }).click();
+  await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button', { name: 'Workflows', exact: true }).click();
   await page.getByLabel('Search workflows').fill(graphName);
   await page.getByRole('button', { name: graphName, exact: true }).click();
   await expect(node(page, 'source')).toBeVisible();
