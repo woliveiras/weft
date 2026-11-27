@@ -238,6 +238,13 @@ func (m *Manager) GraphCheckpoints(ctx context.Context, base, graphID string) ([
 	if err != nil {
 		return nil, err
 	}
+	if m.TransferReplicaBranch != nil {
+		other, err := m.privateCheckpoints(ctx, graphID)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, other...)
+	}
 	newestFirst(list)
 	return list, nil
 }

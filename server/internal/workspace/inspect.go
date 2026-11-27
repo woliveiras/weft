@@ -135,6 +135,12 @@ func (m *Manager) inspect(ctx context.Context, dir, base, view, path string, inc
 			return nil, fmt.Errorf("worktree metadata escapes repository")
 		}
 		relativeGit = filepath.Join("worktrees", rel)
+	} else if dir != base && info.IsDir() && m.TransferReplicaBranch != nil {
+		root, e := filepath.EvalSymlinks(m.Root)
+		if e != nil || filepath.Dir(filepath.Dir(dir)) != filepath.Join(root, ".worktrees") {
+			return nil, errors.New("private clone outside installed workspace")
+		}
+		base = dir
 	} else if dir != base || !info.IsDir() {
 		return nil, fmt.Errorf("invalid Git directory")
 	}
@@ -191,13 +197,8 @@ func (m *Manager) inspectSnapshot(ctx context.Context, dir, snapshot, relativeGi
 		child, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		prefix := []string{"--no-pager", "--git-dir=" + gitdir, "--work-tree=" + dir, "-c", "core.bare=false", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-c", "color.ui=false", "-c", "log.showSignature=false"}
-		workingDir := dir
-		if len(args) > 0 && args[0] == "config" {
-			prefix = []string{"--no-pager"}
-			workingDir = filepath.Dir(snapshot)
-		}
 		cmd := exec.CommandContext(child, m.GitBin, append(prefix, args...)...)
-		cmd.Dir = workingDir
+		cmd.Dir = dir
 		// Deliberately do not inherit GIT_DIR, alternate object stores or user config.
 		cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=/nonexistent", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_OPTIONAL_LOCKS=0", "GIT_LITERAL_PATHSPECS=1", "GIT_TERMINAL_PROMPT=0", "LC_ALL=C"}
 		var out, stderr boundedOutput
@@ -211,17 +212,8 @@ func (m *Manager) inspectSnapshot(ctx context.Context, dir, snapshot, relativeGi
 		}
 		return out.String(), nil
 	}
-	// --no-includes prevents reading external include files. Only inert keys
-	// written by init/clone/worktree are accepted; unknown configuration fails
-	// closed instead of executing clean/process filters or third-party drivers.
-	config, err := run("config", "--file", filepath.Join(snapshot, "config"), "--no-includes", "--name-only", "--list", "-z")
-	if err != nil {
+	if err := m.validateSnapshotConfig(ctx, snapshot); err != nil {
 		return nil, err
-	}
-	for _, key := range strings.Split(strings.TrimSuffix(config, "\x00"), "\x00") {
-		if !safeInspectionConfig(key) {
-			return nil, fmt.Errorf("repository configuration is not supported for read-only inspection")
-		}
 	}
 	branch, err := run("symbolic-ref", "--quiet", "--short", "HEAD")
 	if err != nil {
@@ -246,6 +238,28 @@ func (m *Manager) inspectSnapshot(ctx context.Context, dir, snapshot, relativeGi
 	}
 	result.Content, err = run(args...)
 	return result, err
+}
+
+// Read only the copied file. An agent-editable include or driver must never
+// affect Git processes running in the controller.
+func (m *Manager) validateSnapshotConfig(ctx context.Context, snapshot string) error {
+	cmd := exec.CommandContext(ctx, m.GitBin, "config", "--file", filepath.Join(snapshot, "config"), "--no-includes", "--name-only", "--list", "-z")
+	cmd.Dir = filepath.Dir(snapshot)
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=/nonexistent", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "LC_ALL=C"}
+	var out boundedOutput
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		if out.overflow {
+			return ErrInspectionLimit
+		}
+		return fmt.Errorf("Git configuration inspection failed: %w", err)
+	}
+	for _, key := range strings.Split(strings.TrimSuffix(out.String(), "\x00"), "\x00") {
+		if !safeInspectionConfig(key) {
+			return errors.New("repository configuration is not supported for read-only inspection")
+		}
+	}
+	return nil
 }
 
 func readMetadata(path string) ([]byte, error) {

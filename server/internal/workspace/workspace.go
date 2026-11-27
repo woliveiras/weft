@@ -35,7 +35,8 @@ type Manager struct {
 	GitBin        string
 	// MaxCheckpoints bounds the checkpoints kept per replica (default
 	// DefaultMaxCheckpoints).
-	MaxCheckpoints int
+	MaxCheckpoints        int
+	TransferReplicaBranch func(context.Context, ReplicaBranchTransfer) error
 
 	mu    sync.Mutex
 	locks map[string]*sync.Mutex
@@ -58,6 +59,33 @@ func NewManager(root, hostRoot string, allowAbsolute bool) (*Manager, error) {
 // GraphDir returns the workspace directory of a graph.
 func (m *Manager) GraphDir(g *domain.Graph) (string, error) {
 	p := g.Spec.Workspace.Path
+	if m.TransferReplicaBranch != nil {
+		physical := p
+		if physical == "" {
+			physical = g.Metadata.ID
+		}
+		if !filepath.IsAbs(physical) {
+			physical = filepath.Join(m.Root, physical)
+		}
+		rel, err := filepath.Rel(m.Root, physical)
+		if err != nil || !filepath.IsLocal(rel) || rel == "." || rel == ".worktrees" || strings.HasPrefix(rel, ".worktrees"+string(filepath.Separator)) {
+			return "", fmt.Errorf("graph workspace must be outside the reserved replica directories and beneath the shared claim")
+		}
+		current := m.Root
+		for _, part := range strings.Split(rel, string(filepath.Separator)) {
+			current = filepath.Join(current, part)
+			info, err := os.Lstat(current)
+			if os.IsNotExist(err) {
+				break
+			}
+			if err != nil {
+				return "", err
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				return "", fmt.Errorf("graph workspace contains a symbolic link")
+			}
+		}
+	}
 	switch {
 	case p == "":
 		return filepath.Join(m.Root, g.Metadata.ID), nil
@@ -160,6 +188,9 @@ func (m *Manager) Replica(ctx context.Context, g *domain.Graph, n *domain.Node, 
 	defer lock.Unlock()
 	dir = filepath.Join(m.Root, ".worktrees", g.Metadata.ID, fmt.Sprintf("%s-%d", n.ID, replica))
 	branch = replicaBranch(g, n.ID, replica)
+	if m.TransferReplicaBranch != nil {
+		return m.privateClone(ctx, g, n, replica, base, dir, branch)
+	}
 	if isRepo(dir) {
 		return dir, branch, nil
 	}
@@ -182,6 +213,9 @@ func (m *Manager) Replica(ctx context.Context, g *domain.Graph, n *domain.Node, 
 // with uncommitted changes is kept (git refuses), and the branch is never
 // deleted, so committed work always survives.
 func (m *Manager) ReleaseWorktree(ctx context.Context, g *domain.Graph, nodeID string, replica int) error {
+	if m.TransferReplicaBranch != nil {
+		return fmt.Errorf("private replica checkout is retained for publication and restart")
+	}
 	base, err := m.GraphDir(g)
 	if err != nil {
 		return err
