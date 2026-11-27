@@ -4,6 +4,7 @@ Run `make eval-chat` from the repository root. Each case starts its own Weft API
 
 | Case | Passing evidence |
 | --- | --- |
+| TopicSwitch | One saved conversation moves from budget navigation to an exact task link, previous-month spend, checkpoints and failed tasks. Each request selects its own tool and answers from its fixture result. |
 | TaskFollowup | Two successful tasks followed by five failed tasks. Both turns read the requested status. The replies report each total and show the requested titles and IDs in last-update order, capped at three. |
 | PullRequest | Two loopback repositories both contain PR 418. “o do mobile” prepares a review of the chosen head. No diff is read and no comments are published. |
 | AgentCreation | The definition covers the requested release-review work. The catalog changes only on confirmation. Replaying confirmation leaves exactly one published version. |

@@ -96,9 +96,15 @@ func (s *Session) Context(requestID string) []llm.ChatMessage {
 	var history []llm.ChatMessage
 	for _, message := range s.Messages {
 		if message.Role == "user" {
+			// Some prior replies (e.g. private reviews and legacy handoffs)
+			// have no model-visible content. Preserve the turn boundary:
+			// providers can merge adjacent user messages into a single request.
+			if len(history) > 0 && history[len(history)-1].Role == llm.RoleUser {
+				history = append(history, llm.ChatMessage{Role: llm.RoleAssistant, Content: "No details of the previous reply are available in this context."})
+			}
 			history = append(history, llm.ChatMessage{Role: llm.RoleUser, Content: message.Text})
 			if message.ID == requestID {
-				break
+				return history
 			}
 		} else if ref := conversationReply(message); ref != "" {
 			history = append(history, llm.ChatMessage{Role: llm.RoleAssistant, Content: ref})
@@ -106,15 +112,20 @@ func (s *Session) Context(requestID string) []llm.ChatMessage {
 			history = append(history, llm.ChatMessage{Role: llm.RoleAssistant, Content: message.Text})
 		}
 	}
-	return history
+	return nil
 }
 
 // Give the model the visible answer when the operator refers to its format.
 // Domain reviews and tool payloads continue to contribute safe references only.
 func conversationReply(message Message) string {
 	ref := observedReference(message)
-	if message.Role != "assistant" || message.Destination != "tasks" || message.Review != nil ||
+	if message.Role != "assistant" || message.Review != nil ||
 		message.Task != nil || message.Execution != nil || message.Selection != nil || message.Discovery != nil {
+		return ref
+	}
+	// Only replay answers produced by viewer-readable tools. Navigation,
+	// reviews and other unclassified responses retain their existing projection.
+	if message.Destination != "tasks" && message.Destination != "usage" && message.Destination != "workflows" {
 		return ref
 	}
 	// Earlier single-read answers have a query snapshot but no explicit state.
@@ -126,7 +137,7 @@ func conversationReply(message Message) string {
 			}
 			return message.Text
 		}
-	} else if message.State == "" && message.Inventory == nil {
+	} else if message.Destination == "tasks" && message.State == "" && message.Inventory == nil {
 		// Older combined reads have no provenance marker. Preserve the dialogue
 		// boundary and topic without replaying unclassified message contents.
 		return "The previous response concerned Tasks. Refer to the operator's preceding request for scope and presentation. Query current task records for follow-ups."

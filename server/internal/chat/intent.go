@@ -107,6 +107,11 @@ func boundedHistory(turns []llm.ChatMessage) ([]llm.ChatMessage, error) {
 		bytes += len(message.Content)
 		start--
 	}
+	// The size limit may bisect an earlier exchange. Discard its orphaned
+	// answer so the provider receives a history starting with a user turn.
+	for turns[start].Role == llm.RoleAssistant {
+		start++
+	}
 	return turns[start:], nil
 }
 
