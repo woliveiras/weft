@@ -161,7 +161,7 @@ func gitLog(ctx context.Context, inv *Invocation) (*Result, error) {
 	if err := safeRef("ref", a.Ref); err != nil {
 		return nil, err
 	}
-	args := []string{"log", "-n", strconv.Itoa(a.N), "--date=short", "--pretty=format:%h %ad %an %s"}
+	args := []string{"log", "-n", strconv.Itoa(a.N), "--date=short", "--pretty=format:%H %ad %an %s"}
 	if a.Ref != "" {
 		args = append(args, a.Ref, "--")
 	}

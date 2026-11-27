@@ -179,7 +179,8 @@ func TestGitTools(t *testing.T) {
 	run(t, gw, p, "git.checkout", map[string]any{"ref": "main"})
 	run(t, gw, p, "git.merge", map[string]any{"branch": "feature", "noFF": true, "message": "merge feature"})
 	r = run(t, gw, p, "git.log", map[string]any{"n": 5})
-	if !strings.Contains(r.Content, "merge feature") || !strings.Contains(r.Content, "second") {
+	head, _, _ := strings.Cut(r.Content, " ")
+	if !domain.ValidFullCommit(head) || !strings.Contains(r.Content, "merge feature") || !strings.Contains(r.Content, "second") {
 		t.Fatalf("log: %q", r.Content)
 	}
 	run(t, gw, p, "git.show", map[string]any{"ref": "HEAD~1"})

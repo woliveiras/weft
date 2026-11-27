@@ -18,7 +18,7 @@ import (
 
 func workspaceMutation(t Tool) bool {
 	switch t.Capability() {
-	case "filesystem.write", "filesystem.delete", "git.write", "shell.exec", "environment.propose", "review.request", "checkpoint.restore":
+	case "filesystem.write", "filesystem.delete", "git.write", GitPublish, "shell.exec", "environment.propose", "review.request", "checkpoint.restore":
 		return true
 	}
 	return false

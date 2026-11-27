@@ -221,6 +221,7 @@ func (r *replica) turn(loopCtx context.Context, n *domain.Node, dels []queue.Del
 	if analysisOnly {
 		env.principal.Grants = nil
 		env.principal.Delegate = nil
+		env.principal.PublishBranch = nil
 	}
 	env.executionCtx = turnCtx
 	env.span = trace.SpanContextFromContext(turnCtx)
@@ -642,6 +643,11 @@ func newTurnEnv(r *replica, gr *graphRun, n *domain.Node, x *domain.Execution) *
 		GraphVersion: gr.g.Metadata.Version, GraphID: gr.g.Metadata.ID, NodeID: n.ID, Replica: r.index, ExecutionID: x.ID,
 		TaskID: gr.g.Metadata.Labels[domain.LabelTask], WorkspaceReadOnly: n.Workspace.ReadOnly, Grants: n.Tools, Checks: append(append([]domain.Check{}, gr.g.Spec.Checks...), domain.RepositoryChecks(gr.g.Spec.Workspace.Repositories)...), Repositories: gr.g.Spec.Workspace.Repositories, BaseCommit: gr.g.Metadata.Labels[domain.LabelTaskBase], Workdir: wd, Sandbox: r.sandbox, Actor: fmt.Sprintf("agent:%s#%d", n.ID, r.index),
 	}}
+	if n.Workspace.Mode == domain.WorkspaceWorktree && !n.Workspace.ReadOnly && gr.e.opt.Workspaces != nil && gr.e.opt.Workspaces.TransferReplicaBranch != nil {
+		env.principal.PublishBranch = func(ctx context.Context, req workspace.BranchPublication) (workspace.PublishedBranch, error) {
+			return gr.e.PublishReplicaBranch(ctx, gr.g, n.ID, r.index, req, env.principal.Actor, x.ID)
+		}
+	}
 	if delegationRuntime(n.Runtime.Kind) {
 		env.principal.Delegate = env.delegate
 	}

@@ -75,8 +75,7 @@ func matchingGrants(p *Principal, t Tool, includeCapabilityOnlyNames bool) []dom
 			}
 			continue
 		}
-		// Checkpoint and reviewed line comment grants must name the tool or
-		// capability explicitly. A wildcard cannot grant either effect.
+		// These grants must name the tool or capability explicitly.
 		if ExplicitGrantOnly(t) {
 			if g.Name == t.Name() || g.Name == t.Capability() {
 				out = append(out, g)
@@ -100,7 +99,7 @@ func matchingGrants(p *Principal, t Tool, includeCapabilityOnlyNames bool) []dom
 
 // ExplicitGrantOnly reports tools that wildcard grants never cover.
 func ExplicitGrantOnly(t Tool) bool {
-	return strings.HasPrefix(t.Capability(), "checkpoint.") || t.Capability() == "scm.pull_request.comment"
+	return t.Capability() == GitPublish || strings.HasPrefix(t.Capability(), "checkpoint.") || t.Capability() == "scm.pull_request.comment"
 }
 
 // Authorize decides whether p may invoke t. It returns the merged grant the

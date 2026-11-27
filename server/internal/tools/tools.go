@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/domain"
+	"github.com/woliveiras/weft/server/internal/workspace"
 )
 
 // ErrWorkspaceShellIsolation is the actionable refusal for native shell under Workspace consent.
@@ -41,8 +42,9 @@ type Tool interface {
 
 // Principal identifies who is calling: one replica during one execution.
 type Principal struct {
-	TaskID   string
-	Delegate func(context.Context, json.RawMessage) (*Result, error)
+	PublishBranch func(context.Context, workspace.BranchPublication) (workspace.PublishedBranch, error)
+	TaskID        string
+	Delegate      func(context.Context, json.RawMessage) (*Result, error)
 
 	GraphVersion int
 	GraphID      string
