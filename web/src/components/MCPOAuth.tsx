@@ -62,6 +62,9 @@ export function MCPOAuthActions({connection,canManage,onChanged}:{connection:MCP
  const oauth=connection.oauth!;
  const automatic=!!oauth.registrationMode&&oauth.registrationMode!=="manual";
  const registrationBlocked=oauth.registrationStatus==='uncertain'||oauth.registrationStatus==='pending';
+ const latestRecovery=oauth.registrationHistory?.at(-1);
+ const showRecoveryReceipt=(recoverySaved?.id===connection.id&&connection.revision<=recoverySaved.revision)||
+  (oauth.status==='authorization_required'&&!oauth.registrationStatus&&latestRecovery?.revision===connection.revision-1);
  const canRecover=automatic&&oauth.effectiveRegistrationMode==='dcr'&&oauth.registrationStatus==='uncertain'&&!(recoverySaved?.id===connection.id&&connection.revision<=recoverySaved.revision);
  const fields=registrationFieldLabels(oauth.registrationDiagnostic?.fields);
  const status=error||oauth.registrationStatus==='uncertain'?'Error — last OAuth action failed':oauth.status==='revoked'?'Revoked':oauth.status==='reauthorization_required'||connection.status==='unavailable'?'Error — authorization or discovery needs attention':oauth.status==='authorized'?'Authorized':oauth.status==='authorization_required'?'Authorization required':'Authorization in progress';
@@ -92,7 +95,7 @@ export function MCPOAuthActions({connection,canManage,onChanged}:{connection:MCP
     {attempt.diagnostic?<p>{registrationMessages[attempt.diagnostic.code]??'Previous registration failed.'} Diagnostic: {attempt.diagnostic.code}. {attempt.diagnostic.httpStatus?`Provider HTTP ${attempt.diagnostic.httpStatus}.`:''}{previousFields.length>0&&<> Previous incompatible fields: {previousFields.join(', ')}.</>}</p>:<p>No diagnostic details were recorded for this attempt.</p>}
    </li>;
   })}</ul></details>}
-  {recoverySaved?.id===connection.id&&connection.revision<=recoverySaved.revision&&<p role="status">Previous attempt preserved. Review OAuth setup before registering a new client. Provider authorization is still required.</p>}
+  {showRecoveryReceipt&&<p role="status">Previous attempt preserved. Review OAuth setup before registering a new client. Provider authorization is still required.</p>}
   {canManage&&canRecover&&<div>
    {recoveryRevision===undefined?<Btn disabled={busy||!connection.enabled} onClick={()=>{setRecoveryRevision(connection.revision);setRecoveryConnectionId(connection.id);setAcceptRecovery(false);setPlan(undefined);setError(undefined);}}>Review registration recovery</Btn>:<section aria-label="Registration recovery" className="card form">
     <h4>Prepare another registration attempt</h4>

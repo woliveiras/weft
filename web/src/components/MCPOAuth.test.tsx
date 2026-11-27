@@ -130,7 +130,8 @@ it('prepares recovery through the real API client once and never starts provider
  finish(recovered);
  expect(await screen.findByText(/Previous attempt preserved/)).toBeTruthy();expect(changed).toHaveBeenCalledOnce();
  expect(backend.calls).toHaveLength(1);
- view.rerender(<MCPOAuthActions connection={recovered} canManage onChanged={changed}/>);
+ view.rerender(<MCPOAuthActions key={recovered.revision} connection={recovered} canManage onChanged={changed}/>);
+ expect(screen.getByText(/Previous attempt preserved/)).toBeTruthy();
  expect(screen.getByRole('button',{name:'Review OAuth setup OAuth example'}).hasAttribute('disabled')).toBe(false);
  await userEvent.click(screen.getByText('Previous registration attempts (1)'));
  expect(screen.getByText(/Revision 3/)).toBeTruthy();expect(screen.getByText(/Previous remote outcome remains uncertain/)).toBeTruthy();
