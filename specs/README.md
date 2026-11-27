@@ -18,7 +18,7 @@ sequences. IDs and slugs remain stable after assignment.
 | Area directory | ID range | Capabilities |
 | --- | --- | --- |
 | `product-and-tasks` | `TASK-001`–`TASK-013` | Release contracts, console navigation, graph editing, Activity, prompt tasks, consent, admission, registered projects, guided journeys, multi-repository tasks, failed-task recovery, the conversational console and contextual chat action pills |
-| `workspaces-and-environments` | `ENV-001`–`ENV-009` | Repository imports, workspace review, journal, human review, Docker isolation, capacity, definitions, build/reuse, and network policy |
+| `workspaces-and-environments` | `ENV-001`–`ENV-010` | Repository imports, workspace review, journal, human review, Docker isolation, capacity, definitions, build/reuse, network policy and Kubernetes replica sandboxes |
 | `providers-and-integrations` | `INT-001`–`INT-009` | Built-in inference plugins, adapters, external plugins, budgets, MCP invocation, MCP OAuth, vendor profiles, hosting, and portable issue/SCM integrations |
 | `runtime-and-delivery` | `RUN-001`–`RUN-010` | Steering, delegation, native coding, evaluation, SCM, issue triggers, issue readiness, context usage, manual dependency security, and Eino runtime migration |
 | `installation-and-operations` | `OPS-001`–`OPS-003` | Compose, standalone and declarative installations |
@@ -79,6 +79,7 @@ The [historical source map](./historical-source-map.md) records the migration of
 
 ### In progress
 
+- [ENV-010 — Kubernetes Replica Tool Sandboxes](./workspaces-and-environments/kubernetes-replica-sandbox/spec.md) — `in-progress`. Execute commands in workspace-scoped Kubernetes pods. [Behavior matrix](./workspaces-and-environments/kubernetes-replica-sandbox/matrix.md).
 - [ENV-003 — Workspace Change Journal and Attribution](./workspaces-and-environments/workspace-change-journal-and-attribution/spec.md) — `in-progress`. Record bounded change evidence, preserve honest attribution and recover the Linux workspace journal.
 
 ## Providers and integrations

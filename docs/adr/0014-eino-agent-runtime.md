@@ -134,3 +134,5 @@ Exercise the service first on the pilot workflow, then qualify the full factory 
 Revisit the chosen boundary if a new external agent needs native-only guidance or durable mid-turn resumption, or if either implementation misses measured latency requirements. Acceptance of this ADR, rollout ownership and performance targets for a wider deployment remain maintainer decisions.
 
 The record follows the repository's ADR format, extended with MADR's decision drivers, options and confirmation. [MADR template](https://github.com/adr/madr/blob/4.0.0/template/adr-template.md) · [Michael Nygard on architecture decisions](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
+
+The maintainer selected a dedicated Kubernetes tool sandbox for each workflow replica. Eino continues to call the Weft gateway. Workspace mounting, command execution, permissions and recovery belong to the sandbox. A successful model or file callback does not qualify the QA shell. [Kubernetes sandbox specification](../../specs/workspaces-and-environments/kubernetes-replica-sandbox/spec.md)
