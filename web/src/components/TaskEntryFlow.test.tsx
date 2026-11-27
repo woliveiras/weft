@@ -1,4 +1,4 @@
-import {cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
+import {act,cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {afterEach,expect,it,vi} from 'vitest';
 import {TasksPage,SCMHandOffField} from './TasksPage';
@@ -62,9 +62,10 @@ it('keeps entry context when request typing precedes slow project discovery',asy
  fakeApi({'GET /api/v1/providers':()=>[],'GET /api/v1/projects':()=>pending,'GET /api/v1/scm/connections':()=>[]});
  render(<TasksPage create entry={{workflow:'flow',project:'repo'}} info={info} graphs={[graph]}/>);
  await userEvent.type(screen.getByLabelText('Request'),'Already typing');
- release([project]);
- await waitFor(()=>expect(screen.getByRole('combobox',{name:'Repositories'})).toHaveProperty('value','Repository'));
+ await act(async()=>release([project]));
+ expect(screen.getByRole('combobox',{name:'Repositories'})).toHaveProperty('value','Repository');
  expect(screen.getByLabelText('Workflow')).toHaveProperty('value','flow');
+ expect(screen.getByLabelText('Workflow version')).toHaveProperty('value','3');
  expect(screen.getByLabelText('Entry agent')).toHaveProperty('value','worker');
  expect(screen.getByLabelText('Request')).toHaveProperty('value','Already typing');
 });
