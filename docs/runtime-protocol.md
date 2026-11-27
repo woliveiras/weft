@@ -2,7 +2,7 @@
 
 The Runtime Protocol is how agents written in **any language or framework** (LangGraph, AutoGen,
 CrewAI, plain code) take part in a Weft graph. It is two HTTP endpoints on the agent side and
-eight callback endpoints on the platform side. The [Go SDK](../agents/eino/protocol) serves an agent using `protocol.NewHandler`. Its per-turn client exposes `Tool`, `ListTools`, `Chat`, `Emit`, `StateGet`, `StatePut`, `Output` and `Ask`. A successful `Emit` acknowledges buffering. The controller publishes after turn success and applies channel approvals before delivery. The client returns model usage for inspection. Only runtime-local usage belongs in `TurnResult.Usage`. The Python SDK remains in the checkout during migration.
+eight callback endpoints on the platform side. The [Go SDK](../agents/eino/protocol) serves an agent using `protocol.NewHandler`. Its per-turn client exposes `Tool`, `ListTools`, `Chat`, `Emit`, `StateGet`, `StatePut`, `Output` and `Ask`. A successful `Emit` acknowledges buffering. The controller publishes after turn success and applies channel approvals before delivery. The client returns model usage for inspection. Only runtime-local usage belongs in `TurnResult.Usage`.
 
 Schemas: [`schemas/turn.schema.json`](../schemas/turn.schema.json) (TurnInput, TurnResult, Emit),
 [`schemas/message.schema.json`](../schemas/message.schema.json), and the `runtime-callback` tag of
@@ -194,14 +194,13 @@ last replica stops.
 
 ## Instruction snapshots
 
-`TurnInput.instructions` is an optional immutable manifest (see [schema](../schemas/instructions.schema.json)). It is untrusted data, never permissions. The Python SDK retains it in `TurnInput.instructions`. Opted-in guidance precedes the original node prompt; operator/task text is preserved. Graphs without opt-in retain their original prompt and operator messages. See [composition, budgets and failure behavior](instructions.md).
+`TurnInput.instructions` is an optional immutable manifest (see [schema](../schemas/instructions.schema.json)). It is untrusted data, never permissions. The Go SDK retains it in `TurnInput.Instructions`. Opted-in guidance precedes the original node prompt; operator/task text is preserved. Graphs without opt-in retain their original prompt and operator messages. See [composition, budgets and failure behavior](instructions.md).
 
 Progressive repository guidance requires a supporting runtime. The native
 runtime handles execution-bound skill selection and adds activated guidance
 at its assigned precedence. Its in-process selector is absent from the HTTP
 protocol and callback API. An enabled graph using an incompatible runtime
-fails before dispatch with an explicit compatibility outcome. Existing
-external and Python turns keep the legacy instruction contract when
+fails before dispatch with an explicit compatibility outcome. External turns keep the legacy instruction contract when
 repository guidance is disabled.
 
 ### Yielding for durable human review
@@ -209,8 +208,7 @@ repository guidance is disabled.
 `ToolResult.yield` is an optional boolean. When true, the runtime must finish its
 current turn immediately, without more tools/model calls, completion signals or
 outputs. Native runtime implements this directly; external runtimes should honor
-it. The Python SDK exposes the wire field as `ToolResult.yield_turn`; custom
-runtime loops must check it and return without further work. This field does not
+it. The Go client returns `protocol.ErrYield` and refuses subsequent callbacks. Custom runtime loops must end the turn on a yield. This field does not
 automatically interrupt an arbitrary framework loop. The engine independently rejects subsequent callbacks and discards outputs
 from that turn, including outputs submitted before the gate. It acknowledges the
 input and persists the pending review without holding a runtime request open.

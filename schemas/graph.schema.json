@@ -155,7 +155,7 @@
       "type": "object", "additionalProperties": false,
       "properties": {
         "kind": {"enum": ["native", "external", "echo"], "description": "Default: defaults.runtime.kind, else native."},
-        "framework": {"type": "string", "description": "Informational for external runtimes: langgraph, autogen, crewai, custom."},
+        "framework": {"type": "string", "description": "Informational for external runtimes: for example, eino or custom."},
         "agent": {"type": "string", "description": "Agent name in the external runtime (default: node id)."},
         "endpoint": {"type": "string", "format": "uri", "description": "Already-running Runtime Protocol v1 server."},
         "command": {"type": "array", "items": {"type": "string"}, "description": "Process isolation: command started with PORT/HOST env."},

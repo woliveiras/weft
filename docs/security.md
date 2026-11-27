@@ -22,7 +22,7 @@ flowchart TB
     SB[Sandbox: process / docker]
   end
   subgraph AR["Agent runtimes — semi-trusted (no secrets)"]
-    R[External runtime: LangGraph / AutoGen / CrewAI / custom]
+    R[External runtime: Eino / custom]
   end
   subgraph Data["Stateful services — trusted network"]
     DB[(SQLite / PostgreSQL)]
@@ -132,7 +132,7 @@ production data. CI automation is outside the scope of this update.
 | Runtime callbacks | Per-execution token, constant-time compare, lifetime = turn | `engine/turn.go`, `api/internal.go` |
 | API | RBAC, static tokens + OIDC, CORS closed by default, security headers, body limit, panic recovery, no error details leaked on 500 | `api/` |
 | Secrets | Provider keys via `apiKeyEnv`/`apiKeyFile`; never forwarded to agents; scrubbed sandbox env | `llm`, `config`, `tools` |
-| Containers | Non-root users (uid 10001) for `weftd`, agents and sandbox; agents container read-only rootfs, all caps dropped, `no-new-privileges` | `Dockerfile`, `agents/Dockerfile`, compose |
+| Containers | Non-root users for `weftd` and sandbox (UID 10001) and agents (image UID 65532, Kubernetes pod UID 10001); agents container read-only rootfs, all caps dropped, `no-new-privileges` | `Dockerfile`, `agents/eino/Dockerfile`, compose |
 | Audit | Events for every tool call, denial, approval, operator message, lifecycle action, with actor and trace id | `events`, `domain/event.go` |
 
 ## Secrets handling

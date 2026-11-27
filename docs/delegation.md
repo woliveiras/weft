@@ -299,7 +299,7 @@ expires with the parent. Cancellation or callback disconnection propagates to th
 child; do not retry a request with an uncertain outcome. Review the recorded tree
 first. Idempotent request keys remain future work.
 
-Python agents can call `ctx.delegate(objective, template="analysis")`. Configure
+Go agents call `client.Tool(ctx, "delegation.request", map[string]string{"template": "analysis", "objective": objective})`. Configure
 the callback timeout to cover the installation's approval/child duration and keep
 the parent turn deadline consistent. The helper does not retry or bypass grants.
 Gateway model calls and delegated children share the root reservation ledger.
@@ -308,6 +308,6 @@ ledger. Provider cancellation and monetary guarantees retain the existing limits
 
 The SDK no longer reports gateway model usage or gateway tool attempts again as
 runtime-local totals. Returned chat usage remains available to the agent;
-`ctx.add_usage` is reserved for genuinely runtime-local work. This aligns with the
+`protocol.Usage.Add` is reserved for genuinely runtime-local work. This aligns with the
 Runtime Protocol contract and avoids double-counting existing external callbacks.
 Historical totals are not rewritten.

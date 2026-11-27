@@ -49,14 +49,11 @@ weft/
 │       ├── app/                composition root (wires config to adapters)
 │       └── deps/               dependency pinning (build tag, never compiled)
 │
-├── sdk/python/                 Python Agent SDK `weft` (stdlib only)
-│   ├── weft/                types, context, agent base, server, callback client, testing harness
-│   │   └── adapters/           LangGraph, AutoGen, CrewAI adapters (lazy imports)
-│   └── tests/
-├── agents/                     example agents (planner, researcher, developer, reviewer, qa)
-│   ├── weft_agents/
-│   ├── tests/
-│   └── Dockerfile
+├── agents/eino/                Go module and image for the external Eino runtime
+│   ├── cmd/weft-eino-agent/     compiles and registers bundled agents
+│   ├── protocol/               Protocol v1 handler, callback client and protocoltest
+│   ├── factory/                planner, researcher, developer, reviewer and QA
+│   └── summary/                document summary agent
 ├── web/                        React + TypeScript console (Vite, @xyflow/react)
 │   └── src/{api,components,hooks,mock}
 │

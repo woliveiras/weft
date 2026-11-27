@@ -164,7 +164,7 @@ setting or file that implements it.
       admission (Kyverno/Gatekeeper/Connaisseur).
 - [ ] Deploy by **digest**, not tag; mirror third-party images (NATS,
       PostgreSQL, observability) into your registry.
-- [ ] Pin Python agent dependencies and model versions; record the model in
+- [ ] Pin the Go agent module dependencies and model versions; record the model in
       graph documents (`model.name`) so changes are reviewed.
 
 ## Capacity and resilience testing

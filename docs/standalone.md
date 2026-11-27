@@ -108,7 +108,7 @@ The developer initially writes only `src/**` and `tests/**`; review grants for y
 project. QA has read-only tools and explicitly reports checks that still need human
 execution. It does not claim tests passed. A human approval gates the final review
 handoff. No agent receives Git write or shell permission in this default template;
-commits and pushes remain manual. The Docker/Python example is unchanged.
+commits and pushes remain manual. The separate Compose example runs the external Eino factory.
 
 For a task using this workflow, select the registered project and Software Factory.
 New task suggests entry `planner`, input channel `requests`, message type

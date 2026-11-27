@@ -32,7 +32,7 @@ guides; `make test` alone does not exercise all sandbox boundaries.
 
 | Command | Coverage |
 |---|---|
-| `make test` | Go unit/integration suites, Python SDK and agent tests, console type-check and tests |
+| `make test` | Go controller, SDK and Eino agent unit/integration suites, console type-check and tests |
 | `make lint` | Go formatting and vet |
 | `make build` | weftd, weft and weft-egress binaries |
 | `make test-e2e` | Deterministic Chromium journeys, fixture tests, E2E type-check and console build |

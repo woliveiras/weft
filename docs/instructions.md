@@ -265,7 +265,7 @@ reaching the model.
 Runtime Protocol v1 carries optional `instructions` as inert manifest data;
 `prompt` contains composed optional guidance followed by the original agent
 prompt, and operator messages remain in their existing fields/system context.
-The Python SDK exposes `TurnInput.instructions`. Models/runtimes do not receive
+The Go SDK exposes `TurnInput.Instructions`. Models/runtimes do not receive
 new capabilities, environment variables or credentials through this mechanism.
 `execution.instructions.loaded` reports counts and remaining budget with graph,
 node and execution correlation; normal execution failure events record load

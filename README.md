@@ -28,7 +28,7 @@ production blockers.
 | **Tool permissions** | Default-deny capability grants (`filesystem.read`, `shell.exec`, `git.write`, `http.fetch`, …) narrowed by paths, commands, hosts and rate limits; optional per-tool human approval. Enforced in a gateway the agent cannot bypass. |
 | **Isolation** | Local process execution (same OS permissions as the platform user), Docker sandbox per replica (no network by default), Kubernetes deployment; per-replica git worktrees. See [execution modes and security](#execution-modes-and-security). |
 | **Persistence & recovery** | Graphs, versions, executions, messages, approvals, state, events and leases are stored in SQLite / PostgreSQL / filesystem. Unacked messages are redelivered; a crashed instance's replicas are taken over when its leases expire. |
-| **Pluggable everything** | Brokers: NATS JetStream (default), Redis Streams, RabbitMQ, Kafka, filesystem, memory. Storage: SQLite, PostgreSQL, filesystem. Models: Ollama, vLLM, OpenAI-compatible, Anthropic-compatible, OpenRouter, HuggingFace TGI, offline mock. Runtimes: native Go agent, echo, external (LangGraph, AutoGen, CrewAI, custom — any language). |
+| **Pluggable everything** | Brokers: NATS JetStream (default), Redis Streams, RabbitMQ, Kafka, filesystem, memory. Storage: SQLite, PostgreSQL, filesystem. Models: Ollama, vLLM, OpenAI-compatible, Anthropic-compatible, OpenRouter, HuggingFace TGI, offline mock. Runtimes: native Go/Eino agents, echo and external agents using Runtime Protocol v1 in any language. |
 | **Observability** | Prometheus metrics, OpenTelemetry traces that follow a message across agents and brokers, OTLP logs, Grafana dashboard and alerts, full message history with causal chains, live event stream, graph visualisation. |
 | **Human in the loop** | Approval gates on channels, turns, outputs and tools; agents can ask a human a question; pause/resume of graphs and nodes; operator chat with running agents; message injection. |
 | **Workspace inspection** | Browse graph workspaces and read agent-produced files in the console; user-side workspace editing and uploads are not exposed. |
@@ -71,7 +71,7 @@ and [C4 diagrams](docs/diagrams/c4.md) for component boundaries and deployment v
 ## Repository layout
 
 See the [repository map](docs/folder-structure.md) for the Go server, React
-console, Python SDK, example agents, deployment files and specifications.
+console, Go agent SDK, example agents, deployment files and specifications.
 
 ## Documentation
 

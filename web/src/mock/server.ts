@@ -54,7 +54,7 @@ const softwareFactory: Graph = {
       {
         id: 'researcher',
         name: 'Researcher',
-        runtime: { kind: 'external', framework: 'langgraph', agent: 'researcher' },
+        runtime: { kind: 'external', framework: 'eino', agent: 'researcher' },
         model: { provider: 'local-ollama', name: 'llama3.1:8b' },
         prompt: 'Answer research questions and write notes into research/.',
         tools: ['filesystem.read', 'filesystem.write', { name: 'http.fetch', hosts: ['*.wikipedia.org'] }],

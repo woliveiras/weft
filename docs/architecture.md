@@ -95,7 +95,7 @@ describe the target component view and distinguish proposals from implemented AP
 | **LLM provider agnostic** | `llm.Provider` has three methods (`Name`, `Chat`, `Models`). A new backend is one `RegisterPlugin` call with its manifest; administrators then enable the plugin and configure instances in the console. Agents never hold model credentials; external agents call the platform's `/llm/chat` callback. |
 | **Storage independent** | One `storage.Store` interface with filesystem, SQLite and PostgreSQL adapters. All three pass the same conformance suite (`storage/conformance`). |
 | **Queue independent** | One `queue.Broker` interface with memory, filesystem, NATS JetStream (default), Redis Streams, RabbitMQ and Kafka adapters. All pass `queue/conformance`, and the four networked adapters were run live against real servers. |
-| **Runtime independent** | The engine owns the loop. A `Runtime` only turns `TurnInput` into `TurnResult`. LangGraph, AutoGen, CrewAI and custom code plug in through Runtime Protocol v1 (`sdk/python/weft/adapters`). |
+| **Runtime independent** | The engine owns the loop. A `Runtime` only turns `TurnInput` into `TurnResult`. Bundled Eino agents and independently supplied agents plug in through Runtime Protocol v1. |
 | **Declarative and recoverable** | Desired state (graph, node overrides, replica counts) lives in the store, and a reconciler converges reality onto it. Every instance is stateless apart from the replicas it is currently running. |
 
 ## 4. System overview
@@ -118,7 +118,7 @@ flowchart LR
   end
   subgraph runtimes[Agent runtimes]
     NAT[native - in process]
-    PY[external - Python SDK<br/>LangGraph · AutoGen · CrewAI · custom]
+    PY[external - Go/Eino service<br/>or any Protocol v1 runtime]
   end
   Q[(Broker<br/>NATS · Redis · RabbitMQ · Kafka · fs)]
   S[(Store<br/>PostgreSQL · SQLite · fs)]
@@ -139,7 +139,7 @@ flowchart LR
   weftd -. OTLP / metrics .-> OBS
 ```
 
-There is one binary, `weftd` (`cmd/weftd`), which contains the API, the engine and both gateways. Commands of docker-isolated agents run in containers on `sandbox-daemon`, a Docker daemon dedicated to Weft (see [sandbox-runtime.md](sandbox-runtime.md)). You scale it horizontally by running several instances against the same store and broker. Python agents run in a separate process or container (`agents/`) and hold no credentials.
+There is one binary, `weftd` (`cmd/weftd`), which contains the API, the engine and both gateways. Commands of docker-isolated agents run in containers on `sandbox-daemon`, a Docker daemon dedicated to Weft (see [sandbox-runtime.md](sandbox-runtime.md)). You scale it horizontally by running several instances against the same store and broker. Bundled external agents run in a separate process or container (`agents/eino/`). Weft holds provider credentials and binds each callback token to one execution.
 
 ## 5. Subsystems
 
@@ -237,7 +237,7 @@ boundary. [Runtime Protocol v1](runtime-protocol.md) defines the external wire c
 | `external` | `runtime/external`: `POST {endpoint}/v1/turn` (Runtime Protocol v1). The endpoint is either preconfigured (compose service, Kubernetes Service), a child process (`command`, process isolation), or a container (`image`, docker isolation). Launched runtimes are shared per node and reference-counted. | The agent reaches the platform only through `callback.url` with a token scoped to one execution. |
 | `echo` | `runtime/echo`: forwards inputs to outputs; a source node emits `tick`. | Zero-cost topology testing. Config keys: `type`, `fail`, `stopAfter`. |
 
-The Python SDK (`sdk/python/weft`) implements the server side of the protocol using only the standard library. Its adapters are `LangGraphAgent`, `AutoGenAgent` and `CrewAIAgent`, imported lazily. Example agents live in `agents/weft_agents`.
+The Go SDK implements the HTTP handler and execution-bound callback client. Its test harness runs a real turn against a fixture gateway. The bundled factory compiles each role at startup. [SDK and examples](../agents/eino/README.md)
 
 **Trade-offs and decisions**
 

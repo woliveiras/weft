@@ -596,7 +596,7 @@ feasible `make test`, `make lint` and `make build`. Docker supplies the default
 Go/web build toolchain, and live brokers are opt-in. Run `make test-e2e` (local
 Go, Node, Git and Playwright Chromium) against its disposable backend. Include
 a fixture that supports restart on the same storage. Use `make test-native-browser`
-and `make test-native-upgrade` for the native profile. Use the existing
+and `make test-native-recovery` for the native profile. Use the existing
 daemon-specific or live provider targets only when needed and authorized.
 Test review follows spec approval and precedes implementation review. Record
 durable evidence when each phase is exercised and retain follow-up qualification

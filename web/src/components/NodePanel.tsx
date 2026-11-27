@@ -842,10 +842,10 @@ export function AgentEditor({
         </HelpField>
         {runtime.kind === 'external' && (
           <>
-            <HelpField label={"Framework"} help={"An optional label for the external adapter, such as langgraph or custom. It identifies the adapter implementation; choose an adapter that speaks the Weft Runtime Protocol."}>
+            <HelpField label={"Framework"} help={"An optional label for the external adapter, such as eino or custom. It identifies the adapter implementation; choose an adapter that speaks the Weft Runtime Protocol."}>
               <input
                 value={node.runtime?.framework ?? ''}
-                placeholder={defaults.runtime?.framework ?? 'langgraph'}
+                placeholder={defaults.runtime?.framework ?? 'eino'}
                 onChange={(event) => update({ runtime: { ...node.runtime, framework: event.target.value || undefined } })}
               />
             </HelpField>

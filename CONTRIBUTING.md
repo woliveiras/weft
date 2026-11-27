@@ -9,8 +9,7 @@ merged into core — put them behind one of the extension interfaces instead
 
 Install Git and Make. Docker with Compose is required for the container workflow:
 Go runs in a container through `scripts/go.sh`, and Compose starts the full stack.
-`make test` also requires local Python for the SDK, example agents and script
-tests. Console tests use the Dockerfile's Node.js/pnpm toolchain. These targets
+Console tests use the Dockerfile's Node.js/pnpm toolchain. These targets
 do not skip when their required tools are missing.
 
 ### Local toolchain versions
@@ -20,7 +19,6 @@ Use the following version lines to match the project's existing containers:
 | Tool | Development version | Source |
 | --- | --- | --- |
 | Go | Latest patch in 1.26 | [server/go.mod](server/go.mod) requires 1.26.0; [Dockerfile](Dockerfile) and [scripts/go.sh](scripts/go.sh) use `golang:1.26-alpine`. |
-| Python | Latest patch in 3.12 | [agents/Dockerfile](agents/Dockerfile) uses `python:3.12-slim`; the [SDK](sdk/python/pyproject.toml) supports Python 3.10+. |
 | Node.js | Latest patch in 22, at least 22.22.2 | [Dockerfile](Dockerfile) uses `node:22-alpine`; dependencies in [web/pnpm-lock.yaml](web/pnpm-lock.yaml) require 22.22.2 or newer within Node 22. |
 | pnpm | 10.33.4 (pinned in `packageManager`) | Use `pnpm install --frozen-lockfile` with the committed web lockfile. |
 
@@ -42,17 +40,11 @@ Add each plugin once; omit any already listed by `asdf plugin list`:
 
 ```bash
 asdf plugin add golang https://github.com/asdf-community/asdf-golang.git
-asdf plugin add python https://github.com/asdf-community/asdf-python.git
 asdf plugin add nodejs https://github.com/asdf-vm/asdf-nodejs.git
 ```
 
-The Python plugin builds from source. Install its platform-specific
-[build dependencies](https://github.com/asdf-community/asdf-python#install)
-before installing Python.
-
 ```bash
 asdf set golang latest:1.26
-asdf set python latest:3.12
 asdf set nodejs latest:22
 asdf install
 asdf current
@@ -69,14 +61,14 @@ and [shell setup](https://mise.jdx.dev/shells.html) first. For example, add
 to `~/.bashrc`, then open a new shell.
 
 ```bash
-mise use --pin go@1.26 python@3.12 node@22
+mise use --pin go@1.26 node@22
 mise current
 ```
 
 [`mise use --pin`](https://mise.jdx.dev/cli/use.html) installs the tools and
 records exact versions in `mise.toml`. Subsequent `mise install` calls reuse
 those versions. If you have not activated mise in your shell, run commands with
-`mise exec --`, for example `mise exec -- make test-python`.
+`mise exec --`, for example `mise exec -- make test`.
 
 Install the pinned package manager with `corepack enable && corepack install --global pnpm@10.33.4`
 (or `mise use --pin pnpm@10.33.4`).
@@ -87,7 +79,6 @@ From the repository root, check that your shell resolves the selected tools:
 
 ```bash
 go version
-python3 --version
 node --version
 pnpm --version
 git --version
@@ -100,7 +91,7 @@ Start Docker before running the container-backed targets:
 
 ```bash
 make build        # weftd + weft into server/bin
-make test         # Go, Python, web type-check and Vitest tests
+make test         # Go controller and agent tests, web type-check and Vitest tests
 make lint         # gofmt + go vet
 make up           # full stack via docker compose
 ```
@@ -113,11 +104,9 @@ must remain Alpine-based. Git is installed inside that development image, not
 on the host or in a project sandbox. For native Go development, run `go test ./...`, `go vet ./...`
 and `go build ./...` from `server/`; see
 [running without Docker](docs/getting-started.md#5-run-without-docker) for native
-binaries and startup instructions. `make test-python` runs locally without
-Docker; `make test-web` builds and runs the `web-source` Docker image. For local
+binaries and startup instructions. `make test-web` builds and runs the `web-source` Docker image. For local
 console checks, use the commands in the [web console guide](web/README.md).
-The Python tests use the standard library and the SDK source tree; no optional
-agent framework installation is required.
+Run `go test -race ./...` in `agents/eino/` for the agent and SDK suites.
 
 The shared SQLite API integration fixture validates its entire persisted log
 against `schemas/event.schema.json` at teardown, including dynamically named

@@ -13,7 +13,7 @@ is the only place that knows which concrete implementations exist.
 | Agent runtime | `runtime.Runtime` | `runtimes` map in `app.New` | engine tests |
 | Tool | `tools.Tool` | `tools.Registry.Register` | tools tests |
 | Command sandbox | `tools.Sandbox` + `engine.SandboxFactory` | `sandboxFactory` in `app.go` | — |
-| Agent in any language/framework | Runtime Protocol v1 (HTTP) | graph YAML (`runtime.kind: external`) | `sdk/python/tests` as reference |
+| Agent in any language/framework | Runtime Protocol v1 (HTTP) | graph YAML (`runtime.kind: external`) | [Go SDK test harness](../agents/eino/protocol/protocoltest) |
 
 ## Add a model provider
 
@@ -125,61 +125,13 @@ grants), `Chat` (LLM gateway, node's model), `Emit`, `StateGet/StatePut`,
 `runtimes` map in `app.New`. In most cases you do **not** need a new Go
 runtime: write an external agent instead (below).
 
-## Add a framework adapter (Python)
+## Write a Go agent
 
-`sdk/python/weft/adapters/` contains LangGraph, AutoGen and CrewAI
-adapters. Each is a subclass of `weft.Agent` that builds the framework
-object per turn and bridges three things: the model (a framework chat-model
-wrapper over `ctx.llm`), tools (framework tools wrapping `ctx.tools.call`,
-which enforces grants on the platform side), and outputs (`ctx.emit`).
+Implement a `protocol.Agent`. It receives a context, the turn input and a client bound to that execution. Use `Client.Chat` for the selected model, `Client.Tool` for granted operations, and `StateGet` and `StatePut` for state needed by a later turn. Return messages in `TurnResult.Emits`. Weft accounts for gateway calls and applies channel approvals when it publishes. Propagate callback errors and end the turn on `protocol.ErrYield`.
 
-```python
-from weft import Agent, serve
-from weft.adapters.langgraph import LangGraphAgent, weft_tools_for_langchain
+Compile the role at startup and register it by name with `protocol.NewHandler`, supplying the controller origins and the runtime secret configured for that service. In the workflow select `runtime.kind: external` and set `runtime.agent` and `runtime.endpoint` to the registered name and service address. The controller keeps provider credentials.
 
-def build(ctx):
-    from langgraph.graph import StateGraph, END
-    g = StateGraph(dict)
-    g.add_node("analyse", lambda s: {**s, "verdict": "approved"})
-    g.add_node("decide", lambda s: {**s, "emits": [{"type": "review.approved", "payload": {"ok": True}}],
-                                     "summary": "approved"})
-    g.add_edge("analyse", "decide"); g.add_edge("decide", END)
-    g.set_entry_point("analyse")
-    return g.compile()
-
-serve([LangGraphAgent("reviewer", build)], port=8000)
-```
-
-A new framework follows the same shape; import it lazily so the SDK stays
-dependency-free (`weft.adapters.require`).
-
-## Write an agent (Python SDK)
-
-```python
-from weft import Agent, serve
-
-class Summariser(Agent):
-    name = "summariser"
-
-    def turn(self, ctx):
-        for m in ctx.inputs:
-            text = ctx.llm.complete(f"Summarise:\n{m.payload}")
-            ctx.tools.call("filesystem.write", path=f"summaries/{m.id}.md", content=text)
-            ctx.emit("summary.ready", {"source": m.id, "summary": text})
-        return f"summarised {len(ctx.inputs)} message(s)"
-
-serve([Summariser()], port=8000)
-```
-
-```yaml
-nodes:
-  - id: summariser
-    runtime: {kind: external, agent: summariser, endpoint: http://summariser:8000}
-    tools: [{name: filesystem.write, paths: ["summaries/**"]}]
-```
-
-`weft.testing` provides an in-memory fake platform to unit-test agents
-(scripted LLM replies, granted/denied tools, recorded emits).
+For an executable example, see the [summary workflow](../examples/graphs/eino-summary.yaml), [agent implementation](../agents/eino/summary) and [service registration](../agents/eino/cmd/weft-eino-agent/main.go). In a Go test, pass the role and a fixture HTTP gateway to `protocoltest.Run` to exercise the production turn handler, authorized or denied callbacks, and returned messages. [Test harness](../agents/eino/protocol/protocoltest)
 
 ## Write an agent in any other language
 
@@ -213,7 +165,4 @@ apply to ordinary tool grants.
 Implement the [sandbox interface](../server/internal/tools/tools.go).
 
 Return it from the `engine.SandboxFactory` in `app.go`, keyed on
-`spec.Node.Isolation.Mode`. A Kubernetes sandbox would create one pod per
-replica (workspace PVC mounted, restricted security context, optionally a
-gVisor/Kata `runtimeClassName`) and implement `Exec` via the pod `exec`
-subresource.
+`spec.Node.Isolation.Mode`. The Kubernetes implementation provisions a command pod per replica in the sandbox namespace and invokes the pod `exec` subresource. See the [installation overlay](../deploy/kubernetes-sandboxes/README.md) for storage and permissions.

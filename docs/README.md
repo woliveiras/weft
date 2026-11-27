@@ -21,7 +21,7 @@ should use [Contributing](../CONTRIBUTING.md) for toolchains and checks.
 | Configure models and budgets | [Model setup](getting-started.md#3-use-a-real-model), [cost control](cost-control.md), [Provider qualification with Eino](provider-eino-validation.md) |
 | Connect MCP services | [Connections and permissions](mcp.md), [integration contracts](mcp-integrations.md), [template candidates](mcp-templates.md), [Atlassian and Bitbucket setup](atlassian-bitbucket-setup.md) |
 | Understand native coding and evaluations | [Native runtime](native-coding-runtime.md), [evaluation specification and evidence](../specs/runtime-and-delivery/coding-evaluation-and-model-benchmarks/spec.md) |
-| Extend Weft | [Extension guide](extensibility.md), [Python SDK](../sdk/python/README.md), [example agents](../agents/README.md), [web console](../web/README.md) |
+| Extend Weft | [Extension guide](extensibility.md), [Go agent SDK](../agents/eino/README.md), [example agents](../agents/README.md), [web console](../web/README.md) |
 | Work on visual identity | [Brand assets](brand/README.md), [brand guidelines](brand/brand-guidelines.md) |
 
 ## Architecture and contracts

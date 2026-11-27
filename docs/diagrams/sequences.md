@@ -47,7 +47,7 @@ sequenceDiagram
   end
 ```
 
-## 2. External (Python) agent turn with callbacks
+## 2. External (Go/Eino) agent turn with callbacks
 
 ```mermaid
 sequenceDiagram
@@ -55,7 +55,7 @@ sequenceDiagram
   participant R as Replica
   participant X as execRegistry
   participant EXT as runtime/external
-  participant PY as Python agent (weft.serve)
+  participant PY as Go agent (protocol.NewHandler)
   participant CB as /internal/v1/executions/{id}
   participant TG as Tool gateway
   participant LG as LLM registry

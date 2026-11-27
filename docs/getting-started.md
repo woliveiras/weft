@@ -142,7 +142,7 @@ Until a provider is usable, **New task** explains how to enable one.
 For development without any model, start the server with
 `WEFT_DEV_MOCK=true` (or `llm.devMock: true`): it adds the deterministic,
 offline `mock` plugin with a read-only `mock` provider. Every agent handles it
-(the Python agents fall back to heuristics).
+(the Go/Eino agents fall back to heuristics).
 
 ### From the browser
 
@@ -422,9 +422,9 @@ Weft's services or your network. Details, reset and troubleshooting:
 
 ## 5. Run without Docker
 
-You need Go 1.26+, Python 3.10+, git and (for the console) Node 22.22.2+
+You need Go 1.26+, git and (for the console) Node 22.22.2+
 within the Node 22 line. For development aligned with the container versions,
-use Go 1.26, Python 3.12 and Node 22; see the
+use Go 1.26 and Node 22; see the
 [asdf or mise setup instructions](../CONTRIBUTING.md#local-toolchain-versions).
 
 ```bash
@@ -446,15 +446,15 @@ Data goes to `server/data/` (`weft.db`, `queues/`, `workspaces/`).
 For local-only experiments `WEFT_AUTH_DISABLED=true` turns authentication off
 (never on a shared host).
 
-Python agents run as a separate process:
+Start the external Eino service from the repository root in a second terminal. Set the same runtime shared secret as the controller when configured.
 
 ```bash
-PYTHONPATH=sdk/python:agents PORT=8000 python3 -m weft_agents
+cd agents/eino
+WEFT_URL=http://127.0.0.1:8080 PORT=8000 go run ./cmd/weft-eino-agent
 ```
 
 The example graph addresses them as `http://agents:8000`; when running locally,
-change `spec.defaults.runtime.endpoint` to `http://127.0.0.1:8000` (or add
-`127.0.0.1 agents` to `/etc/hosts`).
+set `spec.defaults.runtime.endpoint` to `http://127.0.0.1:8000` and configure the controller’s advertised internal URL to the same origin used in `WEFT_URL`. The shipped QA node uses Docker isolation and requires the dedicated sandbox daemon. For a self-contained native installation, use the seeded native factory described in the [standalone guide](standalone.md).
 
 `scripts/go.sh` runs the Go toolchain in a container if you prefer not to
 install Go (it produces Linux binaries, suitable for containers and CI).

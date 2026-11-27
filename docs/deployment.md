@@ -222,8 +222,7 @@ The control plane stores Chat transcripts, session indexes, review receipts and 
 2. Model weights: `ollama pull <model>` into the `ollama-models` volume and
    export it, or download HF weights (`huggingface-cli download`) into the
    `hf-models` volume and run TGI with `HF_HUB_OFFLINE=1`.
-3. Python agent dependencies are baked into the agents image (stdlib only by
-   default; `EXTRAS=langgraph` at build time when needed).
+3. The agents image contains the compiled Go/Eino service. The default sandbox includes the Go toolchain for offline factory tests.
 4. The platform makes no outbound calls by default: the mock provider needs
    no network, Grafana analytics are disabled in compose, and `http.fetch`
    reaches only hosts that graphs explicitly grant.
