@@ -86,6 +86,12 @@ recognizable target beside the action in the composer. A category or search
 term alone cannot select a resource. Apply the same selection rule to other
 actions that need an existing target.
 
+In the task picker, lead with the title and state. Show the project reference
+when available and use an ID suffix that distinguishes the visible choices.
+Keep the search field visible while scrolling results. Searching by full ID
+and reviewing that ID in the composer allow an exact choice even for tasks
+with identical titles and states.
+
 Show distinct outcomes for zero matches, partial results and a failed lookup.
 Offer a way to refine the search or retry. Preserve the text and current
 branch on failure. If a selected resource disappears or access changes
@@ -102,7 +108,9 @@ session, transcript entry, model call, watch or domain change. Unsent
 choices have the same tab, draft and owner boundaries as unsent text.
 
 A complete intent such as **Follow a task** plus the chosen task can be sent
-without additional prose. **Send**, Ctrl+Enter and Command+Enter submit the
+without additional prose. A prepared follow uses **Send and follow**. A
+lookup or free-text request uses **Send**. The button and the shortcuts
+Ctrl+Enter and Command+Enter submit the
 same visible intent, exact target when applicable, and optional user text.
 One accepted submission produces one user turn. Retrying uncertain delivery
 uses the existing request key. A submitted change request follows TASK-012

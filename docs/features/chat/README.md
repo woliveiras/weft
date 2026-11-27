@@ -19,13 +19,17 @@ In a new chat with a configured Chat model, choose **Tasks**, **Agents** or
 **Connections**, **Models** and **Skills & instructions**. Available choices
 follow your role. Open **Administration** from the main navigation.
 
-To follow a task, choose **Tasks → Follow a task**, search by title or ID, and
-select a result. Compare the IDs and states when tasks have the same name.
-The selection appears above the field. Add any notes and select **Send**, or
-use the Send shortcut. Browsing reads the catalogue without creating a chat
-or starting a watch. **Back**, **Change selection** and **Clear selection**
-let you revise the request and keep your own text. You can also type a request
-while exploring an incomplete branch.
+Choose **Tasks → Follow a task** and search by task name or paste a full task
+ID. Each result shows the title, current state and a short ID. A project
+reference appears when available. Scroll the results to compare tasks with
+the same title. If the list shows only part of the inventory, refine the
+search to see more specific matches.
+
+Select a task to review its full ID above the message field. **Change task**
+returns to the results with your notes intact. Choose **Send and follow**
+or use the Send shortcut to start watching. **Find a task** uses the same
+picker and sends a lookup with **Send**. You can also clear the selection or
+send your own text while exploring an incomplete branch.
 
 An exact selection is recorded as `/follow <task-id>` or
 `/lookup <area> <id>`. Additional lines stay with the saved request.
