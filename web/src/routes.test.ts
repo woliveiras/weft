@@ -19,7 +19,7 @@ describe('installation destination routes', () => {
     }
   });
   it('round-trips project creation and import destinations', () => {
-    for (const hash of ['#/projects', '#/projects/new', '#/projects/import']) {
+    for (const hash of ['#/projects', '#/projects/new', '#/projects/import', '#/projects?project=proj_selected']) {
       expect(routeHash(parseRoute(hash))).toBe(hash);
     }
     expect(parseRoute('#/projects/unknown')).toEqual({ view: 'projects' });

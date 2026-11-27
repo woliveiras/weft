@@ -75,3 +75,14 @@ it('requires a fresh path review after the repository path changes', async () =>
  await userEvent.type(screen.getByLabelText('Repository path'), '-changed');
  expect(submit.disabled).toBe(true);
 });
+
+it('opens the selected project preference and keeps other projects outside its scope',async()=>{
+  const projects=['first','second'].map(id=>({id,name:'Same name',revision:1,path:'/fixture/'+id,head:'abc'}));
+  fakeApi({'GET /api/v1/projects':()=>projects});
+  render(<ProjectsPage canEdit selectedId="second"/>);
+  const table=await screen.findByRole('table',{name:'Registered projects'});
+  expect(within(table).queryByText('first')).toBeNull();
+  expect(within(table).getByText('second')).toBeTruthy();
+  expect(within(table).getByRole('region',{name:'Execution preference for Same name'}).closest('details')?.open).toBe(true);
+  expect(screen.getByRole('link',{name:'Show all projects'}).getAttribute('href')).toBe('#/projects');
+});

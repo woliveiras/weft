@@ -14,10 +14,11 @@ const environmentNames = {
   sandbox: 'Sandbox',
 };
 
-export function ProjectsPage({ canEdit, nativeProfile = false, mode }: {
+export function ProjectsPage({ canEdit, nativeProfile = false, mode, selectedId }: {
   canEdit: boolean;
   nativeProfile?: boolean;
   mode?: ProjectView;
+  selectedId?: string;
 }) {
   const list = useAsync(api.projects, []);
   const [search, setSearch] = useState('');
@@ -25,7 +26,7 @@ export function ProjectsPage({ canEdit, nativeProfile = false, mode }: {
   const searchField = useRef<HTMLInputElement>(null);
   const query = search.trim().toLowerCase();
   const matches = (list.data ?? []).filter(project =>
-    (!environment || (project.executionMode ?? 'workflow') === environment) &&
+    (!selectedId || project.id === selectedId) && (!environment || (project.executionMode ?? 'workflow') === environment) &&
     [project.name, project.id, project.path, project.repositoryUrl ?? '', project.head]
       .some(value => value.toLowerCase().includes(query)),
   );
@@ -55,6 +56,7 @@ export function ProjectsPage({ canEdit, nativeProfile = false, mode }: {
         <div><h2>Registered repositories</h2><p className="muted">Each project pins a Git commit and can suggest an execution environment for new tasks.</p></div>
         <Btn disabled={list.loading} onClick={() => void list.reload()}>Refresh projects</Btn>
       </header>
+      {selectedId && <a href="#/projects">Show all projects</a>}
       <div className="connection-filter-fields">
         <label>Search projects<input ref={searchField} type="search" placeholder="Name, repository, ID or commit"
           value={search} onChange={event => setSearch(event.target.value)} /></label>
@@ -88,7 +90,7 @@ export function ProjectsPage({ canEdit, nativeProfile = false, mode }: {
             </td>
             <td><code>{project.head}</code></td>
             <td>{environmentNames[project.executionMode ?? 'workflow']}
-              <details className="project-preference">
+              <details className="project-preference" open={project.id === selectedId || undefined}>
                 <summary>{canEdit ? 'Configure preference' : 'View preference'}</summary>
                 <ProjectPreference key={`${project.id}:${project.revision}`} project={project} canEdit={canEdit}
                   nativeProfile={nativeProfile} onSaved={() => void list.reload()} />

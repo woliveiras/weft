@@ -44,7 +44,7 @@ type Route =
   | { view: 'graphs'; create?:boolean }
   | { view: 'agents'; agentId?: string; create?: boolean }
   | { view: 'activity'; activity: ActivityRouteState }
-  | { view: 'projects'; projectView?: ProjectView }
+  | { view: 'projects'; projectId?:string; projectView?: ProjectView }
   | { view: 'tasks'; taskId?: string; create?: boolean; entry?:TaskEntryContext; review?:boolean }
   | { view: 'approvals' }
   | { view: 'connections'; connectionID?: string; connectionTab?: ConnectionTab; create?: boolean; sourceControlCreate?: boolean; issueEdition?: 'jira'; issueConnectionCreate?: boolean; issueConnectionID?: string; issueTransitions?: boolean; issueMapping?: {name?: string; create?: boolean}; history?: boolean; connectQuery?: string; oauthQuery?: string }
@@ -79,10 +79,12 @@ function recognizeRoute(hash: string): Route {
   if (parts[0] === 'agents') {
     return {view:'agents', ...(parts[1] === 'new' ? {create:true} : parts[1] ? {agentId:decodeURIComponent(parts[1])} : {})};
   }
-  if (parts[0] === 'projects') return {
-    view: 'projects',
-    ...(parts[1] === 'new' ? { projectView: 'register' as const } : parts[1] === 'import' ? { projectView: 'import' as const } : {}),
-  };
+  if (parts[0] === 'projects') {
+    if (parts[1] === 'new') return {view:'projects', projectView:'register'};
+    if (parts[1] === 'import') return {view:'projects', projectView:'import'};
+    const projectId = !parts[1] && new URLSearchParams(qs).get('project');
+    return projectId ? {view:'projects', projectId} : {view:'projects'};
+  }
   if (parts[0] === 'graphs' && parts[1] === 'new') return {view:'graphs',create:true};
   if (parts[0] === 'graphs') return {view:'graphs'};
   if (parts[0] === 'tasks') {
@@ -137,7 +139,11 @@ export function routeHash(r: Route): string {
   if (r.view === 'agents') {
     return r.create ? '#/agents/new' : r.agentId ? `#/agents/${encodeURIComponent(r.agentId)}` : '#/agents';
   }
-  if (r.view === 'projects') return r.projectView === 'register' ? '#/projects/new' : r.projectView === 'import' ? '#/projects/import' : '#/projects';
+  if (r.view === 'projects') {
+    if (r.projectView === 'register') return '#/projects/new';
+    if (r.projectView === 'import') return '#/projects/import';
+    return r.projectId ? '#/projects?project='+encodeURIComponent(r.projectId) : '#/projects';
+  }
   if (r.view === 'graphs'&&r.create) return '#/graphs/new';
   if (r.view === 'tasks') return r.create ? taskCreateLink(r.entry) : r.taskId ? `#/tasks/${encodeURIComponent(r.taskId)}${r.review?'?review=1':''}` : '#/tasks';
   if (r.view === 'approvals') return '#/approvals';
@@ -306,7 +312,7 @@ function Shell() {
           {returnTask&&<aside className="card task-return-context" aria-label="Task configuration context"><a href={returnTask}>Return to saved task</a><p>Configuration changes do not start the task. Return to review its requirements and authorization.</p></aside>}
           {ownedTask && route.view === 'graph' && <TaskExecutionPage key={route.id} graphId={route.id} tab={route.tab} executionId={route.executionId} section={route.runSection}/>}
           {route.view === 'activity' && <ActivityPage state={route.activity} onChange={activity => go({ view: 'activity', activity })} />}
-          {route.view === 'projects' && <ProjectsPage key={route.projectView ?? 'list'} mode={route.projectView} nativeProfile={info.data?.nativeProfile===true} canEdit={info.data?.identity?.role==='admin'}/>}
+          {route.view === 'projects' && <ProjectsPage key={routeHash(route)} selectedId={route.projectId} mode={route.projectView} nativeProfile={info.data?.nativeProfile===true} canEdit={info.data?.identity?.role==='admin'}/>}
           {route.view === 'tasks' && <TasksPage key={route.taskId ?? (route.create ? 'new' : 'list')} id={route.taskId} create={route.create} entry={route.entry} reviewOnLoad={route.review} graphsLoading={graphs.loading} graphsError={graphs.error} onReloadGraphs={()=>void graphs.reload()} info={info.data} graphs={list}/>}
           {route.view==='graphs'&&route.create&&<WorkflowCreate canCreate={info.data?.identity?.role==='admin'} onDraftState={onConfigurationDraft} onCreated={summary=>{void graphs.reload();go({view:'graph',id:summary.graph.metadata.id,tab:'agent',agentId:summary.graph.spec.nodes[0]?.id});}} onCancel={()=>go({view:'graphs'})}/>}
           {route.view === 'graphs' && !route.create && (
