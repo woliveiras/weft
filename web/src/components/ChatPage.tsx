@@ -3,7 +3,7 @@ import { Search } from 'lucide-react';
 import { ChatSessionSearch } from './ChatSessionSearch';
 import { ChatMarkdown } from './ChatMarkdown';
 import { ChatActionGuide } from './ChatActionGuide';
-import { guideAction, guidedMessage, type GuideDraft } from './chatGuide';
+import { guideAction, guidedMessage, preparedActionLabel, type GuideDraft } from './chatGuide';
 import { ChatComposer } from './ChatComposer';
 import { ChatModelSection } from './ChatModelSection';
 import { ChatSkillCard } from './ChatSkillCard';
@@ -330,7 +330,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
         onChange={next=>{setError(undefined);setDrafts(previous=>({...previous,[draftKey]:{text:draft,guide:next}}));}}/>}
       {tooLong && <p role="alert">Shorten the message to fit the selected action and details within 4096 bytes.</p>}
       {(!id || session) && !session?.archived && <ChatComposer key={draftKey} draft={draft}
-        sendLabel={action?.kind === 'pick' && action.follow && guide.target ? 'Send and follow' : undefined} detailsHint={action?.kind === 'prompt' ? action.detailsHint : undefined} hasContext={!!action && message !== draft}
+        preparedAction={preparedActionLabel(action, guide.target)} detailsHint={action?.kind === 'prompt' ? action.detailsHint : undefined} hasContext={!!action && message !== draft}
         onChange={text => setDrafts(previous => ({...previous,[draftKey]:{text,guide:entry?.guide}}))}
         onSend={() => void send()} disabled={!canSend || tooLong || sending || !!waiting}
         sending={!!entry?.submitting || !!waiting} admin={canCreateAgent} choicePending={session?.messages.at(-1)?.state === 'discovery'}/>}

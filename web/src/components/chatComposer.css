@@ -67,3 +67,6 @@
 .guide-resource-review .guide-heading { margin: 0 0 var(--space-2); color: var(--text-muted); font-size: .875rem; }
 .guide-resource-review > button { margin: var(--space-2) var(--space-2) 0 0; }
 .chat-page .guide-resource-review + .chat-composer { margin-top: 0; border-radius: 0 0 12px 12px; }
+
+.guide-add-details { background: transparent; color: var(--text-muted); padding: var(--space-2); border: 0; cursor: pointer; font: inherit; }
+.guide-add-details:hover { color: var(--text); text-decoration: underline; }

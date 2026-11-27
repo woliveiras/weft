@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Btn } from './common';
 import './chatComposer.css';
 
@@ -23,14 +23,19 @@ function suggestions(input: string, admin: boolean, choicePending: boolean): Sug
     .map(area => ({label:command+' '+area, value:command+' '+area+(command === '/find' || area === 'execution' ? ' ' : '')}));
 }
 
-export function ChatComposer({draft, hasContext = false, sendLabel = 'Send', detailsHint, onChange, onSend, disabled, sending, admin, choicePending}: {
-  draft:string; hasContext?:boolean; sendLabel?:string; detailsHint?:string; onChange:(draft:string)=>void; onSend:()=>void; disabled:boolean; sending:boolean; admin:boolean; choicePending:boolean;
+export function ChatComposer({draft, hasContext = false, preparedAction, detailsHint, onChange, onSend, disabled, sending, admin, choicePending}: {
+  draft:string; hasContext?:boolean; preparedAction?:string; detailsHint?:string; onChange:(draft:string)=>void; onSend:()=>void; disabled:boolean; sending:boolean; admin:boolean; choicePending:boolean;
 }) {
   const [focused,setFocused] = useState(false);
   const [dismissed,setDismissed] = useState(false);
   const [index,setIndex] = useState(0);
   const field = useRef<HTMLTextAreaElement>(null);
   const id = useId();
+  const [editingDetailsFor,setEditingDetailsFor] = useState<string>();
+  const compact = !!preparedAction && !draft && editingDetailsFor !== preparedAction;
+  useLayoutEffect(() => {
+    if (preparedAction && editingDetailsFor === preparedAction) field.current?.focus();
+  }, [editingDetailsFor,preparedAction]);
   const options = focused && !dismissed && !hasContext ? suggestions(draft,admin,choicePending) : [];
   const active = Math.min(index, options.length - 1);
   const canSend = !disabled && (hasContext || !!draft.trim());
@@ -45,7 +50,14 @@ export function ChatComposer({draft, hasContext = false, sendLabel = 'Send', det
     field.current?.focus();
   }
 
-  return <form className="chat-composer" aria-label="Compose message" onSubmit={event => {
+  return <form className="chat-composer" aria-label="Compose message" onKeyDownCapture={event => {
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (canSend && !event.repeat) event.currentTarget.requestSubmit();
+    }
+  }} onSubmit={event => {
     event.preventDefault();
     if (canSend) { setDismissed(true); onSend(); }
   }}>
@@ -56,18 +68,13 @@ export function ChatComposer({draft, hasContext = false, sendLabel = 'Send', det
       </li>)}
     </ul>}
     {detailsHint && <span className="small" id={id+'-hint'}>{detailsHint}</span>}
-    <textarea aria-describedby={detailsHint ? id+'-hint' : undefined} disabled={sending} ref={field} aria-label="Message" aria-autocomplete="list" aria-controls={options.length ? id : undefined}
+    <textarea hidden={compact} id={id+'-message'} aria-describedby={detailsHint ? id+'-hint' : undefined} disabled={sending} ref={field} aria-label="Message" aria-autocomplete="list" aria-controls={options.length ? id : undefined}
       aria-activedescendant={active >= 0 ? id+'-'+active : undefined} aria-keyshortcuts="Control+Enter Meta+Enter"
       placeholder={detailsHint ? undefined : hasContext ? "Add details (optional)" : "Ask Weft or type / for commands"} value={draft} rows={2} maxLength={4096}
       onChange={event => {onChange(event.target.value); setIndex(0); setDismissed(false);}}
       onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
       onKeyDown={event => {
         if (event.nativeEvent.isComposing || event.nativeEvent.keyCode===229) return;
-        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-          event.preventDefault();
-          if (canSend && !event.repeat) event.currentTarget.form?.requestSubmit();
-          return;
-        }
         if (!options.length) return;
         if (event.key === 'Escape') {event.preventDefault(); setDismissed(true);}
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -80,8 +87,9 @@ export function ChatComposer({draft, hasContext = false, sendLabel = 'Send', det
         }
       }}/>
     <div className="chat-composer-actions">
-      <span className="muted">{/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'} + Enter to send</span>
-      <Btn tone="primary" type="submit" disabled={!canSend}>{sending ? 'Sending…' : sendLabel}</Btn>
+      {compact ? <button type="button" className="guide-add-details" aria-controls={id+'-message'}
+        onClick={()=>setEditingDetailsFor(preparedAction)}>Add details</button> : <span className="muted">{/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'} + Enter to send</span>}
+      <Btn tone="primary" type="submit" disabled={!canSend}>{sending ? 'Sending…' : preparedAction ?? 'Send'}</Btn>
     </div>
   </form>;
 }

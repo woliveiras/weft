@@ -8,30 +8,30 @@ export type GuideAction = {
   label: string;
   admin?: boolean;
 } & (
-  | {kind: 'pick'; area: ChatPickerArea; follow?: boolean}
+  | {kind: 'pick'; area: ChatPickerArea; submitLabel: string; follow?: boolean}
   | {kind: 'project'; area: 'projects'}
-  | {kind: 'prompt'; prompt: string; command?: string; detailsHint?:string}
+  | {kind: 'prompt'; prompt: string; command?: string; detailsHint?:string; submitLabel?:string}
   | {kind: 'link'; href: string}
 );
 
 const actions: Record<ChatCategory, GuideAction[]> = {
   Tasks: [
-    {label:'Follow a task', kind:'pick', area:'tasks', follow:true},
-    {label:'Find a task', kind:'pick', area:'tasks'},
-    {label:'See running tasks', kind:'prompt', prompt:'List the tasks currently running.'},
+    {label:'Follow a task', submitLabel:'Send and follow', kind:'pick', area:'tasks', follow:true},
+    {label:'Find a task', submitLabel:'View task', kind:'pick', area:'tasks'},
+    {label:'See running tasks', submitLabel:'Show running tasks', kind:'prompt', prompt:'List the tasks currently running.'},
   ],
   Agents: [
-    {label:'Find a catalog agent', kind:'pick', area:'agents'},
+    {label:'Find a catalog agent', submitLabel:'View agent', kind:'pick', area:'agents'},
     {label:'Create a catalog agent', kind:'prompt', prompt:'Prepare a new catalog agent for review.', detailsHint:'What should the agent be called, and what should it do?', admin:true},
   ],
   Workflows: [
-    {label:'Find a workflow', kind:'pick', area:'workflows'},
-    {label:'See active workflows', kind:'prompt', prompt:'Which workflows are active?'},
+    {label:'Find a workflow', submitLabel:'View workflow', kind:'pick', area:'workflows'},
+    {label:'See active workflows', submitLabel:'Show active workflows', kind:'prompt', prompt:'Which workflows are active?'},
   ],
   Projects: [
     {label:'Open project registration', kind:'link', href:'#/projects/new', admin:true},
     {label:'Configure a project', kind:'project', area:'projects', admin:true},
-    {label:'Find a project', kind:'pick', area:'projects'},
+    {label:'Find a project', submitLabel:'View project', kind:'pick', area:'projects'},
   ],
   Connections: [
     {label:'Inspect MCP connections', kind:'prompt', command:'/inspect mcp', prompt:'Inspect configured MCP connections.'},
@@ -44,7 +44,7 @@ const actions: Record<ChatCategory, GuideAction[]> = {
     {label:'Open model settings', kind:'link', href:'#/models', admin:true},
   ],
   'Skills & instructions': [
-    {label:'Find a skill', kind:'pick', area:'skills'},
+    {label:'Find a skill', submitLabel:'View skill', kind:'pick', area:'skills'},
     {label:'Open Skills & instructions editor', kind:'link', href:'#/skills', admin:true},
   ],
 };
@@ -70,4 +70,9 @@ export function guidedMessage(action: GuideAction | undefined, target: ChatCandi
     return text;
   }
   return text.trim() ? prefix + '\n' + text : prefix;
+}
+
+export function preparedActionLabel(action:GuideAction | undefined, target:ChatCandidate | undefined) {
+  if (action?.kind === 'pick' && target) return action.submitLabel;
+  if (action?.kind === 'prompt' && !action.detailsHint) return action.submitLabel ?? action.label;
 }

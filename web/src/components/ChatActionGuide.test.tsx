@@ -24,7 +24,7 @@ it('shows the ordered categories and restores keyboard focus when navigating bac
   click('Models');
   expect(guide.queryByRole('link',{name:'Open model settings'})).toBeNull();
   click('View configured models');
-  expect(screen.getByRole('button',{name:'Send'})).toHaveProperty('disabled',false);
+  expect(screen.getByRole('button',{name:'View configured models'})).toHaveProperty('disabled',false);
   click('Back');
   expect(document.activeElement?.textContent).toBe('View configured models');
   click('Back');
@@ -72,7 +72,7 @@ it('distinguishes equal titles and ID suffixes and keeps lookup separate from fo
   await screen.findByRole('button',{name:'Release review Blocked …a123456'});
   click('Release review Failed …b123456');
   expect(screen.getByText('tsk_b123456')).toBeTruthy();
-  expect(screen.getByRole('button',{name:'Send'})).toHaveProperty('disabled',false);
+  expect(screen.getByRole('button',{name:'View task'})).toHaveProperty('disabled',false);
   expect(screen.queryByRole('button',{name:'Send and follow'})).toBeNull();
 });
 
@@ -97,7 +97,9 @@ it('restores the guided draft after a lost acknowledgement and retries with the 
   await screen.findByRole('button',{name:'Tasks'});
   click('Tasks');click('Follow a task');
   fireEvent.click(await screen.findByRole('button',{name:target.label}));
+  click('Add details');
   const field=screen.getByRole('textbox',{name:'Message'});
+  expect(document.activeElement).toBe(field);
   fireEvent.change(field,{target:{value:'Notify me'}});
   fireEvent.keyDown(field,{key:'Enter',ctrlKey:true});
   await screen.findByText('Reply lost');
@@ -142,4 +144,25 @@ it.each([
   expect(screen.queryByRole('searchbox')).toBeNull();
   click('Change '+noun);
   expect(await screen.findByRole('button',{name})).toBe(document.activeElement);
+});
+
+it.each([
+  ['Tasks','See running tasks','Show running tasks','List the tasks currently running.'],
+  ['Workflows','See active workflows','Show active workflows','Which workflows are active?'],
+  ['Connections','Inspect MCP connections','Inspect MCP connections','/inspect mcp'],
+  ['Connections','Inspect source control connections','Inspect source control connections','/inspect scm'],
+  ['Connections','Inspect issue connections','Inspect issue connections','/inspect issue-connections'],
+  ['Models','View configured models','View configured models','/inspect models'],
+])('runs the prepared %s action %s without typing',async(category,action,submit,expected)=>{
+  const backend=fakeApi({...ready,['POST '+sessions]:()=>apiError(503,'Reply lost','network')});
+  render(<ChatPage archived={false} onOpen={vi.fn()}/>);
+  await screen.findByRole('button',{name:'Tasks'});
+  if(category==='Connections' || category==='Models') click('Mais');
+  click(category);click(action);
+  expect(screen.queryByRole('textbox',{name:'Message'})).toBeNull();
+  expect(screen.getByRole('button',{name:'Add details'})).toBeTruthy();
+  expect(backend.find('POST',sessions)).toHaveLength(0);
+  click(submit);
+  await screen.findByText('Reply lost');
+  expect(backend.find('POST',sessions).map(call=>call.body)).toEqual([expect.objectContaining({text:expected})]);
 });

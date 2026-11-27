@@ -28,7 +28,9 @@ search to see more specific matches.
 Select a task to review its full ID above the message field. **Change task**
 returns to the results with your notes intact. Choose **Send and follow**
 or use the Send shortcut to start watching. **Find a task** uses the same
-picker and sends a lookup with **Send**. You can also clear the selection or
+picker and opens the result with **View task**. Agents, workflows, projects
+and skills use this picker too. When a selection completes a request,
+choose its named action or use **Add details** to include a note. You can also clear the selection or
 send your own text while exploring an incomplete branch.
 
 An exact selection is recorded as `/follow <task-id>` or

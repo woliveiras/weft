@@ -14,6 +14,7 @@ export function ChatActionGuide({draft, admin, onChange}: {
   const category = draft.category;
   const target = draft.target;
   const picking = action?.kind === 'pick' || action?.kind === 'project';
+  const readyPrompt = action?.kind === 'prompt' && !action.detailsHint;
 
   // Chat stays mounted in an Activity while a manual editor is open.
   useLayoutEffect(() => {
@@ -47,7 +48,7 @@ export function ChatActionGuide({draft, admin, onChange}: {
     return <button type="button" key={item} data-guide-focus={item}
       onClick={()=>change({category:item,more:moreCategories.some(c=>c===item)}, 'heading')}>{item}</button>;
   }
-  return <section ref={root} className={'chat-guide'+(picking ? target ? ' guide-resource-review' : ' guide-resource-search' : '')} aria-label="Chat actions"
+  return <section ref={root} className={'chat-guide'+(picking ? target ? ' guide-resource-review' : ' guide-resource-search' : readyPrompt ? ' guide-resource-review' : '')} aria-label="Chat actions"
     onKeyDown={event=>{
       if (event.key === 'Escape' && (category || draft.more)) {event.preventDefault();back();}
     }}>
@@ -63,7 +64,7 @@ export function ChatActionGuide({draft, admin, onChange}: {
         query={draft.query ?? ''} target={target} restoreId={lastCandidate.current} onBack={back}
         onQuery={query=>onChange({...draft,query})} onPick={target=>change({...draft,target},'heading')}/>
         : <div className="guide-heading">
-          <strong tabIndex={-1} data-guide-focus="heading">{action ? action.label : category}</strong>
+          <strong tabIndex={-1} data-guide-focus="heading">{readyPrompt ? action.prompt : action ? action.label : category}</strong>
           <button type="button" onClick={back}>Back</button>
         </div>}
       {!action && <div className="guide-pills">

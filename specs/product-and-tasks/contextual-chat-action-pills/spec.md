@@ -110,7 +110,9 @@ choices have the same tab, draft and owner boundaries as unsent text.
 
 A complete intent such as **Follow a task** plus the chosen task can be sent
 without additional prose. A prepared follow uses **Send and follow**. A
-lookup or free-text request uses **Send**. The button and the shortcuts
+lookup names the resource to view. A prepared inventory query shows the
+request and names the action on its submit button. **Add details** opens
+the optional note field. Free text uses **Send**. The button and the shortcuts
 Ctrl+Enter and Command+Enter submit the
 same visible intent, exact target when applicable, and optional user text.
 One accepted submission produces one user turn. Retrying uncertain delivery

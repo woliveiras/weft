@@ -1043,6 +1043,22 @@ test('prepares a guided catalog agent for review before creating its first versi
   expect((await (await request.get(path,{headers})).json()).versions).toHaveLength(1);
 });
 
+test('inspects models from a prepared action without typing a message',async({page,request})=>{
+  await selectFixtureModel(request);
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
+  await page.goto('/#/chat');
+  const guide=page.getByRole('region',{name:'Chat actions'});
+  await guide.getByRole('button',{name:'Mais'}).click();
+  await guide.getByRole('button',{name:'Models'}).click();
+  await guide.getByRole('button',{name:'View configured models'}).click();
+  await expect(guide.getByText('Which models are configured?')).toBeVisible();
+  await expect(page.getByRole('textbox',{name:'Message'})).toHaveCount(0);
+  await page.getByRole('form',{name:'Compose message'}).getByRole('button',{name:'View configured models'}).press('Control+Enter');
+  await expect(page).toHaveURL(/#\/chat\/[a-f0-9]{32}/);
+  const saved=await request.get('/api/v1/chat/sessions/'+page.url().split('/').at(-1),{headers:{Authorization:'Bearer e2e-viewer-token'}});
+  expect((await saved.json()).messages[0].text).toBe('/inspect models');
+});
+
 test('looks up catalog agents and workflows with the shared picker',async({page,request})=>{
   await selectFixtureModel(request);
   const name='Catalog · reviewer';
@@ -1064,7 +1080,8 @@ test('looks up catalog agents and workflows with the shared picker',async({page,
     const list=guide.getByRole('list',{name:'Matching resources'});
     await expect(list).toHaveCSS('scrollbar-width','none');
     await list.getByRole('button',{name:name+' Version 1 '+id}).click();
-    await page.getByRole('button',{name:'Send',exact:true}).click();
+    await expect(page.getByRole('textbox',{name:'Message'})).toHaveCount(0);
+    await page.getByRole('button',{name:category==='Agents' ? 'View agent' : 'View workflow',exact:true}).click();
     await expect(page).toHaveURL(/#\/chat\/[a-f0-9]{32}/);
     const sessionId=page.url().split('/').at(-1);
     const saved=await request.get('/api/v1/chat/sessions/'+sessionId,{headers:{Authorization:'Bearer e2e-viewer-token'}});
