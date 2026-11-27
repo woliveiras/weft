@@ -47,39 +47,52 @@ func bind(in *TurnInput, origins map[string]bool) (*Client, error) {
 }
 
 func (c *Client) post(ctx context.Context, path string, input, output any) error {
-	if c.yielded.Load() {
-		return ErrYield
-	}
-	if c.closed.Load() {
-		return errors.New("turn has ended")
-	}
 	body, err := json.Marshal(input)
 	if err != nil {
 		return errors.New("invalid callback input")
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+path, bytes.NewReader(body))
+	raw, err := c.request(ctx, http.MethodPost, path, "application/json", body)
 	if err != nil {
-		return errors.New("invalid callback request")
+		return err
+	}
+	if output != nil && (bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || json.Unmarshal(raw, output) != nil) {
+		return errors.New("invalid callback response")
+	}
+	return nil
+}
+
+func (c *Client) request(ctx context.Context, method, path, contentType string, body []byte) ([]byte, error) {
+	if c.yielded.Load() {
+		return nil, ErrYield
+	}
+	if c.closed.Load() {
+		return nil, errors.New("turn has ended")
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.base+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, errors.New("invalid callback request")
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
 	propagation.TraceContext{}.Inject(ctx, propagation.HeaderCarrier(req.Header))
 	resp, err := callbackHTTP.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return nil, ctx.Err()
 		}
-		return errors.New("controller unavailable")
+		return nil, errors.New("controller unavailable")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return &HTTPError{Status: resp.StatusCode}
+		return nil, &HTTPError{Status: resp.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse+1))
-	if err != nil || len(raw) > maxResponse || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) || json.Unmarshal(raw, output) != nil {
-		return errors.New("invalid callback response")
+	if err != nil || len(raw) > maxResponse {
+		return nil, errors.New("invalid callback response")
 	}
-	return nil
+	return raw, nil
 }
 
 func (c *Client) Tool(ctx context.Context, name string, args any) (ToolResult, error) {
