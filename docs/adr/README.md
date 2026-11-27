@@ -14,6 +14,7 @@
 | [0010](0010-local-first-delivery.md) | Local-first delivery and external qualification | Accepted |
 | [0011](0011-execution-boundaries.md) | Explicit native and sandbox execution boundaries | Accepted |
 | [0012](0012-installation-identity.md) | Separate installation identity from integration credentials | Accepted |
+| [0013](0013-contextual-chat-action-pills.md) | Compose a chat request with contextual action pills | Proposed |
 
 Format: context, decision, consequences, alternatives considered. New ADRs
 take the next number with status *Proposed* in the pull request that
