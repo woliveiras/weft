@@ -125,3 +125,69 @@ func TestConcurrentTurnClientsStayBoundAfterYield(t *testing.T) {
 		}
 	}
 }
+
+func TestCatalogAndQueuedOutputUseExecutionScope(t *testing.T) {
+	catalog := `[{"name":"filesystem.read","description":"read","parameters":{"type":"object"}}]`
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /internal/v1/executions/one/tools", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer fixture" {
+			t.Error("missing capability")
+		}
+		_, _ = w.Write([]byte(catalog))
+	})
+	mux.HandleFunc("POST /internal/v1/executions/one/emit", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer fixture" {
+			t.Error("missing capability")
+		}
+		var msg Emit
+		if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+			t.Error(err)
+		}
+		if msg.Channel != "release" || msg.Target != "consumer" || msg.Metadata["key"] != "value" {
+			t.Error("lost output routing")
+		}
+		_ = json.NewEncoder(w).Encode(map[string]bool{"queued": msg.Type == "qa.passed"})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	c := Client{base: srv.URL + "/internal/v1/executions/one", token: "fixture"}
+	list, err := c.ListTools(t.Context())
+	if err != nil || len(list) != 1 || list[0].Name != "filesystem.read" || string(list[0].Parameters) != `{"type":"object"}` {
+		t.Fatal(list, err)
+	}
+	msg := Emit{Type: "qa.passed", Channel: "release", Target: "consumer", Metadata: map[string]any{"key": "value"}}
+	if err := c.Emit(t.Context(), msg); err != nil {
+		t.Fatal(err)
+	}
+	msg.Type = "invalid"
+	if err := c.Emit(t.Context(), msg); err == nil {
+		t.Fatal("missing acknowledgement accepted")
+	}
+	c.yielded.Store(true)
+	if err := c.Emit(t.Context(), msg); !errors.Is(err, ErrYield) {
+		t.Fatal(err)
+	}
+	if _, err := c.ListTools(t.Context()); !errors.Is(err, ErrYield) {
+		t.Fatal(err)
+	}
+}
+
+func TestTurnWireCarriesSelectionSignalsAndLocalUsage(t *testing.T) {
+	var in TurnInput
+	raw := `{"model":{"provider":"selected","name":"fixture"},"outputs":[{"channel":"release"}],"inputs":[{"metadata":{"hops":2}}],"pendingStop":true,"maxToolCalls":3}`
+	if err := json.Unmarshal([]byte(raw), &in); err != nil {
+		t.Fatal(err)
+	}
+	if in.Model.Provider != "selected" || in.Model.Name != "fixture" || !in.PendingStop || in.MaxToolCalls != 3 || in.Outputs[0].Channel != "release" || string(in.Inputs[0].Metadata["hops"]) != "2" {
+		t.Fatal("lost turn context")
+	}
+	out, err := json.Marshal(TurnResult{Broadcast: "done", Signal: "confirm_stop", Usage: &Usage{InputTokens: 11}, ToolCalls: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{`"broadcast":"done"`, `"signal":"confirm_stop"`, `"inputTokens":11`, `"toolCalls":1`} {
+		if !bytes.Contains(out, []byte(field)) {
+			t.Fatal("lost field", field)
+		}
+	}
+}

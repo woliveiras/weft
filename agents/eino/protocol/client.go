@@ -118,3 +118,28 @@ func (c *Client) Chat(ctx context.Context, input ChatRequest) (ChatResponse, err
 	err := c.post(ctx, "/llm/chat", input, &out)
 	return out, err
 }
+
+// ListTools returns the current execution's authorized schemas.
+func (c *Client) ListTools(ctx context.Context) ([]ToolSchema, error) {
+	raw, err := c.request(ctx, http.MethodGet, "/tools", "", nil)
+	if err != nil {
+		return nil, err
+	}
+	var out []ToolSchema
+	if json.Unmarshal(raw, &out) != nil || out == nil {
+		return nil, errors.New("invalid tool catalog")
+	}
+	return out, nil
+}
+
+// Emit queues an output at the owning controller. Publication follows turn success.
+func (c *Client) Emit(ctx context.Context, msg Emit) error {
+	var ack struct{ Queued bool }
+	if err := c.post(ctx, "/emit", msg, &ack); err != nil {
+		return err
+	}
+	if !ack.Queued {
+		return errors.New("controller did not queue output")
+	}
+	return nil
+}

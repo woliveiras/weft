@@ -2,8 +2,7 @@
 
 The Runtime Protocol is how agents written in **any language or framework** (LangGraph, AutoGen,
 CrewAI, plain code) take part in a Weft graph. It is two HTTP endpoints on the agent side and
-eight callback endpoints on the platform side. The Python SDK (`sdk/python`, package `weft`)
-implements it; this page is the specification for everyone else.
+eight callback endpoints on the platform side. The [Go SDK](../agents/eino/protocol) serves an agent using `protocol.NewHandler`. Its per-turn client exposes `Tool`, `ListTools`, `Chat`, `Emit`, `StateGet`, `StatePut`, `Output` and `Ask`. A successful `Emit` acknowledges buffering. The controller publishes after turn success and applies channel approvals before delivery. The client returns model usage for inspection. Only runtime-local usage belongs in `TurnResult.Usage`. The Python SDK remains in the checkout during migration.
 
 Schemas: [`schemas/turn.schema.json`](../schemas/turn.schema.json) (TurnInput, TurnResult, Emit),
 [`schemas/message.schema.json`](../schemas/message.schema.json), and the `runtime-callback` tag of
