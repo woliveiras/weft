@@ -30,6 +30,12 @@ func (s *Server) chatReadTools(actor Identity) []chat.ReadTool {
 			finish(err)
 			return result, err
 		}},
+		{Schema: chat.CheckpointQuerySchema(), Read: func(ctx context.Context, args json.RawMessage) (chat.ToolObservation, error) {
+			ctx, finish := observeChatOperation(ctx, "list_checkpoints")
+			result, err := s.queryChatCheckpoints(ctx, actor, args)
+			finish(err)
+			return result, err
+		}},
 	}
 }
 

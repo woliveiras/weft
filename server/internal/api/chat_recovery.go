@@ -25,6 +25,8 @@ func chatRecovery(modelErr, callErr error) chat.Interpretation {
 		result.Text = "The model call ended before Chat received an answer. Retry this saved request."
 	case errors.Is(modelErr, chat.ErrTruncated):
 		result.Text = "The model reached its output limit before completing this request."
+	case errors.Is(modelErr, chat.ErrCheckpointsUnavailable):
+		result.Text = "Chat could not verify the workspace checkpoints. Retry the query."
 	case errors.Is(modelErr, chat.ErrSpendUnavailable):
 		result.Text = "Chat could not verify the spend report. Retry the query."
 		result.Destination = "usage"

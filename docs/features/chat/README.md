@@ -91,6 +91,10 @@ continues to read task state without calling that provider.
 
 Completed watches and task inspections show the pinned base commit, checkout state and available delivery evidence for each repository. A confirmed PR receipt shows the PR number. **View task result** opens Changes & checks for that attempt. A retried task can also link to its previous attempt.
 
+### Inspect workspace checkpoints
+
+Ask for the latest checkpoints of a task ID or workflow ID. Chat reads the same Git checkpoint list as the workspace panel and reports the total and up to eight of the newest entries, including the node, tool and execution when recorded. A task uses its admitted execution copy. If the workspace has multiple repository aliases, name the checkout you want. Restoring a checkpoint remains a separate administrator action in the workspace panel.
+
 ## Review a pull request
 
 Ask “Revise o PR 418.” Chat checks the PR on configured repository connections
