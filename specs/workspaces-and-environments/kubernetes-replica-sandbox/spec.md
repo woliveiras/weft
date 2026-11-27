@@ -10,7 +10,7 @@ change_surfaces: [server/internal/app, server/internal/tools, deploy/kubernetes]
 dependencies: [TASK-006, ENV-005, ENV-009, RUN-010]
 navigation: [specs/README.md, specs/workspaces-and-environments/kubernetes-replica-sandbox/matrix.md]
 authority:
-  granted: [local implementation, scoped commits, designing sandbox permissions]
+  granted: [local implementation, scoped commits, automatic sandbox provisioning, namespace-scoped pod lifecycle and exec]
   withheld: [production deployment, remote push]
 ---
 
@@ -36,6 +36,6 @@ The acceptance journey uses a failing test followed by a passing test for the sa
 
 ## Provisioning and compatibility
 
-Kubernetes namespace roles, pod admission and PVC binding are installation decisions. A claim is namespaced and binds to one PV. A separate sandbox namespace needs a separately provisioned view of the same workspace backing, or an explicit transfer design. The controller's current restricted namespace also hosts platform credentials. A general pod creation or exec permission in that namespace would cross the isolation boundary. The operator's provisioning choice determines whether pods are reconciled automatically or rendered in advance. [Kubernetes RBAC guidance](https://kubernetes.io/docs/concepts/security/rbac-good-practices/) · [Persistent volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)
+Kubernetes namespace roles, pod admission and PVC binding are installation decisions. A claim is namespaced and binds to one PV. A separate sandbox namespace needs a separately provisioned view of the same workspace backing, or an explicit transfer design. The controller's current restricted namespace also hosts platform credentials. A general pod creation or exec permission in that namespace would cross the isolation boundary. The maintainer selected automatic provisioning for workflows created in Chat, the console or the API. A namespaced Role bound to the controller service account grants pod lifecycle and exec solely in `weft-sandboxes`. The installer configures the workspace storage and an enforced admission policy once. Starting a graph requires no manifest changes. In the Kubernetes installation profile the controller routes command tools into sandbox pods and requires an endpoint for external agent runtimes. The standalone profile continues to support local processes. [Kubernetes RBAC guidance](https://kubernetes.io/docs/concepts/security/rbac-good-practices/) · [Persistent volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)
 
 Drain Kubernetes shell turns before cutover. Keep the controller callback Service and existing approvals during the rollout. If sandbox qualification fails, keep Kubernetes command execution unavailable and retain pending work for retry under normal Weft delivery semantics. Docker and explicit native-process sandboxes have their own installation and consent contracts. [Task consent](../../product-and-tasks/task-consent-and-gateway-authorization/spec.md) · [Qualification matrix](./matrix.md)
