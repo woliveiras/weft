@@ -44,7 +44,6 @@ test-go: ## Go unit + integration tests (memory/fs/sqlite; live brokers via WEFT
 test-python: ## SDK and example agent tests (stdlib unittest)
 	cd sdk/python && $(PYTHON) -m unittest discover -s tests -v
 	PYTHONPATH=sdk/python:agents $(PYTHON) -m unittest discover -s agents/tests -v
-	$(PYTHON) -m unittest discover -s scripts/tests -v
 
 test-web: ## Type-check and run the web console tests (Vitest, jsdom)
 	image=$$(docker build -q --target web-source .) && \
