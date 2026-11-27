@@ -18,8 +18,18 @@ The default pod requests and limits are 1 CPU, 512 MiB of memory and 1 GiB of ep
 
 Normal replica shutdown removes its pod using the observed UID. Timeout, cancellation or an interrupted stream discards the pod. Workspace files survive. An abandoned pod has a one-hour active deadline. The next provisioning attempt reaps finished and expired managed pods. A failed command stream can have changed files before it failed. Inspect task history before retrying a non-idempotent action.
 
+## Parallel Git branches
+
+With this overlay, a `workspace.mode: worktree` node gets a private repository on the workspace claim for each replica. A fresh clone starts from its previously published branch when one exists, otherwise from the graph checkout's HEAD. The pod can use `git status`, `git add` and `git commit` offline. Its initial Git identity is `Weft Agent <agent@weft.local>`. A pod restart reuses the directory, including uncommitted files. Graph inspection and checkpoint history can read the retained private replicas.
+
+Weft transfers committed history as a Git bundle. The export pod mounts only its source in read-only mode. The receiver mounts only the destination. The controller buffers up to 64 MiB per transfer in a temporary file and removes the file after the operation. The transfer carries one branch and creates no Git remote. Budget controller scratch space, pod quota and scheduling capacity for transfers alongside running agents.
+
+The publication operation targets the replica's local branch in the graph repository. It takes the source commit and the expected current destination commit. An empty expected destination requests branch creation. A conflicting destination, a divergent history or a checked-out destination prevents the update. The integrator can merge an explicitly published branch from the shared graph repository. Configuring caller access to publication is a separate authorization decision.
+
+The source graph repository needs its Git metadata inside the mounted directory. An existing linked replica worktree requires an explicit migration that preserves its pending edits. Standalone linked worktrees keep their current lifecycle.
+
 ## Qualification
 
 In a disposable cluster, mount both claims against one test directory. Compile the Linux controller fixtures with `./scripts/go.sh test -c -tags kubernetes_e2e -o bin/qa-replica.test ./internal/kubesandbox` and the corresponding command for `./internal/api`. Run `TestLiveReplicaPods` and `TestKubernetesEinoFactory` separately in a test controller pod with service account `weftd`, label `app=weftd` and `WEFT_FIXTURE_WORKSPACES` set to the mounted claim root. The factory test needs Git, the event schema and example graph at their repository paths and a writable temporary directory. In the test namespace, route `factory-controller:8080` to that pod. Configure the bundled Go agents on `weft-agents:8000` with the matching callback origin and the fixture's synthetic runtime secret. The store and broker used by this test are SQLite and the filesystem broker.
 
-The cluster qualification checks access reviews, rejected pod shapes, real process exit and network denial. Run the same positive and negative network checks after changing the CNI. The evidence and the linked Git worktree limitation are recorded in [ENV-010](../../specs/workspaces-and-environments/kubernetes-replica-sandbox/matrix.md).
+The cluster qualification checks access reviews, rejected pod shapes, real process exit and network denial. Run the same positive and negative network checks after changing the CNI. The evidence, including the private Git clone rehearsal, is recorded in [ENV-010](../../specs/workspaces-and-environments/kubernetes-replica-sandbox/matrix.md).

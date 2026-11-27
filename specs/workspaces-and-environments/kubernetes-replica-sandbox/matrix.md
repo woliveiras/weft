@@ -24,3 +24,9 @@ Kubernetes v1.37.0 (kind, Linux/arm64) ran under its own kubeconfig. The control
 
 
 The final serial runs of `TestLiveReplicaPods` and `TestKubernetesEinoFactory` passed in 15.73 s and 13.90 s respectively with the platform network policies enabled. Running both suites at once exceeded the single node’s schedulable CPU and one factory run reached its wait deadline. Sizing for simultaneously active pods is an installation requirement. The fixture does not qualify the stock Python distribution or multi-node storage.
+
+### Private clone qualification, 2026-11-27
+
+For M06 and the Git portion of M07, `TestKubernetesPrivateBranch` passed in 18.78 seconds on a fresh single-node kind v1.37.0 cluster (Linux/arm64). It used the installation Role, admission and sandbox image, plus two claims backed by one disposable directory. Two replicas received independent Git repositories. A plain `git commit` in the first pod succeeded. Reopening the replica retained that commit and an untracked file. The sibling and graph checkout still had the original commit. The private clone had no configured remote.
+
+The fixture called the Weft workspace manager to publish the reviewed commit, then repeated the request before and after the source advanced. It observed the exact destination ref, unchanged graph HEAD, no untracked file copied, a rejected stale destination and a successful second fast-forward. Real Git subprocess tests also rejected divergent history, a checked-out target and an incorrect pod UID. Workspace tests covered partial initialization, retention of legacy edits, private Git inspection, checkpoint listing and restore. The cluster was removed after verification. This qualification covers the internal operation. Caller authorization and the public entry point for M07 remain open.
