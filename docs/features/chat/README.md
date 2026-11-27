@@ -37,6 +37,10 @@ An operator can ask to cancel an execution tree or only a particular delegated c
 
 Ask about the delegation policy or type `/inspect delegation` for the saved approval mode, limits and policy revision. Open **Delegation** to inspect or edit the full policy.
 
+### Inspect monthly model usage
+
+Ask “Which provider and model cost the most last month?” or request a monthly breakdown by user, project, workflow or task run. Chat uses the same retained cost records as **Models → Usage & costs**. Each group includes calls, tokens, recorded cost, estimated cost and unpriced calls. Search and page through up to 100 groups per dimension, with 20 groups per page. The installation total always covers the whole month. Reports use UTC calendar months.
+
 ## Find a resource by name
 
 Ask “Which workflows mention release?” or type `/find workflows release`.

@@ -19,6 +19,7 @@ func TestChatRecoveryShowsSafeNextAction(t *testing.T) {
 		{chat.ErrModelUnavailable, tools.ErrRateLimited, "", "maximum number"},
 		{chat.ErrInvalidPlan, nil, "", "unsupported"},
 		{chat.ErrTruncated, nil, "", "output limit"},
+		{errors.Join(chat.ErrSpendUnavailable, errors.New("private-detail")), nil, "usage", "verify the spend report"},
 		{errors.Join(chat.ErrReadUnavailable, errors.New("private-detail")), nil, "", "verify the task records"},
 		{chat.ErrModelUnavailable, errors.New("private-detail"), "chat-model", "selected model"},
 	} {

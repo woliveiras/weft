@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/chat"
 	"github.com/woliveiras/weft/server/internal/config"
+	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"github.com/woliveiras/weft/server/internal/tools"
 )
@@ -15,12 +17,43 @@ func (s *Server) chatReadTools(actor Identity) []chat.ReadTool {
 	if !actor.Role.Allows(config.RoleViewer) {
 		return nil
 	}
-	return []chat.ReadTool{{Schema: chat.TaskQuerySchema(), Read: func(ctx context.Context, args json.RawMessage) (chat.ToolObservation, error) {
-		ctx, finish := observeChatOperation(ctx, "query_tasks")
-		result, err := s.queryChatTasks(ctx, actor, args)
-		finish(err)
-		return result, err
-	}}}
+	return []chat.ReadTool{
+		{Schema: chat.TaskQuerySchema(), Read: func(ctx context.Context, args json.RawMessage) (chat.ToolObservation, error) {
+			ctx, finish := observeChatOperation(ctx, "query_tasks")
+			result, err := s.queryChatTasks(ctx, actor, args)
+			finish(err)
+			return result, err
+		}},
+		{Schema: chat.SpendQuerySchema(), Read: func(ctx context.Context, args json.RawMessage) (chat.ToolObservation, error) {
+			ctx, finish := observeChatOperation(ctx, "query_spend")
+			result, err := s.queryChatSpend(ctx, actor, args)
+			finish(err)
+			return result, err
+		}},
+	}
+}
+
+func (s *Server) queryChatSpend(ctx context.Context, actor Identity, args json.RawMessage) (chat.ToolObservation, error) {
+	if !actor.Role.Allows(config.RoleViewer) {
+		return chat.ToolObservation{}, tools.ErrDenied
+	}
+	q, err := chat.ParseSpendQuery(args, time.Now())
+	if err != nil {
+		return chat.ToolObservation{}, err
+	}
+	report, err := cost.Spend(ctx, s.Store, q.Period, "")
+	if err != nil {
+		return chat.ToolObservation{}, errors.Join(chat.ErrSpendUnavailable, err)
+	}
+	result, err := q.Observe(report)
+	if err != nil {
+		return chat.ToolObservation{}, err
+	}
+	data, err := json.Marshal(result)
+	if err != nil {
+		return chat.ToolObservation{}, err
+	}
+	return chat.ToolObservation{Data: data, Destination: "usage", Title: q.Title}, nil
 }
 
 func (s *Server) queryChatTasks(ctx context.Context, actor Identity, args json.RawMessage) (chat.ToolObservation, error) {
