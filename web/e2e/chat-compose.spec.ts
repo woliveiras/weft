@@ -102,12 +102,14 @@ test('scrolls a long conversation with the keyboard and wheel while the scrollba
   await expect(history.getByRole('article')).toHaveCount(10);
   await expect(history).toHaveCSS('scrollbar-width','none');
   const top = () => history.evaluate(el => el.scrollTop);
+  const startOfHistory = await page.evaluate(() => navigator.platform.startsWith('Mac'))
+    ? 'Meta+ArrowUp' : 'Control+Home';
   await history.focus();
-  await page.keyboard.press('Control+Home');
+  await page.keyboard.press(startOfHistory);
   await expect.poll(top).toBe(0);
   await page.keyboard.press('PageDown');
   await expect.poll(top).toBeGreaterThan(0);
-  await page.keyboard.press('Control+Home');
+  await page.keyboard.press(startOfHistory);
   await expect.poll(top).toBe(0);
   await history.hover();
   await page.mouse.wheel(0, 300);
