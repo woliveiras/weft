@@ -45,25 +45,25 @@
 .guide-results button { width: 100%; text-align: start; border: 0; border-radius: var(--radius-sm); }
 .chat-guide p { margin: var(--space-2) 0; }
 
-.chat-reading-area:has(+ .guide-task-search) { flex: 0 1 auto; }
-.chat-guide.guide-task-search {
+.chat-reading-area:has(+ .guide-resource-search) { flex: 0 1 auto; }
+.chat-guide.guide-resource-search {
   display: flex; flex-direction: column; gap: var(--space-1);
   height: min(48dvh, 25rem); max-height: none; margin-block: auto; overflow: visible;
 }
-.guide-task-search > :not(.guide-results) { flex: none; }
-.guide-task-search [role=status] { color: var(--text-muted); font-size: .875rem; }
-.guide-task-search .guide-results {
+.guide-resource-search > :not(.guide-results) { flex: none; }
+.guide-resource-search [role=status] { color: var(--text-muted); font-size: .875rem; }
+.guide-resource-search .guide-results {
   min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   scrollbar-width: none; padding: 3px;
 }
-.guide-task-search .guide-results::-webkit-scrollbar { display: none; }
-.guide-task-search .guide-results button { padding: var(--space-2) var(--space-3); border-radius: 0; background: transparent; }
-.guide-task-search .guide-results button:is(:hover,:focus-visible) { background: var(--primary-soft); }
-.guide-task-identity { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: start; gap: .15rem var(--space-2); }
-.guide-task-identity strong { text-align: start; }
-.guide-task-identity small { grid-column: 1 / -1; color: var(--text-muted); }
-.guide-task-identity .badge { max-width: 10rem; white-space: normal; }
-.guide-task-review { background: var(--surface-raised); border: 1px solid var(--border-strong); border-bottom: 0; border-radius: 12px 12px 0 0; padding: var(--space-3); }
-.guide-task-review .guide-heading { margin: 0 0 var(--space-2); color: var(--text-muted); font-size: .875rem; }
-.guide-task-review > button { margin: var(--space-2) var(--space-2) 0 0; }
-.chat-page .guide-task-review + .chat-composer { margin-top: 0; border-radius: 0 0 12px 12px; }
+.guide-resource-search .guide-results::-webkit-scrollbar { display: none; }
+.guide-resource-search .guide-results button { padding: var(--space-2) var(--space-3); border-radius: 0; background: transparent; }
+.guide-resource-search .guide-results button:is(:hover,:focus-visible) { background: var(--primary-soft); }
+.guide-resource-identity { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: start; gap: .15rem var(--space-2); }
+.guide-resource-identity strong { text-align: start; }
+.guide-resource-identity small { grid-column: 1 / -1; color: var(--text-muted); }
+.guide-resource-identity .badge { max-width: 10rem; white-space: normal; }
+.guide-resource-review { background: var(--surface-raised); border: 1px solid var(--border-strong); border-bottom: 0; border-radius: 12px 12px 0 0; padding: var(--space-3); }
+.guide-resource-review .guide-heading { margin: 0 0 var(--space-2); color: var(--text-muted); font-size: .875rem; }
+.guide-resource-review > button { margin: var(--space-2) var(--space-2) 0 0; }
+.chat-page .guide-resource-review + .chat-composer { margin-top: 0; border-radius: 0 0 12px 12px; }

@@ -121,3 +121,25 @@ it('keeps guided actions out of the model recovery and archived conversation sta
   expect(screen.queryByRole('region',{name:'Chat actions'})).toBeNull();
   expect(screen.queryByRole('button',{name:'Send'})).toBeNull();
 });
+
+it.each([
+  ['Agents','Find a catalog agent','agent','Version 2'],
+  ['Workflows','Find a workflow','workflow','Version 2'],
+  ['Projects','Find a project','project','Revision 7'],
+  ['Skills & instructions','Find a skill','skill','Revision 7'],
+])('reviews %s using the resource name, badge and exact ID',async(category,action,noun,badge)=>{
+  const catalog = {name:'Release · review', ...(badge.startsWith('Version') ? {version:2} : {revision:7})};
+  const items = ['first','second'].map(id=>({id,label:'Legacy '+id,catalog}));
+  fakeApi({...ready,['GET '+candidates]:()=>({items,partial:true})});
+  render(<ChatPage archived={false} onOpen={vi.fn()}/>);
+  await screen.findByRole('button',{name:'Tasks'});
+  if(category==='Projects' || category==='Skills & instructions') click('Mais');
+  click(category);click(action);
+  await screen.findByText('Showing 2 '+noun+'s. Search by name or ID to narrow the list.');
+  const name = 'Release · review '+badge+' second';
+  click(name);
+  expect(screen.getByText('second')).toBeTruthy();
+  expect(screen.queryByRole('searchbox')).toBeNull();
+  click('Change '+noun);
+  expect(await screen.findByRole('button',{name})).toBe(document.activeElement);
+});

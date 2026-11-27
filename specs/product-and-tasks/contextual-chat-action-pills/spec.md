@@ -90,7 +90,8 @@ In the task picker, lead with the title and state. Show the project reference
 when available and use an ID suffix that distinguishes the visible choices.
 Keep the search field visible while scrolling results. Searching by full ID
 and reviewing that ID in the composer allow an exact choice even for tasks
-with identical titles and states.
+with identical titles and states. Agents and workflows show the catalog name,
+version and ID in the same picker. Projects and skills show their revision.
 
 Show distinct outcomes for zero matches, partial results and a failed lookup.
 Offer a way to refine the search or retry. Preserve the text and current

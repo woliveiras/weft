@@ -1043,6 +1043,35 @@ test('prepares a guided catalog agent for review before creating its first versi
   expect((await (await request.get(path,{headers})).json()).versions).toHaveLength(1);
 });
 
+test('looks up catalog agents and workflows with the shared picker',async({page,request})=>{
+  await selectFixtureModel(request);
+  const name='Catalog · reviewer';
+  const agentId='picker-catalog-reviewer';
+  const workflowId='picker-catalog-workflow';
+  expect((await request.post('/api/v1/agents',{headers,data:{id:agentId,definition:{
+    name,prompt:'Review the notes.',runtime:{kind:'native'},model:{provider:'e2e',name:'fixture'},isolation:{mode:'process'},readOnly:true,
+  }}})).status()).toBe(201);
+  expect((await request.post('/api/v1/graphs',{headers,data:{metadata:{id:workflowId,name},
+    spec:{nodes:[{id:'reviewer',runtime:{kind:'echo'}}]},
+  }})).status()).toBe(201);
+  await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
+  for(const [category,action,id] of [['Agents','Find a catalog agent',agentId],['Workflows','Find a workflow',workflowId]]){
+    await page.goto('/#/chat');
+    const guide=page.getByRole('region',{name:'Chat actions'});
+    await guide.getByRole('button',{name:category,exact:true}).click();
+    await guide.getByRole('button',{name:action}).click();
+    await guide.getByRole('searchbox').fill(id);
+    const list=guide.getByRole('list',{name:'Matching resources'});
+    await expect(list).toHaveCSS('scrollbar-width','none');
+    await list.getByRole('button',{name:name+' Version 1 '+id}).click();
+    await page.getByRole('button',{name:'Send',exact:true}).click();
+    await expect(page).toHaveURL(/#\/chat\/[a-f0-9]{32}/);
+    const sessionId=page.url().split('/').at(-1);
+    const saved=await request.get('/api/v1/chat/sessions/'+sessionId,{headers:{Authorization:'Bearer e2e-viewer-token'}});
+    expect((await saved.json()).messages[0].text).toBe('/lookup '+category.toLowerCase()+' '+id);
+  }
+});
+
 test('recovers a guided lookup and keeps an incomplete branch out of a free-text turn',async({page,request})=>{
   await selectFixtureModel(request);
   await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
