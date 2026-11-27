@@ -2211,6 +2211,35 @@ paths:
               schema: {$ref: "#/components/schemas/ChatModelSettings"}
         "400": {description: Invalid selection, unavailable provider, or missing revision}
         "409": {$ref: "#/components/responses/Conflict"}
+  /api/v1/chat/candidates:
+    get:
+      tags: [chat]
+      operationId: listChatCandidates
+      x-weft-role: viewer
+      summary: Search authorized resources before composing a chat turn
+      parameters:
+        - {name: area, in: query, required: true, schema: {type: string, enum: [tasks, agents, workflows, projects, skills]}}
+        - {name: q, in: query, schema: {type: string, maxLength: 320}}
+      responses:
+        "200":
+          description: Bounded matching candidates. A partial result can be refined or explicitly selected.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, partial]
+                properties:
+                  partial: {type: boolean}
+                  items:
+                    type: array
+                    maxItems: 8
+                    items:
+                      type: object
+                      required: [id, label]
+                      properties:
+                        id: {type: string}
+                        label: {type: string}
+        "400": {description: Unsupported area or invalid query}
   /api/v1/chat/sessions:
     get:
       tags: [chat]

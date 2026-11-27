@@ -170,7 +170,9 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 			lastInput = history[len(history)-1].Content
 			directive = chat.ExplicitReviewDirective(lastInput)
 		}
-		if find, ok := chat.ExplicitFind(lastInput); ok {
+		if selected, ok := chat.PickerCommand(lastInput); ok {
+			answer = s.exactPickerReply(ctx, actor, selected)
+		} else if find, ok := chat.ExplicitFind(lastInput); ok {
 			answer = find
 			if find.Plan.Kind == chat.FindResource {
 				answer = s.resolveChatPlan(ctx, actor, id, find.Plan)
@@ -362,12 +364,17 @@ func (s *Server) dispatchChatPlan(ctx context.Context, actor Identity, sessionID
 			reply.Text, reply.Retryable = "Task status is temporarily unknown. Retry the saved request to check again.", true
 			return reply
 		}
-		reply.Task = &snapshot
-		if plan.Kind == chat.WatchTask && !snapshot.Terminal() {
-			reply.Text = fmt.Sprintf("Following task %s. Last observed state: %s.", snapshot.ID, snapshot.State)
-		} else {
-			reply.Text = fmt.Sprintf("Task %s: %s.", snapshot.ID, snapshot.State)
-		}
+		return observedTaskReply(plan, snapshot)
+	}
+	return reply
+}
+
+func observedTaskReply(plan chat.Plan, snapshot chat.TaskSummary) chat.Interpretation {
+	reply := chat.Interpretation{Plan: plan, Task: &snapshot}
+	if plan.Kind == chat.WatchTask && !snapshot.Terminal() {
+		reply.Text = fmt.Sprintf("Following task %s. Last observed state: %s.", snapshot.ID, snapshot.State)
+	} else {
+		reply.Text = fmt.Sprintf("Task %s: %s.", snapshot.ID, snapshot.State)
 	}
 	return reply
 }

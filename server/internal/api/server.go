@@ -253,6 +253,7 @@ func (s *Server) routes() {
 		{"GET /api/v1/provider-settings", R, s.providerSettings},
 		{"GET /api/v1/chat/settings", R, s.getChatSettings},
 		{"PUT /api/v1/chat/settings", A, s.saveChatSettings},
+		{"GET /api/v1/chat/candidates", R, s.chatCandidates},
 		{"GET /api/v1/chat/sessions", R, s.listChats},
 		{"POST /api/v1/chat/sessions", R, s.submitChat},
 		{"GET /api/v1/chat/sessions/{chatID}", R, s.getChat},
