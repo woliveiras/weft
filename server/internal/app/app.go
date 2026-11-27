@@ -475,6 +475,16 @@ func capacityManager(cfg *config.Config, store storage.Store) *sandboxcapacity.M
 	}}
 }
 
+// A non-nil sandbox keeps command tools from selecting the local process default.
+// File and model gateways can still serve a Kubernetes node without a command pod.
+type unconfiguredKubernetesSandbox struct{}
+
+func (unconfiguredKubernetesSandbox) Kind() string { return string(domain.IsolationKubernetes) }
+func (unconfiguredKubernetesSandbox) Close() error { return nil }
+func (unconfiguredKubernetesSandbox) Exec(context.Context, tools.ExecRequest) (*tools.ExecResult, error) {
+	return nil, errors.New("Kubernetes replica sandbox is not configured")
+}
+
 // sandboxFactory picks the command sandbox per node isolation mode.
 //
 // Docker-isolated nodes without an image of their own use the graph's
@@ -595,9 +605,9 @@ func sandboxFactory(cfg *config.Config, envs *environment.Manager, store storage
 				return nil, err // Start reconciles failures without deleting a resumable container.
 			}
 			return sb, nil
+		case domain.IsolationKubernetes:
+			return unconfiguredKubernetesSandbox{}, nil
 		default:
-			// Kubernetes also runs tools as processes in the platform pod until
-			// per-replica tool pods are implemented.
 			for _, g := range s.Node.Tools {
 				if g.Name == "*" || strings.HasPrefix(g.Name, "shell") {
 					slog.Warn("node holds shell.exec under process isolation: commands run as the platform user and can read its environment and files; use isolation.mode docker for untrusted work",

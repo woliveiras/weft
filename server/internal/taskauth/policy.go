@@ -24,7 +24,7 @@ var ErrDenied = errors.New("task authorization denied")
 
 func Valid(m Mode) bool { return m == Ask || m == Workspace || m == Full }
 
-// Kubernetes currently uses process execution in the weftd pod.
+// Workspace consent currently qualifies shell only in Docker isolation.
 func workspaceShellAllowed(isolation string) bool { return isolation == "docker" }
 
 var builtinTools = tools.Builtin(tools.BuiltinConfig{})

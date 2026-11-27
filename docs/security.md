@@ -161,8 +161,8 @@ credentials are re-encrypted at startup.
    on the internal network.
 3. Use OIDC for humans, scoped static tokens (`viewer`/`operator`) for automation.
 4. Run any node holding `shell.exec`, `git.write` or broad `filesystem.write` with
-   `isolation.mode: docker`. The current Kubernetes mode runs tools in the weftd
-   pod, so Workspace access refuses shell calls there and Ask requires approval.
+   `isolation.mode: docker`. A node selecting Kubernetes isolation requires a replica sandbox for
+   command execution. An unconfigured sandbox returns a tool error.
    With Compose, sandboxes run on `sandbox-daemon`, a
    Docker daemon dedicated to Weft — never mount the host's Docker socket. That service is
    privileged (Docker-in-Docker): on shared Linux servers run Weft on a dedicated host or VM.
@@ -189,7 +189,7 @@ credentials are re-encrypted at startup.
 | Process sandbox shares the platform's UID | Unrestricted shell can read platform env/data | Docker isolation, or a dedicated sandbox UID |
 | `sandbox-daemon` is privileged Docker-in-Docker | A daemon escape is a host-kernel escape; agents cannot reach the daemon (TLS + firewall), only its unprivileged, capability-less containers | Dedicated host/VM; rootless variant planned |
 | Bridged sandbox commands can reach public destinations | Data exfiltration by an agent with `shell.exec` and `network: bridge` | Execution defaults to `none`; preparation defaults to `bridge`. Opt in to separate HTTP/HTTPS allowlists. Command policy excludes daemon provisioning. Base images are trusted inputs. See [environment policy](environments.md#installation-environment-policy-implemented) |
-| Kubernetes isolation runs tools in the platform pod (process sandbox) | Same as above | Per-replica tool pods are an extension point |
+| Kubernetes nodes with an unconfigured tool sandbox | Commands fail at the gateway | Qualify replica pods before enabling QA. See [ENV-010](../specs/workspaces-and-environments/kubernetes-replica-sandbox/matrix.md). |
 | `/metrics` unauthenticated by default | Metadata disclosure | `server.protectMetrics: true` (viewer token), or network policy |
 | `/internal/v1` shares the public listener by default | Reachable if exposed (per-execution tokens still required) | `server.internalAddr: ":8081"` moves it to its own listener; expose only the public port |
 | Roles are global (no per-graph RBAC, no tenants) | Operators can act on every graph | Separate installations per trust domain |

@@ -15,10 +15,7 @@ See [docs/deployment.md](../../docs/deployment.md) and
 
 Notes:
 - The service-account tokens are not mounted: weftd does not talk to the Kubernetes API.
-- `isolation.mode: docker` is not available in this layout (no Docker socket); tools run in
-  weftd's restricted container. Per-replica tool pods are an extension point
-  (`engine.SandboxFactory`). Use a sandboxed RuntimeClass (gVisor, Kata) for weftd if agents get
-  `shell.exec`.
+- Nodes using `isolation.mode: kubernetes` need a replica sandbox for command tools. An unconfigured sandbox returns a tool error. Ordinary model and file callbacks still work. A graph that explicitly selects process isolation runs commands under the controller UID. Per-replica workload qualification is tracked in [ENV-010](../../specs/workspaces-and-environments/kubernetes-replica-sandbox/matrix.md).
 - The workspace volume must be ReadWriteMany when weftd has more than one replica.
 
 

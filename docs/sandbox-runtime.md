@@ -243,7 +243,7 @@ deferred cleanup records. Mixed-version graph operations are unsupported.
   sandbox daemon: they must call `weftd` back, which its firewall forbids.
   Run external agents as services and point `runtime.endpoint` at them (the
   Compose `agents` service is an example).
-- **Kubernetes isolation** still runs tools in the `weftd` pod.
+- **Kubernetes isolation** returns a tool error for commands when the replica sandbox is unconfigured. [Kubernetes sandbox contract](../specs/workspaces-and-environments/kubernetes-replica-sandbox/spec.md)
 - **Runtime egress is opt-in:** `bridge` remains unrestricted; use environment
   `network.run: egress` with approved `allowedHosts` for HTTP/HTTPS destination
   restrictions. See `docs/environments.md`; setup/build use a separate `setupAllowedHosts` list with `network.setup: egress`.

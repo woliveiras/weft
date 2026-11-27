@@ -2,6 +2,9 @@ package app
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/woliveiras/weft/server/internal/config"
@@ -11,7 +14,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/tools"
 )
 
-func TestKubernetesSandboxFactoryUsesProcessShellPolicy(t *testing.T) {
+func TestUnconfiguredKubernetesSandboxPreservesWorkspaceShellDenial(t *testing.T) {
 	node := domain.Node{
 		ID:        "worker",
 		Isolation: domain.IsolationSpec{Mode: domain.IsolationKubernetes},
@@ -28,8 +31,8 @@ func TestKubernetesSandboxFactoryUsesProcessShellPolicy(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	if kind := sandbox.Kind(); kind != "process" {
-		t.Fatalf("Kubernetes sandbox kind = %q, want process", kind)
+	if kind := sandbox.Kind(); kind != "kubernetes" {
+		t.Fatalf("Kubernetes sandbox kind = %q, want kubernetes", kind)
 	}
 	registry := tools.Builtin(tools.BuiltinConfig{})
 	for _, name := range []string{"shell.exec", tools.CheckToolName} {
@@ -43,5 +46,35 @@ func TestKubernetesSandboxFactoryUsesProcessShellPolicy(t *testing.T) {
 		if approval, err := taskauth.Approval(taskauth.Workspace, tool.Capability(), sandbox.Kind(), false); approval || !errors.Is(err, taskauth.ErrDenied) {
 			t.Errorf("Workspace approved %s: approval %t, error %v", name, approval, err)
 		}
+	}
+}
+
+func TestUnconfiguredKubernetesShellCannotRunOnController(t *testing.T) {
+	factory := sandboxFactory(config.Default(), nil, nil, nil)
+	gateway := tools.NewGateway(tools.Builtin(tools.BuiltinConfig{}), nil, nil)
+	for _, mode := range []domain.IsolationMode{domain.IsolationKubernetes, domain.IsolationProcess} {
+		t.Run(string(mode), func(t *testing.T) {
+			root := t.TempDir()
+			node := &domain.Node{ID: "worker", Isolation: domain.IsolationSpec{Mode: mode}}
+			sb, err := factory(t.Context(), engine.SandboxSpec{Graph: &domain.Graph{}, Node: node, Workdir: root})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if err := sb.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			grant := domain.ToolGrant{Name: "shell.exec", Commands: []string{"touch marker"}}
+			res, err := gateway.Invoke(t.Context(), &tools.Principal{Sandbox: sb, Workdir: root, Grants: []domain.ToolGrant{grant}}, "shell.exec", []byte(`{"argv":["touch","marker"]}`))
+			_, statErr := os.Stat(filepath.Join(root, "marker"))
+			if mode == domain.IsolationKubernetes {
+				if err != nil || res == nil || !res.IsError || !strings.Contains(res.Content, "Kubernetes replica sandbox") || !os.IsNotExist(statErr) {
+					t.Fatalf("unconfigured Kubernetes command: result %v error %v marker %v", res, err, statErr)
+				}
+			} else if err != nil || res == nil || res.IsError || statErr != nil {
+				t.Fatalf("explicit process command: result %v error %v marker %v", res, err, statErr)
+			}
+		})
 	}
 }
