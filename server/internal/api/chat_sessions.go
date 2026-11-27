@@ -134,6 +134,9 @@ func (s *Server) submitChat(w http.ResponseWriter, r *http.Request) error {
 	id := r.PathValue("chatID")
 	if id == "" {
 		id = input.RequestID
+		if err := s.validatePickerDraft(r.Context(), actor, input); err != nil {
+			return err
+		}
 		_, _, err = store.Create(r.Context(), actor.chatOwner, id, input.Text)
 	} else {
 		_, err = store.Append(r.Context(), actor.chatOwner, id, input.RequestID, input.Text)

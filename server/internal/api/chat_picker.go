@@ -49,15 +49,56 @@ func (s *Server) exactPickerReply(ctx context.Context, actor Identity, plan chat
 		}
 		return observedTaskReply(plan, task)
 	case chat.FindResource:
-		matches, err := s.searchChatResources(ctx, actor, discoverySlot{area: plan.Area}, plan.Query)
+		choice, err := s.chatPickerChoice(ctx, actor, plan.Area, plan.Query)
+		if errors.Is(err, storage.ErrNotFound) {
+			return unavailable
+		}
 		if err != nil {
 			return discoveryUnavailable(plan)
 		}
-		for _, choice := range matches.Choices {
-			if choice.ID == plan.Query {
-				return foundResource(plan, plan.Area, choice)
-			}
-		}
+		return foundResource(plan, plan.Area, choice)
 	}
 	return unavailable
+}
+
+func (s *Server) chatPickerChoice(ctx context.Context, actor Identity, area, id string) (chat.Choice, error) {
+	matches, err := s.searchChatResources(ctx, actor, discoverySlot{area: area}, id)
+	if err != nil {
+		return chat.Choice{}, err
+	}
+	for _, choice := range matches.Choices {
+		if choice.ID == id {
+			return choice, nil
+		}
+	}
+	return chat.Choice{}, storage.ErrNotFound
+}
+
+// Reject a stale draft before its first turn is saved. A retry of an already
+// accepted request is reconciled by Sessions.Create against its original text.
+func (s *Server) validatePickerDraft(ctx context.Context, actor Identity, input chatSubmission) error {
+	plan, ok := chat.PickerCommand(input.Text)
+	if !ok {
+		return nil
+	}
+	if plan.Kind == chat.Clarify {
+		return badRequest("choose a valid action and resource ID")
+	}
+	id := plan.Query
+	if plan.Kind == chat.WatchTask {
+		id = plan.Task
+	}
+	_, err := s.chatPickerChoice(ctx, actor, plan.Area, id)
+	if err == nil {
+		return nil
+	}
+	if _, savedErr := s.chatStore().Get(ctx, actor.chatOwner, input.RequestID); savedErr == nil {
+		return nil
+	} else if !errors.Is(savedErr, storage.ErrNotFound) {
+		return chatError(savedErr)
+	}
+	if errors.Is(err, storage.ErrNotFound) {
+		return badRequest("This selection is unavailable. Change or clear it before sending.")
+	}
+	return err
 }

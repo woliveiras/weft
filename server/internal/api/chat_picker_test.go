@@ -31,6 +31,13 @@ func TestChatPickerReadsWithoutSessionAndFollowsOnlySelectedTask(t *testing.T) {
 	if status := call(t, srv, "GET", path, viewerTok, "", "", &sessions); status != 200 || len(sessions.Items) != 0 {
 		t.Fatal(status, sessions)
 	}
+	const stale = "aa000000000000000000000000000009"
+	if status := call(t, srv, "POST", path, viewerTok, "application/json", `{"requestId":"`+stale+`","text":"/follow tsk_gone"}`, nil); status != 400 {
+		t.Fatal(status)
+	}
+	if status := call(t, srv, "GET", path+"/"+stale, viewerTok, "", "", nil); status != 404 {
+		t.Fatal(status)
+	}
 	body := fmt.Sprintf(`{"requestId":"aa000000000000000000000000000001","text":"/follow %s\nCheck the release."}`, tasks[1].ID)
 	for range 2 {
 		var session chat.Session
