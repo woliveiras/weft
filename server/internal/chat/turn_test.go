@@ -23,6 +23,10 @@ func nativeTestCall(id, name, arguments string) *llm.ChatResponse {
 }
 
 func TestTurnModelCanCompareTwoObservedResults(t *testing.T) {
+	checkTurnRunners(t, checkTurnModelCanCompareTwoObservedResults)
+}
+
+func checkTurnModelCanCompareTwoObservedResults(t *testing.T, run TurnRunner) {
 	turns := []llm.ChatMessage{{Role: llm.RoleUser, Content: "O que foi mais frequente, sucesso ou falha?"}}
 	catalog := []ReadTool{{Schema: TaskQuerySchema(), Read: func(_ context.Context, args json.RawMessage) (ToolObservation, error) {
 		query, err := ParseTaskQuery(args)
@@ -34,7 +38,7 @@ func TestTurnModelCanCompareTwoObservedResults(t *testing.T) {
 		return ToolObservation{Data: data, Title: "Resultados das tarefas", Destination: "tasks"}, err
 	}}}
 	step := 0
-	result, err := RunTurn(t.Context(), turns, catalog, func(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
+	result, err := run(t.Context(), turns, catalog, func(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
 		step++
 		if r.JSON || len(r.Tools) < 1 || r.Tools[0].Name != "query_tasks" || r.Messages[0].Content != turns[0].Content {
 			t.Fatalf("step %d unexpected envelope", step)
@@ -66,6 +70,10 @@ func TestTurnModelCanCompareTwoObservedResults(t *testing.T) {
 }
 
 func TestTurnLimitsToolsAndRejectsUnverifiedAnswers(t *testing.T) {
+	checkTurnRunners(t, checkTurnLimitsToolsAndRejectsUnverifiedAnswers)
+}
+
+func checkTurnLimitsToolsAndRejectsUnverifiedAnswers(t *testing.T, run TurnRunner) {
 	for _, tc := range []struct {
 		name  string
 		want  error
@@ -94,7 +102,7 @@ func TestTurnLimitsToolsAndRejectsUnverifiedAnswers(t *testing.T) {
 				}
 				return ToolObservation{Data: json.RawMessage(`{"total":0}`)}, nil
 			}}
-			_, err := RunTurn(t.Context(), []llm.ChatMessage{{Role: llm.RoleUser, Content: "Quantas tarefas existem?"}}, []ReadTool{tool}, func(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
+			_, err := run(t.Context(), []llm.ChatMessage{{Role: llm.RoleUser, Content: "Quantas tarefas existem?"}}, []ReadTool{tool}, func(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
 				resp := taskCall("id", `{"mode":"count"}`)
 				switch tc.name {
 				case "unknown tool":
@@ -141,11 +149,15 @@ func TestTurnLimitsToolsAndRejectsUnverifiedAnswers(t *testing.T) {
 }
 
 func TestTurnBroadTaskProposalRequestsNativeArguments(t *testing.T) {
+	checkTurnRunners(t, checkTurnBroadTaskProposalRequestsNativeArguments)
+}
+
+func checkTurnBroadTaskProposalRequestsNativeArguments(t *testing.T, run TurnRunner) {
 	step := 0
 	tool := ReadTool{Schema: TaskQuerySchema(), Read: func(context.Context, json.RawMessage) (ToolObservation, error) {
 		return ToolObservation{Data: json.RawMessage(`{"mode":"exists","status":"running","total":0}`)}, nil
 	}}
-	got, err := RunTurn(t.Context(), []llm.ChatMessage{{Role: llm.RoleUser, Content: "Tem algo em andamento?"}}, []ReadTool{tool}, func(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
+	got, err := run(t.Context(), []llm.ChatMessage{{Role: llm.RoleUser, Content: "Tem algo em andamento?"}}, []ReadTool{tool}, func(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
 		step++
 		switch step {
 		case 1:
@@ -166,6 +178,10 @@ func TestTurnBroadTaskProposalRequestsNativeArguments(t *testing.T) {
 }
 
 func TestTurnLetsModelCorrectInvalidArgumentsBeforeAnswer(t *testing.T) {
+	checkTurnRunners(t, checkTurnLetsModelCorrectInvalidArgumentsBeforeAnswer)
+}
+
+func checkTurnLetsModelCorrectInvalidArgumentsBeforeAnswer(t *testing.T, run TurnRunner) {
 	for _, test := range []string{"corrected", "answer without evidence", "second invalid call"} {
 		rounds := 0
 		tool := ReadTool{Schema: TaskQuerySchema(), Read: func(_ context.Context, args json.RawMessage) (ToolObservation, error) {
@@ -174,7 +190,7 @@ func TestTurnLetsModelCorrectInvalidArgumentsBeforeAnswer(t *testing.T) {
 			}
 			return ToolObservation{Data: json.RawMessage(`{"total":12}`)}, nil
 		}}
-		result, err := RunTurn(t.Context(), []llm.ChatMessage{{Role: llm.RoleUser, Content: "Quantas tiveram sucesso?"}}, []ReadTool{tool}, func(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
+		result, err := run(t.Context(), []llm.ChatMessage{{Role: llm.RoleUser, Content: "Quantas tiveram sucesso?"}}, []ReadTool{tool}, func(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
 			rounds++
 			switch rounds {
 			case 1:
@@ -203,6 +219,10 @@ func TestTurnLetsModelCorrectInvalidArgumentsBeforeAnswer(t *testing.T) {
 }
 
 func TestTurnReturnsNativeProposalsInOneModelCall(t *testing.T) {
+	checkTurnRunners(t, checkTurnReturnsNativeProposalsInOneModelCall)
+}
+
+func checkTurnReturnsNativeProposalsInOneModelCall(t *testing.T, run TurnRunner) {
 	for _, test := range []struct{ name, arguments, kind string }{
 		{"create_catalog_agent", `{"agentId":"reader","agentName":"Reader","instructions":"Read the notes."}`, CreateAgent},
 		{"open_console_page", `{"destination":"workflows"}`, OpenManual},
@@ -214,7 +234,7 @@ func TestTurnReturnsNativeProposalsInOneModelCall(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			const question = "O que pode fazer com o leitor?"
 			calls := 0
-			got, err := RunTurn(t.Context(), []llm.ChatMessage{{Role: llm.RoleUser, Content: question}}, nil, func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			got, err := run(t.Context(), []llm.ChatMessage{{Role: llm.RoleUser, Content: question}}, nil, func(_ context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 				calls++
 				if req.JSON || len(req.Messages) != 1 || req.Messages[0].Content != question || !toolOffered(req, test.name) || toolOffered(req, "prepare_operation") {
 					t.Fatal("missing native operation contract or conversation")
@@ -229,6 +249,10 @@ func TestTurnReturnsNativeProposalsInOneModelCall(t *testing.T) {
 }
 
 func TestTurnMayCorrectOneNativeOperationOrAskForClarification(t *testing.T) {
+	checkTurnRunners(t, checkTurnMayCorrectOneNativeOperationOrAskForClarification)
+}
+
+func checkTurnMayCorrectOneNativeOperationOrAskForClarification(t *testing.T, run TurnRunner) {
 	const bad = `{"agentId":"release-reader","instructions":"Read the notes."}`
 	const good = `{"agentId":"release-reader","agentName":"Reader","instructions":"Read the notes."}`
 	for _, test := range []struct {
@@ -245,7 +269,7 @@ func TestTurnMayCorrectOneNativeOperationOrAskForClarification(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			history := []llm.ChatMessage{{Role: llm.RoleUser, Content: "Estamos tratando das notas de versão."}, {Role: llm.RoleUser, Content: "Crie um agente para lê-las."}}
 			calls := 0
-			got, err := RunTurn(t.Context(), history, nil, func(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
+			got, err := run(t.Context(), history, nil, func(_ context.Context, r *llm.ChatRequest) (*llm.ChatResponse, error) {
 				calls++
 				if calls == 1 {
 					return nativeTestCall("invalid", "create_catalog_agent", test.first), nil
@@ -274,4 +298,16 @@ func TestTurnMayCorrectOneNativeOperationOrAskForClarification(t *testing.T) {
 
 func toolOffered(request *llm.ChatRequest, name string) bool {
 	return slices.ContainsFunc(request.Tools, func(tool llm.ToolSchema) bool { return tool.Name == name })
+}
+
+func checkTurnRunners(t *testing.T, exercise func(*testing.T, TurnRunner)) {
+	t.Helper()
+	t.Run("direct", func(t *testing.T) { exercise(t, RunTurn) })
+	t.Run("eino", func(t *testing.T) {
+		run, err := NewEinoTurn(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		exercise(t, run)
+	})
 }

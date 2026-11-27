@@ -91,6 +91,15 @@ func (m *chatTaskQueryModel) requests() []llm.ChatRequest {
 }
 
 func TestChatQueriesTasksThroughModelAndSQLite(t *testing.T) {
+	for _, backend := range []string{"direct", "eino"} {
+		t.Run(backend, func(t *testing.T) {
+			t.Setenv("WEFT_CHAT_ORCHESTRATOR", backend)
+			exerciseTaskQueries(t)
+		})
+	}
+}
+
+func exerciseTaskQueries(t *testing.T) {
 	srv, app := setupApp(t, nil)
 	const (
 		graph        = `{"metadata":{"id":"query-task-flow"},"spec":{"nodes":[{"id":"worker","runtime":{"kind":"echo"},"loop":{"mode":"event"}}],"channels":[{"id":"in","to":["worker"],"approval":true}]}}`

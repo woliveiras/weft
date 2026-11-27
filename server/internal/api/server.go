@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/woliveiras/weft/server/internal/chat"
 	"github.com/woliveiras/weft/server/internal/config"
 	"github.com/woliveiras/weft/server/internal/cost"
 	"github.com/woliveiras/weft/server/internal/domain"
@@ -57,6 +58,7 @@ import (
 var Version = "dev"
 
 type Deps struct {
+	ChatTurn          chat.TurnRunner
 	ChatIndexErr      error
 	ReviewRoutes      *reviewroute.Manager
 	TriggerManager    *trigger.Manager
@@ -97,6 +99,9 @@ type Server struct {
 }
 
 func New(d Deps) *Server {
+	if d.ChatTurn == nil {
+		d.ChatTurn = chat.RunTurn
+	}
 	s := &Server{Deps: d, mux: http.NewServeMux()}
 	s.internal = s.mux
 	if d.Config.Server.InternalAddr != "" {

@@ -192,7 +192,7 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 		} else {
 			var callErr error
 			var modelRevision int64
-			turn, modelErr := chat.RunTurn(ctx, history, s.chatReadTools(actor), func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
+			turn, modelErr := s.ChatTurn(ctx, history, s.chatReadTools(actor), func(ctx context.Context, req *llm.ChatRequest) (*llm.ChatResponse, error) {
 				operation := "chat_interpretation"
 				if req.Messages[len(req.Messages)-1].Role == llm.RoleTool {
 					operation = "chat_answer"

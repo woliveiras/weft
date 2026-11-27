@@ -34,26 +34,50 @@ const readAnswerPrompt = "Answer the latest user question in the user's language
 // RunTurn either returns an existing proposal for the domain review pipeline,
 // or executes a registered read and returns the model's grounded final answer.
 func RunTurn(ctx context.Context, turns []llm.ChatMessage, catalog []ReadTool, call ModelCall) (Interpretation, error) {
-	history, err := boundedHistory(turns)
+	t, err := interpretTurn(ctx, &chatTurn{history: turns, catalog: catalog, call: call})
+	for err == nil && len(t.pending) != 0 {
+		t, err = readBatch(ctx, t)
+	}
 	if err != nil {
 		return Interpretation{}, err
 	}
-	reads := make([]llm.ToolSchema, 0, len(catalog))
-	for _, tool := range catalog {
+	return t.result, nil
+}
+
+const maxReads = 3
+
+type chatTurn struct {
+	history                []llm.ChatMessage
+	catalog                []ReadTool
+	call                   ModelCall
+	request                llm.ChatRequest
+	pending                []llm.ToolCall
+	attempts, observations int
+	corrected              bool
+	result                 Interpretation
+}
+
+func interpretTurn(ctx context.Context, t *chatTurn) (*chatTurn, error) {
+	history, err := boundedHistory(t.history)
+	if err != nil {
+		return nil, err
+	}
+	reads := make([]llm.ToolSchema, 0, len(t.catalog))
+	for _, tool := range t.catalog {
 		reads = append(reads, tool.Schema)
 	}
 	req := llm.ChatRequest{System: turnPrompt, Messages: history, MaxTokens: maxAnswerTokens,
 		Tools: append(reads, OperationToolSchemas()...)}
-	response, err := completeTurn(ctx, &req, call)
+	response, err := completeTurn(ctx, &req, t.call)
 	if err != nil {
-		return Interpretation{}, err
+		return nil, err
 	}
 	calls := response.Message.ToolCalls
 	if !validToolCallIDs(calls) {
-		return Interpretation{}, ErrInvalidPlan
+		return nil, ErrInvalidPlan
 	}
 	var plan Plan
-	var proposed, corrected bool
+	var proposed bool
 	switch len(calls) {
 	case 0:
 		// Accept a strictly typed proposal from a compatible provider, even
@@ -63,28 +87,34 @@ func RunTurn(ctx context.Context, turns []llm.ChatMessage, catalog []ReadTool, c
 	case 1:
 		plan, proposed, err = NativeOperationPlan(calls[0])
 		if proposed && errors.Is(err, ErrInvalidPlan) {
-			plan, err = correctNativeOperation(ctx, req, calls[0], call)
-			corrected = true
+			plan, err = correctNativeOperation(ctx, req, calls[0], t.call)
+			t.corrected = true
 		}
 	}
 	if err != nil {
-		return Interpretation{}, err
+		return nil, err
 	}
 	if proposed {
 		if plan.Kind != InspectConsole || plan.Area != "tasks" {
-			return Interpretation{Plan: plan}, nil
+			t.result.Plan = plan
+			return t, nil
 		}
-		if !hasReadTool(catalog, "query_tasks") {
-			return Interpretation{}, ErrReadUnavailable
+		if !hasReadTool(t.catalog, "query_tasks") {
+			return nil, ErrReadUnavailable
 		}
 		req.Tools = reads
 		req.System = "Call query_tasks to answer the operator's task collection question. Choose the arguments according to the question and the tool schema."
-		response, err = completeTurn(ctx, &req, call)
+		response, err = completeTurn(ctx, &req, t.call)
 		if err != nil {
-			return Interpretation{}, err
+			return nil, err
 		}
 	}
-	return runReadTurn(ctx, history, reads, catalog, response, corrected, call)
+	if len(response.Message.ToolCalls) == 0 {
+		return nil, ErrInvalidPlan
+	}
+	t.request = llm.ChatRequest{System: readAnswerPrompt, Messages: history[:len(history):len(history)], Tools: reads, MaxTokens: maxAnswerTokens}
+	t.pending = response.Message.ToolCalls
+	return t, nil
 }
 
 func correctNativeOperation(ctx context.Context, req llm.ChatRequest, invalid llm.ToolCall, call ModelCall) (Plan, error) {
@@ -114,70 +144,62 @@ func correctNativeOperation(ctx context.Context, req llm.ChatRequest, invalid ll
 	return plan, err
 }
 
-func runReadTurn(ctx context.Context, history []llm.ChatMessage, schemas []llm.ToolSchema, catalog []ReadTool, response *llm.ChatResponse, corrected bool, call ModelCall) (Interpretation, error) {
-	if len(response.Message.ToolCalls) == 0 {
-		return Interpretation{}, ErrInvalidPlan
+func readBatch(ctx context.Context, t *chatTurn) (*chatTurn, error) {
+	calls := t.pending
+	if t.attempts+len(calls) > maxReads || !validToolCallIDs(calls) {
+		return nil, ErrInvalidPlan
 	}
-	req := llm.ChatRequest{System: readAnswerPrompt, Messages: history[:len(history):len(history)], Tools: schemas, MaxTokens: maxAnswerTokens}
-	const maxReads = 3
-	var result Interpretation
-	var attempts, observations int
-	var needsCorrection bool
-	for len(response.Message.ToolCalls) > 0 {
-		calls := response.Message.ToolCalls
-		if attempts+len(calls) > maxReads || !validToolCallIDs(calls) {
-			return Interpretation{}, ErrInvalidPlan
+	// Do not run part of a batch that combines reads with a proposal.
+	for _, invocation := range calls {
+		if !hasReadTool(t.catalog, invocation.Name) || !safeToolArguments(invocation) {
+			return nil, ErrInvalidPlan
 		}
-		// Do not run part of a batch that combines reads with a proposal.
-		for _, invocation := range calls {
-			if !hasReadTool(catalog, invocation.Name) || !safeToolArguments(invocation) {
-				return Interpretation{}, ErrInvalidPlan
-			}
+	}
+	// Opaque provider metadata (including Gemini thought signatures)
+	// travels with the originating assistant call only for this turn.
+	t.request.Messages = append(t.request.Messages, llm.ChatMessage{Role: llm.RoleAssistant, ToolCalls: calls})
+	needsCorrection := false
+	for _, invocation := range calls {
+		t.attempts++
+		observed, err := runRead(ctx, t.catalog, invocation)
+		if errors.Is(err, errToolArguments) && !t.corrected && t.attempts < maxReads {
+			t.corrected, needsCorrection = true, true
+			t.request.Messages = append(t.request.Messages, invalidArgumentsMessage(invocation))
+			continue
 		}
-		// Opaque provider metadata (including Gemini thought signatures)
-		// travels with the originating assistant call only for this turn.
-		req.Messages = append(req.Messages, llm.ChatMessage{Role: llm.RoleAssistant, ToolCalls: calls})
-		needsCorrection = false
-		for _, invocation := range calls {
-			attempts++
-			observed, err := runRead(ctx, catalog, invocation)
-			if errors.Is(err, errToolArguments) && !corrected && attempts < maxReads {
-				corrected, needsCorrection = true, true
-				req.Messages = append(req.Messages, invalidArgumentsMessage(invocation))
-				continue
-			}
-			if err != nil {
-				return Interpretation{}, err
-			}
-			observations++
-			if observations == 1 {
-				result.Plan.Title = observed.Title
-				result.Inventory = observed.Inventory
-				result.Destination = observed.Destination
-			} else {
-				// A comparison has multiple filters and totals, so no single query describes it.
-				result.Inventory = nil
-			}
-			req.Messages = append(req.Messages, llm.ChatMessage{Role: llm.RoleTool, Name: invocation.Name, ToolCallID: invocation.ID, Content: string(observed.Data)})
-		}
-		if attempts == maxReads {
-			if needsCorrection {
-				return Interpretation{}, ErrInvalidPlan
-			}
-			req.Tools = nil
-		}
-		next, err := completeTurn(ctx, &req, call)
 		if err != nil {
-			return Interpretation{}, err
+			return nil, err
 		}
-		response = next
+		t.observations++
+		if t.observations == 1 {
+			t.result.Plan.Title = observed.Title
+			t.result.Inventory = observed.Inventory
+			t.result.Destination = observed.Destination
+		} else {
+			// A comparison has multiple filters and totals, so no single query describes it.
+			t.result.Inventory = nil
+		}
+		t.request.Messages = append(t.request.Messages, llm.ChatMessage{Role: llm.RoleTool, Name: invocation.Name, ToolCallID: invocation.ID, Content: string(observed.Data)})
 	}
-	result.Text = strings.TrimSpace(response.Message.Content)
-	if needsCorrection || observations == 0 || result.Text == "" || !safeText(result.Text, MaxRequestBytes) {
-		return Interpretation{}, ErrInvalidPlan
+	if t.attempts == maxReads {
+		if needsCorrection {
+			return nil, ErrInvalidPlan
+		}
+		t.request.Tools = nil
 	}
-	result.Grounded = true
-	return result, nil
+	next, err := completeTurn(ctx, &t.request, t.call)
+	if err != nil {
+		return nil, err
+	}
+	t.pending = next.Message.ToolCalls
+	if len(t.pending) == 0 {
+		t.result.Text = strings.TrimSpace(next.Message.Content)
+		if needsCorrection || t.observations == 0 || t.result.Text == "" || !safeText(t.result.Text, MaxRequestBytes) {
+			return nil, ErrInvalidPlan
+		}
+		t.result.Grounded = true
+	}
+	return t, nil
 }
 
 var errToolArguments = errors.New("invalid tool arguments")

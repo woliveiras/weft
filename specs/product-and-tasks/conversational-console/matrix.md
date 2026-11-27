@@ -84,7 +84,7 @@ a write. Live transport/data tests support only the editions actually exercised.
 
 ## Eino turn qualification
 
-These pending rows exercise the existing Chat criteria with the in-process model-assisted turn in [ADR 0015](../../../docs/adr/0015-eino-console-chat-turns.md). They are independent of the workflow agent service. Use one implementation per request. Run the same fixtures against the current Go loop and the candidate, comparing verified targets, tool and model calls, persisted reviews and domain effects. Wording may vary. [RUN-010 migration](../../runtime-and-delivery/eino-runtime-migration/spec.md)
+These rows exercise the existing Chat criteria with the in-process model-assisted turn in [ADR 0015](../../../docs/adr/0015-eino-console-chat-turns.md). They are independent of the workflow agent service. Use one implementation per request. Run the same fixtures against the current Go loop and the candidate, comparing verified targets, tool and model calls, persisted reviews and domain effects. Wording may vary. [RUN-010 migration](../../runtime-and-delivery/eino-runtime-migration/spec.md)
 
 | ID | Criterion and action | Observable oracle | Provenance | Planned verification |
 | --- | --- | --- | --- | --- |
@@ -92,6 +92,14 @@ These pending rows exercise the existing Chat criteria with the in-process model
 | EINO-02 | AC-003/009. Submit a mixed read/proposal batch, invalid arguments, excessive reads, truncated output, a provider failure or cancellation. | Validate the entire batch before reading. Preserve the three-read ceiling, bounded correction, provider tool-call metadata and existing recovery outcomes. Failed turns yield no applied action or invented answer. | P/C current turn contract | U table-driven branch and error cases. I scripted provider through Weft's real model-call path, inspect persisted recovery state and accounting. |
 | EINO-03 | AC-004/007. Propose starting a ready task, reopen the store after restart and confirm twice. Repeat with decline, expiry, changed task revision or lost role. | The proposal alone leaves the task a draft. A valid confirmation admits exactly one run from the stored review. The other outcomes admit none. Confirmation succeeds for an eligible task even with the Chat model unavailable. | M/P | U review binding and operation selection. I real submission, confirmation and task-admission APIs with SQLite, restart and replay. E inspect the review and resulting task receipt. |
 | EINO-04 | AC-003/004. Use an explicit inspection command, then confirm a stored eligible review after rolling back the model-assisted turn. | Direct supported commands do not call the model. The same owner sees the existing session and review. The decision settles through Weft with a single domain effect and no Eino checkpoint. | M/P | U direct command dispatch and model-call count. I restart on the same data with the previous turn implementation and inspect session and domain records. |
+
+### Local Eino pilot
+
+Start the controller with `WEFT_CHAT_ORCHESTRATOR=eino` to compile the graph at startup. The default is `direct`. Restarting with `direct` selects the existing turn loop for new messages. Both use the same session store and domain review handlers.
+
+On Linux/arm64 with Eino v0.9.23, the shared unit suite passed for both runners, including provider metadata, mixed batches, the three-read bound, corrections, truncation and typed proposals. Concurrent Eino turns with disjoint catalogs and cancellation before a read passed. The HTTP/SQLite task query integration passed with each runner. All nine fixture evaluations passed with `WEFT_CHAT_ORCHESTRATOR=eino make eval-chat`. The full restart/rollback journey in EINO-03/04 and deployment measurements remain open.
+
+A single-process benchmark with one scripted proposal and zero network latency measured 95.2 µs and 129,206 B per direct turn versus 100.3 µs and 138,122 B with Eino (`go test ./internal/chat -bench BenchmarkChatOrchestration`). The unstripped Linux/arm64 controller built with the project toolchain grew from 67,498,661 bytes at the spec revision to 75,777,887 bytes in the pilot build. These measurements apply to this fixture and build.
 
 ## Locally verified coverage
 

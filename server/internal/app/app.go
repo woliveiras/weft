@@ -92,6 +92,18 @@ type App struct {
 
 // New builds every component. Log may be nil (observability.Setup decides).
 func New(ctx context.Context, cfg *config.Config) (*App, error) {
+	var chatTurn chat.TurnRunner = chat.RunTurn
+	switch os.Getenv("WEFT_CHAT_ORCHESTRATOR") {
+	case "", "direct":
+	case "eino":
+		runner, err := chat.NewEinoTurn(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("compile Eino Chat graph: %w", err)
+		}
+		chatTurn = runner
+	default:
+		return nil, errors.New("WEFT_CHAT_ORCHESTRATOR must be direct or eino")
+	}
 	a := &App{Config: cfg}
 	log, shutdown, err := observability.Setup(ctx, observability.Config{
 		ServiceName: cfg.Observability.ServiceName, ServiceVersion: api.Version, Instance: cfg.Instance,
@@ -325,6 +337,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	a.ReviewRoutes = a.newReviewRoutes()
 	a.API = api.New(api.Deps{
 		ChatIndexErr:      chatIndexErr,
+		ChatTurn:          chatTurn,
 		ReviewRoutes:      a.ReviewRoutes,
 		RepositoryImports: a.RepositoryImports, TriggerManager: &a.Triggers.Triggers,
 		Reviews: a.Reviews, PreviewGateway: a.PreviewGateway, MCP: a.MCP, SCM: a.SCM, IssueConnections: a.IssueConnections, CloudProfiles: &a.CloudProfiles, Gateway: a.Gateway,

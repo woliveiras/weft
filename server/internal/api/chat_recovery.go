@@ -21,7 +21,7 @@ func chatRecovery(modelErr, callErr error) chat.Interpretation {
 		result.Destination = "budgets"
 	case errors.Is(callErr, tools.ErrRateLimited):
 		result.Text = "Chat is handling its maximum number of model calls. Retry this saved request when a slot is available."
-	case errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled):
+	case errors.Is(callErr, context.DeadlineExceeded) || errors.Is(callErr, context.Canceled), errors.Is(modelErr, context.Canceled), errors.Is(modelErr, context.DeadlineExceeded):
 		result.Text = "The model call ended before Chat received an answer. Retry this saved request."
 	case errors.Is(modelErr, chat.ErrTruncated):
 		result.Text = "The model reached its output limit before completing this request."
