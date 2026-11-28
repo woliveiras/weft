@@ -156,7 +156,7 @@ test('discovers duplicate PR numbers and publishes only reviewed comments on the
   }
 });
 
-async function startTaskWaitingForApproval(request: APIRequestContext, graphId: string, title: string, authorizationProfile?: string) {
+async function startTaskWaitingForApproval(request: APIRequestContext, graphId: string, title: string) {
   const task = await draftTaskWithApproval(request, graphId, title);
   const started = await request.post(`/api/v1/tasks/${task.id}/start`, {
     headers: { ...headers, 'If-Match': String(task.revision) }, data: { confirm: true },
