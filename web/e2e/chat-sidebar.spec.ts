@@ -13,7 +13,9 @@ test('reads the full recent title with a mouse, keyboard and narrow touch search
   await page.goto('/');
   const row=page.getByRole('listitem').filter({has:page.getByRole('button',{name:title,exact:true})});
   const opener=row.getByRole('button',{name:title,exact:true});
-  expect(await opener.evaluate(el=>el.scrollWidth>el.clientWidth)).toBe(true);
+  await expect.poll(() => opener.evaluate(el => el.scrollWidth - el.clientWidth), {
+    message: 'The recent title should overflow its sidebar button',
+  }).toBeGreaterThan(0);
   await opener.hover();
   const preview=row.locator('.chat-session-preview');
   await expect(preview).toHaveText(new RegExp(title));
