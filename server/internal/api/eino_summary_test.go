@@ -35,7 +35,9 @@ func setupEinoController(t *testing.T) (*httptest.Server, *app.App, string) {
 	ctx := t.Context()
 	base := filepath.Join("..", "..", "..")
 	binary := filepath.Join(t.TempDir(), "weft-eino-agent")
-	build := exec.CommandContext(ctx, "go", "build", "-o", binary, "./cmd/weft-eino-agent")
+	// The test binary does not need VCS metadata, and Git may reject a checkout
+	// owned by the host runner when tests build it inside the container.
+	build := exec.CommandContext(ctx, "go", "build", "-buildvcs=false", "-o", binary, "./cmd/weft-eino-agent")
 	build.Dir = filepath.Join(base, "agents", "eino")
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build external service: %s: %v", out, err)
