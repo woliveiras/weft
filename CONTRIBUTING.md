@@ -93,6 +93,7 @@ Start Docker before running the container-backed targets:
 make build        # weftd + weft into server/bin
 make test         # Go controller and agent tests, web type-check and Vitest tests
 make lint         # gofmt + go vet
+make check        # lint, Go/web tests and the pre-push hook regression
 make up           # full stack via docker compose
 ```
 
@@ -136,6 +137,30 @@ set: `WEFT_TEST_NATS_URL`, `WEFT_TEST_REDIS_URL`,
 `WEFT_TEST_RABBITMQ_URL`, `WEFT_TEST_KAFKA_BROKERS`,
 `WEFT_TEST_POSTGRES_DSN`.
 
+### Direct pushes to main
+
+Enable the versioned hook once in each clone with the following command.
+
+```bash
+git config --local core.hooksPath .githooks
+```
+
+If the clone already has custom hooks, integrate
+[`pre-push`](.githooks/pre-push) with that setup. For an outgoing update to
+`main`, the hook runs `make check` in a temporary copy of the outgoing commit
+stored under the clone's Git directory so Docker can mount it.
+Commit the intended changes first. Uncommitted and untracked files stay in
+your checkout. A failed check stops the push, and you can run `make check`
+directly while developing. The check defaults to serial Go packages, and
+the containerized web tests use two Vitest workers.
+
+GitHub Actions runs `make check`, `make build` and `make test-e2e-smoke` after
+each push to `main`. It reports against the commit that arrived and keeps
+the Playwright report, failure screenshots and traces for seven days when
+produced. Both local and GitHub checks run without a minimum coverage
+percentage. The [web guide](web/README.md#browser-smoke) shows how to run
+the browser smoke locally.
+
 ## Ground rules
 
 - **Contracts first.** [OpenAPI](api/openapi.yaml), [JSON Schemas](schemas/),
@@ -151,7 +176,7 @@ set: `WEFT_TEST_NATS_URL`, `WEFT_TEST_REDIS_URL`,
   hosts) through the helpers in `server/internal/tools/policy.go`.
 - **Tests** accompany every behaviour change. Engine behaviour is tested
   end-to-end in `server/internal/engine/engine_test.go`.
-- Run `make lint test` before opening a pull request. Keep commits focused and
+- Keep the local hook enabled for pushes to `main`. Keep commits focused and
   describe the *why* in the message.
 
 ## Architecture decisions

@@ -151,7 +151,6 @@ items can progress in parallel, subject to the dependencies below.
 - [PROD-06 — Managed secrets and key rotation](./production-readiness/prod-06/spec.md) — `planned`. Vault/KMS choice and authorized rotation qualification pending.
 - [PROD-07 — Production approval defaults](./production-readiness/prod-07/spec.md) — `planned`. Review new-workflow defaults and threat model.
 - [PROD-08 — Production topology and workspace storage](./production-readiness/prod-08/spec.md) — `planned`. Choose deployment shape before the dedicated workspace filesystem migration.
-- [PROD-11 — Required GitHub CI checks](./production-readiness/prod-11/spec.md) — `planned`. Reconfirm the repository-import and MCP browser failures and qualify the full CI workflow.
 - [PROD-12 — Production supply chain](./production-readiness/prod-12/spec.md) — `planned`. Build on CI artifact generation and agree on admission policy.
 - [PROD-13 — Coding model acceptance](./production-readiness/prod-13/spec.md) — `planned`. Choose the production model with PROD-03 and agree on a repeated evaluation and solve-rate bar.
 - [PROD-14 — Production integration qualification](./production-readiness/prod-14/spec.md) — `planned` for the external phase. Requires selected integrations and authorized accounts.
@@ -161,6 +160,7 @@ items can progress in parallel, subject to the dependencies below.
 
 - [PROD-09 — Timed backup and restore](./production-readiness/prod-09/spec.md) — `in-progress`. Journal recovery exists. Time a full restore for the selected installation.
 - [PROD-10 — Production SLOs and alert ownership](./production-readiness/prod-10/spec.md) — `in-progress`. Journal alerts exist. Production SLOs, routing and ownership are open.
+- [PROD-11 — Quality checks for direct pushes to main](./production-readiness/prod-11/spec.md) — `in-progress`. Check the outgoing commit locally and qualify the GitHub Actions workflow for pushes to `main`.
 
 ### Dependencies
 

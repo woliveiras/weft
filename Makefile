@@ -34,15 +34,24 @@ test-egress: ## Real runtime/build/setup HTTP/HTTPS allowlist and isolation chec
 test-environment-policy: ## Installation policy network checks on the dedicated daemon (cached alpine:3.22 required)
 	./scripts/test-environment-policy.sh
 
-test: test-go test-web ## Run all test suites
+.PHONY: check test-pre-push
+# The Go integration suites start their own compilers and subprocesses.
+check: export GOFLAGS ?= -p=1
+check: lint test test-pre-push ## Run local lint, Go and web tests, and the pre-push hook regression
+
+test: test-go test-web ## Run Go and web test suites
+
+test-pre-push: ## Check hook ref filtering and verify the outgoing commit using a Git fixture
+	sh scripts/test-pre-push.sh
 
 test-go: ## Go unit + integration tests (memory/fs/sqlite; live brokers via WEFT_TEST_* env)
 	$(GO) test ./...
 	$(GO) -C ../agents/eino test ./...
 
+# Bound Vitest workers in the shared container toolchain to leave CPU for jsdom.
 test-web: ## Type-check and run the web console tests (Vitest, jsdom)
 	image=$$(docker build -q --target web-source .) && \
-		docker run --rm "$$image" sh -ec 'pnpm exec tsc --noEmit && pnpm test'
+		docker run --rm "$$image" sh -ec 'pnpm exec tsc --noEmit && pnpm test --maxWorkers=2'
 
 test-compose: ## Reviewed Compose services on the dedicated daemon (cached alpine:3.22 required)
 	./scripts/test-compose-runtime.sh
@@ -57,7 +66,7 @@ test-environment-context: ## Real COPY/ADD sandbox checks (running dedicated dae
 	./scripts/test-environment-context.sh
 
 lint: ## gofmt check and go vet
-	@out=$$(docker run --rm -v "$$(pwd):/repo" -w /repo golang:1.26-alpine gofmt -l server agents/eino); \
+	@out=$$(docker run --rm -v "$$(pwd):/repo" -w /repo golang:1.26-alpine gofmt -l server agents/eino) || exit $$?; \
 	  if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 	$(GO) vet ./...
 	$(GO) -C ../agents/eino vet ./...
@@ -91,7 +100,11 @@ k8s-render: ## Render platform manifests (kustomize) and agent runtimes for GRAP
 clean: ## Remove build outputs
 	rm -rf server/bin web/dist
 
-.PHONY: test-e2e
+.PHONY: test-e2e test-e2e-smoke
+test-e2e-smoke: ## Chromium smoke against a disposable backend (Go, Node, Git, Playwright Chromium required)
+	cd server && go test -tags e2e ./cmd/weft-e2e
+	cd web && pnpm run test:e2e:smoke
+
 test-e2e: ## Chromium browser journey against a disposable backend (Go, Node, Git, Playwright Chromium required)
 	cd server && go test -tags e2e ./cmd/weft-e2e
 	cd web && pnpm run test:e2e

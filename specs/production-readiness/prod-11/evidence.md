@@ -1,4 +1,29 @@
-# PROD-11 historical verification notes
+# PROD-11 verification notes
+
+## Direct-to-main verification on 2026-11-28
+
+Local checks ran in the current checkout using the Docker toolchains in
+`Makefile` and a disposable Chromium runner. Hook tests used a synthetic Git
+repository and local ref input. GitHub delivery and diagnostics retention
+still require an authorized push.
+
+| Command or probe | Result |
+| --- | --- |
+| `make test-pre-push` | Passed. The hook ignored unrelated ref updates and a deletion, checked the outgoing commit despite dirty files, rejected a failing commit and cleaned up its snapshot. |
+| `shellcheck .githooks/pre-push scripts/test-pre-push.sh` | Passed. |
+| `actionlint .github/workflows/ci.yml` | Passed with actionlint v1.7.12. |
+| `make build` | Passed with the containerized Go toolchain. |
+| `make check` under concurrent local checks | Go formatting and vet passed. Existing factory and scripted evaluation tests hit their deadlines in `internal/api` and `internal/eval`, and the command failed. |
+| `make test-web` under concurrent local checks | Type-check passed. Seven existing cases in `GraphWorkspace.test.tsx` and `TasksPage.test.tsx` exceeded the 5 s Vitest timeout. |
+| `make check GOFLAGS=-p=1` before bounding Vitest workers | Both Go modules passed. The web suite still timed out in the shared-environment selection case. |
+| `make check` with the final runner settings | Passed Go formatting, vet and both Go suites, web type-check, all 903 Vitest tests across 148 files and the hook regression. The final command used serial Go packages and up to two Vitest workers. |
+| `make test-e2e-smoke` | Passed the tagged Go fixture tests, E2E type-check and all four Chromium scenarios with Go 1.26.10, Node 22.23.5 and pnpm 10.33.4. The first attempt stopped at an unused Chat E2E helper parameter, since removed by `7a6380c7`. |
+| Formatter container failure probe | `make lint` returned a failing status when the formatter container command failed. |
+
+The hook snapshot uses the clone's Git directory. A read-only Docker probe
+confirmed that its contents are visible to the local daemon.
+
+## Historical verification notes
 
 - 2026-10-17. The UX checkpoint observed an intermittent sandbox journal
   supervision failure in a full run and one isolated repetition. A diagnostic

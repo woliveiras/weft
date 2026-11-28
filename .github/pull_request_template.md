@@ -5,7 +5,7 @@
 ## Validation
 
 <!-- List the commands you ran and their results. The contribution guide asks for
-     `make lint test` before opening a PR. For behavior changes, summarize the unit
+     `make check` before sharing changes. For behavior changes, summarize the unit
      and integration coverage. Name any pending checks and explain why. -->
 
 ## Review notes

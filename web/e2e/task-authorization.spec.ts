@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 const headers={Authorization:'Bearer e2e-admin-token'};
-test('reviews task scope, confirms modes and preserves consent across reload',async({page})=>{
+test('reviews task scope, confirms modes and preserves consent across reload', {tag: '@smoke'}, async({page})=>{
  const graph={metadata:{id:'authorization-flow'},spec:{nodes:[{id:'worker',runtime:{kind:'echo'},loop:{mode:'event'},tools:[]}],channels:[{id:'requests',to:['worker'],approval:true}]}};
  expect((await page.request.post('/api/v1/graphs',{headers,data:graph})).status()).toBe(201);
  const res=await page.request.post('/api/v1/tasks',{headers,data:{title:'Consent test',request:'Read the fixture',outcome:'freeform',graphId:'authorization-flow',graphVersion:1,nodeId:'worker',resultNodeId:'worker',channelId:'requests',messageType:'task.request',payloadJson:'{}'}});expect(res.status()).toBe(201);const task=await res.json();
