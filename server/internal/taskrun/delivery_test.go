@@ -44,6 +44,9 @@ func TestSCMHandOffGrantsOnlyTheTaskConnectionToTheResultAgent(t *testing.T) {
 	if err != nil || len(blocks) != 0 {
 		t.Fatalf("prepare: %v %v", blocks, err)
 	}
+	if g.Metadata.Labels[domain.LabelTaskConsent] != "required" {
+		t.Fatal("execution copy missing consent marker")
+	}
 	if source.Spec.Nodes[1].Prompt != "Hand off." || len(source.Spec.Nodes[1].Tools) != 1 {
 		t.Fatal("the source workflow was changed")
 	}

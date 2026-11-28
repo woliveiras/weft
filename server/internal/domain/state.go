@@ -261,9 +261,11 @@ const TaskRunGraphPrefix = "task-run-"
 const (
 	LabelTask         = "weft.task"
 	LabelTaskWorkflow = "weft.workflow"
-	LabelTaskUser     = "weft.user"
-	LabelTaskProject  = "weft.project"
-	LabelTaskSCM      = "weft.scm"
+	// LabelTaskConsent marks execution copies whose admission requires a durable authorization record.
+	LabelTaskConsent = "weft.task.consent"
+	LabelTaskUser    = "weft.user"
+	LabelTaskProject = "weft.project"
+	LabelTaskSCM     = "weft.scm"
 	// LabelTaskBase is the reviewed base commit of a project task; check
 	// evidence lists check-defining files changed since it.
 	LabelTaskBase = "weft.base"

@@ -246,8 +246,12 @@ func (m Manager) Check(ctx context.Context, p *tools.Principal, t tools.Tool, ma
 		return false, "", err
 	}
 	if review.Record == nil {
+		if g.Metadata.Labels[domain.LabelTaskConsent] == "required" || review.WorkflowProfile.IsProfile() {
+			return false, "", ErrDenied
+		}
+		// Historical execution copies created before consent records existed.
 		return mandatory, "legacy", nil
-	} // Existing installation tasks keep their grants.
+	}
 	rec := review.Record
 	currentScope, scopeErr := executionScope(g)
 	if scopeErr != nil {

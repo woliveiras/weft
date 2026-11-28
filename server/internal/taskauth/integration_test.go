@@ -64,7 +64,7 @@ func setupAt(t *testing.T, root string) (Manager, *taskconfig.Draft, *tools.Prin
 func launch(t *testing.T, m Manager, d *taskconfig.Draft, p *tools.Principal) {
 	t.Helper()
 	d.ExecutionGraphID = p.GraphID
-	g := &domain.Graph{Metadata: domain.GraphMetadata{ID: p.GraphID, Labels: map[string]string{"weft.task": d.ID}}}
+	g := &domain.Graph{Metadata: domain.GraphMetadata{ID: p.GraphID, Labels: map[string]string{"weft.task": d.ID, domain.LabelTaskConsent: "required"}}}
 	if _, err := m.Store.SaveGraph(t.Context(), g, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -712,5 +712,35 @@ func TestAssistedWorkspaceEditsRespectWorkflowPathsAndLiveReduction(t *testing.T
 	}
 	if err = write("notes.txt"); err != nil || approvals.calls != 1 {
 		t.Fatalf("manual edit: %v, approvals %d", err, approvals.calls)
+	}
+}
+
+type missingConsentRecord struct{ storage.Store }
+
+func (s missingConsentRecord) GetSetting(ctx context.Context, key string) (*storage.Setting, error) {
+	if strings.HasPrefix(key, prefix) {
+		return nil, storage.ErrNotFound
+	}
+	return s.Store.GetSetting(ctx, key)
+}
+func TestGatewayFailsClosedIfProfileRecordIsMissing(t *testing.T) {
+	m, d, p := setup(t)
+	ctx := t.Context()
+	r, err := m.Review(ctx, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.Save(ctx, d.ID, Automatic, r.Scope, 0, "admin", true); err != nil {
+		t.Fatal(err)
+	}
+	launch(t, m, d, p)
+	m.Store = missingConsentRecord{m.Store}
+	reg := tools.NewRegistry()
+	tool := &sampleTool{}
+	reg.MustRegister(tool)
+	gw := tools.NewGateway(reg, nil, nil)
+	gw.TaskAuthorization = m.Check
+	if _, err = gw.Invoke(ctx, p, tool.Name(), nil); !errors.Is(err, tools.ErrDenied) || tool.calls != 0 {
+		t.Fatalf("missing consent executed: %v, calls %d", err, tool.calls)
 	}
 }

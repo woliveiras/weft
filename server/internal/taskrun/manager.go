@@ -146,7 +146,7 @@ func Prepare(d *taskconfig.Draft, source *domain.Graph) (*domain.Graph, []string
 	g.Metadata.ID = ExecutionID(d.ID)
 	g.Metadata.Name = d.Title + " (task execution)"
 	g.Metadata.Version = 0
-	g.Metadata.Labels = map[string]string{"weft.task.lifecycle": "settled", domain.LabelTask: d.ID, domain.LabelTaskWorkflow: source.Metadata.ID, domain.LabelTaskUser: d.CreatedBy}
+	g.Metadata.Labels = map[string]string{"weft.task.lifecycle": "settled", domain.LabelTaskConsent: "required", domain.LabelTask: d.ID, domain.LabelTaskWorkflow: source.Metadata.ID, domain.LabelTaskUser: d.CreatedBy}
 	if d.ProjectID != "" {
 		g.Metadata.Labels[domain.LabelTaskProject] = d.ProjectID
 		g.Metadata.Labels[domain.LabelTaskBase] = d.BaseCommit
