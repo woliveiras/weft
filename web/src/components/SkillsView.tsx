@@ -3,7 +3,7 @@ import {useEffect,useState,type MouseEvent,type ReactNode} from 'react';
 import {api,errorMessage} from '../api/client';
 import type {Skill,SkillInput} from '../api/instructions';
 import {useAsync} from '../hooks/useData';
-import {Badge,Btn,ContextHelp,ErrorBox} from './common';
+import {Badge,Btn,ContextHelp,ErrorBox,fmtDateTime} from './common';
 import {HelpField} from './FieldHelp';
 import {SkillMarkdown} from './SkillMarkdown';
 import {SkillAssociations} from './SkillAssociations';
@@ -143,6 +143,6 @@ function SkillDetails({skill,copyFrom,initialDraft,create,tab,canEdit,navigate:o
         <HelpField label="Installation default" help="Marks this skill as a default candidate. It is loaded only by workflows that explicitly enable installation defaults; this does not attach it to every workflow."><input type="checkbox" checked={form.global} onChange={event=>update({global:event.target.checked})}/></HelpField>
       </fieldset>
       {saved&&!readOnly&&!saved.deleted&&<div><Btn tone="danger" disabled={busy} onClick={()=>void remove()}>Delete skill</Btn></div>}
-    </form>:tab==='workflows'&&saved?<SkillWorkflows skill={saved} navigate={navigate}/>:saved?<section className="card skill-history" aria-label="Revision history"><h2>Revision history</h2><p className="muted small">Newest revisions first. Saved executions retain their original instruction snapshot.</p>{[...saved.history,saved].sort((a,b)=>b.revision-a.revision).map(version=><details key={version.revision}><summary>Revision {version.revision} · {version.actor} · {version.at}{version.deleted?' · Deleted':''}</summary><p>{version.description}</p><pre>{version.body}</pre></details>)}</section>:null}
+    </form>:tab==='workflows'&&saved?<SkillWorkflows skill={saved} navigate={navigate}/>:saved?<section className="card skill-history" aria-label="Revision history"><h2>Revision history</h2><p className="muted small">Newest revisions first. Saved executions retain their original instruction snapshot.</p>{[...saved.history,saved].sort((a,b)=>b.revision-a.revision).map(version=><details key={version.revision}><summary>Revision {version.revision} · {version.actor} · {version.at ? <time dateTime={version.at}>{fmtDateTime(version.at)}</time> : 'Not recorded'}{version.deleted?' · Deleted':''}</summary><p>{version.description}</p><pre>{version.body}</pre></details>)}</section>:null}
   </div>;
 }

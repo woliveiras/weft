@@ -20,7 +20,7 @@ const skill: Skill = {
   global: false,
   revision: 1,
   actor: "admin",
-  at: "2026-10-16",
+  at: "2026-10-16T23:30:05.027688696Z",
   deleted: false,
   history: [],
 };
@@ -86,7 +86,11 @@ it("creates, versions and deletes through the API client with CAS and retains co
   fireEvent.click(screen.getByRole('button',{name:'Delete skill'}));
   await screen.findByText('Skill deleted. Revision history is retained.');
   fireEvent.click(screen.getByRole('link',{name:'History'}));
-  expect(await screen.findByText('Revision 2 · admin · 2026-10-16 · Deleted')).toBeTruthy();
+  const history = await screen.findByRole("region", { name: "Revision history" });
+  const [latest] = within(history).getAllByRole("time");
+  expect(latest.getAttribute("datetime")).toBe(skill.at);
+  const localTime = new Date("2026-10-16T23:30:05Z").toLocaleString();
+  expect(latest.closest("summary")?.textContent).toBe(`Revision 2 · admin · ${localTime} · Deleted`);
 });
 it("opens History on the first click after deletion completes and blocks it while deletion is pending", async () => {
   let finishDelete!: (skill: Skill) => void;
@@ -114,8 +118,11 @@ it("opens History on the first click after deletion completes and blocks it whil
   try {
     finishDelete({ ...skill, revision: 2, deleted: true, enabled: false, history: [skill] });
     const revisions = await screen.findByRole("region", { name: "Revision history" });
-    expect(within(revisions).getByText("Revision 2 · admin · 2026-10-16 · Deleted")).toBeTruthy();
-    expect(within(revisions).getByText("Revision 1 · admin · 2026-10-16")).toBeTruthy();
+    const localTime = new Date("2026-10-16T23:30:05Z").toLocaleString();
+    expect(Array.from(revisions.querySelectorAll("summary"), row => row.textContent)).toEqual([
+      `Revision 2 · admin · ${localTime} · Deleted`,
+      `Revision 1 · admin · ${localTime}`,
+    ]);
     expect(routes.find("DELETE", "/api/v1/skills/review")).toHaveLength(1);
   } finally {
     observer.disconnect();

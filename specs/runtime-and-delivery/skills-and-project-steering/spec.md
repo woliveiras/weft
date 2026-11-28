@@ -46,6 +46,8 @@ Workspace reads stay in the selected workspace, exclude unsupported entries and 
 
 - 2026-11-19. Built-in skill details explicitly identify read-only content and offer administrators Create editable copy. The action prepares an unsaved custom draft with an available, non-reserved ID; Save creates a first revision. Original content and associations remain unchanged; history and installation-default status are not copied.
 
+- 2026-11-28. Revision history displays the date and local time to the second in the browser’s locale and time zone. Each revision retains its original timestamp.
+
 ## Reconciliation
 
 - [instructions.md](../../../docs/instructions.md), [product-contracts.md](../../../docs/product-contracts.md), [runtime-protocol.md](../../../docs/runtime-protocol.md).
