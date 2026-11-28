@@ -263,3 +263,23 @@ test('copies a built-in only after review and saving, retaining the original and
   await page.getByRole('link',{name:'Back to skills',exact:true}).click();
   expect((await page.request.get('/api/v1/skills/planner-copy-2',{headers})).status()).toBe(404);
 });
+
+test('opens a deleted skill’s saved history and retains both revisions on reload', async ({ page, request }) => {
+  const id = 'history-after-delete';
+  const created = await request.post('/api/v1/skills', {
+    headers: { Authorization: 'Bearer e2e-admin-token' },
+    data: { id, title: 'History after delete', body: 'Original guidance.', enabled: true },
+  });
+  expect(created.ok()).toBe(true);
+  await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
+  await page.goto('/#/skills/s/' + id + '/content');
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Delete skill' }).click();
+  await expect(page.getByRole('status')).toHaveText('Skill deleted. Revision history is retained.');
+  await page.getByRole('link', { name: 'History', exact: true }).click();
+  await expect(page).toHaveURL(/#\/skills\/s\/history-after-delete\/history$/);
+  const history = page.getByRole('region', { name: 'Revision history' });
+  await expect(history.locator('summary')).toHaveText([/^Revision 2 .* · Deleted$/, /^Revision 1 /]);
+  await page.reload();
+  await expect(history.locator('summary')).toHaveText([/^Revision 2 .* · Deleted$/, /^Revision 1 /]);
+});

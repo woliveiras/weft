@@ -88,6 +88,39 @@ it("creates, versions and deletes through the API client with CAS and retains co
   fireEvent.click(screen.getByRole('link',{name:'History'}));
   expect(await screen.findByText('Revision 2 · admin · 2026-10-16 · Deleted')).toBeTruthy();
 });
+it("opens History on the first click after deletion completes and blocks it while deletion is pending", async () => {
+  let finishDelete!: (skill: Skill) => void;
+  const deleted = new Promise<Skill>(resolve => { finishDelete = resolve; });
+  const routes = fakeApi({
+    "GET /api/v1/skills": () => [skill],
+    "DELETE /api/v1/skills/review": () => deleted,
+  });
+  vi.spyOn(window, "confirm").mockReturnValue(true);
+  render(<SkillsView role="admin" onChanged={() => {}} />);
+  fireEvent.click(await screen.findByRole("link", { name: "Review" }));
+  const history = screen.getByRole("link", { name: "History" });
+  fireEvent.click(screen.getByRole("button", { name: "Delete skill" }));
+  fireEvent.click(history);
+  expect(screen.getByRole("link", { name: "Content" }).getAttribute("aria-current")).toBe("page");
+
+  // Click once in the first DOM update that tells the user deletion is complete.
+  const observer = new MutationObserver(() => {
+    if (screen.queryByText("Skill deleted. Revision history is retained.")) {
+      observer.disconnect();
+      history.click();
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  try {
+    finishDelete({ ...skill, revision: 2, deleted: true, enabled: false, history: [skill] });
+    const revisions = await screen.findByRole("region", { name: "Revision history" });
+    expect(within(revisions).getByText("Revision 2 · admin · 2026-10-16 · Deleted")).toBeTruthy();
+    expect(within(revisions).getByText("Revision 1 · admin · 2026-10-16")).toBeTruthy();
+    expect(routes.find("DELETE", "/api/v1/skills/review")).toHaveLength(1);
+  } finally {
+    observer.disconnect();
+  }
+});
 it("associates graph and narrowed agents and inspects saved/execution manifests", async () => {
   const graph={apiVersion:'weft.io/v1',kind:'Graph',metadata:{id:'g',name:'Graph',version:3},spec:{nodes:[{id:'n',prompt:'task'}]}};
   const snapshot={graphId:'g',nodeId:'n',budget:8,entries:[{scope:'graph',source:'review',included:true,body:'Review code'}]};

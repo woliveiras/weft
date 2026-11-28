@@ -23,7 +23,7 @@ export function SkillsView({role,onChanged,route,onNavigate}:{role?:string;onCha
   const [localRoute,setLocalRoute]=useState<SkillsRoute>({});
   const current=route??localRoute;
   const [dirty,setDirty]=useState(false);
-  const [busy,setBusy]=useState(false);
+  const [associationsBusy,setAssociationsBusy]=useState(false);
   const [creationNotice,setCreationNotice]=useState<string>();
   const admin=role==='admin';
   const editing=!!current.skillId||!!current.create;
@@ -32,7 +32,7 @@ export function SkillsView({role,onChanged,route,onNavigate}:{role?:string;onCha
   const navigate:Navigate=next=>{
     const sameSkill=editing && next.skillId===current.skillId && next.create===current.create && next.copyFrom===current.copyFrom && (next.skillId||next.create);
     const sameWorkflow=!editing && current.workflow===next.workflow && current.section===next.section;
-    if(busy)return;
+    if(associationsBusy)return;
     if(dirty&&!sameSkill&&!sameWorkflow&&!window.confirm('Discard unsaved changes?'))return;
     if(!sameSkill&&!sameWorkflow)setDirty(false);
     setCreationNotice(undefined);setRoute(next);
@@ -59,13 +59,13 @@ export function SkillsView({role,onChanged,route,onNavigate}:{role?:string;onCha
     {editing ? <>
       {requestedId&&!selected ? !catalog.loading&&!catalog.error&&<><h1>{current.create?'Source skill not found':'Skill not found'}</h1><SkillLink route={{}} navigate={navigate}>Back to skills</SkillLink></> :
         <SkillDetails key={current.create?`new-${current.copyFrom??''}`:current.skillId} skill={current.create?undefined:selected} copyFrom={current.create?selected:undefined} initialDraft={current.create&&selected?editableSkillCopy(selected,catalog.data??[]):undefined} create={!!current.create} tab={current.tab??'content'} canEdit={admin&&!catalog.error&&!catalog.loading}
-          navigate={navigate} onDirty={setDirty} onBusy={setBusy} onSaved={skill=>{
+          navigate={navigate} onDirty={setDirty} onSaved={skill=>{
             catalog.setData(items=>[...(items??[]).filter(item=>item.id!==skill.id),skill]);
             if(current.create){setCreationNotice(`Skill saved as revision ${skill.revision}.`);setDirty(false);if(onNavigate)onNavigate({skillId:skill.id});else setLocalRoute({skillId:skill.id});}
           }}/>}
     </> : section==='catalog' ? <SkillCatalog skills={catalog.data??[]} ready={!!catalog.data} navigate={navigate} onReload={()=>void catalog.reload()}/> :
       <SkillAssociations key={section} skills={catalog.data??[]} skillsUnavailable={!catalog.data||!!catalog.error||catalog.loading} role={role} mode={section} workflowId={current.workflow} agentId={current.agent} executionId={current.execution}
-        onSelection={(workflow,agent,execution)=>setRoute({section,workflow,agent,execution})} onDirty={setDirty} onBusy={setBusy} onChanged={onChanged}/>}
+        onSelection={(workflow,agent,execution)=>setRoute({section,workflow,agent,execution})} onDirty={setDirty} onBusy={setAssociationsBusy} onChanged={onChanged}/>}
   </div>;
 }
 function SkillCatalog({skills,ready,navigate,onReload}:{skills:Skill[];ready:boolean;navigate:Navigate;onReload:()=>void}) {
@@ -89,14 +89,14 @@ function SkillCatalog({skills,ready,navigate,onReload}:{skills:Skill[];ready:boo
     </>}
   </section>;
 }
-function SkillDetails({skill,copyFrom,initialDraft,create,tab,canEdit,navigate,onDirty,onBusy,onSaved}:{skill?:Skill;copyFrom?:Skill;initialDraft?:SkillInput;create:boolean;tab:keyof typeof tabs;canEdit:boolean;navigate:Navigate;onDirty:(value:boolean)=>void;onBusy:(value:boolean)=>void;onSaved:(skill:Skill)=>void}) {
+function SkillDetails({skill,copyFrom,initialDraft,create,tab,canEdit,navigate:onNavigate,onDirty,onSaved}:{skill?:Skill;copyFrom?:Skill;initialDraft?:SkillInput;create:boolean;tab:keyof typeof tabs;canEdit:boolean;navigate:Navigate;onDirty:(value:boolean)=>void;onSaved:(skill:Skill)=>void}) {
   const [saved,setSaved]=useState(skill);
   const [form,setForm]=useState<SkillInput>(skill?skillInput(skill):initialDraft??blank);
   const [preview,setPreview]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState<string>();const [notice,setNotice]=useState<string>();
   const dirty=JSON.stringify(form)!==JSON.stringify(saved?skillInput(saved):blank);
   const readOnly=!canEdit||!!saved?.builtin;
   useEffect(()=>{onDirty(dirty);return()=>onDirty(false);},[dirty,onDirty]);
-  useEffect(()=>{onBusy(busy);return()=>onBusy(false);},[busy,onBusy]);
+  const navigate:Navigate=route=>{if(!busy)onNavigate(route);};
   const update=(patch:Partial<SkillInput>)=>{setForm(value=>({...value,...patch}));setNotice(undefined);};
   const validation=useFieldValidation({
     id: !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(form.id) ? 'Use a lowercase ID with letters, numbers or hyphens, up to 63 characters; end with a letter or number.' : undefined,
