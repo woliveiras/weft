@@ -1,0 +1,22 @@
+name: Feature request
+description: Suggest a new capability or an improvement to Weft.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe who is affected and when they encounter the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What outcome would help?
+      description: Describe what you want to be able to do and how you would know the change solved the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Ideas and examples
+      description: Share any proposed solution, alternatives, current workarounds, or examples.

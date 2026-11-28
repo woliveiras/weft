@@ -1,0 +1,38 @@
+name: Bug report
+description: Report unexpected behavior in Weft.
+body:
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: What happened?
+      description: Describe what you observed, including any error message with sensitive details removed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: List the smallest set of steps you can share and say how often the issue occurs.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Weft version or commit
+  - type: input
+    id: environment
+    attributes:
+      label: Installation and environment
+      description: Include the installation method and any relevant operating system or runtime details.
+      placeholder: Docker Compose on Ubuntu, native bundle on macOS, or Kubernetes
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Additional evidence
+      description: Add relevant logs, screenshots, or a minimal configuration. Remove credentials, tokens, and other sensitive data before sharing.
