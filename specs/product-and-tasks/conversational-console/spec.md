@@ -559,6 +559,8 @@ record the gaps. Extend the inventory when a new manual capability ships.
 
 For Bitbucket Cloud PRs, Chat offers the diff and draft analysis at the reviewed head and base. It explains that inline publication is unavailable because the provider does not document a commit anchor for the write. Chat makes zero publication requests for this edition, including after reload or direct API submission. [Bitbucket Cloud PR comment contract](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/#api-repositories-workspace-repo-slug-pullrequests-pull-request-id-comments-post)
 
+Data Center inline publication requires an administrator to enable it for the exact connection and the workflow to grant `scm.pull_request.comment` for that connection. Existing and new connections default to disabled. A changed repository or server requires fresh enablement. Each operator publication still reviews selected comments at both pinned commits.
+
 Chat may open a diff viewer, a protected preview or a credential form in
 context. The owning service authorizes the interaction. A secret goes directly
 to the credential handler, outside message history, model input and telemetry.

@@ -384,6 +384,7 @@ never run an SCM CLI and never see a token.
 | Method and path | Role | Purpose |
 |---|---|---|
 | `GET /api/v1/scm/connections` | viewer | Connections without credentials (`tokenConfigured` only). |
+| `PUT /api/v1/scm/connections/{name}/inline-publication` | admin | Set `enabled` for a Bitbucket Data Center connection using its last observed `updatedAt` as `revision`. New connections default to disabled. Changing the repository or endpoint clears this permission. |
 | `POST /api/v1/scm/connections` | admin | `{name, kind, repository, apiUrl?, gitUrl?, branchPrefix?, requirePullRequestApproval?, token}`; the token is encrypted with the installation key. |
 | `PUT /api/v1/scm/connections/{name}` | admin | Same body without `name`; omit `token` to keep the stored one. |
 | `DELETE /api/v1/scm/connections/{name}` | admin | Removes a connection. |

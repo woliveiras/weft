@@ -605,3 +605,7 @@ value. Use the separately confirmed uncertain-registration recovery flow before
 another reviewed attempt. Do not bypass the response checks or automatically
 repeat registration. Real consent and a scoped Jira tool call still need live
 qualification after registration succeeds.
+
+## Data Center line comment permission
+
+Under **Connections → Source control**, an administrator can choose **Enable line comments** on the Data Center connection for the reviewed repository. The workflow also needs an exact line comment grant for that connection. **Disable line comments** revokes the connection permission. Replacing the repository or its server clears the permission automatically.

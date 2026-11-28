@@ -406,6 +406,7 @@ export const api = {
   testIssueConnection: (name: string, revision: number) => request<{ok: boolean; error?: string; identity?: {key: string; name: string}}>(`${V1}/issue-connections/${enc(name)}/test`, {method: 'POST', headers: {'If-Match': String(revision)}}),
   scmConnections: () => request<SCMConnection[]>(`${V1}/scm/connections`),
   createSCMConnection: (input: SCMConnectionInput) => request<SCMConnection>(`${V1}/scm/connections`, { method: 'POST', body: input }),
+  setSCMInlinePublication: (name: string, revision: string, enabled: boolean) => request<SCMConnection>(`${V1}/scm/connections/${enc(name)}/inline-publication`, {method:'PUT',body:{enabled,revision}}),
   deleteSCMConnection: (name: string) => request<void>(`${V1}/scm/connections/${enc(name)}`, { method: 'DELETE' }),
   testSCMConnection: (name: string) =>
     request<{ ok: boolean; error?: string; identity?: { user: string; repository: string; defaultBranch?: string; canPush: boolean } }>(`${V1}/scm/connections/${enc(name)}/test`, { method: 'POST' }),

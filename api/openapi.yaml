@@ -1938,6 +1938,32 @@ paths:
       responses:
         "204": {description: Deleted}
         "404": {description: Unknown connection}
+  /api/v1/scm/connections/{name}/inline-publication:
+    put:
+      tags: [scm]
+      operationId: setSCMInlinePublication
+      x-weft-role: admin
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [enabled, revision]
+              properties:
+                enabled: {type: boolean}
+                revision: {type: string, format: date-time, description: Last observed updatedAt of this connection}
+      responses:
+        "200":
+          description: Updated Data Center publication permission
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SCMConnection"}
+        "404": {description: Unknown connection}
+        "409": {description: Stale revision or unsupported adapter}
   /api/v1/scm/connections/{name}/test:
     post:
       tags: [scm]
@@ -4350,6 +4376,7 @@ components:
         gitUrl: {type: string}
         branchPrefix: {type: string}
         requirePullRequestApproval: {type: boolean}
+        inlinePublication: {type: boolean, description: Explicit Data Center line comment publication permission. Defaults to false.}
         tokenConfigured: {type: boolean}
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}

@@ -316,6 +316,7 @@ func (s *Server) routes() {
 		{"POST /api/v1/scm/connections", A, s.createSCMConnection},
 		{"PUT /api/v1/scm/connections/{name}", A, s.updateSCMConnection},
 		{"DELETE /api/v1/scm/connections/{name}", A, s.deleteSCMConnection},
+		{"PUT /api/v1/scm/connections/{name}/inline-publication", A, s.setSCMInlinePublication},
 		{"POST /api/v1/scm/connections/{name}/test", O, s.testSCMConnection},
 		{"GET /api/v1/cost/prices", R, s.getPrices},
 		{"PUT /api/v1/cost/prices", A, s.putPrices},

@@ -619,6 +619,7 @@ export interface TriggerMatches {
 
 /** A server-held SCM connection (never carries its token). */
 export interface SCMConnection {
+  inlinePublication?: boolean;
   name: string;
   kind: 'github' | 'bitbucket-dc' | string;
   repository: string;

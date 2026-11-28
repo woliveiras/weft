@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
+	"time"
 
 	"github.com/woliveiras/weft/server/internal/scm"
 )
@@ -78,5 +80,23 @@ func (s *Server) testSCMConnection(w http.ResponseWriter, r *http.Request) error
 
 func (s *Server) scmKinds(w http.ResponseWriter, r *http.Request) error {
 	writeJSON(w, http.StatusOK, scm.Kinds())
+	return nil
+}
+
+func (s *Server) setSCMInlinePublication(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		Enabled  *bool     `json:"enabled"`
+		Revision time.Time `json:"revision"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 512))
+	dec.DisallowUnknownFields()
+	if dec.Decode(&in) != nil || dec.Decode(&struct{}{}) != io.EOF || in.Enabled == nil || in.Revision.IsZero() {
+		return badRequest("expected an explicit choice and the reviewed connection revision")
+	}
+	saved, err := s.SCM.SetInlinePublication(r.Context(), r.PathValue("name"), in.Revision, *in.Enabled, identityFrom(r.Context()).Name)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, http.StatusOK, saved)
 	return nil
 }

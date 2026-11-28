@@ -245,3 +245,28 @@ it('shows loading and an empty adapter catalogue without enabling save', async (
   expect(await screen.findByText('No source control adapter is available.')).toBeTruthy();
   expect((screen.getByRole('button', { name: 'Save connection' }) as HTMLButtonElement).disabled).toBe(true);
 });
+
+it('requires an administrator and the displayed connection revision to enable Data Center line comments', async () => {
+  let enabled = false;
+  const revision = '2026-11-28T20:00:00Z';
+  const row = () => ({...gh,kind:'bitbucket-dc',inlinePublication:enabled,updatedAt:revision});
+  const backend = fakeApi({
+    'GET /api/v1/scm/connections': () => [row()],
+    'PUT /api/v1/scm/connections/gh/inline-publication': call => {
+      expect(call.body).toEqual({enabled:true,revision});
+      enabled = true;
+      return row();
+    },
+  });
+  const view=render(<SCMConnectionsSection role="operator"/>);
+  await screen.findByText('Line comment publication disabled');
+  expect(screen.queryByRole('button',{name:'Enable line comments'})).toBeNull();
+  view.rerender(<SCMConnectionsSection role="admin"/>);
+  const toggle=screen.getByRole('button',{name:'Enable line comments'});
+  vi.stubGlobal('confirm',()=>false);
+  await userEvent.click(toggle);
+  expect(backend.calls.filter(c=>c.method==='PUT')).toHaveLength(0);
+  vi.stubGlobal('confirm',()=>true);
+  await userEvent.click(toggle);
+  expect(await screen.findByRole('button',{name:'Disable line comments'})).toBeTruthy();
+});

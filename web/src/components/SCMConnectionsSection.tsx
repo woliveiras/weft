@@ -54,6 +54,15 @@ export function SCMConnectionsSection({ role }: { role?: string }) {
     }
     setResults(current => ({ ...current, [connection.name]: result }));
   };
+  const changePublication = async (c: SCMConnection) => {
+    const enabled = !c.inlinePublication;
+    if (!c.updatedAt || !confirm(`${enabled ? 'Enable' : 'Disable'} reviewed line comment publication for ${c.name} (${c.repository})?`)) return;
+    try {
+      setError(undefined);
+      await api.setSCMInlinePublication(c.name,c.updatedAt,enabled);
+      await list.reload();
+    } catch (e) { setError(errorMessage(e)); }
+  };
   const remove = async (c: SCMConnection) => {
     if (!confirm(`Remove the source control connection "${c.name}"? Tasks that use it can no longer push.`)) return;
     try {
@@ -101,7 +110,8 @@ export function SCMConnectionsSection({ role }: { role?: string }) {
             return <tr key={c.name}>
               <td><strong>{c.name}</strong><span className="small muted connection-meta">{serviceNames[c.kind] ?? c.kind}</span></td>
               <td>{c.repository}<code className="small muted connection-meta">{c.branchPrefix || 'weft/'}*</code></td>
-              <td>{c.requirePullRequestApproval === false ? 'Not required' : 'Required'}</td>
+              <td>{c.requirePullRequestApproval === false ? 'Not required' : 'Required'}
+                {c.kind === 'bitbucket-dc' && <span className="small muted connection-meta">Line comment publication {c.inlinePublication ? 'enabled' : 'disabled'}</span>}</td>
               <td>{c.tokenConfigured ? 'Configured' : <Badge tone="warn">No token</Badge>}</td>
               <td><div role="status">
                 <Badge tone={status.tone}>{status.label}</Badge>
@@ -111,6 +121,7 @@ export function SCMConnectionsSection({ role }: { role?: string }) {
                 <Btn small disabled={pending} onClick={() => void test(c)}>
                   {pending ? <><LoaderCircle size={14} className="connection-test-spinner" aria-hidden="true" /> Testing…</> : 'Test connection'}
                 </Btn>
+                {admin && c.kind === 'bitbucket-dc' && <Btn small disabled={pending || !c.updatedAt} onClick={()=>void changePublication(c)}>{c.inlinePublication ? 'Disable' : 'Enable'} line comments</Btn>}
                 {admin && <Btn small tone="danger" disabled={pending} onClick={() => void remove(c)}>Remove</Btn>}
               </div></td>}
             </tr>;

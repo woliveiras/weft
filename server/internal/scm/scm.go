@@ -102,11 +102,12 @@ func factory(kind string) (Factory, bool) {
 
 // Connection is a stored SCM connection. Token is sealed, never plain text.
 type Connection struct {
-	Name       string `json:"name"`
-	Kind       string `json:"kind"`
-	Repository string `json:"repository"`
-	AuthType   string `json:"authType,omitempty"`
-	Username   string `json:"username,omitempty"`
+	InlinePublication bool   `json:"inlinePublication,omitempty"`
+	Name              string `json:"name"`
+	Kind              string `json:"kind"`
+	Repository        string `json:"repository"`
+	AuthType          string `json:"authType,omitempty"`
+	Username          string `json:"username,omitempty"`
 	// APIURL is the REST base; GitURL the HTTPS (or file) remote. Both
 	// default per kind; neither may contain credentials.
 	APIURL       string `json:"apiUrl,omitempty"`
@@ -366,6 +367,9 @@ func (m Manager) mutate(ctx context.Context, actor string, fn func(d *document) 
 }
 
 func (m Manager) apply(c *Connection, in Input, actor string, now time.Time) error {
+	if c.Kind != in.Kind || c.Repository != in.Repository || c.APIURL != in.APIURL || c.GitURL != in.GitURL {
+		c.InlinePublication = false
+	}
 	c.Kind, c.Repository, c.APIURL, c.GitURL, c.BranchPrefix = in.Kind, in.Repository, in.APIURL, in.GitURL, in.BranchPrefix
 	c.AuthType, c.Username = in.AuthType, in.Username
 	c.RequirePullRequestApproval, c.UpdatedAt, c.UpdatedBy = in.RequirePullRequestApproval, now, actor
@@ -381,6 +385,36 @@ func (m Manager) apply(c *Connection, in Input, actor string, now time.Time) err
 	}
 	c.Token, c.TokenUpdatedAt = sealed, &now
 	return nil
+}
+
+// SetInlinePublication records the administrator's decision on a specific Data Center
+// destination. It needs no access to the credential and never contacts the provider.
+func (m Manager) SetInlinePublication(ctx context.Context, name string, expected time.Time, enabled bool, actor string) (View, error) {
+	var saved View
+	err := m.mutate(ctx, actor, func(d *document) error {
+		for i := range d.Connections {
+			c := &d.Connections[i]
+			if c.Name != name {
+				continue
+			}
+			if c.Kind != "bitbucket-dc" || !c.UpdatedAt.Equal(expected) {
+				return storage.ErrConflict
+			}
+			c.InlinePublication, c.UpdatedAt, c.UpdatedBy = enabled, time.Now().UTC(), actor
+			saved = view(*c)
+			return nil
+		}
+		return storage.ErrNotFound
+	})
+	if err != nil {
+		return View{}, err
+	}
+	action := "inline_publication_disabled"
+	if enabled {
+		action = "inline_publication_enabled"
+	}
+	m.audit(ctx, action, name, actor)
+	return saved, nil
 }
 
 // Save creates (update=false) or updates a connection.
