@@ -29,6 +29,13 @@ documentation if instructions conflict.
   repository; use a coding-agent harness that can require approval and isolate
   execution where available.
 
+## Commit Co-Authorship
+
+- Every commit that includes work contributed by a coding agent must include a
+  `Co-authored-by: Name <email>` trailer for each contributing agent. Use each
+  agent's established attribution identity. For Codex, use
+  `Co-authored-by: Codex <noreply@openai.com>`.
+
 ## Specifications
 
 Specification-Driven Development is used only when a change needs it. The
