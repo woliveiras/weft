@@ -158,6 +158,7 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
   const guide = entry?.guide ?? {};
   const action = showGuide ? guideAction(guide, canCreateAgent) : undefined;
   const message = guidedMessage(action, guide.target, draft);
+  const hasContext = !!action && message !== draft;
   const tooLong = !!action && new TextEncoder().encode(message).length > 4096;
 
   const textDecision = /^(confirm this proposal|confirme esta proposta|decline this proposal|recuse esta proposta)$/i.test(draft.trim().replace(/\.$/, '').trim());
@@ -327,10 +328,11 @@ export function ChatPage({id, archived, canCreateAgent = false, canOperate = fal
       {session?.archived && <p className="muted">This conversation is archived. <Btn disabled={sending}
         onClick={() => void mutate(() => api.archiveChat(session.id,false), next => onOpen(next.id,false))}>Restore conversation</Btn></p>}
       {showGuide && !sending && <ChatActionGuide key={'guide-'+draftKey} admin={canCreateAgent} draft={guide}
+        onSendPrepared={hasContext ? () => void send() : undefined}
         onChange={next=>{setError(undefined);setDrafts(previous=>({...previous,[draftKey]:{text:draft,guide:next}}));}}/>}
       {tooLong && <p role="alert">Shorten the message to fit the selected action and details within 4096 bytes.</p>}
       {(!id || session) && !session?.archived && <ChatComposer key={draftKey} draft={draft}
-        preparedAction={preparedActionLabel(action, guide.target)} detailsHint={action?.kind === 'prompt' ? action.detailsHint : undefined} hasContext={!!action && message !== draft}
+        preparedAction={preparedActionLabel(action, guide.target)} detailsHint={action?.kind === 'prompt' ? action.detailsHint : undefined} hasContext={hasContext}
         onChange={text => setDrafts(previous => ({...previous,[draftKey]:{text,guide:entry?.guide}}))}
         onSend={() => void send()} disabled={!canSend || tooLong || sending || !!waiting}
         sending={!!entry?.submitting || !!waiting} admin={canCreateAgent} choicePending={session?.messages.at(-1)?.state === 'discovery'}/>}

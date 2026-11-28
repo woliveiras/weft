@@ -88,6 +88,32 @@ it('uses a complete eligible choice and keeps an incomplete branch out of the su
   expect(guidedMessage(guideAction(creation,true),undefined,'Reader checks notes')).toContain('Reader checks notes');
 });
 
+it.each(['ctrlKey','metaKey'])('submits the exact task from the focused review with %s + Enter',async modifier=>{
+  const task = {id:'tsk_target',label:'Review release'};
+  const backend = fakeApi({...ready,['GET '+candidates]:()=>({items:[task],partial:false}),
+    ['POST '+sessions]:()=>apiError(503,'Reply lost','network')});
+  render(<ChatPage archived={false} onOpen={vi.fn()}/>);
+  await screen.findByRole('button',{name:'Tasks'});
+  fireEvent.change(screen.getByRole('textbox',{name:'Message'}),{target:{value:'Keep me updated'}});
+  click('Tasks');
+  const shortcut = {key:'Enter',[modifier]:true};
+  fireEvent.keyDown(document.activeElement!,shortcut);
+  click('Follow a task');
+  fireEvent.keyDown(screen.getByRole('searchbox'),shortcut);
+  fireEvent.click(await screen.findByRole('button',{name:task.label}));
+  const review = within(screen.getByRole('region',{name:'Chat actions'})).getByText('Follow a task');
+  expect(document.activeElement).toBe(review);
+  fireEvent.keyDown(review,{key:'Enter'});
+  fireEvent.keyDown(review,{...shortcut,repeat:true});
+  fireEvent.keyDown(review,{...shortcut,isComposing:true});
+  expect(backend.find('POST',sessions)).toHaveLength(0);
+  fireEvent.keyDown(review,shortcut);
+  await screen.findByText('Reply lost');
+  expect(backend.find('POST',sessions).map(call=>call.body)).toEqual([
+    expect.objectContaining({text:'/follow tsk_target\nKeep me updated'}),
+  ]);
+});
+
 it('restores the guided draft after a lost acknowledgement and retries with the same key',async()=>{
   const target={id:'tsk_a',label:'Release · tsk_a · draft'};
   const open=vi.fn();

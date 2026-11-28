@@ -1,9 +1,10 @@
 import {useId, useLayoutEffect, useRef} from 'react';
+import {handleChatSubmitShortcut} from './chatSubmitShortcut';
 import {ChatResourcePicker} from './ChatResourcePicker';
 import {guideAction, guideActions, moreCategories, primaryCategories, type ChatCategory, type GuideDraft} from './chatGuide';
 
-export function ChatActionGuide({draft, admin, onChange}: {
-  draft:GuideDraft; admin:boolean; onChange:(draft:GuideDraft)=>void;
+export function ChatActionGuide({draft, admin, onChange, onSendPrepared}: {
+  draft:GuideDraft; admin:boolean; onChange:(draft:GuideDraft)=>void; onSendPrepared?:()=>void;
 }) {
   const groupId = useId();
   const root = useRef<HTMLElement>(null);
@@ -50,6 +51,9 @@ export function ChatActionGuide({draft, admin, onChange}: {
   }
   return <section ref={root} className={'chat-guide'+(picking ? target ? ' guide-resource-review' : ' guide-resource-search' : readyPrompt ? ' guide-resource-review' : '')} aria-label="Chat actions"
     onKeyDown={event=>{
+      if (onSendPrepared && event.target instanceof HTMLElement && event.target.dataset.guideFocus === 'heading') {
+        handleChatSubmitShortcut(event,onSendPrepared);
+      }
       if (event.key === 'Escape' && (category || draft.more)) {event.preventDefault();back();}
     }}>
     {!category ? <>

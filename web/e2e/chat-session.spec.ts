@@ -1059,6 +1059,29 @@ test('inspects models from a prepared action without typing a message',async({pa
   expect((await saved.json()).messages[0].text).toBe('/inspect models');
 });
 
+for (const shortcut of ['Control+Enter','Meta+Enter']) {
+  test(`sends the prepared model inspection from its focused summary with ${shortcut}`,async({page,request})=>{
+    await selectFixtureModel(request);
+    await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-viewer-token'));
+    await page.goto('/#/chat');
+    const guide = page.getByRole('region',{name:'Chat actions'});
+    for (const name of ['More','Models','View configured models']) {
+      await guide.getByRole('button',{name,exact:true}).press('Enter');
+    }
+    await expect(guide.getByText('Which models are configured?')).toBeFocused();
+    await page.keyboard.press(shortcut);
+    await expect(page).toHaveURL(/#\/chat\/[a-f0-9]{32}/);
+    const saved = await request.get('/api/v1/chat/sessions/'+page.url().split('/').at(-1),{
+      headers:{Authorization:'Bearer e2e-viewer-token'},
+    });
+    expect(saved.ok()).toBe(true);
+    const {messages} = await saved.json();
+    expect(messages.filter((message:{role:string})=>message.role==='user')).toEqual([
+      expect.objectContaining({text:'/inspect models'}),
+    ]);
+  });
+}
+
 test('looks up catalog agents and workflows with the shared picker',async({page,request})=>{
   await selectFixtureModel(request);
   const name='Catalog · reviewer';

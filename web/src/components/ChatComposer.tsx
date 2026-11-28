@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Btn } from './common';
+import { handleChatSubmitShortcut } from './chatSubmitShortcut';
 import './chatComposer.css';
 
 const searchable = ['tasks','workflows','nodes','agents','projects','executions','skills','approvals','triggers','review-routes','mcp','scm','issue-connections','models','plugins','tools','budgets'];
@@ -51,12 +52,9 @@ export function ChatComposer({draft, hasContext = false, preparedAction, details
   }
 
   return <form className="chat-composer" aria-label="Compose message" onKeyDownCapture={event => {
-    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (canSend && !event.repeat) event.currentTarget.requestSubmit();
-    }
+    handleChatSubmitShortcut(event, () => {
+      if (canSend) event.currentTarget.requestSubmit();
+    });
   }} onSubmit={event => {
     event.preventDefault();
     if (canSend) { setDismissed(true); onSend(); }
