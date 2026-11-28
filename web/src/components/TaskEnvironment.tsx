@@ -1,3 +1,4 @@
+import {authorizationLabels} from '../api/tasks';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {api, errorMessage} from '../api/client';
 import type {TaskAuthorization, TaskDraft, TaskReview} from '../api/tasks';
@@ -104,7 +105,7 @@ export function TaskEnvironment({task, environment, canControl, onChanged}: {tas
     finally {setConfirmed(false); setBusy(false); acting.current = false;}
   };
   const agents = review?.agents ?? (review ? [{id: task.nodeId, isolation: review.isolation, grants: review.grants ?? []}] : []);
-  const mode = authorization?.record?.mode ?? 'ask';
+  const mode = authorization?.record?.mode ?? authorization?.workflowProfile ?? 'ask';
   return <div className="task-environment-panel">
     <section className="card task-environment-controls" aria-label="Task environment preparation">
       <div className="task-detail-heading"><h2>Environment preparation</h2><Badge tone={environment.state === 'failed' ? 'bad' : environment.state === 'ready' ? 'ok' : undefined}>{environment.state}</Badge></div>
@@ -126,7 +127,7 @@ export function TaskEnvironment({task, environment, canControl, onChanged}: {tas
             <div><dt>Workflow</dt><dd>{task.graphId} · Version {review.task.graphVersion}</dd></div>
             <div><dt>Agents</dt><dd>{task.nodeId} → {task.resultNodeId || task.nodeId}</dd></div>
             <div><dt>Repository</dt><dd>{review.project ? <>{review.project.name}{(review.project.repositoryUrl || review.project.path) && <> · {review.project.repositoryUrl || review.project.path}</>}{task.baseCommit && <> · Commit <code>{task.baseCommit}</code></>}</> : task.projectId || current?.workspace?.repo || 'Empty managed workspace — no repository selected'}</dd></div>
-            <div><dt>Access</dt><dd>{mode === 'ask' ? 'Ask for approval' : mode === 'workspace' ? 'Workspace access' : 'Full access'}</dd></div>
+            <div><dt>Access</dt><dd>{authorizationLabels[mode]}</dd></div>
           </dl>
           {current && <p>{current.budget.taskRunBudgetMicros > 0 ? `Task budget: ${money(current.budget.taskRunBudgetMicros, current.budget.currency)}.` : 'No per-task spending limit is configured.'} {current.budget.budgets.map(budget => `${budget.scope}: ${money(budget.limitMicros, current.budget.currency)}`).join(' · ')}</p>}
           <p>Granted tools: {agents.flatMap(agent => agent.grants ?? []).map(grant => grant.name).join(', ') || 'None'}. Mandatory approvals and task/installation budgets still apply.</p>

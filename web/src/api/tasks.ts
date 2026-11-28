@@ -52,5 +52,8 @@ export interface CleanupPreview {retainedRepository?:string;path:string;branch:s
 
 export interface RepositoryImportRecord {authentication?:string;id:string;url:string;ref:string;state:string;message:string;revision:number;attempt:string;projectId?:string;commit?:string;bytes:number;createdAt:string;updatedAt:string;deadline:string}
 
-export type AuthorizationMode = "ask"|"workspace"|"full";
-export interface TaskAuthorization {projectId?:string;preference?:{mode:AuthorizationMode;revision:number};capabilities?:{id:string;isolation:string;grants:ToolGrant[]}[];scope:string;record?:{taskId:string;mode:AuthorizationMode;scope:string;actor:string;policyVersion:number;revision:number}}
+export const profileLabels = {manual: 'Manual', assisted: 'Assisted', automatic: 'Automatic'} as const;
+export type AuthorizationProfile = keyof typeof profileLabels;
+export const authorizationLabels = {...profileLabels, ask: 'Ask for approval', workspace: 'Workspace access', full: 'Full access'};
+export type AuthorizationMode = keyof typeof authorizationLabels;
+export interface TaskAuthorization {workflowProfile?:AuthorizationProfile;workflowVersion?:number;projectId?:string;preference?:{mode:AuthorizationMode;revision:number};capabilities?:{id:string;isolation:string;grants:ToolGrant[]}[];scope:string;record?:{source?:"workflow"|"task";workflowId?:string;workflowVersion?:number;taskId:string;mode:AuthorizationMode;scope:string;actor:string;policyVersion:number;revision:number}}

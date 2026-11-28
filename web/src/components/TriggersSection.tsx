@@ -1,3 +1,4 @@
+import {profileLabels} from '../api/tasks';
 import {cloudWorkflowConnection} from './workflowEdition';
 import { LifecycleMappingPicker } from './LifecycleMappingPicker';
 import { HelpField } from './FieldHelp';
@@ -8,6 +9,7 @@ import { useAsync } from '../hooks/useData';
 import { Badge, Btn, ErrorBox, fmtDateTime } from './common';
 
 const modes: Record<TriggerInput['authorizationMode'], string> = {
+  ...profileLabels,
   ask: 'Ask — every gated action waits for a person',
   workspace: 'Workspace — act inside the task worktree',
   full: 'Full access',
@@ -15,7 +17,7 @@ const modes: Record<TriggerInput['authorizationMode'], string> = {
 
 function emptyInput(graph: Graph): TriggerInput {
   const first = graph.spec.nodes.find((n) => !n.disabled)?.id ?? '';
-  return { name: '', workflow: graph.metadata.id, nodeId: first, resultNodeId: '', source: { kind: 'github', connectionId: '', repository: '' }, label: 'weft:todo', owner: '', intervalMinutes: 15, authorizationMode: 'ask' };
+  return { name: '', workflow: graph.metadata.id, nodeId: first, resultNodeId: '', source: { kind: 'github', connectionId: '', repository: '' }, label: 'weft:todo', owner: '', intervalMinutes: 15, authorizationMode: graph.spec.task?.authorizationProfile??'ask' };
 }
 
 function holdResolutionWarning(hold: NonNullable<Trigger['holds']>[number]): string | undefined {

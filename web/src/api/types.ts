@@ -47,6 +47,7 @@ export interface GraphSpec {
 }
 
 export interface WorkflowTaskDefaults {
+  authorizationProfile?: import("./tasks").AuthorizationProfile;
   projectIds?: string[];
   nodeId?: string;
   resultNodeId?: string;
@@ -587,7 +588,7 @@ export interface TriggerInput {
   scmConnection?: string;
   projectId?: string;
   executionMode?: string;
-  authorizationMode: 'ask' | 'workspace' | 'full';
+  authorizationMode: import("./tasks").AuthorizationMode;
 }
 
 export interface Trigger extends TriggerInput {

@@ -58,3 +58,40 @@ test('explains native shell restrictions when Workspace consent is rejected', as
  await expect(section).toContainText('use Ask for approval, Full access or Docker isolation');
  await expect(section).toContainText('Current mode: Ask for approval (default)');
 });
+
+test('saves the workflow default in the editor and reduces an inherited profile during a run',async({page})=>{
+ const graphId='inherited-profile-flow';
+ const create=await page.request.post('/api/v1/graphs',{headers,data:{metadata:{id:graphId},spec:{
+  nodes:[{id:'worker',runtime:{kind:'echo'},loop:{mode:'event'}}],channels:[{id:'requests',to:['worker'],approval:true}]
+ }}});
+ expect(create.status()).toBe(201);
+ await page.addInitScript(()=>localStorage.setItem('weftToken','e2e-admin-token'));
+ await page.goto('/#/g/'+graphId+'/settings/task');
+ await page.getByLabel('Default task authorization',{exact:true}).selectOption('automatic');
+ const saved=page.waitForResponse(r=>r.url().endsWith('/api/v1/graphs/'+graphId)&&r.request().method()==='PUT');
+ await page.getByRole('button',{name:'Save graph',exact:true}).click();
+ expect((await saved).status()).toBe(200);
+ const res=await page.request.post('/api/v1/tasks',{headers,data:{
+  title:'Inherited launch',request:'Review this fixture',outcome:'freeform',graphId,graphVersion:2,nodeId:'worker',
+  resultNodeId:'worker',channelId:'requests',messageType:'task.request',payloadJson:'{}'
+ }});
+ expect(res.status()).toBe(201);
+ const task=await res.json();
+ await page.goto('/#/tasks/'+task.id);
+ await expect(page.getByRole('region',{name:'Launch review',exact:true})).toContainText('Inherited from workflow v2');
+ await page.getByRole('button',{name:'Run task',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Needs your decision',exact:true})).toBeVisible();
+ const path='/api/v1/tasks/'+task.id+'/authorization';
+ expect((await (await page.request.get(path,{headers})).json()).record).toMatchObject({source:'workflow',workflowVersion:2,mode:'automatic'});
+ await page.getByRole('link',{name:'Settings & access',exact:true}).click();
+ const section=page.getByRole('region',{name:'Task authorization'});
+ await section.getByLabel('Authorization mode',{exact:true}).selectOption('assisted');
+ await section.getByRole('checkbox').check();
+ await section.getByRole('button',{name:'Confirm authorization'}).click();
+ await expect(section).toContainText('Current mode: Assisted');
+ await expect(section.locator('option[value="automatic"]')).toBeDisabled();
+ await section.getByLabel('Authorization mode',{exact:true}).selectOption('manual');
+ await section.getByRole('checkbox').check();
+ await section.getByRole('button',{name:'Confirm authorization'}).click();
+ await expect(section).toContainText('Current mode: Manual');
+});

@@ -52,3 +52,15 @@ it('lets non-administrators inspect the defaults without editing them',async()=>
  for(const select of screen.getAllByRole('combobox'))expect((select as HTMLSelectElement).disabled).toBe(true);
  expect(screen.getByText('An administrator can change these workflow defaults.')).not.toBeNull();
 });
+
+it('persists the approval profile in the workflow draft without editing agent grants',async()=>{
+ fakeApi({'GET /api/v1/projects':()=>[], 'GET /api/v1/scm/connections':()=>[]});
+ render(<Editor/>);
+ for (const profile of ['manual','assisted','automatic']) {
+  fireEvent.change(screen.getByLabelText('Default task authorization'),{target:{value:profile}});
+  const graph=JSON.parse(screen.getByTestId('draft').textContent!);
+  expect(graph.spec.task.authorizationProfile).toBe(profile);
+  expect(graph.spec.nodes).toEqual(initial.spec.nodes);
+ }
+ await screen.findByRole('button',{name:'New task with these defaults'});
+});

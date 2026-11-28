@@ -24,7 +24,7 @@ export function taskLaunchIdentity(value:TaskLaunchReview):string|undefined {
  if(budget.budgets.some(item=>item.reached||item.paused||item.invalid)||!authorization.scope||!review.task.id||!review.task.revision||authorization.record&&(authorization.record.scope!==authorization.scope||authorization.record.taskId!==review.task.id))return undefined;
  return JSON.stringify({
   task:review.task.id,revision:review.task.revision,input:taskInputIdentity(review.task),scope:authorization.scope,
-  mode:authorization.record?.mode??'ask',recordScope:authorization.record?.scope,
+  mode:authorization.record?.mode??authorization.workflowProfile??'ask',recordScope:authorization.record?.scope,
   workflow:review.currentGraphVersion,environment:review.environmentDefinition,
   project:review.project?.id,workspace:review.workspacePath,workflowWorkspace:value.workspace,agents:review.agents,
   grants:review.grants,model:review.model,isolation:review.isolation,

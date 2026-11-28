@@ -1,3 +1,4 @@
+import {authorizationLabels} from '../api/tasks';
 import { ChatTitleForm } from './ChatTitleForm';
 import { Search } from 'lucide-react';
 import { ChatSessionSearch } from './ChatSessionSearch';
@@ -700,8 +701,8 @@ function TaskStartReviewCard({review, now, canConfirm, onDecide, onView}: {
     <dl>
       <dt>Task ID</dt><dd>{task.id} · Revision {task.taskRevision}</dd>
       <dt>Workflow</dt><dd>{task.workflowId} · Version {task.workflowVersion}</dd>
-      <dt>Authorization</dt><dd>{task.consent.mode === 'ask' ? 'Ask for approval as required' : task.consent.mode}
-        {task.consent.revision === 0 ? ' · Default' : ` · Revision ${task.consent.revision}`}</dd>
+      <dt>Authorization</dt><dd>{task.consent.mode === 'ask' ? 'Ask for approval as required' : authorizationLabels[task.consent.mode]}
+        {task.consent.source==='workflow' && ' · Inherited from workflow'}{task.consent.revision === 0 ? ' · Default' : ` · Revision ${task.consent.revision}`}</dd>
       {task.repositories?.map(repo=><div key={repo.alias || repo.project}><dt>{repo.alias || 'Repository'}</dt><dd>{repo.project} · revision {repo.revision} · {repo.commit}{repo.checks?.length ? ' · Checks ' + repo.checks.join(', ') : ''}</dd></div>)}
       {task.issueSource && <><dt>Issue source</dt><dd>{task.issueSource}</dd></>}
       {task.build && <><dt>Prepared environment</dt><dd>{task.build.graph} · {task.build.hash} · {task.build.completed}</dd></>}
@@ -1044,7 +1045,7 @@ function TaskCancellationCard({review, now, canConfirm, onDecide, onView}: {
   </section>;
 }
 
-const taskModeLabels = {ask:'Ask for approval',workspace:'Workspace access',full:'Full access'};
+
 
 function TaskAuthorizationCard({review, now, canConfirm, onDecide, onView}: {
   review:ChatTaskAuthorizationReview; now:number; canConfirm:boolean; onDecide:(decision:'confirm'|'decline')=>void; onView:(anchor:string)=>void;
@@ -1057,8 +1058,8 @@ function TaskAuthorizationCard({review, now, canConfirm, onDecide, onView}: {
       <dt>Task</dt><dd>{auth.id} · Revision {auth.taskRevision}</dd>
       <dt>Workflow</dt><dd>{auth.workflowId} · Version {auth.workflowVersion}</dd>
       <dt>Execution environment</dt><dd>{auth.executionMode || 'Workflow default'}</dd>
-      <dt>Current mode</dt><dd>{taskModeLabels[auth.current.mode]}{auth.current.revision === 0 ? ' · Default' : ` · Revision ${auth.current.revision}`}</dd>
-      <dt>Proposed mode</dt><dd>{taskModeLabels[auth.mode]}</dd>
+      <dt>Current mode</dt><dd>{authorizationLabels[auth.current.mode]}{auth.current.source==='workflow' && ' · Inherited from workflow'}{auth.current.revision === 0 ? ' · Default' : ` · Revision ${auth.current.revision}`}</dd>
+      <dt>Proposed mode</dt><dd>{authorizationLabels[auth.mode]}</dd>
     </dl>
     {auth.repositories && <ul aria-label="Repositories">{auth.repositories.map(repo => <li key={repo.projectId}>
       {repo.alias && `${repo.alias} · `}{repo.projectId} · {repo.baseCommit}{repo.scmConnection && ` · ${repo.scmConnection}`}

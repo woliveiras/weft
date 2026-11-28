@@ -103,6 +103,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		toolName, arguments = "watch_task", `{"task":"Cancellation fixture task","title":"Follow cancellation fixture"}`
 	case "Cancel the running cancellation test task.":
 		toolName, arguments = "cancel_task", `{"task":"Cancellation fixture task"}`
+	case "Use Assisted for the profile selection fixture.":
+		toolName, arguments = "set_task_authorization", `{"task":"Profile selection fixture","taskAuthorizationMode":"assisted","title":"Review task profile"}`
 	case "Set the editorial authorization task to workspace access.":
 		toolName, arguments = "set_task_authorization", `{"task":"Editorial authorization task fixture","taskAuthorizationMode":"workspace","title":"Review editorial task authorization"}`
 	case "Raise the current allowance for the budget report task to 2.004005 USD.":

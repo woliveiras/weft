@@ -1,3 +1,4 @@
+import {authorizationLabels} from '../api/tasks';
 import {RepositoryPicker,RepositoryRows,repositoryBindings} from './RepositoryPicker';
 import {taskInputIdentity,taskLaunchIdentity,type TaskLaunchReview} from './taskLaunch';
 import {TaskReadiness} from './TaskReadiness';
@@ -409,7 +410,7 @@ function TaskEditor({draft,graphs,canEdit,canStart,nativeProfile,noModel,admin,e
         {input.graphId&&<TaskBudgetPreview preview={launchReview&&review?{...budgets,data:launchReview.budget,error:undefined,loading:false}:budgets}/>}
         {launchReview&&review&&<section className="task-launch-review" aria-label="Launch review">
           <h3>{review.canStart&&taskLaunchIdentity(launchReview)?'Ready to run':'Before this task can run'}</h3>
-          <p>Access: <strong>{launchReview.authorization.record?.mode==='full'?'Full access':launchReview.authorization.record?.mode==='workspace'?'Workspace access':'Ask for approval'}</strong>{!launchReview.authorization.record&&' — Ask for approval (default)'}. Mandatory approvals and installation restrictions still apply.</p>
+          <p>Access: <strong>{authorizationLabels[launchReview.authorization.record?.mode??launchReview.authorization.workflowProfile??'ask']}</strong>{!launchReview.authorization.record&&(launchReview.authorization.workflowProfile?' — Inherited from workflow v'+launchReview.authorization.workflowVersion:' — Ask for approval (default)')}. Mandatory approvals and installation restrictions still apply.</p>
           <p>Workflow: <strong>{review.task.graphId} · Version {review.task.graphVersion}</strong>. {review.task.repositories?.length?'Repositories: '+review.task.repositories.map(r=>r.alias).join(', '):'Repository: '+(review.project?.name||review.task.projectId||selected?.spec.workspace?.repo||'Empty managed workspace')}{review.task.baseCommit&&<> · Commit <code>{review.task.baseCommit}</code></>}.</p>
           {review.task.repositories&&<RepositoryRows repos={review.task.repositories} projects={projects.data??[]}/>}
           <p>Run task authorizes a separate execution with the request, repository and workflow version shown above. It does not grant additional tools.</p>

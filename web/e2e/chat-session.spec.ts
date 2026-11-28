@@ -6,12 +6,13 @@ import type { GraphSummary } from '../src/api/types';
 
 const headers = { Authorization: 'Bearer e2e-admin-token' };
 
-async function draftTaskWithApproval(request: APIRequestContext, graphId: string, title: string) {
+async function draftTaskWithApproval(request: APIRequestContext, graphId: string, title: string, authorizationProfile?: string) {
   const graph = await request.post('/api/v1/graphs', {
     headers,
     data: {
       metadata: { id: graphId },
       spec: {
+        task: authorizationProfile ? {authorizationProfile} : undefined,
         nodes: [{ id: 'reviewer', runtime: { kind: 'echo' }, loop: { mode: 'event' } }],
         channels: [{ id: 'requests', to: ['reviewer'], approval: true }],
       },
@@ -155,7 +156,7 @@ test('discovers duplicate PR numbers and publishes only reviewed comments on the
   }
 });
 
-async function startTaskWaitingForApproval(request: APIRequestContext, graphId: string, title: string) {
+async function startTaskWaitingForApproval(request: APIRequestContext, graphId: string, title: string, authorizationProfile?: string) {
   const task = await draftTaskWithApproval(request, graphId, title);
   const started = await request.post(`/api/v1/tasks/${task.id}/start`, {
     headers: { ...headers, 'If-Match': String(task.revision) }, data: { confirm: true },
@@ -1155,4 +1156,27 @@ test('keeps a guided draft private across an identity change in another tab',asy
   await guide.getByRole('button',{name:'Agents'}).click();
   await expect(guide.getByRole('button',{name:'Create a catalog agent'})).toHaveCount(0);
   await expect(guide.getByRole('button',{name:'Find a catalog agent'})).toBeVisible();
+});
+
+test('inherits the workflow profile and shares changes between Chat and task settings', async ({page,request}) => {
+  await selectFixtureModel(request);
+  const task = await draftTaskWithApproval(request,'profile-source','Profile selection fixture','automatic');
+  await page.addInitScript(() => localStorage.setItem('weftToken','e2e-admin-token'));
+  await page.goto('/');
+  await send(page,'Use Assisted for the profile selection fixture.');
+  const card = page.getByRole('region',{name:'Authorize task Profile selection fixture'});
+  await expect(card).toContainText('Automatic');
+  await expect(card).toContainText('Assisted');
+  await card.getByRole('button',{name:'Save task authorization',exact:true}).click();
+  await expect(card.getByText('Authorization revision 1 saved.')).toBeVisible();
+  await card.getByRole('link',{name:'Open Settings & access',exact:true}).click();
+  await page.locator('summary').filter({hasText:'Access settings'}).click();
+  const panel=page.getByRole('region',{name:'Task authorization'});
+  await expect(panel).toContainText('Current mode: Assisted');
+  await panel.getByLabel('Authorization mode',{exact:true}).selectOption('manual');
+  await panel.getByRole('checkbox').check();
+  await panel.getByRole('button',{name:'Confirm authorization'}).click();
+  await expect(panel).toContainText('Current mode: Manual');
+  const auth=await (await request.get(`/api/v1/tasks/${task.id}/authorization`,{headers})).json();
+  expect(auth).toMatchObject({workflowProfile:'automatic',workflowVersion:1,record:{source:'task',mode:'manual',workflowVersion:1,revision:2}});
 });

@@ -110,7 +110,7 @@ export interface ChatTaskStartReview extends ChatReviewState {
     workflowId: string;
     workflowVersion: number;
     taskRevision: number;
-    consent: {scope: string; mode: string; revision: number};
+    consent: {scope: string; mode: AuthorizationMode; revision: number;source?:"task"|"workflow"};
     build?:{graph:string;hash:string;completed:string};
     repositories?:{project:string;alias?:string;commit:string;revision:number;checks?:string[]}[];
     issueSource?:string;
@@ -210,7 +210,7 @@ export interface ChatTaskCancellationReview extends ChatReviewState {
 export interface ChatTaskAuthorizationReview extends ChatReviewState {
   taskAuthorization: {
     id:string; title:string; taskRevision:number; workflowId:string; workflowVersion:number; executionMode?:string;
-    current:{mode:AuthorizationMode; scope:string; revision:number}; mode:AuthorizationMode;
+    current:{mode:AuthorizationMode; scope:string; revision:number;source?:"task"|"workflow"}; mode:AuthorizationMode;
     agents:NonNullable<TaskAuthorization['capabilities']>;
     repositories?:{alias?:string; projectId:string; baseCommit:string; scmConnection?:string; repository?:string; targetBranch?:string}[];
   };
