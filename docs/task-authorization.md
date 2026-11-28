@@ -9,6 +9,18 @@ Precedence is: installation restrictions and cancellation; exact agent grants
 (including exact MCP names); reviewed task scope; mandatory tool/workflow gates;
 then task-mode approval. Tool path, command, host and rate constraints still apply.
 
+In the workflow editor, choose **Default task authorization**. Or ask Chat “Use Assisted by default for the release workflow” and confirm the proposed configuration. The graph stores the selection in `spec.task.authorizationProfile` and preserves the other task settings and agent grants. In a task, open **Settings & access** or ask Chat “Use Assisted for the release notes task.” Both paths show the same scope and an administrator confirms a task override. Starting a task inherits the saved workflow default when there is no override. Its authorization record identifies the source, workflow version, scope digest and actor.
+
+| Profile | When the operator is asked |
+| --- | --- |
+| Manual | Every granted tool call. |
+| Assisted | Routine workspace reads, edits, Git staging and commits, declared Docker checks and delivery through an admitted repository binding can proceed. Other calls ask, including arbitrary shell commands and file deletion. |
+| Automatic | Granted tools run within the admitted scope. Mandatory approvals and human review gates still ask. |
+
+For unattended push or PR creation, select the repository, connection and base branch in the task's repository list and grant the result agent the corresponding tools on that connection. A singular connection suggestion alone does not pin a destination. The SCM service verifies the connection revision, head branch, required checks and reviewed candidate. A workflow configured for human review of the candidate still pauses there. Changing the workflow version invalidates the active profile before the next tool invocation. To supervise an active task more closely, reduce Automatic to Assisted or Manual, or Assisted to Manual.
+
+Workflows without a profile support the existing consent modes.
+
 - **Ask for approval** adds a human decision before each granted tool call.
 - **Workspace access** preauthorizes jailed filesystem tools, Git reads and shell
   calls in Docker sandboxes. Other tools require a decision. It refuses process
@@ -37,7 +49,7 @@ operations may finish; stopping requests cancellation and does not roll back
 external effects. Auditing records actor, revisions and decisions, not prompts or
 credentials. No automatic mode expansion or replay is permitted.
 
-AUTH-01/02 are implemented. New tasks default to Ask at admission. Save or resolve
+AUTH-01/02 are implemented. Tasks without a workflow profile or explicit consent default to Ask at admission. Save or resolve
 a draft to review capabilities and explicitly confirm another mode before starting.
 Existing execution copies without consent retain their existing grant behavior.
 The server seals the normalized execution copy before agents start, checks its

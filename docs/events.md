@@ -142,7 +142,8 @@ The browser polls the owner's Chat session and Recents endpoints for progress, u
 | `task.repository_delivery` | `{taskId, repository, phase, state, head}` |
 | `task.transition_requested` | `{taskId, from, to, expectedRevision}` |
 | `task.prompt_resolution` | `{taskId, state, expectedRevision}` |
-| `task.authorization_requested`, `task.authorization_preference_requested` | `{taskId, mode, scope, expectedRevision}` |
+| `task.authorization_requested` | Task ID, mode, scope digest and expected revision. Profile decisions also identify their source and workflow version. |
+| `task.authorization_preference_requested` | Task ID, suggested mode and expected revision. |
 | `task.authorization_decision` | Tool gateway authorization recheck: `{tool, outcome: "taskId:revision:mode" or "legacy", durationMs}`. Records the consent snapshot used for dispatch; contains no tool arguments or credentials. |
 | `task.workspace_cleanup_requested`, `task.workspace_cleanup_completed` | `{taskId, nodeId, replica}` |
 | `sandbox.capacity` | `{state, node?, replica?, phase?}` |
