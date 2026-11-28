@@ -24,7 +24,7 @@ test('launches a new task through visible scope review without interpretation or
   await expect(page.getByRole('region',{name:'Launch review',exact:true})).toContainText('Ask');
   await page.getByRole('region',{name:'Launch review',exact:true}).scrollIntoViewIfNeeded();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.screenshot({path:`test-results/task-launch-review-${width}.png`,fullPage:true});
+  await page.screenshot({path:test.info().outputPath(`task-launch-review-${width}.png`),fullPage:true});
  }
  await page.getByRole('button',{name:'Run task',exact:true}).click();
  await expect(page.getByRole('region',{name:'Task status',exact:true})).toContainText('Task status: succeeded');

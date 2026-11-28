@@ -20,7 +20,7 @@ test('creates a reviewed linked draft from a failed manual task without replayin
  await page.setViewportSize({width:720,height:900});
  const retry=page.getByRole('region',{name:'Try task again'});
  await expect(retry).toContainText('new workspace and its own approvals');
- await page.screenshot({path:'test-results/task-retry-failed-narrow.png',fullPage:true});
+ await page.screenshot({path:test.info().outputPath('task-retry-failed-narrow.png'),fullPage:true});
  await retry.getByRole('button',{name:'Try again',exact:true}).focus();
  await page.keyboard.press('Enter');
  await expect(page).toHaveURL(new RegExp('#/tasks/tsk_'));
@@ -33,9 +33,9 @@ test('creates a reviewed linked draft from a failed manual task without replayin
  expect(child).toMatchObject({...input,status:'draft',retryOfTaskId:draft.id,retryOfRevision:original.revision});
  expect(child.executionGraphId).toBeUndefined();expect(child.submitted).toBeUndefined();expect(child.environmentApprovalId).toBeUndefined();
  await expect(page.getByRole('link',{name:'Original failed task'})).toHaveAttribute('href',`#/tasks/${draft.id}`);
- await page.screenshot({path:'test-results/task-retry-draft-narrow.png',fullPage:true});
+ await page.screenshot({path:test.info().outputPath('task-retry-draft-narrow.png'),fullPage:true});
  await page.setViewportSize({width:1440,height:1000});
- await page.screenshot({path:'test-results/task-retry-draft-wide.png',fullPage:true});
+ await page.screenshot({path:test.info().outputPath('task-retry-draft-wide.png'),fullPage:true});
  await page.reload();
  await expect(page.getByRole('link',{name:'Original failed task'})).toBeVisible();
  await expect(page.getByRole('textbox',{name:'Request',exact:true})).toHaveValue(input.request);

@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "include": [
     "e2e",
+    "runner-tests/*.unit.test.ts",
     "e2e-journal",
     "playwright.journal.config.ts",
     "playwright.config.ts",

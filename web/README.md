@@ -153,9 +153,13 @@ one marked build exactly once; it does not enforce cgroups or execute commands.
 `make test-sandbox-capacity` separately verifies real cgroups and container,
 workspace and cache preservation on the dedicated daemon.
 
-Failed tests retain screenshots and traces in `web/test-results/`;
-`cd web && pnpm exec playwright show-report` opens the HTML report. There are no automatic
-retries, intercepted browser API responses or fixed sleeps.
+Each Playwright invocation keeps its screenshots and failure traces in
+`web/test-results/<run-id>/`. The HTML report uses the same run ID. From
+`web/`, open it with `pnpm exec playwright show-report playwright-report/<run-id>`.
+Completed run directories remain available for inspection. To keep separate `--last-failed` histories
+for concurrent commands, pass a distinct `--last-failed-file <path>` to each
+command and its rerun. The default history tracks the last completed run.
+The suite uses no automatic retries, intercepted browser API responses or fixed sleeps.
 
 ### Browser journey with the real sandbox
 
@@ -193,5 +197,5 @@ execution in two isolated tasks, checking prepared-image reuse and private cache
 The controller stops its tasks, resets their environments and cleans only shared
 generations registered in its temporary database on shutdown. It never prunes the
 daemon or removes unrelated resources. Reports/traces are separate:
-`web/playwright-report-real/` and `web/test-results-real/`. A forced process kill
+`web/playwright-report-real/<run-id>/` and `web/test-results-real/<run-id>/`. A forced process kill
 can interrupt cleanup; inspect the reported temporary paths if shutdown fails.

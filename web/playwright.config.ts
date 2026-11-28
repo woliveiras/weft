@@ -1,3 +1,4 @@
+import { runArtifacts } from './playwright-artifacts';
 import { defineConfig, devices } from '@playwright/test';
 
 const port = process.env.WEFT_E2E_PORT || '18089';
@@ -11,7 +12,7 @@ export default defineConfig({
   retries: 0,
   timeout: 60000,
   expect: { timeout: 15000 },
-  reporter: [['list'], ['html', { open: 'never' }]],
+  ...runArtifacts('test-results', 'playwright-report'),
   use: { actionTimeout: 15000, baseURL, trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {

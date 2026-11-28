@@ -3,6 +3,8 @@ server/.weft-test-tls.*
 **/node_modules
 **/.npmrc
 web/dist
+web/test-results*
+web/playwright-report*
 **/__pycache__
 **/*.pyc
 **/.pytest_cache
