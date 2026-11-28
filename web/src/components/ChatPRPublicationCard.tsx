@@ -4,13 +4,13 @@ import { Btn } from './common';
 
 const anchor = (c: ChatPRDraftComment) => `${c.path}, ${c.side === 'RIGHT' ? 'added' : 'removed'} line ${c.line}`;
 
-export function ChatPRCommentSelection({ comments, enabled, onPrepare }: {
-  comments: ChatPRDraftComment[]; enabled: boolean; onPrepare?: (ids: number[]) => void;
+export function ChatPRCommentSelection({ comments, enabled, onPrepare, unavailableExplained }: {
+  comments: ChatPRDraftComment[]; enabled: boolean; unavailableExplained?: boolean; onPrepare?: (ids: number[]) => void;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
   return <fieldset className="chat-pr-comments">
     <legend>Draft line comments</legend>
-    {!onPrepare && <p>Line comment publication is unavailable for this pull request.</p>}
+    {!onPrepare && !unavailableExplained && <p>Line comment publication is unavailable for this pull request.</p>}
     {comments.map(comment => <div key={comment.id}>
       {onPrepare ? <label><input type="checkbox" checked={selected.includes(comment.id)} disabled={!enabled}
         onChange={event => {

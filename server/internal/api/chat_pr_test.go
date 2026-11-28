@@ -18,6 +18,7 @@ import (
 type manualPRFixture struct {
 	chatAgentFixture
 	analyses atomic.Int32
+	cloud    bool
 }
 
 func (f *manualPRFixture) Chat(_ context.Context, q *llm.ChatRequest) (*llm.ChatResponse, error) {
@@ -28,6 +29,9 @@ func (f *manualPRFixture) Chat(_ context.Context, q *llm.ChatRequest) (*llm.Chat
 		}
 		f.analyses.Add(1)
 		result = "The fixture change needs a boundary test."
+		if f.cloud {
+			result = `{"summary":"The fixture change needs a boundary test.","comments":[{"path":"file","side":"RIGHT","line":1,"body":"Add a test."}]}`
+		}
 	}
 	return &llm.ChatResponse{Message: llm.ChatMessage{Role: llm.RoleAssistant, Content: result}, Usage: llm.Usage{InputTokens: 15, OutputTokens: 8}}, nil
 }
@@ -86,7 +90,7 @@ func verifyChatPRFixture(t *testing.T, kind string) {
 	if _, err := a.SCM.Save(t.Context(), connection, "fixture", false); err != nil {
 		t.Fatal(err)
 	}
-	model := &manualPRFixture{}
+	model := &manualPRFixture{cloud: kind == "bitbucket-cloud"}
 	if err := a.Models.ReplaceProviders([]llm.Entry{{Config: llm.ProviderConfig{Name: "chat-fixture", Type: "mock"}, Provider: model}}, "chat-fixture"); err != nil {
 		t.Fatal(err)
 	}
@@ -168,6 +172,16 @@ func verifyChatPRFixture(t *testing.T, kind string) {
 		}
 		r := got.Messages[1].Review
 		if r.State == chat.ReviewApplied {
+			if kind == "bitbucket-cloud" {
+				if len(r.PRComments) != 1 {
+					t.Fatal("missing Cloud draft comment", r)
+				}
+				before := reads.Load()
+				path := "/api/v1/chat/sessions/" + s.ID + "/operations/" + r.ID + "/pr-comment-review"
+				if status := call(t, server, "POST", path, operatorTok, "application/json", `{"commentIds":[1]}`, nil); status != 409 || writes.Load() != 0 || reads.Load() != before {
+					t.Fatal("Cloud publication produced provider traffic or an incorrect status", status)
+				}
+			}
 			if r.ResultID == "" || r.PRSummary != "The fixture change needs a boundary test." || !got.Messages[1].Unread {
 				t.Fatalf("evidence: %+v", r)
 			}

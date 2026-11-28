@@ -43,3 +43,17 @@ it('fetches the pinned diff on demand, without confirming the analysis', async (
   fireEvent.click(screen.getByRole('button', {name: 'Hide pinned diff'}));
   expect(screen.queryByRole('region', {name: 'Pinned pull request diff'})).toBeNull();
 });
+
+it.each(['awaiting_confirmation', 'applied'] as const)('explains the Cloud publication limit during %s and offers the pinned diff', state => {
+  const review: ChatPRReview = {
+    id:'review', digest:'digest', expiresAt:'2027-01-01', state,
+    pr:{number:418,provider:'bitbucket-cloud',connection:'origin',repository:'team/repo',head:'head',base:'base',graph:'reviews',node:'reviewer',version:1,modelProvider:'fixture',modelName:'reader'},
+    prSummary:'Check the migration.', prComments:[{id:1,path:'file',line:1,side:'RIGHT',body:'Add a test.'}],
+  };
+  render(<ChatPRCard sessionId="session" review={review} now={0} canConfirm onDecide={vi.fn()} onPrepare={vi.fn()} onView={vi.fn()}/>);
+  expect(screen.getByText(/Bitbucket Cloud.*reviewed commit/i)).toBeTruthy();
+  expect(screen.getByRole('button',{name:'Inspect pinned diff'})).toBeTruthy();
+  expect(screen.queryByRole('button',{name:'Review selected comments'})).toBeNull();
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  if (state === 'applied') expect(screen.getByText('Add a test.')).toBeTruthy();
+});

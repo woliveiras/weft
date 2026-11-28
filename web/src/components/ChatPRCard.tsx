@@ -35,6 +35,7 @@ export function ChatPRCard({ sessionId, review, now, canConfirm, onDecide, onVie
   return <section className="chat-agent-review" aria-label={`Review PR #${pr.number}`}>
     <h3>Review PR #{pr.number}</h3>
     <p>{pr.repository} · {pr.provider} · {pr.connection}</p>
+    {pr.provider === 'bitbucket-cloud' && <p>Bitbucket Cloud supports pinned diff analysis. Line comment publication is unavailable because the PR comment API cannot pin a write to the reviewed commit.</p>}
     <dl>
       <dt>Source</dt><dd><code>{pr.head}</code></dd>
       <dt>Base</dt><dd><code>{pr.base}</code></dd>
@@ -60,7 +61,7 @@ export function ChatPRCard({ sessionId, review, now, canConfirm, onDecide, onVie
     {state === 'applying' && <p role="status">Checking the PR revisions and dispatching the review…</p>}
     {state === 'queued' && <p role="status">Review dispatched. Waiting for the workflow result.</p>}
     {state === 'applied' && <><h4>Draft review</h4><p className="run-summary">{review.prSummary}</p>
-      {!!review.prComments?.length && <ChatPRCommentSelection comments={review.prComments} enabled={canConfirm}
+      {!!review.prComments?.length && <ChatPRCommentSelection comments={review.prComments} enabled={canConfirm} unavailableExplained={pr.provider === 'bitbucket-cloud'}
         onPrepare={pr.provider === 'github' && !pr.draft ? onPrepare : undefined}/>}
     </>}
     {state === 'incomplete' && <p role="status">The workflow could not complete this review.</p>}

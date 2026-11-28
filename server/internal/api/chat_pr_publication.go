@@ -21,6 +21,9 @@ const chatPRPublicationTimeout = 30 * time.Second
 
 func (s *Server) chatPRCommentGrant(ctx context.Context, p chat.PRAnalysis) (domain.ToolGrant, error) {
 	denied := fmt.Errorf("%w: the reviewed workflow version needs saved SCM read and line comment grants for this connection", tools.ErrDenied)
+	if p.Provider == "bitbucket-cloud" {
+		return domain.ToolGrant{}, fmt.Errorf("%w: Bitbucket Cloud supports pinned analysis only; inline publication cannot pin a comment to the reviewed commit", storage.ErrConflict)
+	}
 	if p.Provider != "github" || p.Draft || s.Gateway == nil {
 		return domain.ToolGrant{}, fmt.Errorf("%w: this provider or draft PR does not support reviewed line comment publication", storage.ErrConflict)
 	}
