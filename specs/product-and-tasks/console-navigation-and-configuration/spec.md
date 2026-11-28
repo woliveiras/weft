@@ -97,6 +97,8 @@ Common forms and controls remain usable at narrow widths and in the supported th
   the retained snapshot and retry. Cost failures remain separately identified.
   No task mutation, build or execution is implied by refresh or section changes.
 
+- 2026-11-28. The MCP token expiry and Jira issue update time in transition discovery use the browser’s locale and time zone with second precision, matching skill revision history. The original timestamp is available in the HTML time element.
+
 ## Reconciliation
 
 - [TASK-012 AC-001](../conversational-console/spec.md#ac-001--chat-entry-and-manual-compatibility) defines the current Chat-first entry point for TASK-002 AC-001/003. Manual deep links, retained drafts and contextual setup continue under TASK-002.

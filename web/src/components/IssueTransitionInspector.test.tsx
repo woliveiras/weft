@@ -7,7 +7,7 @@ import type {IssueTransition} from '../api/types';
 
 const connection={name:'native',kind:'jira-dc',siteUrl:'https://jira.example',projectId:'10001',revision:3,enabled:true,projectRestricted:false,credentialConfigured:true};
 const transitions:IssueTransition[]=[{id:'31',name:'Review',to:{id:'20',name:'Revisão'},fields:{}},{id:'32',name:'Review',to:{id:'21',name:'Revisão'},fields:null},{id:'33',name:'Finish',to:{id:'22',name:'Done'},fields:{resolution:{required:true,name:'Resolution',schema:{type:'resolution'},hasDefaultValue:true}}}];
-const result={connection:'native',revision:3,discovery:{site:connection.siteUrl,projectId:'10001',issueId:'10007',issueKey:'APP-7',issueTypeId:'10002',current:{id:'10',name:'Ready'},updated:'2026-11-20T12:00:00Z',transitions}};
+const result={connection:'native',revision:3,discovery:{site:connection.siteUrl,projectId:'10001',issueId:'10007',issueKey:'APP-7',issueTypeId:'10002',current:{id:'10',name:'Ready'},updated:'2026-11-20T12:00:00.123+0200',transitions}};
 afterEach(cleanup);
 it('distinguishes known-empty metadata, unavailable fields and required fields',()=>{
  expect(transitions.map(transitionRequirements)).toEqual(['No required fields reported','Field metadata unavailable','1 required field']);
@@ -26,6 +26,9 @@ it('discovers issue-specific IDs using the reviewed connection revision and pres
  expect(call.body).toEqual({issueKey:'APP-7'});expect(call.headers['If-Match']).toBe('3');
  await act(async()=>finish(result));
  const table=await screen.findByRole('region',{name:'Transition table'});
+ const updated = screen.getByText(/Issue updated/).querySelector('time');
+ expect(updated?.dateTime).toBe(result.discovery.updated);
+ expect(updated?.textContent).toBe(new Date('2026-11-20T10:00:00Z').toLocaleString());
  expect(within(table).getAllByText('Review')).toHaveLength(2);
  expect(within(table).getByText('Transition ID 31')).toBeTruthy();
  expect(within(table).getByText('Status ID 21')).toBeTruthy();

@@ -106,7 +106,7 @@ export function MCPOAuthActions({connection,canManage,onChanged}:{connection:MCP
     <div className="btn-row"><Btn disabled={busy||!acceptRecovery||recoveryRevision!==connection.revision||recoveryConnectionId!==connection.id||!connection.enabled} onClick={()=>void recover()}>{busy?'Preparing registration recovery…':'Prepare new registration attempt'}</Btn><Btn disabled={busy} onClick={()=>{setRecoveryRevision(undefined);setAcceptRecovery(false);}}>Cancel registration recovery</Btn></div>
    </section>}
   </div>}
-  {oauth.expiresAt&&<p>Token expires: {oauth.expiresAt}. Renewal is attempted before use when supported.</p>}
+  {oauth.expiresAt&&<p>Token expires: <time dateTime={oauth.expiresAt}>{fmtDateTime(oauth.expiresAt)}</time>. Renewal is attempted before use when supported.</p>}
   {oauth.revocation&&<p>Local access revoked. Provider revocation: {oauth.revocation}. {oauth.revocation!=='requested'&&'Review and revoke access in the provider account settings.'}</p>}
   <ErrorBox error={error}/>{(error||connection.error)&&<p>Check the client registration and exact callback. A 403 may indicate insufficient MCP scopes, repository/site permissions, SSO, or a corporate IP/domain policy. Correct the specific restriction before reauthorizing.</p>}
   {canManage&&automatic&&<div><Btn disabled={busy||!connection.enabled||registrationBlocked||recoveryRevision!==undefined} onClick={()=>void preview()}>Review OAuth setup {connection.name}</Btn>{plan&&<div role="status"><p>Selected mechanism: {plan.mode}. {plan.reason}</p><Btn disabled={busy||registrationBlocked||!connection.enabled} onClick={()=>void start()}>Confirm {plan.mode} and authorize {connection.name}</Btn><Btn disabled={busy} onClick={()=>setPlan(undefined)}>Cancel OAuth setup</Btn></div>}</div>}

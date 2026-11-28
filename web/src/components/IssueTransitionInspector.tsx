@@ -3,7 +3,7 @@ import {useState} from 'react';
 import {errorMessage} from '../api/client';
 import type {IssueTransition, IssueTransitionDiscovery, WorkflowEdition} from '../api/types';
 import {useAsync} from '../hooks/useData';
-import {Badge, Btn, ErrorBox} from './common';
+import {Badge, Btn, ErrorBox, fmtDateTime} from './common';
 import {HelpField} from './FieldHelp';
 
 export function transitionRequirements(t: IssueTransition): string {
@@ -48,7 +48,7 @@ export function IssueTransitionInspector({name, role, edition='jira-dc'}: {name:
       <ErrorBox error={error}/>
     </form>}
     {d&&<section className="card connections-panel" aria-label="Discovered transitions">
-      <header><h2>{d.issueKey} · {d.current.name}</h2><p className="muted small">Issue ID {d.issueId} · Type ID {d.issueTypeId} · Current status ID {d.current.id} · Issue updated {d.updated}</p></header>
+      <header><h2>{d.issueKey} · {d.current.name}</h2><p className="muted small">Issue ID {d.issueId} · Type ID {d.issueTypeId} · Current status ID {d.current.id} · Issue updated <time dateTime={d.updated}>{fmtDateTime(d.updated)}</time></p></header>
       <p>Names are labels for people. IDs identify the transition and destination; equal names may refer to different statuses.</p>
       {d.transitions.length?<div className="connection-table connections-table" role="region" aria-label="Transition table" tabIndex={0}><table>
         <thead><tr><th scope="col">Transition</th><th scope="col">Destination status</th><th scope="col">Fields</th></tr></thead>

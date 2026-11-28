@@ -6,6 +6,16 @@ import { MCPOAuthActions, MCPOAuthReturn, MCPOAuthCallbackURL, registrationField
 import type { MCPConnection } from '../api/types';
 afterEach(cleanup);
 const connection:MCPConnection={id:'oauth',name:'OAuth example',service:'generic',endpoint:'https://example.com/mcp',enabled:true,status:'ready',revision:1,credentialConfigured:true,tools:[],toolsRevision:1,updatedAt:'2026-10-17',updatedBy:'admin',oauth:{issuer:'https://issuer.example',clientId:'client',scopes:['read'],grantedScopes:['read'],status:'authorized',clientSecretConfigured:false}};
+it('shows token expiry in local time only when the provider supplies it', () => {
+ const expiresAt = '2026-11-28T23:30:21.595118297Z';
+ const props = {canManage: false, onChanged: async () => {}};
+ const view = render(<MCPOAuthActions connection={connection} {...props}/>);
+ expect(screen.queryByText(/Token expires:/)).toBeNull();
+ view.rerender(<MCPOAuthActions connection={{...connection, oauth: {...connection.oauth!, expiresAt}}} {...props}/>);
+ const time = screen.getByText(/Token expires:/).querySelector('time');
+ expect(time?.textContent).toBe(new Date('2026-11-28T23:30:21Z').toLocaleString());
+ expect(time?.dateTime).toBe(expiresAt);
+});
 it('completes only on explicit authenticated action and reports discovery failures',async()=>{
  const state='a'.repeat(43);const backend=fakeApi({'POST /api/v1/mcp/oauth/complete':()=>({...connection,status:'unavailable'})});const changed=vi.fn(async()=>{});
  render(<MCPOAuthReturn query={'state='+state} canManage onChanged={changed}/>);
