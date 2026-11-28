@@ -43,17 +43,20 @@ var (
 // Plan proposes an operation or asks for clarification. A task selector is
 // always resolved against the caller's permitted resources before it is used.
 type Plan struct {
-	Query                 string
-	EnvironmentWorkflow   string
-	Trigger               TriggerControlDraft
-	Scale                 WorkflowScaleDraft
-	ExecutionScope        string
-	ExecutionID           string
-	Budget                BudgetRaiseDraft
-	Correction            taskconfig.DraftText
-	CorrectionPayload     string
-	CheckoutAlias         string
-	ReplacementProject    string
+	Query               string
+	EnvironmentWorkflow string
+	Trigger             TriggerControlDraft
+	Scale               WorkflowScaleDraft
+	ExecutionScope      string
+	ExecutionID         string
+	Budget              BudgetRaiseDraft
+	Correction          taskconfig.DraftText
+	CorrectionPayload   string
+	CheckoutAlias       string
+	ReplacementProject  string
+	// Populated from the authenticated user message, never decoded from a model plan.
+	DeliveryConnection    string
+	DeliveryBranch        string
 	Skill                 SkillDraft
 	Area                  string
 	PRSelector            PRSelector

@@ -213,6 +213,9 @@ func (s *Server) interpretChat(w http.ResponseWriter, r *http.Request, actor Ide
 			} else {
 				plan := turn.Plan
 				plan, clarification := groundChatPRPlan(plan, lastInput, requestID, session, actor)
+				if plan.Kind == chat.CorrectTask && plan.CheckoutAlias != "" {
+					plan.DeliveryConnection, plan.DeliveryBranch, clarification = checkoutDestinationChoice(lastInput)
+				}
 				if plan.Kind == chat.InspectTask && plan.TaskView == chat.TaskLinkView && !chat.MatchesTaskLinkTarget(lastInput, plan.Task, visibleSession.PriorTaskLinkTarget(requestID)) {
 					clarification = "Which task should I link? Enter the exact ID of one task."
 				}

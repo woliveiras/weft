@@ -221,6 +221,21 @@ func (m Manager) List(ctx context.Context) ([]View, error) {
 	return out, nil
 }
 
+// ReviewConnection returns public metadata and a guard from the same snapshot.
+// A caller can commit a reviewed operation only while this registry is current.
+func (m Manager) ReviewConnection(ctx context.Context, name string) (View, storage.SettingRevision, error) {
+	d, revision, err := m.read(ctx)
+	if err != nil {
+		return View{}, storage.SettingRevision{}, err
+	}
+	for _, c := range d.Connections {
+		if c.Name == name {
+			return view(c), storage.SettingRevision{Key: SettingKey, Revision: revision}, nil
+		}
+	}
+	return View{}, storage.SettingRevision{}, storage.ErrNotFound
+}
+
 // Get returns one connection (with its sealed token) by name.
 func (m Manager) Get(ctx context.Context, name string) (Connection, error) {
 	d, _, err := m.read(ctx)

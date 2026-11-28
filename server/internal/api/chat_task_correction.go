@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/woliveiras/weft/server/internal/chat"
@@ -10,6 +11,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
 	"github.com/woliveiras/weft/server/internal/projectconfig"
+	"github.com/woliveiras/weft/server/internal/scm"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 )
@@ -96,7 +98,22 @@ func (s *Server) applyChatTaskCorrection(ctx context.Context, actor Identity, id
 			return storage.ErrConflict
 		}
 		if change := p.Repository; change != nil {
-			_, err = manager.ReplaceRepositoryForOperation(ctx, d.ID, d.Revision, change.Before, change.After, actor.Name, r.ID, projectconfig.RevisionGuard(change.After.ProjectID, change.ProjectRevision))
+			guards := []storage.SettingRevision{projectconfig.RevisionGuard(change.After.ProjectID, change.ProjectRevision)}
+			if change.After.SCMConnection != "" {
+				project, err := (projectconfig.Manager{Store: s.Store}).Get(ctx, change.After.ProjectID)
+				if err != nil {
+					return err
+				}
+				conn, guard, err := s.checkoutDelivery(ctx, project, change.After.SCMConnection, change.After.TargetBranch, d.ID)
+				if err != nil {
+					return err
+				}
+				if conn.Repository != change.After.Repository || conn.UpdatedAt.UTC().Format(time.RFC3339Nano) != change.After.ConnectionRevision {
+					return storage.ErrConflict
+				}
+				guards = append(guards, guard)
+			}
+			_, err = manager.ReplaceRepositoryForOperation(ctx, d.ID, d.Revision, change.Before, change.After, actor.Name, r.ID, guards...)
 			return err
 		}
 		if q := p.Payload; q != nil {
@@ -151,9 +168,13 @@ func (s *Server) reviewChatCheckout(ctx context.Context, actor Identity, id stri
 		out.Text = "Which existing checkout alias should I replace?"
 		return out
 	}
-	if old.SCMConnection != "" {
-		out.Text = "This checkout has a pull request destination. Review its connection and branch in Tasks."
-		out.Destination = "tasks"
+	if old.SCMConnection != "" && plan.DeliveryConnection == "" {
+		out.Plan.Kind = chat.Clarify
+		out.Text = checkoutChoicePrompt
+		return out
+	}
+	if old.SCMConnection == "" && plan.DeliveryConnection != "" {
+		out.Text = "This task uses local delivery. Replace the checkout locally or review the delivery settings for every repository in Tasks."
 		return out
 	}
 	projects, err := (projectconfig.Manager{Store: s.Store}).List(ctx)
@@ -169,6 +190,20 @@ func (s *Server) reviewChatCheckout(ctx context.Context, actor Identity, id stri
 		return out
 	}
 	next := domain.TaskRepository{Alias: old.Alias, ProjectID: target.ID, BaseCommit: target.Head, SourceRef: target.RepositoryRef, Checks: target.Checks, RequiredChecks: old.RequiredChecks}
+	if old.SCMConnection != "" {
+		c, _, err := s.checkoutDelivery(ctx, target, plan.DeliveryConnection, plan.DeliveryBranch, d.ID)
+		if err != nil {
+			if errors.Is(err, storage.ErrNotFound) || errors.Is(err, storage.ErrConflict) {
+				out.Plan.Kind = chat.Clarify
+				out.Text = "Choose a connection whose repository matches the registered project's origin and a valid PR base branch. " + checkoutChoicePrompt
+			} else {
+				out.Text, out.Retryable = "Could not verify the delivery connection. Retry this request.", true
+			}
+			return out
+		}
+		next.SCMConnection, next.Repository, next.TargetBranch = c.Name, c.Repository, plan.DeliveryBranch
+		next.ConnectionRevision = c.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	}
 	out.Review, err = chat.NewTaskCheckoutReview(actor.chatOwner, id, d, chat.TaskCheckoutChange{Before: old, After: next, ProjectRevision: target.Revision}, digest, time.Now())
 	if err != nil {
 		out.Text = "Could not prepare this replacement. Check the distinct project, its required checks and the editable draft state."
@@ -176,4 +211,47 @@ func (s *Server) reviewChatCheckout(ctx context.Context, actor Identity, id stri
 	}
 	out.Text = "Review the replacement checkout and its checks before saving."
 	return out
+}
+
+const checkoutChoicePrompt = "Include the new PR destination in your message as connection=<name> branch=<base-branch>."
+
+func checkoutDestinationChoice(input string) (string, string, string) {
+	var connection, branch string
+	var haveConnection, haveBranch bool
+	for _, field := range strings.Fields(input) {
+		key, value, ok := strings.Cut(field, "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "connection":
+			if haveConnection || value == "" {
+				return "", "", checkoutChoicePrompt
+			}
+			connection, haveConnection = value, true
+		case "branch":
+			if haveBranch || !scm.ValidBaseBranch(value) {
+				return "", "", checkoutChoicePrompt
+			}
+			branch, haveBranch = value, true
+		}
+	}
+	if haveConnection != haveBranch {
+		return "", "", checkoutChoicePrompt
+	}
+	return connection, branch, ""
+}
+
+func (s *Server) checkoutDelivery(ctx context.Context, project *projectconfig.Project, connection, branch, task string) (scm.View, storage.SettingRevision, error) {
+	c, guard, err := (scm.Manager{Store: s.Store}).ReviewConnection(ctx, connection)
+	if err != nil {
+		return scm.View{}, storage.SettingRevision{}, err
+	}
+	if !scm.ValidBaseBranch(branch) || branch == c.Prefix()+domain.TaskExecutionID(task) {
+		return scm.View{}, storage.SettingRevision{}, storage.ErrConflict
+	}
+	if err = projectconfig.MatchDelivery(ctx, project, c.Repository, c.PublicRemoteURL(), c.Repository); err != nil {
+		return scm.View{}, storage.SettingRevision{}, storage.ErrConflict
+	}
+	return c, guard, nil
 }

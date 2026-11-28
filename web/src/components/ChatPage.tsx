@@ -879,6 +879,7 @@ function CorrectionCard({review, now, canConfirm, onDecide, onView}: {
       {([['Current checkout', edit.repository.before], ['Proposed checkout', edit.repository.after]] as const).map(([label, repo]) =>
         <section key={label} aria-label={label}><h4>{label}</h4>
           <p>{repo.projectId} · {repo.sourceRef || 'HEAD'} @ <code>{repo.baseCommit}</code></p>
+          {repo.scmConnection && <p>PR destination · connection <code>{repo.scmConnection}</code> · <code>{repo.repository}</code> · base <code>{repo.targetBranch}</code></p>}
           {!!repo.checks?.length && <ul aria-label="Project checks">{repo.checks.map(check =>
             <li key={check.name}>{check.name}{repo.requiredChecks?.includes(check.name) && ' (required)'} · <code>{check.command}</code>
               {check.cwd && <> in <code>{check.cwd}</code></>}{!!check.timeoutSec && <> · {check.timeoutSec}s</>}</li>)}</ul>}
