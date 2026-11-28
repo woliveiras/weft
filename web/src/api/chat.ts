@@ -1,4 +1,4 @@
-import type { AuthorizationMode, TaskAuthorization } from './tasks';
+import type { AuthorizationMode, TaskAuthorization, TaskRepository } from './tasks';
 
 export interface ChatTask {
   linkOnly?: boolean;
@@ -174,8 +174,9 @@ export interface ChatWorkflowEnvironmentReview extends ChatReviewState {
 export interface ChatDraftText { title:string; request:string; outcome:string }
 export interface ChatCorrectionReview extends ChatReviewState {
   taskCorrection: {task:string; revision:number; workflow:string; workflowVersion:number; workflowDigest:string} & (
-    {before:ChatDraftText; after:ChatDraftText; payload?:undefined} |
-    {payload:{channel:string; messageType:string; before:string; after:string}}
+    {before:ChatDraftText; after:ChatDraftText; payload?:undefined;repository?:undefined} |
+    {repository?:undefined;payload:{channel:string; messageType:string; before:string; after:string}} |
+    {payload?:undefined;repository:{before:TaskRepository;after:TaskRepository;projectRevision:number}}
   );
 }
 export interface ChatTaskRetryReview extends ChatReviewState {

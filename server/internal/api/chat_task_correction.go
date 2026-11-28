@@ -7,7 +7,9 @@ import (
 
 	"github.com/woliveiras/weft/server/internal/chat"
 	"github.com/woliveiras/weft/server/internal/config"
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/engine"
+	"github.com/woliveiras/weft/server/internal/projectconfig"
 	"github.com/woliveiras/weft/server/internal/storage"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 )
@@ -50,6 +52,9 @@ func (s *Server) reviewChatTaskCorrection(ctx context.Context, actor Identity, i
 		out.Text, out.Retryable = "Could not verify the workflow revision.", true
 		return out
 	}
+	if plan.CheckoutAlias != "" {
+		return s.reviewChatCheckout(ctx, actor, id, plan, d, digest)
+	}
 	if plan.CorrectionPayload != "" {
 		out.Review, err = chat.NewTaskPayloadCorrection(actor.chatOwner, id, d, plan.CorrectionPayload, digest, time.Now())
 		if err == nil {
@@ -90,6 +95,10 @@ func (s *Server) applyChatTaskCorrection(ctx context.Context, actor Identity, id
 		if d.Revision != p.Revision || d.GraphID != p.Workflow {
 			return storage.ErrConflict
 		}
+		if change := p.Repository; change != nil {
+			_, err = manager.ReplaceRepositoryForOperation(ctx, d.ID, d.Revision, change.Before, change.After, actor.Name, r.ID, projectconfig.RevisionGuard(change.After.ProjectID, change.ProjectRevision))
+			return err
+		}
 		if q := p.Payload; q != nil {
 			if d.ChannelID != q.Channel || d.MessageType != q.MessageType || d.PayloadJSON != q.Before {
 				return storage.ErrConflict
@@ -126,4 +135,45 @@ func (s *Server) observeChatTaskCorrection(ctx context.Context, owner string, se
 		return s.chatStore().FinishReview(ctx, owner, session.ID, r.ID, chat.ReviewUnknown, 0)
 	}
 	return session, nil
+}
+
+func (s *Server) reviewChatCheckout(ctx context.Context, actor Identity, id string, plan chat.Plan, d *taskconfig.Draft, digest string) chat.Interpretation {
+	out := chat.Interpretation{Plan: plan}
+	var old domain.TaskRepository
+	for _, r := range d.Repositories {
+		if r.Alias == plan.CheckoutAlias {
+			old = r
+			break
+		}
+	}
+	if old.Alias == "" {
+		out.Plan.Kind = chat.Clarify
+		out.Text = "Which existing checkout alias should I replace?"
+		return out
+	}
+	if old.SCMConnection != "" {
+		out.Text = "This checkout has a pull request destination. Review its connection and branch in Tasks."
+		out.Destination = "tasks"
+		return out
+	}
+	projects, err := (projectconfig.Manager{Store: s.Store}).List(ctx)
+	if err != nil {
+		out.Text = "Could not read registered projects. Retry this request."
+		out.Retryable = true
+		return out
+	}
+	target, err := findDraftProject(projects, plan.ReplacementProject)
+	if err != nil {
+		out.Plan.Kind = chat.Clarify
+		out.Text = "Which registered replacement project should I use? Enter its exact ID or unique name."
+		return out
+	}
+	next := domain.TaskRepository{Alias: old.Alias, ProjectID: target.ID, BaseCommit: target.Head, SourceRef: target.RepositoryRef, Checks: target.Checks, RequiredChecks: old.RequiredChecks}
+	out.Review, err = chat.NewTaskCheckoutReview(actor.chatOwner, id, d, chat.TaskCheckoutChange{Before: old, After: next, ProjectRevision: target.Revision}, digest, time.Now())
+	if err != nil {
+		out.Text = "Could not prepare this replacement. Check the distinct project, its required checks and the editable draft state."
+		return out
+	}
+	out.Text = "Review the replacement checkout and its checks before saving."
+	return out
 }

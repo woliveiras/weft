@@ -51,6 +51,8 @@ func consoleFixtureResponse(request *llm.ChatRequest) (*llm.ChatResponse, error)
 		toolName, arguments = "open_console_page", `{"destination":"agents","title":"Review the registered workflows and retained evidence for the quarterly editorial release across multiple repositories"}`
 	case "Draft a comparison of the registered chat project.":
 		toolName, arguments = "create_task_draft", `{"taskTitle":"Compare registered project","workflow":"draft-project-fixture","request":"Compare the examples.","outcome":"understand","repositories":[{"project":"Draft repository fixture","alias":"examples"}]}`
+	case "Replace the docs checkout on the checkout swap draft with Replacement docs.":
+		toolName, arguments = "edit_task_draft", `{"task":"Checkout swap draft","checkoutAlias":"docs","replacementProject":"Replacement docs"}`
 	case "Start the repository checklist task.":
 		toolName, arguments = "start_task", `{"task":"Repository checklist fixture"}`
 	case "Start the prepared release sandbox task.":

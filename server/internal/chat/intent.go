@@ -10,6 +10,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/llm"
 	"github.com/woliveiras/weft/server/internal/taskauth"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
@@ -51,6 +52,8 @@ type Plan struct {
 	Budget                BudgetRaiseDraft
 	Correction            taskconfig.DraftText
 	CorrectionPayload     string
+	CheckoutAlias         string
+	ReplacementProject    string
 	Skill                 SkillDraft
 	Area                  string
 	PRSelector            PRSelector
@@ -246,6 +249,10 @@ func decodePlan(body string) (Plan, error) {
 			plan.Correction.Request = value
 		case "newOutcome":
 			plan.Correction.Outcome = value
+		case "checkoutAlias":
+			plan.CheckoutAlias = value
+		case "replacementProject":
+			plan.ReplacementProject = value
 		case "newPayloadJson":
 			plan.CorrectionPayload = value
 		case "taskTitle":
@@ -322,7 +329,8 @@ func decodePlan(body string) (Plan, error) {
 		return Plan{}, ErrInvalidPlan
 	}
 	textCorrection := seen["newTitle"] || seen["newRequest"] || seen["newOutcome"]
-	if (textCorrection || seen["newPayloadJson"]) && plan.Kind != CorrectTask {
+	repoCorrection := seen["checkoutAlias"] || seen["replacementProject"]
+	if (repoCorrection || textCorrection || seen["newPayloadJson"]) && plan.Kind != CorrectTask {
 		return Plan{}, ErrInvalidPlan
 	}
 	if plan.Kind != CreateTask && (seen["repositories"] || seen["taskTitle"] || seen["workflow"] || seen["workflowVersion"] || seen["request"] || seen["outcome"]) {
@@ -439,7 +447,11 @@ func decodePlan(body string) (Plan, error) {
 		if !shortLabel(plan.Task) || seen["question"] {
 			return Plan{}, ErrInvalidPlan
 		}
-		if seen["newPayloadJson"] {
+		if repoCorrection {
+			if textCorrection || seen["newPayloadJson"] || !domain.ValidRepositoryAlias(plan.CheckoutAlias) || !shortLabel(plan.ReplacementProject) {
+				return Plan{}, ErrInvalidPlan
+			}
+		} else if seen["newPayloadJson"] {
 			if textCorrection || !validTaskPayload(plan.CorrectionPayload) {
 				return Plan{}, ErrInvalidPlan
 			}

@@ -51,21 +51,9 @@ func (s *Server) bindDraftRepositories(ctx context.Context, selectors []chat.Dra
 	var refs []domain.TaskRepository
 	var bindings []chat.StartRepository
 	for _, selector := range selectors {
-		var selected *projectconfig.Project
-		matches := 0
-		for _, p := range projects {
-			if p.ID == selector.Project {
-				selected = p
-				matches = 1
-				break
-			}
-			if strings.EqualFold(p.Name, selector.Project) {
-				selected = p
-				matches++
-			}
-		}
-		if matches != 1 {
-			return nil, nil, storage.ErrNotFound
+		selected, err := findDraftProject(projects, selector.Project)
+		if err != nil {
+			return nil, nil, err
 		}
 		if selector.Commit != "" && selector.Commit != selected.Head {
 			return nil, nil, taskconfig.ErrInvalid
@@ -77,4 +65,24 @@ func (s *Server) bindDraftRepositories(ctx context.Context, selectors []chat.Dra
 		return nil, nil, taskconfig.ErrInvalid
 	}
 	return refs, bindings, nil
+}
+
+func findDraftProject(projects []*projectconfig.Project, selector string) (*projectconfig.Project, error) {
+	var selected *projectconfig.Project
+	matches := 0
+	for _, p := range projects {
+		if p.ID == selector {
+			selected = p
+			matches = 1
+			break
+		}
+		if strings.EqualFold(p.Name, selector) {
+			selected = p
+			matches++
+		}
+	}
+	if matches != 1 {
+		return nil, storage.ErrNotFound
+	}
+	return selected, nil
 }

@@ -1,8 +1,10 @@
 package chat
 
 import (
+	"encoding/json"
 	"time"
 
+	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 )
 
@@ -16,6 +18,7 @@ type TaskCorrection struct {
 	WorkflowDigest  string                `json:"workflowDigest"`
 	Before          *taskconfig.DraftText `json:"before,omitempty"`
 	After           *taskconfig.DraftText `json:"after,omitempty"`
+	Repository      *TaskCheckoutChange   `json:"repository,omitempty"`
 	Payload         *TaskPayloadChange    `json:"payload,omitempty"`
 }
 
@@ -61,4 +64,24 @@ func NewTaskCorrection(owner, session string, draft *taskconfig.Draft, change ta
 		return nil, err
 	}
 	return newReview(owner, session, now, OperationReview{TaskCorrection: &TaskCorrection{Task: draft.ID, Revision: draft.Revision, Workflow: draft.GraphID, WorkflowVersion: draft.GraphVersion, WorkflowDigest: workflowDigest, Before: &before, After: &after}})
+}
+
+type TaskCheckoutChange struct {
+	Before          domain.TaskRepository `json:"before"`
+	After           domain.TaskRepository `json:"after"`
+	ProjectRevision int64                 `json:"projectRevision"`
+}
+
+func NewTaskCheckoutReview(owner, session string, d *taskconfig.Draft, change TaskCheckoutChange, digest string, now time.Time) (*OperationReview, error) {
+	if d == nil || d.Revision < 1 || change.ProjectRevision < 1 || digest == "" {
+		return nil, ErrInvalidPlan
+	}
+	raw, err := json.Marshal(change)
+	if err != nil || !validTaskPayload(string(raw)) {
+		return nil, ErrInvalidPlan
+	}
+	if _, err = d.ReplacedRepositoryInput(change.Before, change.After); err != nil {
+		return nil, err
+	}
+	return newReview(owner, session, now, OperationReview{TaskCorrection: &TaskCorrection{Task: d.ID, Revision: d.Revision, Workflow: d.GraphID, WorkflowVersion: d.GraphVersion, WorkflowDigest: digest, Repository: &change}})
 }
