@@ -498,6 +498,10 @@ repository. Reuse existing task, consent, review and gateway contracts. A review
 analysis is distinct from a remote write, and unsupported integrations expose
 their limitation and a safe handoff.
 
+For recurring tasks, an administrator can define a versioned authorization profile from Tasks or Chat. It states which granted actions run automatically, which require a person and which are outside the task. A critical task can use supervised execution. Before admission, both surfaces show the effective rules, their source and any outstanding human decisions. Each task records the profile revision and the concrete scope it inherited. A saved project suggestion alone supplies no standing permission.
+
+A profile may preauthorize a specific external effect. For example, it may permit opening one PR from the admitted task branch through one named connection to one repository and base branch. Pushing the branch is a separate capability and needs its own rule if required. Evaluate grants, connection policy and the task’s effective scope in the owning service. A changed destination, broader grant or new profile revision cannot silently expand an active task. Honor revocation before subsequent effects. Reconcile an uncertain external write against its existing receipt before retrying. The conversation and task history identify the rule, affected resource and observed outcome. These profile rules are a planned extension to [the existing task consent modes](../task-consent-and-gateway-authorization/spec.md); their acceptance scenario is S60.
+
 ### AC-008 — Reviewed installation operations
 
 Inspect and change supported installation settings through typed services,
