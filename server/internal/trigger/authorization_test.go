@@ -19,7 +19,10 @@ func TestAuthorizationProblemChecksInheritedGrantsAcrossWorkflow(t *testing.T) {
 		{taskauth.Workspace, domain.IsolationDocker, false, ""},
 		{taskauth.Workspace, domain.IsolationProcess, true, ""},
 		{taskauth.Ask, domain.IsolationProcess, false, ""},
-		{"invalid", domain.IsolationDocker, false, "ask, workspace or full"},
+		{taskauth.Manual, domain.IsolationDocker, false, ""},
+		{taskauth.Assisted, domain.IsolationProcess, false, ""},
+		{taskauth.Automatic, domain.IsolationDocker, false, ""},
+		{"invalid", domain.IsolationDocker, false, "choose manual, assisted, automatic or a supported legacy mode"},
 	} {
 		g := &domain.Graph{}
 		g.Spec.Defaults.Isolation.Mode = tc.defaults

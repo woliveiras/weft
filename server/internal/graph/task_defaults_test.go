@@ -37,6 +37,7 @@ func TestTaskDefaultsValidation(t *testing.T) {
 		{"type required", "messageType", func(g *domain.Graph) { g.Spec.Task.MessageType = "" }},
 		{"disallowed type", "messageType", func(g *domain.Graph) { g.Spec.Task.MessageType = "other.request" }},
 		{"orphan type", "messageType", func(g *domain.Graph) { g.Spec.Task.ChannelID = "" }},
+		{"invalid profile", "authorizationProfile", func(g *domain.Graph) { g.Spec.Task.AuthorizationProfile = "full" }},
 		{"long project", "projectId", func(g *domain.Graph) { g.Spec.Task.ProjectID = strings.Repeat("p", 129) }},
 		{"byte bound", "projectId", func(g *domain.Graph) { g.Spec.Task.ProjectID = strings.Repeat("é", 65) }},
 		{"long connection", "scmConnection", func(g *domain.Graph) { g.Spec.Task.SCMConnection = strings.Repeat("c", 129) }},
@@ -76,6 +77,7 @@ func TestTaskDefaultsDocumentRoundTrip(t *testing.T) {
 	for _, format := range []string{"json", "yaml"} {
 		t.Run(format, func(t *testing.T) {
 			g := taskGraph()
+			g.Spec.Task.AuthorizationProfile = domain.TaskAutomatic
 			var data []byte
 			var err error
 			if format == "json" {

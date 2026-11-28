@@ -77,8 +77,10 @@ type Principal struct {
 
 // Invocation is what a Tool receives.
 type Invocation struct {
-	Principal *Principal
-	Args      json.RawMessage
+	// TaskConsent pins the gateway decision for tools that wait before an external effect.
+	TaskConsent string
+	Principal   *Principal
+	Args        json.RawMessage
 	// Grant is the (merged) grant that authorised the call; tools apply its
 	// Paths/Commands/Hosts constraints.
 	Grant   domain.ToolGrant

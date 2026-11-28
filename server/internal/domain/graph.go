@@ -56,7 +56,7 @@ type InstructionRefs struct {
 
 type GraphSpec struct {
 	Instructions InstructionRefs `json:"instructions,omitempty" yaml:"instructions,omitempty"`
-	// Task contains reusable editor suggestions. Admission still validates the
+	// Task contains reusable editor suggestions and a default approval profile. Admission validates the
 	// task's concrete version, resources and reviewed permissions independently.
 	Task *TaskDefaults `json:"task,omitempty" yaml:"task,omitempty"`
 
@@ -78,16 +78,29 @@ type GraphSpec struct {
 	MaxHops int `json:"maxHops,omitempty" yaml:"maxHops,omitempty"`
 }
 
-// TaskDefaults contains no authorization, secret, moving version or payload.
+type TaskAuthorizationMode string
+
+const (
+	TaskManual    TaskAuthorizationMode = "manual"
+	TaskAssisted  TaskAuthorizationMode = "assisted"
+	TaskAutomatic TaskAuthorizationMode = "automatic"
+)
+
+func (m TaskAuthorizationMode) IsProfile() bool {
+	return m == TaskManual || m == TaskAssisted || m == TaskAutomatic
+}
+
+// TaskDefaults pins the approval profile and suggests task configuration.
 // External references are selected and revalidated when a task is saved/reviewed.
 type TaskDefaults struct {
-	ProjectIDs    []string `json:"projectIds,omitzero" yaml:"projectIds,omitempty"`
-	NodeID        string   `json:"nodeId,omitempty" yaml:"nodeId,omitempty"`
-	ResultNodeID  string   `json:"resultNodeId,omitempty" yaml:"resultNodeId,omitempty"`
-	ChannelID     string   `json:"channelId,omitempty" yaml:"channelId,omitempty"`
-	MessageType   string   `json:"messageType,omitempty" yaml:"messageType,omitempty"`
-	ProjectID     string   `json:"projectId,omitempty" yaml:"projectId,omitempty"`
-	SCMConnection string   `json:"scmConnection,omitempty" yaml:"scmConnection,omitempty"`
+	AuthorizationProfile TaskAuthorizationMode `json:"authorizationProfile,omitempty" yaml:"authorizationProfile,omitempty"`
+	ProjectIDs           []string              `json:"projectIds,omitzero" yaml:"projectIds,omitempty"`
+	NodeID               string                `json:"nodeId,omitempty" yaml:"nodeId,omitempty"`
+	ResultNodeID         string                `json:"resultNodeId,omitempty" yaml:"resultNodeId,omitempty"`
+	ChannelID            string                `json:"channelId,omitempty" yaml:"channelId,omitempty"`
+	MessageType          string                `json:"messageType,omitempty" yaml:"messageType,omitempty"`
+	ProjectID            string                `json:"projectId,omitempty" yaml:"projectId,omitempty"`
+	SCMConnection        string                `json:"scmConnection,omitempty" yaml:"scmConnection,omitempty"`
 }
 
 // EnvironmentOrigin identifies the repository snapshot accepted by the operator.

@@ -10,7 +10,7 @@ import (
 
 func TestWorkflowTaskDefaultsRoundTripAndValidation(t *testing.T) {
 	srv, app := setupApp(t, nil)
-	const doc = `{"metadata":{"id":"task-defaults","name":"Task defaults"},"spec":{"task":{"nodeId":"worker","resultNodeId":"worker","channelId":"requests","messageType":"work.request","projectId":"project-a","scmConnection":"team-scm"},"nodes":[{"id":"worker","runtime":{"kind":"echo"},"loop":{"mode":"event"}}],"channels":[{"id":"requests","to":["worker"],"types":["work.*"]}]}}`
+	const doc = `{"metadata":{"id":"task-defaults","name":"Task defaults"},"spec":{"task":{"authorizationProfile":"assisted","nodeId":"worker","resultNodeId":"worker","channelId":"requests","messageType":"work.request","projectId":"project-a","scmConnection":"team-scm"},"nodes":[{"id":"worker","runtime":{"kind":"echo"},"loop":{"mode":"event"}}],"channels":[{"id":"requests","to":["worker"],"types":["work.*"]}]}}`
 	if got := call(t, srv, "POST", "/api/v1/graphs", adminTok, "application/json", doc, nil); got != http.StatusCreated {
 		t.Fatalf("create task defaults: %d", got)
 	}
@@ -18,7 +18,7 @@ func TestWorkflowTaskDefaultsRoundTripAndValidation(t *testing.T) {
 	if got := call(t, srv, "GET", "/api/v1/graphs/task-defaults", viewerTok, "", "", &response); got != http.StatusOK {
 		t.Fatalf("read task defaults: %d", got)
 	}
-	if response.Graph.Spec.Task == nil || response.Graph.Spec.Task.ProjectID != "project-a" || response.Graph.Spec.Task.SCMConnection != "team-scm" || response.Graph.Spec.Task.MessageType != "work.request" {
+	if response.Graph.Spec.Task == nil || response.Graph.Spec.Task.AuthorizationProfile != domain.TaskAssisted || response.Graph.Spec.Task.ProjectID != "project-a" || response.Graph.Spec.Task.SCMConnection != "team-scm" || response.Graph.Spec.Task.MessageType != "work.request" {
 		t.Fatalf("lost saved suggestions: %+v", response.Graph.Spec.Task)
 	}
 	for _, invalid := range []string{

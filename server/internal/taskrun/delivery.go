@@ -11,6 +11,7 @@ import (
 	"github.com/woliveiras/weft/server/internal/projectconfig"
 	"github.com/woliveiras/weft/server/internal/scm"
 	"github.com/woliveiras/weft/server/internal/storage"
+	"github.com/woliveiras/weft/server/internal/taskauth"
 	"github.com/woliveiras/weft/server/internal/taskconfig"
 )
 
@@ -20,8 +21,15 @@ func (m Manager) prepare(ctx context.Context, d *taskconfig.Draft, source *domai
 	if err != nil {
 		return g, blockers, err
 	}
+	workflowGrants := false
+	if len(d.Repositories) > 0 || d.SCMConnection != "" {
+		workflowGrants, err = (taskauth.Manager{Store: m.Store}).UsesWorkflowGrants(ctx, d.ID, source)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	if len(d.Repositories) > 0 {
-		blocks, err := m.reviewRepositories(ctx, d, g)
+		blocks, err := m.reviewRepositories(ctx, d, g, workflowGrants)
 		return g, append(blockers, blocks...), err
 	}
 	checkBlocks, err := m.attachChecks(ctx, d, g)
@@ -31,7 +39,7 @@ func (m Manager) prepare(ctx context.Context, d *taskconfig.Draft, source *domai
 	if d.SCMConnection == "" {
 		return g, blockers, err
 	}
-	b, err := m.attachSCM(ctx, d, g)
+	b, err := m.attachSCM(ctx, d, g, workflowGrants)
 	return g, append(blockers, b...), err
 }
 
@@ -67,7 +75,7 @@ func Branch(c scm.Connection, taskID string) string {
 // branch, push it and open a pull request, all through gateway tools whose
 // grants name only that connection. Opening the pull request still waits
 // for a person unless the connection relaxes it.
-func (m Manager) attachSCM(ctx context.Context, d *taskconfig.Draft, g *domain.Graph) ([]string, error) {
+func (m Manager) attachSCM(ctx context.Context, d *taskconfig.Draft, g *domain.Graph, workflowGrants bool) ([]string, error) {
 	c, err := (scm.Manager{Store: m.Store}).Get(ctx, d.SCMConnection)
 	if errors.Is(err, storage.ErrNotFound) {
 		return []string{fmt.Sprintf("The SCM connection %q no longer exists. Choose another one or none.", d.SCMConnection)}, nil
@@ -82,6 +90,9 @@ func (m Manager) attachSCM(ctx context.Context, d *taskconfig.Draft, g *domain.G
 	n := g.Node(nodeID)
 	if n == nil {
 		return []string{"Select the result agent that delivers to source control."}, nil
+	}
+	if workflowGrants {
+		return []string{"Select a repository delivery binding with its connection and base branch before starting a profiled task."}, nil
 	}
 	repos := []string{c.Name}
 	n.Tools = append(n.Tools,

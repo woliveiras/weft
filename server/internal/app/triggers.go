@@ -81,7 +81,7 @@ func (x triggerTasks) Start(ctx context.Context, t *trigger.Trigger, i trigger.I
 		if !launchReview.CanPrepareEnvironment {
 			return fail("preparation", taskconfig.ErrInvalid, launchReview.Blockers...)
 		}
-		if t.Consent.Authorization == taskauth.Ask {
+		if t.Consent.Authorization == taskauth.Ask || t.Consent.Authorization == taskauth.Manual || t.Consent.Authorization == taskauth.Assisted {
 			d.EnvironmentApprovalID = domain.NewID("apr")
 			d, err = (taskconfig.Manager{Store: x.a.Store}).Transition(ctx, d, "draft", actor)
 			if err != nil {

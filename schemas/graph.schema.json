@@ -46,8 +46,9 @@
   "$defs": {
     "TaskDefaults": {
       "type": "object", "additionalProperties": false,
-      "description": "Versioned suggestions for new task editors. No grants, consent, payload or moving version aliases. External project/SCM names are revalidated at task admission.",
+      "description": "Versioned task suggestions and inherited approval profile. Tool grants belong to workflow agents. External project/SCM names are revalidated at task admission.",
       "properties": {
+        "authorizationProfile": {"type":"string","enum":["manual","assisted","automatic"]},
         "nodeId": {"type": "string", "maxLength": 128},
         "resultNodeId": {"type": "string", "maxLength": 128},
         "channelId": {"type": "string", "maxLength": 128},

@@ -76,7 +76,7 @@ func launch(t *testing.T, m Manager, d *taskconfig.Draft, p *tools.Principal) {
 	}
 }
 func TestGatewayConsentAndMandatoryGrants(t *testing.T) {
-	for _, mode := range []Mode{Ask, Workspace, Full} {
+	for _, mode := range []Mode{Ask, Workspace, Full, Manual, Assisted, Automatic} {
 		t.Run(string(mode), func(t *testing.T) {
 			m, d, p := setup(t)
 			r, err := m.Review(t.Context(), d.ID)
@@ -97,7 +97,7 @@ func TestGatewayConsentAndMandatoryGrants(t *testing.T) {
 				t.Fatal(err)
 			}
 			expected := 1
-			if mode == Full {
+			if mode == Full || mode == Automatic {
 				expected = 0
 			}
 			if ap.calls != expected || tool.calls != 1 {
@@ -157,7 +157,7 @@ func TestLongTaskExecutionAuthorizationUsesVerifiedOwner(t *testing.T) {
 			case "graph-version":
 				p.GraphVersion++
 			}
-			_, _, err = m.Check(t.Context(), p, &sampleTool{}, false)
+			_, _, err = m.Check(t.Context(), p, &sampleTool{}, false, nil)
 			if (err == nil) != (invalid == "") {
 				t.Fatalf("verified owner %q: %v", invalid, err)
 			}
@@ -231,7 +231,7 @@ func TestRunningLegacyTaskWithoutConsent(t *testing.T) {
 		t.Fatalf("ungranted legacy call: err=%v calls=%d approvals=%d", err, tool.calls, ap.calls)
 	}
 
-	for _, mode := range []Mode{Ask, Workspace, Full} {
+	for _, mode := range []Mode{Ask, Workspace, Full, Manual, Assisted, Automatic} {
 		if _, err := m.Save(ctx, draft.ID, mode, review.Scope, 0, "admin", true); !errors.Is(err, storage.ErrConflict) {
 			t.Fatalf("running legacy task adopted %s: %v", mode, err)
 		}
@@ -262,7 +262,7 @@ func TestConsentInvalidationAndPersistence(t *testing.T) {
 	g, _ := m.Store.GetGraph(t.Context(), "workflow", 0)
 	g.Metadata.Name = "changed"
 	m.Store.SaveGraph(t.Context(), g, 1)
-	if _, _, err = m.Check(t.Context(), p, &sampleTool{}, false); err == nil {
+	if _, _, err = m.Check(t.Context(), p, &sampleTool{}, false, nil); err == nil {
 		t.Fatal("stale workflow accepted")
 	}
 }
@@ -302,7 +302,7 @@ func TestDependencyFailureDenies(t *testing.T) {
 	m, d, p := setup(t)
 	_ = d
 	m.Store = unavailable{m.Store}
-	if _, _, err := m.Check(t.Context(), p, &sampleTool{}, false); err == nil {
+	if _, _, err := m.Check(t.Context(), p, &sampleTool{}, false, nil); err == nil {
 		t.Fatal("ignored dependency failure")
 	}
 }
@@ -404,7 +404,7 @@ func TestConsentSurvivesStoreRestart(t *testing.T) {
 	}
 	defer reopened.Close()
 	m.Store = reopened
-	required, _, err := m.Check(t.Context(), p, &sampleTool{}, false)
+	required, _, err := m.Check(t.Context(), p, &sampleTool{}, false, nil)
 	if err != nil || required {
 		t.Fatal(required, err)
 	}
@@ -528,7 +528,7 @@ func TestGatewayExplainsNativeShellDenialForPreviouslyConsentedTask(t *testing.T
 }
 
 func TestRepositoryGuidancePreservesReviewedAuthorizationMode(t *testing.T) {
-	for _, mode := range []Mode{Ask, Workspace, Full} {
+	for _, mode := range []Mode{Ask, Workspace, Full, Manual, Assisted, Automatic} {
 		t.Run(string(mode), func(t *testing.T) {
 			ctx := t.Context()
 			m, draft, principal := setup(t)
@@ -591,7 +591,7 @@ func TestRepositoryGuidancePreservesReviewedAuthorizationMode(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := 1
-			if mode == Full {
+			if mode == Full || mode == Automatic {
 				want = 0
 			}
 			after, err := m.Review(ctx, draft.ID)
@@ -603,5 +603,114 @@ func TestRepositoryGuidancePreservesReviewedAuthorizationMode(t *testing.T) {
 				t.Fatalf("authorization changed: %+v, approvals %d, calls %d", after.Record, ap.calls, tool.calls)
 			}
 		})
+	}
+}
+
+func TestWorkflowProfileAdmissionOverrideAndRevocation(t *testing.T) {
+	ctx := t.Context()
+	m, old, _ := setup(t)
+	g, err := m.Store.GetGraph(ctx, old.GraphID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.Spec.Task = &domain.TaskDefaults{AuthorizationProfile: Automatic}
+	if _, err = m.Store.SaveGraph(ctx, g, 1); err != nil {
+		t.Fatal(err)
+	}
+	in := old.Input
+	in.GraphVersion = 2
+	tasks := taskconfig.Manager{Store: m.Store}
+	d, err := tasks.Save(ctx, "", in, 0, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	review, err := m.Review(ctx, d.ID)
+	if err != nil || review.StartConsent().Mode != Automatic || review.Record != nil {
+		t.Fatalf("initial review: %+v %v", review, err)
+	}
+	wrong := review.StartConsent()
+	wrong.Mode = Manual
+	if _, err = m.GuardStart(ctx, d.ID, "admin", d.Revision, wrong); !errors.Is(err, storage.ErrConflict) {
+		t.Fatalf("wrong reviewed mode: %v", err)
+	}
+	if _, err = m.GuardStart(ctx, d.ID, "admin", d.Revision, review.StartConsent()); err != nil {
+		t.Fatal(err)
+	}
+	review, err = m.Review(ctx, d.ID)
+	if err != nil || review.Record.Source != "workflow" || review.Record.WorkflowVersion != 2 || review.Record.WorkflowID != g.Metadata.ID {
+		t.Fatalf("inheritance: %+v %v", review, err)
+	}
+	rec, err := m.Save(ctx, d.ID, Assisted, review.Scope, review.Record.Revision, "admin", true)
+	if err != nil || rec.Source != "task" {
+		t.Fatalf("override: %+v %v", rec, err)
+	}
+	p := &tools.Principal{GraphID: domain.TaskExecutionID(d.ID), GraphVersion: 1, NodeID: "worker", Grants: g.Node("worker").Tools}
+	launch(t, m, d, p)
+	if _, _, err = m.Check(ctx, p, &sampleTool{}, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	g.Spec.Nodes[0].Tools = nil
+	if _, err = m.Store.SaveGraph(ctx, g, 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = m.Check(ctx, p, &sampleTool{}, false, nil); err == nil {
+		t.Fatal("revoked source still authorized")
+	}
+}
+
+func TestAssistedWorkspaceEditsRespectWorkflowPathsAndLiveReduction(t *testing.T) {
+	ctx := t.Context()
+	m, old, _ := setup(t)
+	g, err := m.Store.GetGraph(ctx, old.GraphID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.Spec.Task = &domain.TaskDefaults{AuthorizationProfile: Assisted}
+	g.Node("worker").Tools = []domain.ToolGrant{{Name: "filesystem.write", Paths: []string{"notes.txt"}}}
+	if _, err = m.Store.SaveGraph(ctx, g, 1); err != nil {
+		t.Fatal(err)
+	}
+	in := old.Input
+	in.GraphVersion = 2
+	d, err := (taskconfig.Manager{Store: m.Store}).Save(ctx, "", in, 0, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = m.Ensure(ctx, d.ID, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	p := &tools.Principal{GraphID: domain.TaskExecutionID(d.ID), GraphVersion: 1, NodeID: "worker", Workdir: t.TempDir(), Grants: g.Node("worker").Tools}
+	launch(t, m, d, p)
+	approvals := &approver{}
+	gw := tools.NewGateway(tools.Builtin(tools.BuiltinConfig{}), approvals, nil)
+	gw.TaskAuthorization = m.Check
+	write := func(path string) error {
+		args, _ := json.Marshal(map[string]string{"path": path, "content": "edited"})
+		_, err := gw.Invoke(ctx, p, "filesystem.write", args)
+		return err
+	}
+	for range 2 {
+		if err = write("notes.txt"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if approvals.calls != 0 {
+		t.Fatalf("routine edits asked %d times", approvals.calls)
+	}
+	if err = write("other.txt"); !errors.Is(err, tools.ErrDenied) {
+		t.Fatalf("outside path: %v", err)
+	}
+	if _, err = os.Stat(filepath.Join(p.Workdir, "other.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unexpected outside write: %v", err)
+	}
+	review, err := m.Review(ctx, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = m.Save(ctx, d.ID, Manual, review.Scope, review.Record.Revision, "admin", true); err != nil {
+		t.Fatal(err)
+	}
+	if err = write("notes.txt"); err != nil || approvals.calls != 1 {
+		t.Fatalf("manual edit: %v, approvals %d", err, approvals.calls)
 	}
 }

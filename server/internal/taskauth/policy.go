@@ -10,9 +10,12 @@ import (
 	"github.com/woliveiras/weft/server/internal/tools"
 )
 
-type Mode string
+type Mode = domain.TaskAuthorizationMode
 
 const (
+	Manual             = domain.TaskManual
+	Assisted           = domain.TaskAssisted
+	Automatic          = domain.TaskAutomatic
 	Ask           Mode = "ask"
 	Workspace     Mode = "workspace"
 	Full          Mode = "full"
@@ -22,7 +25,7 @@ const (
 var ErrInvalid = errors.New("invalid task authorization")
 var ErrDenied = errors.New("task authorization denied")
 
-func Valid(m Mode) bool { return m == Ask || m == Workspace || m == Full }
+func Valid(m Mode) bool { return m.IsProfile() || m == Ask || m == Workspace || m == Full }
 
 // Workspace consent currently qualifies shell only in Docker isolation.
 func workspaceShellAllowed(isolation string) bool { return isolation == "docker" }
@@ -62,7 +65,7 @@ func Approval(mode Mode, capability, isolation string, mandatory bool) (bool, er
 		return true, nil
 	}
 	switch mode {
-	case Ask:
+	case Manual, Assisted, Ask:
 		return true, nil
 	case Workspace:
 		return !(strings.HasPrefix(capability, "filesystem.") || capability == "git.read" || capability == "shell.exec"), nil
@@ -73,6 +76,9 @@ func Approval(mode Mode, capability, isolation string, mandatory bool) (bool, er
 
 // Reduction reduces automatic execution; Ask requires fresh human decisions.
 func Reduction(from, to Mode) bool {
-	rank := map[Mode]int{Ask: 0, Workspace: 1, Full: 2}
-	return Valid(from) && Valid(to) && rank[to] < rank[from]
+	if from.IsProfile() || to.IsProfile() {
+		return (to == Manual && (from == Automatic || from == Assisted)) ||
+			(to == Assisted && from == Automatic)
+	}
+	return (to == Ask && (from == Workspace || from == Full)) || (to == Workspace && from == Full)
 }

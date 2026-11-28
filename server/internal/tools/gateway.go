@@ -26,7 +26,7 @@ const maxAuditArgBytes = 2 << 10
 // optionally held for human approval, executed, audited, measured and traced.
 type Gateway struct {
 	Registry          *Registry
-	TaskAuthorization func(context.Context, *Principal, Tool, bool) (bool, string, error)
+	TaskAuthorization func(context.Context, *Principal, Tool, bool, json.RawMessage) (bool, string, error)
 	// ResolveTool resolves dynamic tools; errors fail closed. Configured at startup.
 	ResolveTool func(context.Context, string) (Tool, error)
 	Approver    Approver
@@ -177,7 +177,7 @@ func (g *Gateway) invoke(ctx context.Context, p *Principal, name string, args js
 	required, consent := grant.RequiresApproval, ""
 	if g.TaskAuthorization != nil {
 		var e error
-		required, consent, e = g.TaskAuthorization(ctx, p, t, required)
+		required, consent, e = g.TaskAuthorization(ctx, p, t, required, args)
 		if e != nil {
 			outcome = "denied"
 			err = taskConsentDenied(e, "task consent unavailable or stale")
@@ -206,8 +206,8 @@ func (g *Gateway) invoke(ctx context.Context, p *Principal, name string, args js
 		}
 	}
 	if g.TaskAuthorization != nil {
-		_, current, e := g.TaskAuthorization(ctx, p, t, grant.RequiresApproval)
-		if e != nil || current != consent {
+		nowRequired, current, e := g.TaskAuthorization(ctx, p, t, grant.RequiresApproval, args)
+		if e != nil || current != consent || (nowRequired && !required) {
 			outcome = "denied"
 			err = taskConsentDenied(e, "task consent changed while waiting; retry under current permissions")
 			g.audit(ctx, p, domain.EvToolDenied, name, nil, outcome, 0, err)
@@ -221,7 +221,7 @@ func (g *Gateway) invoke(ctx context.Context, p *Principal, name string, args js
 		p.BeforeMutation(ctx, name)
 	}
 	g.audit(ctx, p, domain.EvToolInvoked, name, shown, "started", 0, nil)
-	inv := &Invocation{Principal: p, Args: args, Grant: grant, Workdir: p.Workdir, Sandbox: p.Sandbox, Approver: g.Approver}
+	inv := &Invocation{TaskConsent: consent, Principal: p, Args: args, Grant: grant, Workdir: p.Workdir, Sandbox: p.Sandbox, Approver: g.Approver}
 	if inv.Sandbox == nil {
 		inv.Sandbox = &ProcessSandbox{Root: p.Workdir}
 	}

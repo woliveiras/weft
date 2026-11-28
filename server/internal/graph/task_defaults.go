@@ -20,6 +20,9 @@ func validateTaskDefaults(g *domain.Graph, r *Report) {
 	if task == nil {
 		return
 	}
+	if task.AuthorizationProfile != "" && !task.AuthorizationProfile.IsProfile() {
+		r.errf("spec.task.authorizationProfile", "expected manual, assisted or automatic")
+	}
 	if task.ProjectIDs != nil {
 		if task.ProjectID != "" || task.SCMConnection != "" {
 			r.errf("spec.task.projectIds", "cannot combine repository suggestions with a singular project or delivery connection")

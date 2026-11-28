@@ -6,9 +6,9 @@ import (
 	"github.com/woliveiras/weft/server/internal/storage"
 )
 
-// StartConsent describes the existing authorization or the canonical Ask
-// default the operator reviewed before starting a task.
+// StartConsent pins the effective mode and scope displayed before task admission.
 type StartConsent struct {
+	Source   string `json:"source,omitempty"`
 	Scope    string `json:"scope"`
 	Mode     Mode   `json:"mode"`
 	Revision int64  `json:"revision"`
@@ -16,7 +16,10 @@ type StartConsent struct {
 
 func (r *Review) StartConsent() StartConsent {
 	if r.Record != nil {
-		return StartConsent{Scope: r.Scope, Mode: r.Record.Mode, Revision: r.Record.Revision}
+		return StartConsent{Scope: r.Scope, Mode: r.Record.Mode, Revision: r.Record.Revision, Source: r.Record.Source}
+	}
+	if r.WorkflowProfile.IsProfile() {
+		return StartConsent{Scope: r.Scope, Mode: r.WorkflowProfile, Source: "workflow"}
 	}
 	return StartConsent{Scope: r.Scope, Mode: Ask}
 }
@@ -33,7 +36,7 @@ func (m Manager) GuardStart(ctx context.Context, id, actor string, draftRevision
 	}
 	record := review.Record
 	if record == nil {
-		record, err = m.save(ctx, id, Ask, review.Scope, 0, actor, true, draftRevision, "")
+		record, err = m.save(ctx, id, expected.Mode, review.Scope, 0, actor, true, draftRevision, "", true)
 		if err != nil {
 			return storage.SettingRevision{}, err
 		}

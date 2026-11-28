@@ -66,6 +66,14 @@ func TestSCMHandOffGrantsOnlyTheTaskConnectionToTheResultAgent(t *testing.T) {
 	if g.Metadata.Labels[domain.LabelTaskSCM] != "gh" {
 		t.Fatalf("labels = %+v", g.Metadata.Labels)
 	}
+	// A profiled task cannot acquire remote authority from a singular connection suggestion.
+	source.Spec.Task = &domain.TaskDefaults{AuthorizationProfile: domain.TaskAutomatic}
+	profiled, blocks, err := m.prepare(ctx, d, source)
+	if err != nil || len(blocks) == 0 || len(profiled.Node("integrator").Tools) != 1 {
+		t.Fatalf("legacy grants injected into profiled task: %v %v", blocks, err)
+	}
+	source.Spec.Task = nil
+
 	// Without a result agent the entry agent delivers.
 	d.ResultNodeID = ""
 	g, _, _ = m.prepare(ctx, d, source)

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/woliveiras/weft/server/internal/domain"
@@ -19,14 +21,17 @@ import (
 const prefix = "tasks/authorization/"
 
 type Record struct {
-	ExecutionScope string `json:"executionScope,omitempty"`
-	TaskID         string `json:"taskId"`
-	Mode           Mode   `json:"mode"`
-	Scope          string `json:"scope"`
-	Actor          string `json:"actor"`
-	PolicyVersion  int    `json:"policyVersion"`
-	Revision       int64  `json:"revision"`
-	Operation      string `json:"operation,omitempty"`
+	Source          string `json:"source,omitempty"`
+	WorkflowID      string `json:"workflowId,omitempty"`
+	WorkflowVersion int    `json:"workflowVersion,omitempty"`
+	ExecutionScope  string `json:"executionScope,omitempty"`
+	TaskID          string `json:"taskId"`
+	Mode            Mode   `json:"mode"`
+	Scope           string `json:"scope"`
+	Actor           string `json:"actor"`
+	PolicyVersion   int    `json:"policyVersion"`
+	Revision        int64  `json:"revision"`
+	Operation       string `json:"operation,omitempty"`
 }
 type AgentScope struct {
 	ID        string               `json:"id"`
@@ -38,12 +43,14 @@ type Preference struct {
 	Revision int64 `json:"revision"`
 }
 type Review struct {
-	ProjectID    string        `json:"projectId,omitempty"`
-	Preference   *Preference   `json:"preference,omitempty"`
-	Capabilities []AgentScope  `json:"capabilities"`
-	Record       *Record       `json:"record,omitempty"`
-	Scope        string        `json:"scope"`
-	Agents       []domain.Node `json:"-"`
+	WorkflowProfile Mode          `json:"workflowProfile,omitempty"`
+	WorkflowVersion int           `json:"workflowVersion,omitempty"`
+	ProjectID       string        `json:"projectId,omitempty"`
+	Preference      *Preference   `json:"preference,omitempty"`
+	Capabilities    []AgentScope  `json:"capabilities"`
+	Record          *Record       `json:"record,omitempty"`
+	Scope           string        `json:"scope"`
+	Agents          []domain.Node `json:"-"`
 }
 type Manager struct {
 	Store storage.Store
@@ -78,6 +85,13 @@ func (m Manager) Review(ctx context.Context, id string) (*Review, error) {
 	sum := sha256.Sum256(b)
 	graph.Normalize(g)
 	r := &Review{ProjectID: d.ProjectID, Scope: hex.EncodeToString(sum[:]), Agents: g.Spec.Nodes}
+	if g.Spec.Task != nil && g.Spec.Task.AuthorizationProfile != "" {
+		r.WorkflowProfile = g.Spec.Task.AuthorizationProfile
+		r.WorkflowVersion = g.Metadata.Version
+		if !r.WorkflowProfile.IsProfile() {
+			return nil, ErrInvalid
+		}
+	}
 	for _, n := range g.Spec.Nodes {
 		if !n.Disabled {
 			r.Capabilities = append(r.Capabilities, AgentScope{ID: n.ID, Isolation: n.Isolation.Mode, Grants: n.Tools})
@@ -97,9 +111,23 @@ func (m Manager) Review(ctx context.Context, id string) (*Review, error) {
 			r.Preference = &p
 		}
 	}
+	r.Record, err = m.record(ctx, id)
+	return r, err
+}
+
+// UsesWorkflowGrants selects the delivery contract for the execution copy.
+func (m Manager) UsesWorkflowGrants(ctx context.Context, id string, workflow *domain.Graph) (bool, error) {
+	if workflow.Spec.Task != nil && workflow.Spec.Task.AuthorizationProfile.IsProfile() {
+		return true, nil
+	}
+	rec, err := m.record(ctx, id)
+	return rec != nil && rec.Mode.IsProfile(), err
+}
+
+func (m Manager) record(ctx context.Context, id string) (*Record, error) {
 	setting, err := m.Store.GetSetting(ctx, prefix+id)
 	if errors.Is(err, storage.ErrNotFound) {
-		return r, nil
+		return nil, nil
 	}
 	if err != nil {
 		return nil, err
@@ -109,21 +137,20 @@ func (m Manager) Review(ctx context.Context, id string) (*Review, error) {
 		return nil, ErrInvalid
 	}
 	rec.Revision = setting.Revision
-	r.Record = &rec
-	return r, nil
+	return &rec, nil
 }
 func (m Manager) Save(ctx context.Context, id string, mode Mode, scope string, revision int64, actor string, confirm bool) (*Record, error) {
-	return m.save(ctx, id, mode, scope, revision, actor, confirm, 0, "")
+	return m.save(ctx, id, mode, scope, revision, actor, confirm, 0, "", false)
 }
 
 func (m Manager) SaveReviewed(ctx context.Context, id string, mode Mode, scope string, revision, draftRevision int64, actor, operation string) (*Record, error) {
 	if operation == "" || draftRevision < 1 {
 		return nil, ErrInvalid
 	}
-	return m.save(ctx, id, mode, scope, revision, actor, true, draftRevision, operation)
+	return m.save(ctx, id, mode, scope, revision, actor, true, draftRevision, operation, false)
 }
 
-func (m Manager) save(ctx context.Context, id string, mode Mode, scope string, revision int64, actor string, confirm bool, draftRevision int64, operation string) (*Record, error) {
+func (m Manager) save(ctx context.Context, id string, mode Mode, scope string, revision int64, actor string, confirm bool, draftRevision int64, operation string, inherited bool) (*Record, error) {
 	if !Valid(mode) || actor == "" || !confirm {
 		return nil, ErrInvalid
 	}
@@ -142,6 +169,12 @@ func (m Manager) save(ctx context.Context, id string, mode Mode, scope string, r
 	if err != nil {
 		return nil, err
 	}
+	if review.WorkflowProfile != "" && !mode.IsProfile() {
+		return nil, ErrInvalid
+	}
+	if inherited && mode != review.StartConsent().Mode {
+		return nil, storage.ErrConflict
+	}
 	if scope != review.Scope {
 		return nil, storage.ErrConflict
 	}
@@ -152,10 +185,16 @@ func (m Manager) save(ctx context.Context, id string, mode Mode, scope string, r
 		return nil, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	rec := &Record{TaskID: id, Mode: mode, Scope: scope, Actor: actor, PolicyVersion: PolicyVersion, Operation: operation}
+	if mode.IsProfile() {
+		rec.Source, rec.WorkflowID, rec.WorkflowVersion = "task", d.GraphID, d.GraphVersion
+		if inherited {
+			rec.Source = "workflow"
+		}
+	}
 	if running {
 		rec.ExecutionScope = review.Record.ExecutionScope
 	}
-	if err = m.Store.AppendEvent(ctx, domain.NewEvent("task.authorization_requested", d.GraphID, map[string]any{"taskId": id, "mode": mode, "scope": scope, "expectedRevision": revision}).WithActor(actor)); err != nil {
+	if err = m.Store.AppendEvent(ctx, domain.NewEvent("task.authorization_requested", d.GraphID, map[string]any{"taskId": id, "mode": mode, "scope": scope, "expectedRevision": revision, "source": rec.Source, "workflowVersion": rec.WorkflowVersion}).WithActor(actor)); err != nil {
 		return nil, err
 	}
 	b, err := json.Marshal(rec)
@@ -166,14 +205,14 @@ func (m Manager) save(ctx context.Context, id string, mode Mode, scope string, r
 	return rec, err
 }
 
-// Ensure is called before task side effects. Absent consent uses Ask, never Full.
+// Ensure snapshots the workflow default before any task side effect.
 func (m Manager) Ensure(ctx context.Context, id, actor string) error {
 	review, err := m.Review(ctx, id)
 	if err != nil {
 		return err
 	}
 	if review.Record == nil {
-		_, err = m.Save(ctx, id, Ask, review.Scope, 0, actor, true)
+		_, err = m.save(ctx, id, review.StartConsent().Mode, review.Scope, 0, actor, true, 0, "", true)
 		return err
 	}
 	if review.Record.Scope != review.Scope {
@@ -183,7 +222,7 @@ func (m Manager) Ensure(ctx context.Context, id, actor string) error {
 }
 
 // Check is called at gateway admission and again immediately before invocation.
-func (m Manager) Check(ctx context.Context, p *tools.Principal, t tools.Tool, mandatory bool) (bool, string, error) {
+func (m Manager) Check(ctx context.Context, p *tools.Principal, t tools.Tool, mandatory bool, args json.RawMessage) (bool, string, error) {
 	if !strings.HasPrefix(p.GraphID, "task-run-") {
 		return mandatory, "", nil
 	}
@@ -224,7 +263,29 @@ func (m Manager) Check(ctx context.Context, p *tools.Principal, t tools.Tool, ma
 	if p.Sandbox != nil {
 		kind = p.Sandbox.Kind()
 	}
+	if rec.Mode.IsProfile() && len(d.Repositories) > 0 {
+		// Multi-repository progress is pinned. Recheck the live policy before a new effect.
+		latest, err := m.Store.GetGraph(ctx, d.GraphID, 0)
+		if err != nil {
+			return false, "", err
+		}
+		if latest.Metadata.Version != d.GraphVersion {
+			return false, "", ErrDenied
+		}
+	}
 	required, err := Approval(rec.Mode, t.Capability(), kind, mandatory)
+	if rec.Mode.IsProfile() {
+		routine := routineTool(t.Name(), kind)
+		if t.Name() == "git.push" || t.Name() == "scm.pull_request.create" {
+			if !boundDelivery(d.Repositories, args) {
+				return false, "", fmt.Errorf("%w: choose a repository, connection and base branch in task delivery", ErrDenied)
+			}
+			routine = true
+		}
+		if rec.Mode == Assisted && !mandatory {
+			required = !routine
+		}
+	}
 	return required, fmt.Sprintf("%s:%d:%s", id, rec.Revision, rec.Mode), err
 }
 
@@ -247,6 +308,19 @@ func (m Manager) Bind(ctx context.Context, id string, g *domain.Graph) error {
 		return ErrDenied
 	}
 	rec := review.Record
+	if rec.Mode.IsProfile() {
+		// A prepared graph may predate a task override. Reject grants added by
+		// legacy delivery preparation, even if the mode changed concurrently.
+		for _, node := range g.Spec.Nodes {
+			if node.Disabled {
+				continue
+			}
+			i := slices.IndexFunc(review.Agents, func(a domain.Node) bool { return a.ID == node.ID && !a.Disabled })
+			if i < 0 || !reflect.DeepEqual(node.Tools, review.Agents[i].Tools) {
+				return fmt.Errorf("%w: execution grants differ from the workflow for %s", ErrDenied, node.ID)
+			}
+		}
+	}
 	rec.ExecutionScope, err = executionScope(g)
 	if err != nil {
 		return err

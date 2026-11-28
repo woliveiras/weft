@@ -13,6 +13,8 @@ import (
 	"github.com/woliveiras/weft/server/internal/domain"
 	"github.com/woliveiras/weft/server/internal/review"
 	"github.com/woliveiras/weft/server/internal/scm"
+	"github.com/woliveiras/weft/server/internal/taskauth"
+	"github.com/woliveiras/weft/server/internal/taskconfig"
 	"github.com/woliveiras/weft/server/internal/tools"
 )
 
@@ -60,13 +62,23 @@ func TestReviewedMultiRepositoryDeliveryRecoversOriginalPR(t *testing.T) {
 	m, store := manager(t)
 	providers := map[string]*memberProvider{}
 	scm.RegisterKind("member-fixture", func(c scm.Connection, _ string) (scm.Provider, error) { return providers[c.Name], nil })
-	graphID := "task-run-scope"
+	aliases := []string{"infra", "backend", "frontend"}
+	grants := []domain.ToolGrant{{Name: "git.push", Repositories: aliases}, {Name: "scm.pull_request.create", Repositories: aliases}}
+	source := &domain.Graph{Metadata: domain.GraphMetadata{ID: "delivery"}, Spec: domain.GraphSpec{Task: &domain.TaskDefaults{AuthorizationProfile: taskauth.Assisted}, Nodes: []domain.Node{{ID: "result", Tools: grants, Isolation: domain.IsolationSpec{Mode: domain.IsolationDocker}}}}}
+	if _, err := store.SaveGraph(ctx, source, 0); err != nil {
+		t.Fatal(err)
+	}
+	tasks := taskconfig.Manager{Store: store}
+	d, err := tasks.Save(ctx, "", taskconfig.Input{GraphID: "delivery", GraphVersion: 1, NodeID: "result", Title: "Deliver", Request: "Review delivery", Outcome: "freeform"}, 0, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	graphID := domain.TaskExecutionID(d.ID)
 	dir := filepath.Join(t.TempDir(), graphID)
 	if err := os.Mkdir(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
 	var bindings []domain.TaskRepository
-	aliases := []string{"infra", "backend", "frontend"}
 	for _, alias := range aliases {
 		work, bare := repo(t)
 		dest := filepath.Join(dir, alias)
@@ -89,7 +101,27 @@ func TestReviewedMultiRepositoryDeliveryRecoversOriginalPR(t *testing.T) {
 			git(t, dest, "commit", "-qam", "change "+alias)
 		}
 	}
-	g := &domain.Graph{Metadata: domain.GraphMetadata{ID: graphID}, Spec: domain.GraphSpec{Workspace: domain.WorkspaceSpec{Repositories: bindings}, Nodes: []domain.Node{{ID: "result", Isolation: domain.IsolationSpec{Mode: domain.IsolationDocker}}}}}
+	d.Input.Repositories = bindings
+	d, err = tasks.Save(ctx, d.ID, d.Input, d.Revision, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	authorization := taskauth.Manager{Store: store}
+	if err = authorization.Ensure(ctx, d.ID, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	g := &domain.Graph{Metadata: domain.GraphMetadata{ID: graphID, Labels: map[string]string{domain.LabelTask: d.ID}}, Spec: source.Spec}
+	g.Spec.Workspace.Repositories = bindings
+	if _, err = store.SaveGraph(ctx, g, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err = authorization.Bind(ctx, d.ID, g); err != nil {
+		t.Fatal(err)
+	}
+	d.ExecutionGraphID = graphID
+	if _, err = tasks.Transition(ctx, d, "running", "admin"); err != nil {
+		t.Fatal(err)
+	}
 	reviews := review.New(review.Options{Store: store, Root: t.TempDir()})
 	record, err := reviews.Create(ctx, g, "result", 0, "execution", dir, review.Request{Title: "Three projects", Instructions: "Inspect each change."})
 	if err != nil {
@@ -99,7 +131,7 @@ func TestReviewedMultiRepositoryDeliveryRecoversOriginalPR(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := principal(dir, domain.ToolGrant{Name: "git.push", Repositories: aliases}, domain.ToolGrant{Name: "scm.pull_request.create", Repositories: aliases})
-	p.GraphID = graphID
+	p.GraphID, p.GraphVersion, p.NodeID, p.TaskID = graphID, 1, "result", d.ID
 	p.Repositories = bindings
 	call := func(gw *tools.Gateway, alias, name string) error {
 		args, _ := json.Marshal(map[string]string{"connection": alias, "title": "Change"})
@@ -110,6 +142,7 @@ func TestReviewedMultiRepositoryDeliveryRecoversOriginalPR(t *testing.T) {
 		return err
 	}
 	gw := gateway(t, m)
+	gw.TaskAuthorization = authorization.Check
 	for _, alias := range aliases {
 		if err := call(gw, alias, "git.push"); err != nil {
 			t.Fatal(err)
@@ -124,6 +157,7 @@ func TestReviewedMultiRepositoryDeliveryRecoversOriginalPR(t *testing.T) {
 		t.Fatal(receipt, err)
 	}
 	reopened := gateway(t, m)
+	reopened.TaskAuthorization = authorization.Check
 	providers["backend"].lookupUnavailable = true
 	if err := call(reopened, "backend", "scm.pull_request.create"); err == nil || providers["backend"].created != 1 {
 		t.Fatal("lookup outage repeated an uncertain write", err)
@@ -152,10 +186,23 @@ func TestReviewedMultiRepositoryDeliveryRecoversOriginalPR(t *testing.T) {
 	if git(t, providers["frontend"].dir, "for-each-ref") != "" || providers["frontend"].created != 0 {
 		t.Fatal("unchanged member received a remote write")
 	}
+	if err := call(reopened, "unbound", "git.push"); err == nil {
+		t.Fatal("unbound connection accepted")
+	}
 	if err = os.WriteFile(filepath.Join(dir, "frontend", "a.txt"), []byte("candidate changed"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err = call(reopened, "infra", "git.push"); err == nil {
 		t.Fatal("accepted stale candidate approval")
+	}
+	source.Spec.Nodes[0].Tools = nil
+	if _, err = store.SaveGraph(ctx, source, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err = call(reopened, "infra", "scm.pull_request.create"); !errors.Is(err, tools.ErrDenied) {
+		t.Fatalf("revocation should stop dispatch: %v", err)
+	}
+	if providers["infra"].created != 1 {
+		t.Fatal("another PR was created after revocation")
 	}
 }

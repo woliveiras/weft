@@ -55,7 +55,7 @@ func (m Manager) prepareCheckouts(ctx context.Context, d *taskconfig.Draft, g *d
 	return nil
 }
 
-func (m Manager) reviewRepositories(ctx context.Context, d *taskconfig.Draft, g *domain.Graph) ([]string, error) {
+func (m Manager) reviewRepositories(ctx context.Context, d *taskconfig.Draft, g *domain.Graph, workflowGrants bool) ([]string, error) {
 	var out []string
 	if m.Workspaces == nil {
 		out = append(out, "Task workspaces are unavailable.")
@@ -139,6 +139,10 @@ func (m Manager) reviewRepositories(ctx context.Context, d *taskconfig.Draft, g 
 			}
 			existing := tools.MatchingGrants(&tools.Principal{Grants: n.Tools}, tool)
 			if len(existing) == 0 {
+				if workflowGrants {
+					out = append(out, tool.Name()+": result agent requires a workflow grant for delivery")
+					continue
+				}
 				n.Tools = append(n.Tools, domain.ToolGrant{Name: tool.Name(), Repositories: connections})
 				continue
 			}

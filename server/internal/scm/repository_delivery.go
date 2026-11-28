@@ -117,12 +117,15 @@ func (m Manager) deliverRepository(ctx context.Context, inv *tools.Invocation, c
 		if p.TaskID == "" {
 			return "", nil
 		}
-		_, scope, err := (taskauth.Manager{Store: m.Store}).Check(ctx, p, tool, false)
+		_, scope, err := (taskauth.Manager{Store: m.Store}).Check(ctx, p, tool, false, inv.Args)
 		return scope, err
 	}
 	consent, err := authorization()
 	if err != nil {
 		return nil, err
+	}
+	if inv.TaskConsent != "" && consent != inv.TaskConsent {
+		return nil, review.ErrStale
 	}
 	candidate := func() (map[string]workspace.RepositoryState, *review.Record, error) {
 		states, err := workspace.RepositoryStates(ctx, dir, p.Repositories)

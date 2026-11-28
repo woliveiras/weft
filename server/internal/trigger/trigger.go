@@ -203,7 +203,7 @@ func validate(in *Input) error {
 		in.Authorization = taskauth.Ask
 	}
 	if !taskauth.Valid(in.Authorization) {
-		fe.add("authorizationMode", "ask, workspace or full")
+		fe.add("authorizationMode", "choose manual, assisted, automatic or a supported legacy mode")
 	}
 	switch in.ExecutionMode {
 	case "", "workflow", "local", "sandbox":
@@ -305,7 +305,10 @@ func (m Manager) Update(ctx context.Context, id, actor string, fn func(t *Trigge
 // authorizationProblem is shared by consent writes and the runner's preflight.
 func (m Manager) authorizationProblem(mode taskauth.Mode, g *domain.Graph) string {
 	if !taskauth.Valid(mode) {
-		return "ask, workspace or full"
+		return "choose manual, assisted, automatic or a supported legacy mode"
+	}
+	if g.Spec.Task != nil && g.Spec.Task.AuthorizationProfile.IsProfile() && !mode.IsProfile() {
+		return "Choose Manual, Assisted or Automatic for this workflow."
 	}
 	if mode == taskauth.Workspace {
 		graph.Normalize(g)
