@@ -161,6 +161,15 @@ for concurrent commands, pass a distinct `--last-failed-file <path>` to each
 command and its rerun. The default history tracks the last completed run.
 The suite uses no automatic retries, intercepted browser API responses or fixed sleeps.
 
+### Browser smoke
+
+Run `make test-e2e-smoke` from the repository root after installing the host
+Go toolchain, the locked console dependencies and Chromium as shown above.
+It uses the same disposable backend and production web build as the main
+browser suite. The `@smoke` scenarios verify task consent and approval or
+rejection, plus MCP authentication failure with an empty tool catalogue.
+The full browser suite also runs these scenarios.
+
 ### Browser journey with the real sandbox
 
 With the existing dedicated `sandbox-daemon` running and `alpine:3.22` already

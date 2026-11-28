@@ -28,7 +28,7 @@ test('registers a remote MCP, discovers tools and persists exact agent permissio
  await page.goto('/#/integrations');await section.getByRole('button',{name:'Edit Team MCP',exact:true}).click();await expect(section.getByLabel('Bearer token',{exact:true})).toHaveValue('');await section.getByLabel('Connection enabled',{exact:true}).uncheck();await section.getByRole('button',{name:'Save MCP connection',exact:true}).click();await expect(section.getByRole('button',{name:'Refresh tools for Team MCP',exact:true})).toBeDisabled();
  await page.goto('/#/g/journal-capture/canvas?sel=node:worker');await page.getByRole('navigation',{name:'Agent inspector sections',exact:true}).getByRole('button',{name:'Configuration',exact:true}).click();await expect(grants).toContainText('Unavailable in the current catalogue');await grants.getByRole('checkbox',{name:/mcp.team.search/}).click();await expect(grants.getByRole('checkbox',{name:/mcp.team.search/})).toHaveCount(0);await Promise.all([page.waitForResponse(r=>r.url().endsWith('/api/v1/graphs/journal-capture')&&r.request().method()==='PUT'&&r.status()===200),page.getByRole('button',{name:'Save graph',exact:true}).click()]);await expect(page.getByRole('button',{name:'Save graph',exact:true})).toBeDisabled();
 });
-test('reports MCP authentication failure without a discovered tool catalogue', async ({ page }) => {
+test('reports MCP authentication failure without a discovered tool catalogue', {tag: '@smoke'}, async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('weftToken', 'e2e-admin-token'));
   await page.goto('/#/integrations');
   const section = page.getByRole('region', { name: 'MCP connections', exact: true });

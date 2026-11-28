@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+
+# Git sends the outgoing and destination refs with their object IDs on stdin.
+while read -r local_ref local_oid remote_ref _remote_oid; do
+  [ "$remote_ref" = refs/heads/main ] && [ "$local_ref" != '(delete)' ] || continue
+
+  # Keep the snapshot on the same filesystem Docker can mount for this clone.
+  git_dir=$(git rev-parse --absolute-git-dir)
+  snapshot=$(mktemp -d "$git_dir/weft-pre-push.XXXXXX")
+  trap 'rm -rf -- "$snapshot"' EXIT
+  trap 'exit 1' HUP INT TERM
+  git archive --format=tar --output="$snapshot/tree.tar" "$local_oid"
+  mkdir "$snapshot/tree"
+  tar -xf "$snapshot/tree.tar" -C "$snapshot/tree"
+
+  # Git commands spawned by the checks must resolve their own fixture repos.
+  git_env=$(git rev-parse --local-env-vars)
+  printf 'pre-push: running make check for %s\n' "$local_oid" >&2
+  if (
+    while IFS= read -r name; do
+      unset "$name"
+    done <<EOF
+$git_env
+EOF
+    cd "$snapshot/tree" && make check
+  ) </dev/null; then
+    exit 0
+  fi
+  printf 'pre-push: make check failed for %s\n' "$local_oid" >&2
+  exit 1
+done
