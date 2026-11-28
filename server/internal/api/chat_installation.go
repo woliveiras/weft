@@ -29,7 +29,7 @@ func (s *Server) reviewChatInstallation(ctx context.Context, actor Identity, id 
 		out.Text, out.Retryable = "Could not read the installation configuration. Retry the saved request.", true
 		return out
 	}
-	docs = hydrateChatProjectSettings(docs, snapshot)
+	docs = hydrateChatSettings(docs, snapshot)
 	in := installation.Request{Revisions: map[string]string{}, RecordConsent: proposal.IntakeConsent}
 	for _, doc := range docs {
 		if doc.Revision() != "" {
@@ -82,12 +82,12 @@ func (s *Server) applyReviewedChatInstallation(ctx context.Context, actor Identi
 		return s.chatStore().FinishReview(ctx, actor.chatOwner, id, review.ID, chat.ReviewConflict, 0)
 	}
 	for _, doc := range docs {
-		if partialChatProject(doc) {
+		if partialChatProject(doc) || partialWorkflowProfile(doc) {
 			snapshot, err := s.configSnapshot(ctx)
 			if err != nil {
 				return s.chatStore().FinishReview(ctx, actor.chatOwner, id, review.ID, chat.ReviewUnknown, 0)
 			}
-			docs = hydrateChatProjectSettings(docs, snapshot)
+			docs = hydrateChatSettings(docs, snapshot)
 			break
 		}
 	}
@@ -130,16 +130,47 @@ func partialChatProject(doc installation.Document) bool {
 	return true
 }
 
+// A graph profile change carries only the workflow ID and the requested mode.
+func partialWorkflowProfile(doc installation.Document) bool {
+	if doc.Kind != "Graph" || len(doc.Spec) != 1 || len(doc.Extensions) != 0 {
+		return false
+	}
+	for field := range doc.Metadata {
+		if field != "id" && field != "revision" {
+			return false
+		}
+	}
+	task, ok := doc.Spec["task"].(map[string]any)
+	return ok && len(task) == 1 && task["authorizationProfile"] != nil
+}
+
 // Existing projects can be identified by native ID without repeating source
 // details or settings the operator did not ask to change. Keep hydration out
 // of the persisted proposal. The plan and revision still gate confirmation.
-func hydrateChatProjectSettings(docs []installation.Document, snapshot map[string]configObject) []installation.Document {
+func hydrateChatSettings(docs []installation.Document, snapshot map[string]configObject) []installation.Document {
 	for i, doc := range docs {
-		if !partialChatProject(doc) {
-			continue
-		}
 		old, ok := snapshot[doc.Key()]
 		if !ok {
+			continue
+		}
+		if partialWorkflowProfile(doc) {
+			saved := old.Doc
+			saved.Spec = maps.Clone(saved.Spec)
+			task, _ := saved.Spec["task"].(map[string]any)
+			task = maps.Clone(task)
+			if task == nil {
+				task = map[string]any{}
+			}
+			task["authorizationProfile"] = doc.Spec["task"].(map[string]any)["authorizationProfile"]
+			saved.Spec["task"] = task
+			saved.Metadata = maps.Clone(saved.Metadata)
+			if revision := doc.Revision(); revision != "" {
+				saved.Metadata["revision"] = revision
+			}
+			docs[i] = saved
+			continue
+		}
+		if !partialChatProject(doc) {
 			continue
 		}
 		hydrated := maps.Clone(old.Doc.Spec)

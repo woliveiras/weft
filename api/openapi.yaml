@@ -3047,7 +3047,7 @@ paths:
       summary: Review current task consent and capability scope
       x-weft-role: viewer
       responses:
-        '200': {description: Scope digest, reviewed capabilities and optional consent record}
+        '200': {description: Scope digest, reviewed capabilities, optional workflowProfile and workflowVersion, and optional consent record with source and workflow revision}
     put:
       summary: Confirm draft consent or reduce running task authorization (admin only)
       x-weft-role: admin
@@ -3062,7 +3062,7 @@ paths:
               additionalProperties: false
               required: [mode, scope, confirm]
               properties:
-                mode: {type: string, enum: [ask, workspace, full]}
+                mode: {type: string, enum: [manual, assisted, automatic, ask, workspace, full]}
                 remember: {type: boolean, default: false, description: Save a project suggestion; never automatic consent}
                 preferenceRevision: {type: integer, minimum: 0}
                 scope: {type: string}
@@ -3533,7 +3533,8 @@ components:
                   required: [scope, mode, revision]
                   properties:
                     scope: {type: string}
-                    mode: {type: string, enum: [ask, workspace, full]}
+                    mode: {type: string, enum: [manual, assisted, automatic, ask, workspace, full]}
+                    source: {type: string, enum: [workflow, task]}
                     revision: {type: integer, minimum: 0}
                 build:
                   type: object
@@ -3866,9 +3867,10 @@ components:
                   required: [scope, mode, revision]
                   properties:
                     scope: {type: string}
-                    mode: {type: string, enum: [ask, workspace, full]}
+                    mode: {type: string, enum: [manual, assisted, automatic, ask, workspace, full]}
+                    source: {type: string, enum: [workflow, task]}
                     revision: {type: integer, minimum: 0}
-                mode: {type: string, enum: [ask, workspace, full]}
+                mode: {type: string, enum: [manual, assisted, automatic, ask, workspace, full]}
                 agents:
                   type: array
                   items:

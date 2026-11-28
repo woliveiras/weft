@@ -305,6 +305,7 @@ func (s *Server) configSnapshot(ctx context.Context) (map[string]configObject, e
 		if err = json.Unmarshal(b, &d); err != nil {
 			return nil, err
 		}
+		d.Extensions = g.Extensions
 		version := g.Metadata.Version
 		delete(d.Metadata, "version")
 		delete(d.Metadata, "createdAt")

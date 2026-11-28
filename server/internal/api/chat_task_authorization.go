@@ -39,6 +39,10 @@ func (s *Server) reviewChatTaskAuthorization(ctx context.Context, actor Identity
 		return out
 	}
 	mode := plan.TaskAuthorizationMode
+	if native.WorkflowProfile != "" && !mode.IsProfile() {
+		out.Text = "Choose Manual, Assisted or Automatic for this workflow."
+		return out
+	}
 	running := draft.Status == "running" || draft.Status == "starting"
 	if draft.Status != "draft" && draft.Status != "environment_pending" && !running {
 		out.Text, out.Destination = "This task cannot change its current authorization. Inspect the task state in Tasks.", "tasks"

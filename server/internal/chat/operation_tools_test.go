@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -175,4 +176,30 @@ func TestNativeOperationToolsRejectUnreviewedAndInvalidArguments(t *testing.T) {
 	if !recognized || err != nil || plan.Title != "" {
 		t.Fatalf("title redaction diverged from decodePlan: %+v %t %v", plan, recognized, err)
 	}
+}
+
+func TestTaskProfileToolAdvertisesAndDecodesEachProfile(t *testing.T) {
+	for _, schema := range OperationToolSchemas() {
+		if schema.Name != "set_task_authorization" {
+			continue
+		}
+		var params struct {
+			Properties map[string]struct{ Enum []string }
+		}
+		if err := json.Unmarshal(schema.Parameters, &params); err != nil {
+			t.Fatal(err)
+		}
+		for _, profile := range []string{"manual", "assisted", "automatic"} {
+			if !slices.Contains(params.Properties["taskAuthorizationMode"].Enum, profile) {
+				t.Fatalf("missing profile %s", profile)
+			}
+			args, _ := json.Marshal(map[string]string{"task": "Release notes", "taskAuthorizationMode": profile})
+			plan, ok, err := NativeOperationPlan(llm.ToolCall{Name: schema.Name, Arguments: args})
+			if !ok || err != nil || plan.Kind != AuthorizeTask || string(plan.TaskAuthorizationMode) != profile {
+				t.Fatalf("unexpected plan: %+v %v", plan, err)
+			}
+		}
+		return
+	}
+	t.Fatal("authorization tool missing")
 }
